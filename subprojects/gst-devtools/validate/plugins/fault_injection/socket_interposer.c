@@ -100,10 +100,15 @@ socket_interposer_set_callback (struct sockaddr_in *addrin,
 }
 
 int
-connect (int socket, const struct sockaddr_in *addrin, socklen_t address_len)
+#if defined(__linux__) && !defined(__GLIBC__)
+connect (int socket, const struct sockaddr *addr, socklen_t address_len)
+#else
+connect (int socket, const struct sockaddr_in *addr, socklen_t address_len)
+#endif
 {
   size_t i;
   int override_errno = 0;
+  struct sockaddr_in* addrin = (struct sockaddr_in*)addr;
   typedef ssize_t (*real_connect_fn) (int, const struct sockaddr_in *,
       socklen_t);
   static real_connect_fn real_connect = 0;
