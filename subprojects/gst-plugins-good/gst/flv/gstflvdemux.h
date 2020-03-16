@@ -26,18 +26,9 @@
 #include "gstindex.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_FLV_DEMUX \
-  (gst_flv_demux_get_type())
-#define GST_FLV_DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FLV_DEMUX,GstFlvDemux))
-#define GST_FLV_DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FLV_DEMUX,GstFlvDemuxClass))
-#define GST_IS_FLV_DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FLV_DEMUX))
-#define GST_IS_FLV_DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FLV_DEMUX))
-typedef struct _GstFlvDemux GstFlvDemux;
-typedef struct _GstFlvDemuxClass GstFlvDemuxClass;
+
+#define GST_TYPE_FLV_DEMUX (gst_flv_demux_get_type())
+G_DECLARE_FINAL_TYPE (GstFlvDemux, gst_flv_demux, GST, FLV_DEMUX, GstElement)
 
 typedef enum
 {
@@ -164,12 +155,6 @@ struct _GstFlvDemux
   gint64 to_offset;
 };
 
-struct _GstFlvDemuxClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_flv_demux_get_type (void);
-
 G_END_DECLS
+
 #endif /* __FLV_DEMUX_H__ */
