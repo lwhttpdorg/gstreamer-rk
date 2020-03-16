@@ -30,23 +30,8 @@
 
 G_BEGIN_DECLS
 
-
-#define GST_TYPE_LEVEL \
-  (gst_level_get_type())
-#define GST_LEVEL(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_LEVEL,GstLevel))
-#define GST_LEVEL_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_LEVEL,GstLevelClass))
-#define GST_LEVEL_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj),GST_TYPE_LEVEL,GstLevelClass))
-#define GST_IS_LEVEL(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_LEVEL))
-#define GST_IS_LEVEL_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_LEVEL))
-
-
-typedef struct _GstLevel GstLevel;
-typedef struct _GstLevelClass GstLevelClass;
+#define GST_TYPE_LEVEL (gst_level_get_type())
+G_DECLARE_FINAL_TYPE (GstLevel, gst_level, GST, LEVEL, GstBaseTransform)
 
 /**
  * GstLevel:
@@ -79,12 +64,6 @@ struct _GstLevel {
 
   void (*process)(gpointer, guint, guint, gdouble*, gdouble*);
 };
-
-struct _GstLevelClass {
-  GstBaseTransformClass parent_class;
-};
-
-GType gst_level_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (level);
 
