@@ -25,19 +25,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ID3DEMUX \
-  (gst_id3demux_get_type())
-#define GST_ID3DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_ID3DEMUX,GstID3Demux))
-#define GST_ID3DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_ID3DEMUX,GstID3DemuxClass))
-#define GST_IS_ID3DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_ID3DEMUX))
-#define GST_IS_ID3DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ID3DEMUX))
-
-typedef struct _GstID3Demux      GstID3Demux;
-typedef struct _GstID3DemuxClass GstID3DemuxClass;
+#define GST_TYPE_ID3DEMUX (gst_id3demux_get_type())
+G_DECLARE_FINAL_TYPE (GstID3Demux, gst_id3demux, GST, ID3DEMUX, GstTagDemux)
 
 struct _GstID3Demux
 {
@@ -45,13 +34,6 @@ struct _GstID3Demux
 
   gboolean prefer_v1;     /* prefer ID3v1 tags over ID3v2 tags? */
 };
-
-struct _GstID3DemuxClass 
-{
-  GstTagDemuxClass parent_class;
-};
-
-GType gst_id3demux_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (id3demux);
 
