@@ -26,28 +26,13 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUTO_AUDIO_SRC \
-  (gst_auto_audio_src_get_type ())
-#define GST_AUTO_AUDIO_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_AUTO_AUDIO_SRC, \
-                               GstAutoAudioSrc))
-#define GST_AUTO_AUDIO_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_AUTO_AUDIO_SRC, \
-                            GstAutoAudioSrcClass))
-#define GST_IS_AUTO_AUDIO_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_AUTO_AUDIO_SRC))
-#define GST_IS_AUTO_AUDIO_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_AUTO_AUDIO_SRC))
+#define GST_TYPE_AUTO_AUDIO_SRC (gst_auto_audio_src_get_type ())
+G_DECLARE_FINAL_TYPE (GstAutoAudioSrc, gst_auto_audio_src, GST, AUTO_AUDIO_SRC,
+    GstAutoDetect)
 
 typedef struct _GstAutoAudioSrc {
   GstAutoDetect parent;
 } GstAutoAudioSrc;
-
-typedef struct _GstAutoAudioSrcClass {
-  GstAutoDetectClass parent_class;
-} GstAutoAudioSrcClass;
-
-GType   gst_auto_audio_src_get_type    (void);
 
 G_END_DECLS
 

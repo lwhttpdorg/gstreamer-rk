@@ -26,28 +26,13 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUTO_VIDEO_SRC \
-  (gst_auto_video_src_get_type ())
-#define GST_AUTO_VIDEO_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_AUTO_VIDEO_SRC, \
-                               GstAutoVideoSrc))
-#define GST_AUTO_VIDEO_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_AUTO_VIDEO_SRC, \
-                            GstAutoVideoSrcClass))
-#define GST_IS_AUTO_VIDEO_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_AUTO_VIDEO_SRC))
-#define GST_IS_AUTO_VIDEO_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_AUTO_VIDEO_SRC))
+#define GST_TYPE_AUTO_VIDEO_SRC (gst_auto_video_src_get_type ())
+G_DECLARE_FINAL_TYPE (GstAutoVideoSrc, gst_auto_video_src, GST, AUTO_VIDEO_SRC,
+    GstAutoDetect)
 
 typedef struct _GstAutoVideoSrc {
   GstAutoDetect parent;
 } GstAutoVideoSrc;
-
-typedef struct _GstAutoVideoSrcClass {
-  GstAutoDetectClass parent_class;
-} GstAutoVideoSrcClass;
-
-GType   gst_auto_video_src_get_type    (void);
 
 G_END_DECLS
 
