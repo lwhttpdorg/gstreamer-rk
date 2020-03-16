@@ -29,19 +29,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AU_PARSE \
-  (gst_au_parse_get_type())
-#define GST_AU_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AU_PARSE,GstAuParse))
-#define GST_AU_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AU_PARSE,GstAuParseClass))
-#define GST_IS_AU_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AU_PARSE))
-#define GST_IS_AU_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AU_PARSE))
-
-typedef struct _GstAuParse GstAuParse;
-typedef struct _GstAuParseClass GstAuParseClass;
+#define GST_TYPE_AU_PARSE (gst_au_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstAuParse, gst_au_parse, GST, AU_PARSE, GstElement)
 
 struct _GstAuParse {
   GstElement element;
@@ -63,12 +52,6 @@ struct _GstAuParse {
   guint       samplerate;
   guint       channels;
 };
-
-struct _GstAuParseClass {
-  GstElementClass parent_class;
-};
-
-GType gst_au_parse_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (auparse);
 
