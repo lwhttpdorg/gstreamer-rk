@@ -25,29 +25,12 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ALAW_DEC \
-  (gst_alaw_dec_get_type())
-#define GST_ALAW_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_ALAW_DEC,GstALawDec))
-#define GST_ALAW_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_ALAW_DEC,GstALawDecClass))
-#define GST_IS_ALAW_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_ALAW_DEC))
-#define GST_IS_ALAW_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ALAW_DEC))
-
-typedef struct _GstALawDec GstALawDec;
-typedef struct _GstALawDecClass GstALawDecClass;
+#define GST_TYPE_ALAW_DEC (gst_alaw_dec_get_type())
+G_DECLARE_FINAL_TYPE (GstALawDec, gst_alaw_dec, GST, ALAW_DEC, GstAudioDecoder)
 
 struct _GstALawDec {
   GstAudioDecoder element;
 };
-
-struct _GstALawDecClass {
-  GstAudioDecoderClass parent_class;
-};
-
-GType gst_alaw_dec_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (alawdec);
 
