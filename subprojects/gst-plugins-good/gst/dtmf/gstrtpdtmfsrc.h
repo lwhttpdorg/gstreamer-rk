@@ -32,17 +32,11 @@
 #include "gstdtmfcommon.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_DTMF_SRC		(gst_rtp_dtmf_src_get_type())
-#define GST_RTP_DTMF_SRC(obj)		(G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_DTMF_SRC,GstRTPDTMFSrc))
-#define GST_RTP_DTMF_SRC_CLASS(klass)	(G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_DTMF_SRC,GstRTPDTMFSrcClass))
-#define GST_RTP_DTMF_SRC_GET_CLASS(obj)     (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_RTP_DTMF_SRC, GstRTPDTMFSrcClass))
-#define GST_IS_RTP_DTMF_SRC(obj)		(G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_DTMF_SRC))
-#define GST_IS_RTP_DTMF_SRC_CLASS(klass)	(G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_DTMF_SRC))
+
+#define GST_TYPE_RTP_DTMF_SRC (gst_rtp_dtmf_src_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPDTMFSrc, gst_rtp_dtmf_src, GST, RTP_DTMF_SRC,
+    GstBaseSrc)
 #define GST_RTP_DTMF_SRC_CAST(obj)		((GstRTPDTMFSrc *)(obj))
-typedef struct _GstRTPDTMFSrc GstRTPDTMFSrc;
-typedef struct _GstRTPDTMFSrcClass GstRTPDTMFSrcClass;
-
-
 
 enum _GstRTPDTMFEventType
 {
@@ -100,13 +94,6 @@ struct _GstRTPDTMFSrc
   gboolean dirty;
   guint16 redundancy_count;
 };
-
-struct _GstRTPDTMFSrcClass
-{
-  GstBaseSrcClass parent_class;
-};
-
-GType gst_rtp_dtmf_src_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (rtpdtmfsrc);
 
