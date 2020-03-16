@@ -31,19 +31,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_WARPTV \
-  (gst_warptv_get_type())
-#define GST_WARPTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_WARPTV,GstWarpTV))
-#define GST_WARPTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_WARPTV,GstWarpTVClass))
-#define GST_IS_WARPTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_WARPTV))
-#define GST_IS_WARPTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_WARPTV))
-
-typedef struct _GstWarpTV GstWarpTV;
-typedef struct _GstWarpTVClass GstWarpTVClass;
+#define GST_TYPE_WARPTV (gst_warptv_get_type())
+G_DECLARE_FINAL_TYPE (GstWarpTV, gst_warptv, GST, WARPTV, GstVideoFilter)
 
 struct _GstWarpTV
 {
@@ -54,13 +43,6 @@ struct _GstWarpTV
   gint32 ctable[1024];
   gint tval;
 };
-
-struct _GstWarpTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_warptv_get_type (void);
 
 G_END_DECLS
 

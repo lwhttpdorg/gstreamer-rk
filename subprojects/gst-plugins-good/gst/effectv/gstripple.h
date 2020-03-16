@@ -34,19 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RIPPLETV \
-  (gst_rippletv_get_type())
-#define GST_RIPPLETV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RIPPLETV,GstRippleTV))
-#define GST_RIPPLETV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RIPPLETV,GstRippleTVClass))
-#define GST_IS_RIPPLETV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RIPPLETV))
-#define GST_IS_RIPPLETV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RIPPLETV))
-
-typedef struct _GstRippleTV GstRippleTV;
-typedef struct _GstRippleTVClass GstRippleTVClass;
+#define GST_TYPE_RIPPLETV (gst_rippletv_get_type())
+G_DECLARE_FINAL_TYPE (GstRippleTV, gst_rippletv, GST, RIPPLETV, GstVideoFilter)
 
 struct _GstRippleTV
 {
@@ -73,13 +62,6 @@ struct _GstRippleTV
   gint drops_per_frame;
   gint drop_power;
 };
-
-struct _GstRippleTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_rippletv_get_type (void);
 
 G_END_DECLS
 
