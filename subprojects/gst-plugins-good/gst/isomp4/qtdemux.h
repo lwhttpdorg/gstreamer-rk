@@ -30,16 +30,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_QTDEMUX \
-  (gst_qtdemux_get_type())
-#define GST_QTDEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_QTDEMUX,GstQTDemux))
-#define GST_QTDEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_QTDEMUX,GstQTDemuxClass))
-#define GST_IS_QTDEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_QTDEMUX))
-#define GST_IS_QTDEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_QTDEMUX))
+#define GST_TYPE_QTDEMUX (gst_qtdemux_get_type())
+G_DECLARE_FINAL_TYPE (GstQTDemux, gst_qtdemux, GST, QTDEMUX, GstElement)
 
 #define GST_QTDEMUX_CAST(obj) ((GstQTDemux *)(obj))
 
@@ -47,8 +39,6 @@ G_BEGIN_DECLS
 #define GST_QT_DEMUX_PRIVATE_TAG "private-qt-tag"
 #define GST_QT_DEMUX_CLASSIFICATION_TAG "classification"
 
-typedef struct _GstQTDemux GstQTDemux;
-typedef struct _GstQTDemuxClass GstQTDemuxClass;
 typedef struct _QtDemuxStream QtDemuxStream;
 typedef struct _QtDemuxSample QtDemuxSample;
 typedef struct _QtDemuxSegment QtDemuxSegment;
@@ -310,12 +300,6 @@ struct _GstQTDemux {
   gboolean received_seek;
   gboolean first_moof_already_parsed;
 };
-
-struct _GstQTDemuxClass {
-  GstElementClass parent_class;
-};
-
-GType gst_qtdemux_get_type (void);
 
 struct _QtDemuxStreamStsdEntry
 {
