@@ -22,28 +22,11 @@
 
 #include "matroska-mux.h"
 
-#define GST_TYPE_WEBM_MUX \
-  (gst_webm_mux_get_type ())
-#define GST_WEBM_MUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_WEBM_MUX, GstWebMMux))
-#define GST_WEBM_MUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_WEBM_MUX, GstWebMMuxClass))
-#define GST_IS_WEBM_MUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_WEBM_MUX))
-#define GST_IS_WEBM_MUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_WEBM_MUX))
-
-typedef struct _GstWebMMux GstWebMMux;
-typedef struct _GstWebMMuxClass GstWebMMuxClass;
+#define GST_TYPE_WEBM_MUX (gst_webm_mux_get_type ())
+G_DECLARE_FINAL_TYPE (GstWebMMux, gst_webm_mux, GST, WEBM_MUX, GstMatroskaMux)
 
 struct _GstWebMMux {
   GstMatroskaMux matroskamux;
 };
-
-struct _GstWebMMuxClass {
-  GstMatroskaMuxClass matroskamuxclass;
-};
-
-GType   gst_webm_mux_get_type (void);
 
 #endif /* __GST_WEBM_MUX_H__ */

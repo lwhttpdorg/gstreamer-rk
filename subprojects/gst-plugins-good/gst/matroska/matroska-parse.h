@@ -31,16 +31,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_MATROSKA_PARSE \
-  (gst_matroska_parse_get_type ())
-#define GST_MATROSKA_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_MATROSKA_PARSE, GstMatroskaParse))
-#define GST_MATROSKA_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_MATROSKA_PARSE, GstMatroskaParseClass))
-#define GST_IS_MATROSKA_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_MATROSKA_PARSE))
-#define GST_IS_MATROSKA_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_MATROSKA_PARSE))
+#define GST_TYPE_MATROSKA_PARSE (gst_matroska_parse_get_type ())
+G_DECLARE_FINAL_TYPE (GstMatroskaParse, gst_matroska_parse, GST, MATROSKA_PARSE,
+    GstElement)
 
 typedef struct _GstMatroskaParse {
   GstElement              parent;
@@ -93,10 +86,6 @@ typedef struct _GstMatroskaParse {
   GArray                  *seek_index;
   gint                     seek_entry;
 } GstMatroskaParse;
-
-typedef struct _GstMatroskaParseClass {
-  GstElementClass parent;
-} GstMatroskaParseClass;
 
 G_END_DECLS
 
