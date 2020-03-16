@@ -31,16 +31,9 @@ G_BEGIN_DECLS
 #include <gst/gst.h>
 #include <gst/audio/audio.h>
 
-#define GST_TYPE_DEINTERLEAVE            (gst_deinterleave_get_type())
-#define GST_DEINTERLEAVE(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DEINTERLEAVE,GstDeinterleave))
-#define GST_DEINTERLEAVE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DEINTERLEAVE,GstDeinterleaveClass))
-#define GST_DEINTERLEAVE_GET_CLASS(obj) \
-        (G_TYPE_INSTANCE_GET_CLASS ((obj),GST_TYPE_DEINTERLEAVE,GstDeinterleaveClass))
-#define GST_IS_DEINTERLEAVE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DEINTERLEAVE))
-#define GST_IS_DEINTERLEAVE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DEINTERLEAVE))
-
-typedef struct _GstDeinterleave GstDeinterleave;
-typedef struct _GstDeinterleaveClass GstDeinterleaveClass;
+#define GST_TYPE_DEINTERLEAVE (gst_deinterleave_get_type())
+G_DECLARE_FINAL_TYPE (GstDeinterleave, gst_deinterleave, GST, DEINTERLEAVE,
+    GstElement)
 
 typedef void (*GstDeinterleaveFunc) (gpointer out, gpointer in, guint stride, guint nframes);
 
@@ -60,13 +53,6 @@ struct _GstDeinterleave
 
   GList *pending_events;
 };
-
-struct _GstDeinterleaveClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_deinterleave_get_type (void);
 
 G_END_DECLS
 
