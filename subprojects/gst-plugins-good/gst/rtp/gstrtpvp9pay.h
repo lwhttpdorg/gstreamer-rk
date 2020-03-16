@@ -25,32 +25,16 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_VP9_PAY \
-  (gst_rtp_vp9_pay_get_type())
-#define GST_RTP_VP9_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_RTP_VP9_PAY, GstRtpVP9Pay))
-#define GST_RTP_VP9_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_RTP_VP9_PAY, GstRtpVP9PayClass))
-#define GST_IS_RTP_VP9_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_RTP_VP9_PAY))
-#define GST_IS_RTP_VP9_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_RTP_VP9_PAY))
-#define GST_RTP_VP9_PAY_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_RTP_VP9_PAY, GstRtpVP9PayClass))
+#define GST_TYPE_RTP_VP9_PAY (gst_rtp_vp9_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpVP9Pay, gst_rtp_vp9_pay, GST, RTP_VP9_PAY,
+    GstRTPBasePayload)
 
-typedef struct _GstRtpVP9Pay GstRtpVP9Pay;
-typedef struct _GstRtpVP9PayClass GstRtpVP9PayClass;
 typedef enum _GstVP9RtpPayPictureIDMode GstVP9RtpPayPictureIDMode;
 
 enum _GstVP9RtpPayPictureIDMode {
   VP9_PAY_NO_PICTURE_ID,
   VP9_PAY_PICTURE_ID_7BITS,
   VP9_PAY_PICTURE_ID_15BITS,
-};
-
-struct _GstRtpVP9PayClass
-{
-  GstRTPBasePayloadClass parent_class;
 };
 
 struct _GstRtpVP9Pay
@@ -63,8 +47,6 @@ struct _GstRtpVP9Pay
   gint picture_id_offset;
   gint picture_id;
 };
-
-GType gst_rtp_vp9_pay_get_type (void);
 
 G_END_DECLS
 

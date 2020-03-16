@@ -20,32 +20,15 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRtpCELTDepay GstRtpCELTDepay;
-typedef struct _GstRtpCELTDepayClass GstRtpCELTDepayClass;
-
-#define GST_TYPE_RTP_CELT_DEPAY \
-  (gst_rtp_celt_depay_get_type())
-#define GST_RTP_CELT_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_CELT_DEPAY,GstRtpCELTDepay))
-#define GST_RTP_CELT_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_CELT_DEPAY,GstRtpCELTDepayClass))
-#define GST_IS_RTP_CELT_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_CELT_DEPAY))
-#define GST_IS_RTP_CELT_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_CELT_DEPAY))
+#define GST_TYPE_RTP_CELT_DEPAY (gst_rtp_celt_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpCELTDepay, gst_rtp_celt_depay, GST, RTP_CELT_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpCELTDepay
 {
   GstRTPBaseDepayload depayload;
   gint frame_size;
 };
-
-struct _GstRtpCELTDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_celt_depay_get_type (void);
 
 G_END_DECLS
 

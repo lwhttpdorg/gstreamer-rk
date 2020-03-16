@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MPA_ROBUST_DEPAY \
-  (gst_rtp_mpa_robust_depay_get_type())
-#define GST_RTP_MPA_ROBUST_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MPA_ROBUST_DEPAY,GstRtpMPARobustDepay))
-#define GST_RTP_MPA_ROBUST_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MPA_ROBUST_DEPAY,GstRtpMPARobustDepayClass))
-#define GST_IS_RTP_MPA_ROBUST_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MPA_ROBUST_DEPAY))
-#define GST_IS_RTP_MPA_ROBUST_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MPA_ROBUST_DEPAY))
-
-typedef struct _GstRtpMPARobustDepay GstRtpMPARobustDepay;
-typedef struct _GstRtpMPARobustDepayClass GstRtpMPARobustDepayClass;
+#define GST_TYPE_RTP_MPA_ROBUST_DEPAY (gst_rtp_mpa_robust_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMPARobustDepay, gst_rtp_mpa_robust_depay,
+    GST, RTP_MPA_ROBUST_DEPAY, GstRTPBaseDepayload)
 
 struct _GstRtpMPARobustDepay
 {
@@ -63,13 +53,6 @@ struct _GstRtpMPARobustDepay
   gint         size;
   GstByteWriter *mp3_frame;
 };
-
-struct _GstRtpMPARobustDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_mpa_robust_depay_get_type (void);
 
 G_END_DECLS
 

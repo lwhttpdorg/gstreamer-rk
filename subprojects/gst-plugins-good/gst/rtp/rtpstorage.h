@@ -25,23 +25,8 @@
 
 G_BEGIN_DECLS
 
-#define RTP_TYPE_STORAGE \
-  (rtp_storage_get_type())
-#define RTP_STORAGE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),RTP_TYPE_STORAGE,RtpStorage))
-#define RTP_STORAGE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),RTP_TYPE_STORAGE,RtpStorageClass))
-#define GST_IS_RTP_STORAGE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),RTP_TYPE_STORAGE))
-#define GST_IS_RTP_STORAGE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),RTP_TYPE_RED_DEC))
-
-typedef struct _RtpStorage RtpStorage;
-typedef struct _RtpStorageClass RtpStorageClass;
-
-struct _RtpStorageClass {
-  GObjectClass parent_class;
-};
+#define RTP_TYPE_STORAGE (rtp_storage_get_type())
+G_DECLARE_FINAL_TYPE (RtpStorage, rtp_storage, RTP, STORAGE, GObject)
 
 struct _RtpStorage {
   GObject parent;
@@ -61,8 +46,6 @@ void            rtp_storage_clear                    (RtpStorage *self);
 RtpStorage    * rtp_storage_new                      (void);
 void            rtp_storage_set_size                 (RtpStorage *self, GstClockTime size);
 GstClockTime    rtp_storage_get_size                 (RtpStorage *self);
-
-GType rtp_storage_get_type (void);
 
 G_END_DECLS
 

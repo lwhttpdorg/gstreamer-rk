@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-/* #define's don't like whitespacey bits */
 #define GST_TYPE_RTP_DV_DEPAY (gst_rtp_dv_depay_get_type())
-#define GST_RTP_DV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_DV_DEPAY,GstRTPDVDepay))
-#define GST_RTP_DV_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_DV_DEPAY,GstRTPDVDepay))
-#define GST_IS_RTP_DV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_DV_DEPAY))
-#define GST_IS_RTP_DV_DEPAY_CLASS(obj) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_DV_DEPAY))
-
-typedef struct _GstRTPDVDepay      GstRTPDVDepay;
-typedef struct _GstRTPDVDepayClass GstRTPDVDepayClass;
+G_DECLARE_FINAL_TYPE (GstRTPDVDepay, gst_rtp_dv_depay, GST, RTP_DV_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRTPDVDepay
 {
@@ -51,13 +41,6 @@ struct _GstRTPDVDepay
   gint width, height;
   gint rate_num, rate_denom;
 };
-
-struct _GstRTPDVDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_dv_depay_get_type (void);
 
 G_END_DECLS
 

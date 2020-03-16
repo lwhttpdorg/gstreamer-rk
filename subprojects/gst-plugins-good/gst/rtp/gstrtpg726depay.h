@@ -21,19 +21,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRtpG726Depay GstRtpG726Depay;
-typedef struct _GstRtpG726DepayClass GstRtpG726DepayClass;
-
-#define GST_TYPE_RTP_G726_DEPAY \
-  (gst_rtp_g726_depay_get_type())
-#define GST_RTP_G726_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G726_DEPAY,GstRtpG726Depay))
-#define GST_RTP_G726_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G726_DEPAY,GstRtpG726DepayClass))
-#define GST_IS_RTP_G726_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G726_DEPAY))
-#define GST_IS_RTP_G726_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G726_DEPAY))
+#define GST_TYPE_RTP_G726_DEPAY (gst_rtp_g726_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpG726Depay, gst_rtp_g726_depay, GST, RTP_G726_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpG726Depay
 {
@@ -44,13 +34,6 @@ struct _GstRtpG726Depay
   gint bitrate;
   guint block_align;
 };
-
-struct _GstRtpG726DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_g726_depay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_G726_DEPAY_H__ */

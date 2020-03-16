@@ -26,33 +26,16 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MP4V_DEPAY \
-  (gst_rtp_mp4v_depay_get_type())
-#define GST_RTP_MP4V_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP4V_DEPAY,GstRtpMP4VDepay))
-#define GST_RTP_MP4V_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP4V_DEPAY,GstRtpMP4VDepayClass))
-#define GST_IS_RTP_MP4V_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP4V_DEPAY))
-#define GST_IS_RTP_MP4V_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP4V_DEPAY))
-
-typedef struct _GstRtpMP4VDepay GstRtpMP4VDepay;
-typedef struct _GstRtpMP4VDepayClass GstRtpMP4VDepayClass;
+#define GST_TYPE_RTP_MP4V_DEPAY (gst_rtp_mp4v_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMP4VDepay, gst_rtp_mp4v_depay, GST, RTP_MP4V_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpMP4VDepay
 {
   GstRTPBaseDepayload depayload;
-  
+
   GstAdapter *adapter;
 };
-
-struct _GstRtpMP4VDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_mp4v_depay_get_type (void);
 
 G_END_DECLS
 

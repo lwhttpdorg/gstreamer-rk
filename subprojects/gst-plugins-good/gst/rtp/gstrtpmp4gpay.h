@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MP4G_PAY \
-  (gst_rtp_mp4g_pay_get_type())
-#define GST_RTP_MP4G_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP4G_PAY,GstRtpMP4GPay))
-#define GST_RTP_MP4G_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP4G_PAY,GstRtpMP4GPayClass))
-#define GST_IS_RTP_MP4G_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP4G_PAY))
-#define GST_IS_RTP_MP4G_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP4G_PAY))
-
-typedef struct _GstRtpMP4GPay GstRtpMP4GPay;
-typedef struct _GstRtpMP4GPayClass GstRtpMP4GPayClass;
+#define GST_TYPE_RTP_MP4G_PAY (gst_rtp_mp4g_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMP4GPay, gst_rtp_mp4g_pay, GST, RTP_MP4G_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpMP4GPay
 {
@@ -57,13 +47,6 @@ struct _GstRtpMP4GPay
   GstBuffer    *config;
   guint         frame_len;
 };
-
-struct _GstRtpMP4GPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_mp4g_pay_get_type (void);
 
 G_END_DECLS
 

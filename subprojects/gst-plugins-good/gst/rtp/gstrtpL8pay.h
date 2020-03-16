@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_L8_PAY \
-  (gst_rtp_L8_pay_get_type())
-#define GST_RTP_L8_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_L8_PAY,GstRtpL8Pay))
-#define GST_RTP_L8_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_L8_PAY,GstRtpL8PayClass))
-#define GST_IS_RTP_L8_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_L8_PAY))
-#define GST_IS_RTP_L8_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_L8_PAY))
-
-typedef struct _GstRtpL8Pay GstRtpL8Pay;
-typedef struct _GstRtpL8PayClass GstRtpL8PayClass;
+#define GST_TYPE_RTP_L8_PAY (gst_rtp_L8_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpL8Pay, gst_rtp_L8_pay, GST, RTP_L8_PAY,
+    GstRTPBaseAudioPayload)
 
 struct _GstRtpL8Pay
 {
@@ -49,13 +39,6 @@ struct _GstRtpL8Pay
   GstAudioInfo info;
   const GstRTPChannelOrder *order;
 };
-
-struct _GstRtpL8PayClass
-{
-  GstRTPBaseAudioPayloadClass parent_class;
-};
-
-GType gst_rtp_L8_pay_get_type (void);
 
 G_END_DECLS
 

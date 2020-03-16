@@ -19,19 +19,11 @@
 #include <gst/gst.h>
 #include <gst/rtp/gstrtpbaseaudiopayload.h>
 
-G_BEGIN_DECLS typedef struct _GstRtpG726Pay GstRtpG726Pay;
-typedef struct _GstRtpG726PayClass GstRtpG726PayClass;
+G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_G726_PAY \
-  (gst_rtp_g726_pay_get_type())
-#define GST_RTP_G726_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G726_PAY,GstRtpG726Pay))
-#define GST_RTP_G726_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G726_PAY,GstRtpG726PayClass))
-#define GST_IS_RTP_G726_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G726_PAY))
-#define GST_IS_RTP_G726_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G726_PAY))
+#define GST_TYPE_RTP_G726_PAY (gst_rtp_g726_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpG726Pay, gst_rtp_g726_pay, GST, RTP_G726_PAY,
+    GstRTPBaseAudioPayload)
 
 struct _GstRtpG726Pay
 {
@@ -41,13 +33,6 @@ struct _GstRtpG726Pay
   gboolean force_aal2;
   gint bitrate;
 };
-
-struct _GstRtpG726PayClass
-{
-  GstRTPBaseAudioPayloadClass parent_class;
-};
-
-GType gst_rtp_g726_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_G726_PAY_H__ */

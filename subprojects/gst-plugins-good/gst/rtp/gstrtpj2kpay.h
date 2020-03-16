@@ -24,18 +24,10 @@
 #include <gst/rtp/gstrtpbasepayload.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_J2K_PAY \
-  (gst_rtp_j2k_pay_get_type())
-#define GST_RTP_J2K_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_J2K_PAY,GstRtpJ2KPay))
-#define GST_RTP_J2K_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_J2K_PAY,GstRtpJ2KPayClass))
-#define GST_IS_RTP_J2K_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_J2K_PAY))
-#define GST_IS_RTP_J2K_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_J2K_PAY))
-typedef struct _GstRtpJ2KPay GstRtpJ2KPay;
-typedef struct _GstRtpJ2KPayClass GstRtpJ2KPayClass;
+
+#define GST_TYPE_RTP_J2K_PAY (gst_rtp_j2k_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpJ2KPay, gst_rtp_j2k_pay, GST, RTP_J2K_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpJ2KPay
 {
@@ -44,13 +36,6 @@ struct _GstRtpJ2KPay
   gint height;
   gint width;
 };
-
-struct _GstRtpJ2KPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_j2k_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_J2K_PAY_H__ */

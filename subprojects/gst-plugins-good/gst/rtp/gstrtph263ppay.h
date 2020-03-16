@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_H263P_PAY \
-  (gst_rtp_h263p_pay_get_type())
-#define GST_RTP_H263P_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H263P_PAY,GstRtpH263PPay))
-#define GST_RTP_H263P_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H263P_PAY,GstRtpH263PPayClass))
-#define GST_IS_RTP_H263P_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H263P_PAY))
-#define GST_IS_RTP_H263P_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H263P_PAY))
-
-typedef struct _GstRtpH263PPay GstRtpH263PPay;
-typedef struct _GstRtpH263PPayClass GstRtpH263PPayClass;
+#define GST_TYPE_RTP_H263P_PAY (gst_rtp_h263p_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH263PPay, gst_rtp_h263p_pay, GST, RTP_H263P_PAY,
+    GstRTPBasePayload)
 
 typedef enum
 {
@@ -55,13 +45,6 @@ struct _GstRtpH263PPay
   GstClockTime         first_duration;
   GstFragmentationMode fragmentation_mode;
 };
-
-struct _GstRtpH263PPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_h263p_pay_get_type (void);
 
 G_END_DECLS
 

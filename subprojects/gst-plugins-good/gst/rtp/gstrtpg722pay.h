@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_G722_PAY \
-  (gst_rtp_g722_pay_get_type())
-#define GST_RTP_G722_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G722_PAY,GstRtpG722Pay))
-#define GST_RTP_G722_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G722_PAY,GstRtpG722PayClass))
-#define GST_IS_RTP_G722_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G722_PAY))
-#define GST_IS_RTP_G722_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G722_PAY))
-
-typedef struct _GstRtpG722Pay GstRtpG722Pay;
-typedef struct _GstRtpG722PayClass GstRtpG722PayClass;
+#define GST_TYPE_RTP_G722_PAY (gst_rtp_g722_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpG722Pay, gst_rtp_g722_pay, GST, RTP_G722_PAY,
+    GstRTPBaseAudioPayload)
 
 struct _GstRtpG722Pay
 {
@@ -46,13 +36,6 @@ struct _GstRtpG722Pay
   gint rate;
   gint channels;
 };
-
-struct _GstRtpG722PayClass
-{
-  GstRTPBaseAudioPayloadClass parent_class;
-};
-
-GType gst_rtp_g722_pay_get_type (void);
 
 G_END_DECLS
 

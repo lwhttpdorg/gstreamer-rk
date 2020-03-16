@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_G723_PAY \
-  (gst_rtp_g723_pay_get_type())
-#define GST_RTP_G723_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G723_PAY,GstRTPG723Pay))
-#define GST_RTP_G723_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G723_PAY,GstRTPG723PayClass))
-#define GST_IS_RTP_G723_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G723_PAY))
-#define GST_IS_RTP_G723_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G723_PAY))
-
-typedef struct _GstRTPG723Pay GstRTPG723Pay;
-typedef struct _GstRTPG723PayClass GstRTPG723PayClass;
+#define GST_TYPE_RTP_G723_PAY (gst_rtp_g723_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPG723Pay, gst_rtp_g723_pay, GST, RTP_G723_PAY,
+    GstRTPBasePayload)
 
 struct _GstRTPG723Pay
 {
@@ -49,13 +39,6 @@ struct _GstRTPG723Pay
   GstClockTime timestamp;
   gboolean discont;
 };
-
-struct _GstRTPG723PayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_g723_pay_get_type (void);
 
 G_END_DECLS
 

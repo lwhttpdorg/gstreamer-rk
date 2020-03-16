@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPDVPay GstRTPDVPay;
-typedef struct _GstRTPDVPayClass GstRTPDVPayClass;
-
-#define GST_TYPE_RTP_DV_PAY \
-  (gst_rtp_dv_pay_get_type())
-#define GST_RTP_DV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_DV_PAY,GstRTPDVPay))
-#define GST_RTP_DV_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_DV_PAY,GstRTPDVPay))
-#define GST_IS_RTP_DV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_DV_PAY))
-#define GST_IS_RTP_DV_PAY_CLASS(obj) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_DV_PAY))
+#define GST_TYPE_RTP_DV_PAY (gst_rtp_dv_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPDVPay, gst_rtp_dv_pay, GST, RTP_DV_PAY,
+    GstRTPBasePayload)
 
 typedef enum
 {
@@ -54,13 +44,6 @@ struct _GstRTPDVPay
   gboolean negotiated;
   GstDVPayMode mode;
 };
-
-struct _GstRTPDVPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_dv_pay_get_type (void);
 
 G_END_DECLS
 

@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_VRAW_DEPAY \
-  (gst_rtp_vraw_depay_get_type())
-#define GST_RTP_VRAW_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_VRAW_DEPAY,GstRtpVRawDepay))
-#define GST_RTP_VRAW_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_VRAW_DEPAY,GstRtpVRawDepayClass))
-#define GST_IS_RTP_VRAW_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_VRAW_DEPAY))
-#define GST_IS_RTP_VRAW_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_VRAW_DEPAY))
-
-typedef struct _GstRtpVRawDepay GstRtpVRawDepay;
-typedef struct _GstRtpVRawDepayClass GstRtpVRawDepayClass;
+#define GST_TYPE_RTP_VRAW_DEPAY (gst_rtp_vraw_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpVRawDepay, gst_rtp_vraw_depay, GST, RTP_VRAW_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpVRawDepay
 {
@@ -56,13 +46,6 @@ struct _GstRtpVRawDepay
   gint pgroup;
   gint xinc, yinc;
 };
-
-struct _GstRtpVRawDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_vraw_depay_get_type (void);
 
 G_END_DECLS
 

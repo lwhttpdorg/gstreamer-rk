@@ -25,20 +25,10 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPiLBCDepay GstRTPiLBCDepay;
-typedef struct _GstRTPiLBCDepayClass GstRTPiLBCDepayClass;
+#define GST_TYPE_RTP_ILBC_DEPAY (gst_rtp_ilbc_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPiLBCDepay, gst_rtp_ilbc_depay, GST, RTP_ILBC_DEPAY,
+    GstRTPBaseDepayload)
 
-#define GST_TYPE_RTP_ILBC_DEPAY \
-  (gst_rtp_ilbc_depay_get_type())
-#define GST_RTP_ILBC_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_ILBC_DEPAY,GstRTPiLBCDepay))
-#define GST_RTP_ILBC_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_ILBC_DEPAY,GstRTPiLBCDepayClass))
-#define GST_IS_RTP_ILBC_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_ILBC_DEPAY))
-#define GST_IS_RTP_ILBC_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_ILBC_DEPAY))
-  
 typedef enum {
   GST_ILBC_MODE_20 = 20,
   GST_ILBC_MODE_30 = 30
@@ -50,13 +40,6 @@ struct _GstRTPiLBCDepay
 
   GstiLBCMode mode;
 };
-
-struct _GstRTPiLBCDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_ilbc_depay_get_type (void);
 
 G_END_DECLS
 

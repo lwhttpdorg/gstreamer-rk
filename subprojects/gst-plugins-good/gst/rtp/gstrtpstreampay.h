@@ -25,27 +25,15 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_STREAM_PAY            (gst_rtp_stream_pay_get_type())
-#define GST_RTP_STREAM_PAY(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_STREAM_PAY,GstRtpStreamPay))
-#define GST_IS_RTP_STREAM_PAY(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_STREAM_PAY))
-#define GST_RTP_STREAM_PAY_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_RTP_STREAM_PAY,GstRtpStreamPayClass))
-#define GST_IS_RTP_STREAM_PAY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_RTP_STREAM_PAY))
-#define GST_RTP_STREAM_PAY_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_RTP_STREAM_PAY,GstRtpStreamPayClass))
-
-typedef struct _GstRtpStreamPay      GstRtpStreamPay;
-typedef struct _GstRtpStreamPayClass GstRtpStreamPayClass;
+#define GST_TYPE_RTP_STREAM_PAY (gst_rtp_stream_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpStreamPay, gst_rtp_stream_pay, GST, RTP_STREAM_PAY,
+    GstElement)
 
 struct _GstRtpStreamPay {
   GstElement parent;
 
   GstPad *srcpad, *sinkpad;
 };
-
-struct _GstRtpStreamPayClass {
-  GstElementClass parent_class;
-};
-
-GType gst_rtp_stream_pay_get_type (void);
 
 G_END_DECLS
 

@@ -25,31 +25,14 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_STREAM_DEPAY \
-  (gst_rtp_stream_depay_get_type())
-#define GST_RTP_STREAM_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_STREAM_DEPAY,GstRtpStreamDepay))
-#define GST_RTP_STREAM_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_STREAM_DEPAY,GstRtpStreamDepayClass))
-#define GST_IS_RTP_STREAM_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_STREAM_DEPAY))
-#define GST_IS_RTP_STREAM_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_STREAM_DEPAY))
-
-typedef struct _GstRtpStreamDepay GstRtpStreamDepay;
-typedef struct _GstRtpStreamDepayClass GstRtpStreamDepayClass;
+#define GST_TYPE_RTP_STREAM_DEPAY (gst_rtp_stream_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpStreamDepay, gst_rtp_stream_depay,
+    GST, RTP_STREAM_DEPAY, GstBaseParse)
 
 struct _GstRtpStreamDepay
 {
   GstBaseParse parent;
 };
-
-struct _GstRtpStreamDepayClass
-{
-  GstBaseParseClass parent_class;
-};
-
-GType gst_rtp_stream_depay_get_type (void);
 
 G_END_DECLS
 

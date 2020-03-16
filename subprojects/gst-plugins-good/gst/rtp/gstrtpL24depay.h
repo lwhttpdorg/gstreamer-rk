@@ -28,22 +28,10 @@
 
 G_BEGIN_DECLS
 
-/* Standard macros for defining types for this element.  */
-#define GST_TYPE_RTP_L24_DEPAY \
-  (gst_rtp_L24_depay_get_type())
-#define GST_RTP_L24_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_L24_DEPAY,GstRtpL24Depay))
-#define GST_RTP_L24_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_L24_DEPAY,GstRtpL24DepayClass))
-#define GST_IS_RTP_L24_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_L24_DEPAY))
-#define GST_IS_RTP_L24_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_L24_DEPAY))
+#define GST_TYPE_RTP_L24_DEPAY (gst_rtp_L24_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpL24Depay, gst_rtp_L24_depay, GST, RTP_L24_DEPAY,
+    GstRTPBaseDepayload)
 
-typedef struct _GstRtpL24Depay GstRtpL24Depay;
-typedef struct _GstRtpL24DepayClass GstRtpL24DepayClass;
-
-/* Definition of structure storing data for this element. */
 struct _GstRtpL24Depay
 {
   GstRTPBaseDepayload depayload;
@@ -51,14 +39,6 @@ struct _GstRtpL24Depay
   GstAudioInfo info;
   const GstRTPChannelOrder *order;
 };
-
-/* Standard definition defining a class for this element. */
-struct _GstRtpL24DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_L24_depay_get_type (void);
 
 G_END_DECLS
 

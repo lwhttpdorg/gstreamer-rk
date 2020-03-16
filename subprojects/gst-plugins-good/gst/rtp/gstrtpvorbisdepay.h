@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_VORBIS_DEPAY \
-  (gst_rtp_vorbis_depay_get_type())
-#define GST_RTP_VORBIS_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_VORBIS_DEPAY,GstRtpVorbisDepay))
-#define GST_RTP_VORBIS_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_VORBIS_DEPAY,GstRtpVorbisDepayClass))
-#define GST_IS_RTP_VORBIS_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_VORBIS_DEPAY))
-#define GST_IS_RTP_VORBIS_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_VORBIS_DEPAY))
-
-typedef struct _GstRtpVorbisDepay GstRtpVorbisDepay;
-typedef struct _GstRtpVorbisDepayClass GstRtpVorbisDepayClass;
+#define GST_TYPE_RTP_VORBIS_DEPAY (gst_rtp_vorbis_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpVorbisDepay, gst_rtp_vorbis_depay,
+    GST, RTP_VORBIS_DEPAY, GstRTPBaseDepayload)
 
 typedef struct _GstRtpVorbisConfig {
   guint32  ident;
@@ -55,13 +45,6 @@ struct _GstRtpVorbisDepay
   GstAdapter         *adapter;
   gboolean            assembling;
 };
-
-struct _GstRtpVorbisDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_vorbis_depay_get_type (void);
 
 G_END_DECLS
 

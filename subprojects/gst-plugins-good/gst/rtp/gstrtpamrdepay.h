@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_AMR_DEPAY \
-  (gst_rtp_amr_depay_get_type())
-#define GST_RTP_AMR_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_AMR_DEPAY,GstRtpAMRDepay))
-#define GST_RTP_AMR_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_AMR_DEPAY,GstRtpAMRDepayClass))
-#define GST_IS_RTP_AMR_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_AMR_DEPAY))
-#define GST_IS_RTP_AMR_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_AMR_DEPAY))
-
-typedef struct _GstRtpAMRDepay GstRtpAMRDepay;
-typedef struct _GstRtpAMRDepayClass GstRtpAMRDepayClass;
+#define GST_TYPE_RTP_AMR_DEPAY (gst_rtp_amr_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpAMRDepay, gst_rtp_amr_depay, GST, RTP_AMR_DEPAY,
+    GstRTPBaseDepayload)
 
 typedef enum {
   GST_RTP_AMR_DP_MODE_INVALID = 0,
@@ -62,13 +52,6 @@ struct _GstRtpAMRDepay
   gint     ptime;
   gint     channels;
 };
-
-struct _GstRtpAMRDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_amr_depay_get_type (void);
 
 G_END_DECLS
 

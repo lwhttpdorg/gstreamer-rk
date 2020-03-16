@@ -25,33 +25,17 @@
 #include <gst/gst.h>
 #include <gst/rtp/gstrtpbasedepayload.h>
 
-G_BEGIN_DECLS typedef struct _GstRTPOpusDepay GstRTPOpusDepay;
-typedef struct _GstRTPOpusDepayClass GstRTPOpusDepayClass;
+G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_OPUS_DEPAY \
-  (gst_rtp_opus_depay_get_type())
-#define GST_RTP_OPUS_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_OPUS_DEPAY,GstRTPOpusDepay))
-#define GST_RTP_OPUS_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_OPUS_DEPAY,GstRTPOpusDepayClass))
-#define GST_IS_RTP_OPUS_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_OPUS_DEPAY))
-#define GST_IS_RTP_OPUS_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_OPUS_DEPAY))
-
+#define GST_TYPE_RTP_OPUS_DEPAY (gst_rtp_opus_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPOpusDepay, gst_rtp_opus_depay, GST, RTP_OPUS_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRTPOpusDepay
 {
   GstRTPBaseDepayload depayload;
 
 };
-
-struct _GstRTPOpusDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_opus_depay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_OPUS_DEPAY_H__ */

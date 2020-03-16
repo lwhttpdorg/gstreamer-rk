@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_L16_PAY \
-  (gst_rtp_L16_pay_get_type())
-#define GST_RTP_L16_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_L16_PAY,GstRtpL16Pay))
-#define GST_RTP_L16_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_L16_PAY,GstRtpL16PayClass))
-#define GST_IS_RTP_L16_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_L16_PAY))
-#define GST_IS_RTP_L16_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_L16_PAY))
-
-typedef struct _GstRtpL16Pay GstRtpL16Pay;
-typedef struct _GstRtpL16PayClass GstRtpL16PayClass;
+#define GST_TYPE_RTP_L16_PAY (gst_rtp_L16_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpL16Pay, gst_rtp_L16_pay, GST, RTP_L16_PAY,
+    GstRTPBaseAudioPayload)
 
 struct _GstRtpL16Pay
 {
@@ -48,13 +38,6 @@ struct _GstRtpL16Pay
   GstAudioInfo info;
   const GstRTPChannelOrder *order;
 };
-
-struct _GstRtpL16PayClass
-{
-  GstRTPBaseAudioPayloadClass parent_class;
-};
-
-GType gst_rtp_L16_pay_get_type (void);
 
 G_END_DECLS
 

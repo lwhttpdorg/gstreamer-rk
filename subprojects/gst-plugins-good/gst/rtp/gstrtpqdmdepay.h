@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_QDM2_DEPAY \
-  (gst_rtp_qdm2_depay_get_type())
-#define GST_RTP_QDM2_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_QDM2_DEPAY,GstRtpQDM2Depay))
-#define GST_RTP_QDM2_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_QDM2_DEPAY,GstRtpQDM2DepayClass))
-#define GST_IS_RTP_QDM2_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_QDM2_DEPAY))
-#define GST_IS_RTP_QDM2_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_QDM2_DEPAY))
-
-typedef struct _GstRtpQDM2Depay GstRtpQDM2Depay;
-typedef struct _GstRtpQDM2DepayClass GstRtpQDM2DepayClass;
+#define GST_TYPE_RTP_QDM2_DEPAY (gst_rtp_qdm2_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpQDM2Depay, gst_rtp_qdm2_depay, GST, RTP_QDM2_DEPAY,
+    GstRTPBaseDepayload)
 
 typedef struct _QDM2Packet {
   guint8* data;
@@ -70,13 +60,6 @@ struct _GstRtpQDM2Depay
 
   QDM2Packet *packets[MAX_SCRAMBLED_PACKETS];
 };
-
-struct _GstRtpQDM2DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_qdm2_depay_get_type (void);
 
 G_END_DECLS
 

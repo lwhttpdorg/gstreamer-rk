@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ASTERISK_H263 \
-  (gst_asteriskh263_get_type())
-#define GST_ASTERISK_H263(obj) \
- (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_ASTERISK_H263,GstAsteriskh263))
-#define GST_ASTERISK_H263_CLASS(klass) \
- (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_ASTERISK_H263,GstAsteriskh263Class))
-#define GST_IS_ASTERISK_H263(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_ASTERISK_H263))
-#define GST_IS_ASTERISK_H263_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ASTERISK_H263))
-
-typedef struct _GstAsteriskh263 GstAsteriskh263;
-typedef struct _GstAsteriskh263Class GstAsteriskh263Class;
+#define GST_TYPE_ASTERISK_H263 (gst_asteriskh263_get_type())
+G_DECLARE_FINAL_TYPE (GstAsteriskh263, gst_asteriskh263, GST, ASTERISK_H263,
+    GstElement)
 
 struct _GstAsteriskh263
 {
@@ -50,13 +40,6 @@ struct _GstAsteriskh263
 
   guint32 lastts;
 };
-
-struct _GstAsteriskh263Class
-{
-  GstElementClass parent_class;
-};
-
-GType gst_asteriskh263_get_type (void);
 
 G_END_DECLS
 

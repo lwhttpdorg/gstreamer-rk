@@ -27,31 +27,14 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_KLV_PAY \
-  (gst_rtp_klv_pay_get_type())
-#define GST_RTP_KLV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_KLV_PAY,GstRtpKlvPay))
-#define GST_RTP_KLV_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_KLV_PAY,GstRtpKlvPayClass))
-#define GST_IS_RTP_KLV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_KLV_PAY))
-#define GST_IS_RTP_KLV_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_KLV_PAY))
-
-typedef struct _GstRtpKlvPay GstRtpKlvPay;
-typedef struct _GstRtpKlvPayClass GstRtpKlvPayClass;
+#define GST_TYPE_RTP_KLV_PAY (gst_rtp_klv_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpKlvPay, gst_rtp_klv_pay, GST, RTP_KLV_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpKlvPay
 {
   GstRTPBasePayload rtpbasepayload;
 };
-
-struct _GstRtpKlvPayClass
-{
-  GstRTPBasePayloadClass rtpbasepayload_class;
-};
-
-G_GNUC_INTERNAL  GType     gst_rtp_klv_pay_get_type (void);
 
 G_END_DECLS
 

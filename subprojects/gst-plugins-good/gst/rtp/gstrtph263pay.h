@@ -26,16 +26,11 @@
 #include <gst/rtp/gstrtpbasepayload.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_H263_PAY \
-  (gst_rtp_h263_pay_get_type())
-#define GST_RTP_H263_PAY(obj) \
- (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H263_PAY,GstRtpH263Pay))
-#define GST_RTP_H263_PAY_CLASS(klass) \
- (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H263_PAY,GstRtpH263PayClass))
-#define GST_IS_RTP_H263_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H263_PAY))
-#define GST_IS_RTP_H263_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H263_PAY))
+
+#define GST_TYPE_RTP_H263_PAY (gst_rtp_h263_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH263Pay, gst_rtp_h263_pay, GST, RTP_H263_PAY,
+    GstRTPBasePayload)
+
 // blocks per macroblock
 #define N_BLOCKS 6
 #define DEFAULT_MODE_A FALSE
@@ -49,8 +44,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstRtpH263PayContext GstRtpH263PayContext;
 typedef struct _GstRtpH263PayPic GstRtpH263PayPic;
-typedef struct _GstRtpH263PayClass GstRtpH263PayClass;
-typedef struct _GstRtpH263Pay GstRtpH263Pay;
 typedef struct _GstRtpH263PayBoundry GstRtpH263PayBoundry;
 typedef struct _GstRtpH263PayMB GstRtpH263PayMB;
 typedef struct _GstRtpH263PayGob GstRtpH263PayGob;
@@ -84,11 +77,6 @@ struct _GstRtpH263PayContext
   guint no_gobs;
   GstRtpH263PayGob **gobs;
 
-};
-
-struct _GstRtpH263PayClass
-{
-  GstRTPBasePayloadClass parent_class;
 };
 
 typedef struct _GstRtpH263PayAHeader
@@ -406,8 +394,6 @@ struct _GstRtpH263PayPackage
 
 #define GST_RTP_H263_PAY_END(start, len) (((guint8 *)start) + ((guint)len))
 #define GST_RTP_H263_PAY_GOBN(gob) (((((guint8 *) gob)[2] >> 2) & 0x1f)
-
-GType gst_rtp_h263_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_H263_PAY_H__ */

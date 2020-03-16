@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_AMR_PAY \
-  (gst_rtp_amr_pay_get_type())
-#define GST_RTP_AMR_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_AMR_PAY,GstRtpAMRPay))
-#define GST_RTP_AMR_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_AMR_PAY,GstRtpAMRPayClass))
-#define GST_IS_RTP_AMR_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_AMR_PAY))
-#define GST_IS_RTP_AMR_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_AMR_PAY))
-
-typedef struct _GstRtpAMRPay GstRtpAMRPay;
-typedef struct _GstRtpAMRPayClass GstRtpAMRPayClass;
+#define GST_TYPE_RTP_AMR_PAY (gst_rtp_amr_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpAMRPay, gst_rtp_amr_pay, GST, RTP_AMR_PAY,
+    GstRTPBasePayload)
 
 typedef enum {
   GST_RTP_AMR_P_MODE_INVALID = 0,
@@ -55,13 +45,6 @@ struct _GstRtpAMRPay
   guint32 first_rtp_time;
   guint32 next_rtp_time;
 };
-
-struct _GstRtpAMRPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_amr_pay_get_type (void);
 
 G_END_DECLS
 

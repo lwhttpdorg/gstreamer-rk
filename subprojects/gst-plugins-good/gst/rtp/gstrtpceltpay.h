@@ -21,19 +21,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRtpCELTPay GstRtpCELTPay;
-typedef struct _GstRtpCELTPayClass GstRtpCELTPayClass;
-
-#define GST_TYPE_RTP_CELT_PAY \
-  (gst_rtp_celt_pay_get_type())
-#define GST_RTP_CELT_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_CELT_PAY,GstRtpCELTPay))
-#define GST_RTP_CELT_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_CELT_PAY,GstRtpCELTPayClass))
-#define GST_IS_RTP_CELT_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_CELT_PAY))
-#define GST_IS_RTP_CELT_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_CELT_PAY))
+#define GST_TYPE_RTP_CELT_PAY (gst_rtp_celt_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpCELTPay, gst_rtp_celt_pay, GST, RTP_CELT_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpCELTPay
 {
@@ -47,13 +37,6 @@ struct _GstRtpCELTPay
   guint        bytes;     /* bytes queued for data */
   GstClockTime qduration; /* queued duration */
 };
-
-struct _GstRtpCELTPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_celt_pay_get_type (void);
 
 G_END_DECLS
 

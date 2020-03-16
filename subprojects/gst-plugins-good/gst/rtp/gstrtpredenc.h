@@ -25,23 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_RED_ENC \
-  (gst_rtp_red_enc_get_type())
-#define GST_RTP_RED_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_RED_ENC,GstRtpRedEnc))
-#define GST_RTP_RED_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_RED_ENC,GstRtpRedEncClass))
-#define GST_IS_RTP_RED_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_RED_ENC))
-#define GST_IS_RTP_RED_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_RED_ENC))
-
-typedef struct _GstRtpRedEnc GstRtpRedEnc;
-typedef struct _GstRtpRedEncClass GstRtpRedEncClass;
-
-struct _GstRtpRedEncClass {
-  GstElementClass parent_class;
-};
+#define GST_TYPE_RTP_RED_ENC (gst_rtp_red_enc_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpRedEnc, gst_rtp_red_enc, GST, RTP_RED_ENC,
+    GstElement)
 
 struct _GstRtpRedEnc {
   GstElement parent;
@@ -60,8 +46,6 @@ struct _GstRtpRedEnc {
 
   gboolean ignoring_extension_warned;
 };
-
-GType gst_rtp_red_enc_get_type (void);
 
 G_END_DECLS
 

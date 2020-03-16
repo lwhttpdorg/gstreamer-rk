@@ -25,23 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_RED_DEC \
-  (gst_rtp_red_dec_get_type())
-#define GST_RTP_RED_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_RED_DEC,GstRtpRedDec))
-#define GST_RTP_RED_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_RED_DEC,GstRtpRedDecClass))
-#define GST_IS_RTP_RED_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_RED_DEC))
-#define GST_IS_RTP_RED_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_RED_DEC))
-
-typedef struct _GstRtpRedDec GstRtpRedDec;
-typedef struct _GstRtpRedDecClass GstRtpRedDecClass;
-
-struct _GstRtpRedDecClass {
-  GstElementClass parent_class;
-};
+#define GST_TYPE_RTP_RED_DEC (gst_rtp_red_dec_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpRedDec, gst_rtp_red_dec, GST, RTP_RED_DEC,
+    GstElement)
 
 struct _GstRtpRedDec {
   GstElement parent;
@@ -60,8 +46,6 @@ struct _GstRtpRedDec {
   /* Protects pt and payloads */
   GMutex lock;
 };
-
-GType gst_rtp_red_dec_get_type (void);
 
 G_END_DECLS
 

@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MP4G_DEPAY \
-  (gst_rtp_mp4g_depay_get_type())
-#define GST_RTP_MP4G_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP4G_DEPAY,GstRtpMP4GDepay))
-#define GST_RTP_MP4G_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP4G_DEPAY,GstRtpMP4GDepayClass))
-#define GST_IS_RTP_MP4G_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP4G_DEPAY))
-#define GST_IS_RTP_MP4G_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP4G_DEPAY))
-
-typedef struct _GstRtpMP4GDepay GstRtpMP4GDepay;
-typedef struct _GstRtpMP4GDepayClass GstRtpMP4GDepayClass;
+#define GST_TYPE_RTP_MP4G_DEPAY (gst_rtp_mp4g_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMP4GDepay, gst_rtp_mp4g_depay, GST, RTP_MP4G_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpMP4GDepay
 {
@@ -75,13 +65,6 @@ struct _GstRtpMP4GDepay
   GstAdapter *adapter;
   GstBufferList *outbufs;
 };
-
-struct _GstRtpMP4GDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_mp4g_depay_get_type (void);
 
 G_END_DECLS
 
