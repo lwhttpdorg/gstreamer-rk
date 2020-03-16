@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AC3_PARSE \
-  (gst_ac3_parse_get_type())
-#define GST_AC3_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_AC3_PARSE, GstAc3Parse))
-#define GST_AC3_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_AC3_PARSE, GstAc3ParseClass))
-#define GST_IS_AC3_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_AC3_PARSE))
-#define GST_IS_AC3_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_AC3_PARSE))
 
-typedef struct _GstAc3Parse GstAc3Parse;
-typedef struct _GstAc3ParseClass GstAc3ParseClass;
+#define GST_TYPE_AC3_PARSE (gst_ac3_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstAc3Parse, gst_ac3_parse, GST, AC3_PARSE, GstBaseParse)
 
 enum {
   GST_AC3_PARSE_ALIGN_NONE,
@@ -65,18 +55,6 @@ struct _GstAc3Parse {
   gint                  align;
   GstPadChainFunction   baseparse_chainfunc;
 };
-
-/**
- * GstAc3ParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstAc3ParseClass data structure.
- */
-struct _GstAc3ParseClass {
-  GstBaseParseClass baseparse_class;
-};
-
-GType gst_ac3_parse_get_type (void);
 
 G_END_DECLS
 

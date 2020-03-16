@@ -25,22 +25,11 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_DCA_PARSE \
-  (gst_dca_parse_get_type())
-#define GST_DCA_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_DCA_PARSE, GstDcaParse))
-#define GST_DCA_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_DCA_PARSE, GstDcaParseClass))
-#define GST_IS_DCA_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_DCA_PARSE))
-#define GST_IS_DCA_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_DCA_PARSE))
+#define GST_TYPE_DCA_PARSE (gst_dca_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstDcaParse, gst_dca_parse, GST, DCA_PARSE, GstBaseParse)
 
 #define DCA_MIN_FRAMESIZE 96
 #define DCA_MAX_FRAMESIZE 18725 /* 16384*16/14 */
-
-typedef struct _GstDcaParse GstDcaParse;
-typedef struct _GstDcaParseClass GstDcaParseClass;
 
 /**
  * GstDcaParse:
@@ -64,18 +53,6 @@ struct _GstDcaParse {
 
   GstPadChainFunction   baseparse_chainfunc;
 };
-
-/**
- * GstDcaParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstDcaParseClass data structure.
- */
-struct _GstDcaParseClass {
-  GstBaseParseClass baseparse_class;
-};
-
-GType gst_dca_parse_get_type (void);
 
 G_END_DECLS
 

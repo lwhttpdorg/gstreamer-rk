@@ -28,20 +28,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AMR_PARSE \
-  (gst_amr_parse_get_type())
-#define GST_AMR_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_AMR_PARSE, GstAmrParse))
-#define GST_AMR_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_AMR_PARSE, GstAmrParseClass))
-#define GST_IS_AMR_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_AMR_PARSE))
-#define GST_IS_AMR_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_AMR_PARSE))
-
-
-typedef struct _GstAmrParse GstAmrParse;
-typedef struct _GstAmrParseClass GstAmrParseClass;
+#define GST_TYPE_AMR_PARSE (gst_amr_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstAmrParse, gst_amr_parse, GST, AMR_PARSE, GstBaseParse)
 
 /**
  * GstAmrParse:
@@ -60,18 +48,6 @@ struct _GstAmrParse {
   gint header;
   gboolean wide;
 };
-
-/**
- * GstAmrParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstAmrParseClass data structure.
- */
-struct _GstAmrParseClass {
-  GstBaseParseClass parent_class;
-};
-
-GType gst_amr_parse_get_type (void);
 
 G_END_DECLS
 

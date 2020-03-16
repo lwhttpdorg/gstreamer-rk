@@ -27,17 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_WAVPACK_PARSE \
-  (gst_wavpack_parse_get_type())
-#define GST_WAVPACK_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_WAVPACK_PARSE, GstWavpackParse))
-#define GST_WAVPACK_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_WAVPACK_PARSE, GstWavpackParseClass))
-#define GST_IS_WAVPACK_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_WAVPACK_PARSE))
-#define GST_IS_WAVPACK_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_WAVPACK_PARSE))
-
+#define GST_TYPE_WAVPACK_PARSE (gst_wavpack_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstWavpackParse, gst_wavpack_parse, GST, WAVPACK_PARSE,
+    GstBaseParse)
 
 #define ID_UNIQUE               0x3f
 #define ID_OPTIONAL_DATA        0x20
@@ -95,9 +87,6 @@ typedef struct {
   guint channel_mask;
 } WavpackInfo;
 
-typedef struct _GstWavpackParse GstWavpackParse;
-typedef struct _GstWavpackParseClass GstWavpackParseClass;
-
 /**
  * GstWavpackParse:
  *
@@ -116,18 +105,6 @@ struct _GstWavpackParse {
 
   gboolean      sent_codec_tag;
 };
-
-/**
- * GstWavpackParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstWavpackParseClass data structure.
- */
-struct _GstWavpackParseClass {
-  GstBaseParseClass baseparse_class;
-};
-
-GType gst_wavpack_parse_get_type (void);
 
 G_END_DECLS
 
