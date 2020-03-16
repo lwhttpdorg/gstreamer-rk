@@ -28,14 +28,10 @@
 #include <gst/audio/gstaudiofilter.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_AUDIO_AMPLIFY            (gst_audio_amplify_get_type())
-#define GST_AUDIO_AMPLIFY(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_AMPLIFY,GstAudioAmplify))
-#define GST_IS_AUDIO_AMPLIFY(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_AMPLIFY))
-#define GST_AUDIO_AMPLIFY_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_AMPLIFY,GstAudioAmplifyClass))
-#define GST_IS_AUDIO_AMPLIFY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_AMPLIFY))
-#define GST_AUDIO_AMPLIFY_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_AMPLIFY,GstAudioAmplifyClass))
-typedef struct _GstAudioAmplify GstAudioAmplify;
-typedef struct _GstAudioAmplifyClass GstAudioAmplifyClass;
+
+#define GST_TYPE_AUDIO_AMPLIFY (gst_audio_amplify_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioAmplify, gst_audio_amplify, GST, AUDIO_AMPLIFY,
+    GstAudioFilter)
 
 typedef void (*GstAudioAmplifyProcessFunc) (GstAudioAmplify *, void *, guint);
 
@@ -50,13 +46,6 @@ struct _GstAudioAmplify
   gint clipping_method;
   GstAudioFormat format;
 };
-
-struct _GstAudioAmplifyClass
-{
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_amplify_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audioamplify);
 

@@ -29,19 +29,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_IIR_FILTER \
-  (gst_audio_iir_filter_get_type())
-#define GST_AUDIO_IIR_FILTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_IIR_FILTER,GstAudioIIRFilter))
-#define GST_AUDIO_IIR_FILTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AUDIO_IIR_FILTER,GstAudioIIRFilterClass))
-#define GST_IS_AUDIO_IIR_FILTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_IIR_FILTER))
-#define GST_IS_AUDIO_IIR_FILTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AUDIO_IIR_FILTER))
-
-typedef struct _GstAudioIIRFilter GstAudioIIRFilter;
-typedef struct _GstAudioIIRFilterClass GstAudioIIRFilterClass;
+#define GST_TYPE_AUDIO_IIR_FILTER (gst_audio_iir_filter_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioIIRFilter, gst_audio_iir_filter,
+    GST, AUDIO_IIR_FILTER, GstAudioFXBaseIIRFilter)
 
 /**
  * GstAudioIIRFilter:
@@ -56,14 +46,6 @@ struct _GstAudioIIRFilter {
   /* < private > */
   GMutex lock;
 };
-
-struct _GstAudioIIRFilterClass {
-  GstAudioFXBaseIIRFilterClass parent;
-
-  void (*rate_changed) (GstElement * element, gint rate);
-};
-
-GType gst_audio_iir_filter_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audioiirfilter);
 

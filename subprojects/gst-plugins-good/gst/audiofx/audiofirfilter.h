@@ -29,19 +29,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_FIR_FILTER \
-  (gst_audio_fir_filter_get_type())
-#define GST_AUDIO_FIR_FILTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_FIR_FILTER,GstAudioFIRFilter))
-#define GST_AUDIO_FIR_FILTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AUDIO_FIR_FILTER,GstAudioFIRFilterClass))
-#define GST_IS_AUDIO_FIR_FILTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_FIR_FILTER))
-#define GST_IS_AUDIO_FIR_FILTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AUDIO_FIR_FILTER))
-
-typedef struct _GstAudioFIRFilter GstAudioFIRFilter;
-typedef struct _GstAudioFIRFilterClass GstAudioFIRFilterClass;
+#define GST_TYPE_AUDIO_FIR_FILTER (gst_audio_fir_filter_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioFIRFilter, gst_audio_fir_filter,
+    GST, AUDIO_FIR_FILTER, GstAudioFXBaseFIRFilter)
 
 /**
  * GstAudioFIRFilter:
@@ -57,14 +47,6 @@ struct _GstAudioFIRFilter {
   /* < private > */
   GMutex lock;
 };
-
-struct _GstAudioFIRFilterClass {
-  GstAudioFXBaseFIRFilterClass parent;
-
-  void (*rate_changed) (GstElement * element, gint rate);
-};
-
-GType gst_audio_fir_filter_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiofirfilter);
 

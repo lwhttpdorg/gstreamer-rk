@@ -25,19 +25,8 @@
 #include <gst/gst.h>
 #include <gst/audio/gstaudiofilter.h>
 
-#define GST_TYPE_STEREO \
-  (gst_stereo_get_type())
-#define GST_STEREO(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_STEREO,GstStereo))
-#define GST_STEREO_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_STEREO,GstStereoClass))
-#define GST_IS_STEREO(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_STEREO))
-#define GST_IS_STEREO_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_STEREO))
-
-typedef struct _GstStereo GstStereo;
-typedef struct _GstStereoClass GstStereoClass;
+#define GST_TYPE_STEREO (gst_stereo_get_type())
+G_DECLARE_FINAL_TYPE (GstStereo, gst_stereo, GST, STEREO, GstAudioFilter)
 
 struct _GstStereo {
   GstAudioFilter element;
@@ -45,12 +34,6 @@ struct _GstStereo {
   gboolean active;
   gfloat stereo;
 };
-
-struct _GstStereoClass {
-  GstAudioFilterClass parent_class;
-};
-
-GType gst_stereo_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (stereo);
 

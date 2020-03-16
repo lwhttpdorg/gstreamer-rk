@@ -38,19 +38,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_WSINC_BAND \
-  (gst_audio_wsincband_get_type())
-#define GST_AUDIO_WSINC_BAND(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_WSINC_BAND,GstAudioWSincBand))
-#define GST_AUDIO_WSINC_BAND_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AUDIO_WSINC_BAND,GstAudioWSincBandClass))
-#define GST_IS_AUDIO_WSINC_BAND(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_WSINC_BAND))
-#define GST_IS_AUDIO_WSINC_BAND_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AUDIO_WSINC_BAND))
-
-typedef struct _GstAudioWSincBand GstAudioWSincBand;
-typedef struct _GstAudioWSincBandClass GstAudioWSincBandClass;
+#define GST_TYPE_AUDIO_WSINC_BAND (gst_audio_wsincband_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioWSincBand, gst_audio_wsincband,
+    GST, AUDIO_WSINC_BAND, GstAudioFXBaseFIRFilter)
 
 /**
  * GstAudioWSincBand:
@@ -68,12 +58,6 @@ struct _GstAudioWSincBand {
   /* < private > */
   GMutex lock;
 };
-
-struct _GstAudioWSincBandClass {
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_wsincband_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiowsincband);
 

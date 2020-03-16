@@ -28,14 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_ECHO            (gst_audio_echo_get_type())
-#define GST_AUDIO_ECHO(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_ECHO,GstAudioEcho))
-#define GST_IS_AUDIO_ECHO(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_ECHO))
-#define GST_AUDIO_ECHO_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_ECHO,GstAudioEchoClass))
-#define GST_IS_AUDIO_ECHO_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_ECHO))
-#define GST_AUDIO_ECHO_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_ECHO,GstAudioEchoClass))
-typedef struct _GstAudioEcho GstAudioEcho;
-typedef struct _GstAudioEchoClass GstAudioEchoClass;
+#define GST_TYPE_AUDIO_ECHO (gst_audio_echo_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioEcho, gst_audio_echo, GST, AUDIO_ECHO,
+    GstAudioFilter)
 
 typedef void (*GstAudioEchoProcessFunc) (GstAudioEcho *, guint8 *, guint);
 
@@ -60,13 +55,6 @@ struct _GstAudioEcho
 
   GMutex lock;
 };
-
-struct _GstAudioEchoClass
-{
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_echo_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audioecho);
 

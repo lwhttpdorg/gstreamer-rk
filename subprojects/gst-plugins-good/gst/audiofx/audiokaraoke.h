@@ -27,14 +27,10 @@
 #include <gst/audio/gstaudiofilter.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_AUDIO_KARAOKE            (gst_audio_karaoke_get_type())
-#define GST_AUDIO_KARAOKE(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_KARAOKE,GstAudioKaraoke))
-#define GST_IS_AUDIO_KARAOKE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_KARAOKE))
-#define GST_AUDIO_KARAOKE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_KARAOKE,GstAudioKaraokeClass))
-#define GST_IS_AUDIO_KARAOKE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_KARAOKE))
-#define GST_AUDIO_KARAOKE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_KARAOKE,GstAudioKaraokeClass))
-typedef struct _GstAudioKaraoke GstAudioKaraoke;
-typedef struct _GstAudioKaraokeClass GstAudioKaraokeClass;
+
+#define GST_TYPE_AUDIO_KARAOKE (gst_audio_karaoke_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioKaraoke, gst_audio_karaoke, GST, AUDIO_KARAOKE,
+    GstAudioFilter)
 
 typedef void (*GstAudioKaraokeProcessFunc) (GstAudioKaraoke *, guint8 *, guint);
 
@@ -55,13 +51,6 @@ struct _GstAudioKaraoke
   /* < private > */
   GstAudioKaraokeProcessFunc process;
 };
-
-struct _GstAudioKaraokeClass
-{
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_karaoke_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiokaraoke);
 

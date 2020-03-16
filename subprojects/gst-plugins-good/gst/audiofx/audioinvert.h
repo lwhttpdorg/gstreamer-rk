@@ -28,14 +28,10 @@
 #include <gst/audio/gstaudiofilter.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_AUDIO_INVERT            (gst_audio_invert_get_type())
-#define GST_AUDIO_INVERT(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_INVERT,GstAudioInvert))
-#define GST_IS_AUDIO_INVERT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_INVERT))
-#define GST_AUDIO_INVERT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_INVERT,GstAudioInvertClass))
-#define GST_IS_AUDIO_INVERT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_INVERT))
-#define GST_AUDIO_INVERT_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_INVERT,GstAudioInvertClass))
-typedef struct _GstAudioInvert GstAudioInvert;
-typedef struct _GstAudioInvertClass GstAudioInvertClass;
+
+#define GST_TYPE_AUDIO_INVERT (gst_audio_invert_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioInvert, gst_audio_invert, GST, AUDIO_INVERT,
+    GstAudioFilter)
 
 typedef void (*GstAudioInvertProcessFunc) (GstAudioInvert *, guint8 *, guint);
 
@@ -48,13 +44,6 @@ struct _GstAudioInvert
   /* < private > */
   GstAudioInvertProcessFunc process;
 };
-
-struct _GstAudioInvertClass
-{
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_invert_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audioinvert);
 

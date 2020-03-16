@@ -30,15 +30,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_CHEB_LIMIT            (gst_audio_cheb_limit_get_type())
-#define GST_AUDIO_CHEB_LIMIT(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_CHEB_LIMIT,GstAudioChebLimit))
-#define GST_IS_AUDIO_CHEB_LIMIT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_CHEB_LIMIT))
-#define GST_AUDIO_CHEB_LIMIT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_CHEB_LIMIT,GstAudioChebLimitClass))
-#define GST_IS_AUDIO_CHEB_LIMIT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_CHEB_LIMIT))
-#define GST_AUDIO_CHEB_LIMIT_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_CHEB_LIMIT,GstAudioChebLimitClass))
-
-typedef struct _GstAudioChebLimit GstAudioChebLimit;
-typedef struct _GstAudioChebLimitClass GstAudioChebLimitClass;
+#define GST_TYPE_AUDIO_CHEB_LIMIT (gst_audio_cheb_limit_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioChebLimit, gst_audio_cheb_limit,
+    GST, AUDIO_CHEB_LIMIT, GstAudioFXBaseIIRFilter)
 
 struct _GstAudioChebLimit
 {
@@ -53,13 +47,6 @@ struct _GstAudioChebLimit
   /* < private > */
   GMutex lock;
 };
-
-struct _GstAudioChebLimitClass
-{
-  GstAudioFXBaseIIRFilterClass parent;
-};
-
-GType gst_audio_cheb_limit_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiocheblimit);
 
