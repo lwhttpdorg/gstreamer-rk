@@ -38,19 +38,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_MULTI_FILE_SINK \
-  (gst_multi_file_sink_get_type())
-#define GST_MULTI_FILE_SINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_MULTI_FILE_SINK,GstMultiFileSink))
-#define GST_MULTI_FILE_SINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_MULTI_FILE_SINK,GstMultiFileSinkClass))
-#define GST_IS_MULTI_FILE_SINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_MULTI_FILE_SINK))
-#define GST_IS_MULTI_FILE_SINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_MULTI_FILE_SINK))
-
-typedef struct _GstMultiFileSink GstMultiFileSink;
-typedef struct _GstMultiFileSinkClass GstMultiFileSinkClass;
+#define GST_TYPE_MULTI_FILE_SINK (gst_multi_file_sink_get_type())
+G_DECLARE_FINAL_TYPE (GstMultiFileSink, gst_multi_file_sink,
+    GST, MULTI_FILE_SINK, GstBaseSink)
 
 /**
  * GstMultiFileSinkNext:
@@ -106,13 +96,6 @@ struct _GstMultiFileSink
   GstAdapter *gop_adapter;  /* to aggregate GOPs */
   GList *potential_next_gop;	/* To detect false-positives */
 };
-
-struct _GstMultiFileSinkClass
-{
-  GstBaseSinkClass parent_class;
-};
-
-GType gst_multi_file_sink_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (multifilesink);
 
