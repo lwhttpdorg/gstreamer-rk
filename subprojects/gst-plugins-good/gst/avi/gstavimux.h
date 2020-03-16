@@ -30,16 +30,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AVI_MUX \
-  (gst_avi_mux_get_type())
-#define GST_AVI_MUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AVI_MUX,GstAviMux))
-#define GST_AVI_MUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AVI_MUX,GstAviMuxClass))
-#define GST_IS_AVI_MUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AVI_MUX))
-#define GST_IS_AVI_MUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AVI_MUX))
+#define GST_TYPE_AVI_MUX (gst_avi_mux_get_type ())
+G_DECLARE_FINAL_TYPE (GstAviMux, gst_avi_mux, GST, AVI_MUX, GstElement)
 
 #define GST_AVI_INDEX_OF_INDEXES     0
 #define GST_AVI_INDEX_OF_CHUNKS      1
@@ -66,8 +58,6 @@ typedef struct _gst_riff_strh_full {
 } gst_riff_strh_full;
 
 typedef struct _GstAviPad GstAviPad;
-typedef struct _GstAviMux GstAviMux;
-typedef struct _GstAviMuxClass GstAviMuxClass;
 
 typedef GstFlowReturn (*GstAviPadHook) (GstAviMux * avi, GstAviPad * avipad,
                                         GstBuffer * buffer);
@@ -196,12 +186,6 @@ struct _GstAviMux {
   /* whether to use "large AVI files" or just stick to small indexed files */
   gboolean enable_large_avi;
 };
-
-struct _GstAviMuxClass {
-  GstElementClass parent_class;
-};
-
-GType gst_avi_mux_get_type(void);
 
 G_END_DECLS
 
