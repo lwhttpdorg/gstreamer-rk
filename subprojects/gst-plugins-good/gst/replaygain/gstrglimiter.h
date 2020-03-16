@@ -26,19 +26,9 @@
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
 
-#define GST_TYPE_RG_LIMITER \
-  (gst_rg_limiter_get_type())
-#define GST_RG_LIMITER(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RG_LIMITER,GstRgLimiter))
-#define GST_RG_LIMITER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RG_LIMITER,GstRgLimiterClass))
-#define GST_IS_RG_LIMITER(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RG_LIMITER))
-#define GST_IS_RG_LIMITER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RG_LIMITER))
-
-typedef struct _GstRgLimiter GstRgLimiter;
-typedef struct _GstRgLimiterClass GstRgLimiterClass;
+#define GST_TYPE_RG_LIMITER (gst_rg_limiter_get_type())
+G_DECLARE_FINAL_TYPE (GstRgLimiter, gst_rg_limiter, GST, RG_LIMITER,
+    GstBaseTransform)
 
 /**
  * GstRgLimiter:
@@ -53,13 +43,6 @@ struct _GstRgLimiter
 
   gboolean enabled;
 };
-
-struct _GstRgLimiterClass
-{
-  GstBaseTransformClass parent_class;
-};
-
-GType gst_rg_limiter_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (rglimiter);
 
