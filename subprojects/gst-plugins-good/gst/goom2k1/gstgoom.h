@@ -30,14 +30,8 @@ G_BEGIN_DECLS
 
 #define GOOM2K1_SAMPLES 512
 
-#define GST_TYPE_GOOM2K1            (gst_goom2k1_get_type())
-#define GST_GOOM2K1(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GOOM2K1,GstGoom2k1))
-#define GST_GOOM2K1_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GOOM2K1,GstGoom2k1Class))
-#define GST_IS_GOOM2K1(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GOOM2K1))
-#define GST_IS_GOOM2K1_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GOOM2K1))
-
-typedef struct _GstGoom2k1 GstGoom2k1;
-typedef struct _GstGoom2k1Class GstGoom2k1Class;
+#define GST_TYPE_GOOM2K1 (gst_goom2k1_get_type())
+G_DECLARE_FINAL_TYPE (GstGoom2k1, gst_goom2k1, GST, GOOM2K1, GstAudioVisualizer)
 
 struct _GstGoom2k1
 {
@@ -54,12 +48,6 @@ struct _GstGoom2k1
   GoomData goomdata;
 };
 
-struct _GstGoom2k1Class
-{
-  GstAudioVisualizerClass parent_class;
-};
-
-GType gst_goom2k1_get_type (void);
 GST_ELEMENT_REGISTER_DECLARE (goom2k1);
 
 G_END_DECLS
