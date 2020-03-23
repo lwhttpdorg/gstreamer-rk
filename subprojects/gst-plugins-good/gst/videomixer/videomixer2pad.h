@@ -29,17 +29,9 @@
 G_BEGIN_DECLS
 
 #define GST_TYPE_VIDEO_MIXER2_PAD (gst_videomixer2_pad_get_type())
-#define GST_VIDEO_MIXER2_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_MIXER2_PAD, GstVideoMixer2Pad))
-#define GST_VIDEO_MIXER2_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_MIXER_PAD, GstVideoMixer2PadClass))
-#define GST_IS_VIDEO_MIXER2_PAD(obj) \
-        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_MIXER2_PAD))
-#define GST_IS_VIDEO_MIXER2_PAD_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_MIXER2_PAD))
+G_DECLARE_FINAL_TYPE (GstVideoMixer2Pad, gst_videomixer2_pad,
+    GST, VIDEO_MIXER2_PAD, GstPad)
 
-typedef struct _GstVideoMixer2Pad GstVideoMixer2Pad;
-typedef struct _GstVideoMixer2PadClass GstVideoMixer2PadClass;
 typedef struct _GstVideoMixer2Collect GstVideoMixer2Collect;
 
 /**
@@ -71,13 +63,6 @@ struct _GstVideoMixer2Pad
 
   gboolean need_conversion_update;
 };
-
-struct _GstVideoMixer2PadClass
-{
-  GstPadClass parent_class;
-};
-
-GType gst_videomixer2_pad_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_VIDEO_MIXER2_PAD_H__ */
