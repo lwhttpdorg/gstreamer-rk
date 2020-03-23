@@ -28,13 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_SPECTRUM            (gst_spectrum_get_type())
-#define GST_SPECTRUM(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SPECTRUM,GstSpectrum))
-#define GST_IS_SPECTRUM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SPECTRUM))
-#define GST_SPECTRUM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_SPECTRUM,GstSpectrumClass))
-#define GST_IS_SPECTRUM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_SPECTRUM))
-typedef struct _GstSpectrum GstSpectrum;
-typedef struct _GstSpectrumClass GstSpectrumClass;
+#define GST_TYPE_SPECTRUM (gst_spectrum_get_type())
+G_DECLARE_FINAL_TYPE (GstSpectrum, gst_spectrum, GST, SPECTRUM, GstAudioFilter)
+
 typedef struct _GstSpectrumChannel GstSpectrumChannel;
 
 typedef void (*GstSpectrumInputData)(const guint8 * in, gfloat * out,
@@ -83,15 +79,6 @@ struct _GstSpectrum
   GstSpectrumInputData input_data;
 };
 
-struct _GstSpectrumClass
-{
-  GstAudioFilterClass parent_class;
-};
-
-GType gst_spectrum_get_type (void);
-
 GST_ELEMENT_REGISTER_DECLARE (spectrum);
-
-G_END_DECLS
 
 #endif /* __GST_SPECTRUM_H__ */
