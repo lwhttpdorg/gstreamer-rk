@@ -30,25 +30,14 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_WAVPARSE \
-  (gst_wavparse_get_type())
-#define GST_WAVPARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_WAVPARSE,GstWavParse))
-#define GST_WAVPARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_WAVPARSE,GstWavParseClass))
-#define GST_IS_WAVPARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_WAVPARSE))
-#define GST_IS_WAVPARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_WAVPARSE))
+#define GST_TYPE_WAVPARSE (gst_wavparse_get_type())
+G_DECLARE_FINAL_TYPE (GstWavParse, gst_wavparse, GST, WAVPARSE, GstElement)
 
 typedef enum {
   GST_WAVPARSE_START,
   GST_WAVPARSE_HEADER,
   GST_WAVPARSE_DATA
 } GstWavParseState;
-
-typedef struct _GstWavParse GstWavParse;
-typedef struct _GstWavParseClass GstWavParseClass;
 
 /**
  * GstWavParse:
@@ -126,12 +115,6 @@ struct _GstWavParse {
   /* Size of the data as written in the chunk size */
   guint32 chunk_size;
 };
-
-struct _GstWavParseClass {
-  GstElementClass parent_class;
-};
-
-GType gst_wavparse_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (wavparse);
 
