@@ -29,21 +29,9 @@ G_BEGIN_DECLS
 
 #include "gstudpnetutils.h"
 
-#define GST_TYPE_UDPSRC \
-  (gst_udpsrc_get_type())
-#define GST_UDPSRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_UDPSRC,GstUDPSrc))
-#define GST_UDPSRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_UDPSRC,GstUDPSrcClass))
-#define GST_IS_UDPSRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_UDPSRC))
-#define GST_IS_UDPSRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_UDPSRC))
+#define GST_TYPE_UDPSRC (gst_udpsrc_get_type())
+G_DECLARE_FINAL_TYPE (GstUDPSrc, gst_udpsrc, GST, UDPSRC, GstPushSrc)
 #define GST_UDPSRC_CAST(obj) ((GstUDPSrc *)(obj))
-
-typedef struct _GstUDPSrc GstUDPSrc;
-typedef struct _GstUDPSrcClass GstUDPSrcClass;
-
 
 /**
  * GstSocketTimestampMode:
@@ -101,12 +89,6 @@ struct _GstUDPSrc {
   gchar     *uri;
   GPtrArray *source_list;
 };
-
-struct _GstUDPSrcClass {
-  GstPushSrcClass parent_class;
-};
-
-GType gst_udpsrc_get_type(void);
 
 G_END_DECLS
 
