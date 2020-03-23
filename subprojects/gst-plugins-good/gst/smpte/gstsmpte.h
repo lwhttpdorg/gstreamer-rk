@@ -29,19 +29,8 @@ G_BEGIN_DECLS
 
 #include "gstmask.h"
 
-#define GST_TYPE_SMPTE \
-  (gst_smpte_get_type())
-#define GST_SMPTE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SMPTE,GstSMPTE))
-#define GST_SMPTE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SMPTE,GstSMPTEClass))
-#define GST_IS_SMPTE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SMPTE))
-#define GST_IS_SMPTE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SMPTE))
-
-typedef struct _GstSMPTE GstSMPTE;
-typedef struct _GstSMPTEClass GstSMPTEClass;
+#define GST_TYPE_SMPTE (gst_smpte_get_type())
+G_DECLARE_FINAL_TYPE (GstSMPTE, gst_smpte, GST, SMPTE, GstElement)
 
 struct _GstSMPTE {
   GstElement     element;
@@ -73,12 +62,6 @@ struct _GstSMPTE {
   gint           end_position;
   GstMask       *mask;
 };
-
-struct _GstSMPTEClass {
-  GstElementClass parent_class;
-};
-
-GType gst_smpte_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (smpte);
 

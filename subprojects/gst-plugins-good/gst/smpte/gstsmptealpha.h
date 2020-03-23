@@ -30,19 +30,9 @@ G_BEGIN_DECLS
 
 #include "gstmask.h"
 
-#define GST_TYPE_SMPTE_ALPHA \
-  (gst_smpte_alpha_get_type())
-#define GST_SMPTE_ALPHA(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SMPTE_ALPHA,GstSMPTEAlpha))
-#define GST_SMPTE_ALPHA_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SMPTE_ALPHA,GstSMPTEAlphaClass))
-#define GST_IS_SMPTE_ALPHA(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SMPTE_ALPHA))
-#define GST_IS_SMPTE_ALPHA_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SMPTE_ALPHA))
-
-typedef struct _GstSMPTEAlpha GstSMPTEAlpha;
-typedef struct _GstSMPTEAlphaClass GstSMPTEAlphaClass;
+#define GST_TYPE_SMPTE_ALPHA (gst_smpte_alpha_get_type())
+G_DECLARE_FINAL_TYPE (GstSMPTEAlpha, gst_smpte_alpha, GST, SMPTE_ALPHA,
+    GstVideoFilter)
 
 struct _GstSMPTEAlpha {
   GstVideoFilter element;
@@ -66,12 +56,6 @@ struct _GstSMPTEAlpha {
   void (*process) (GstSMPTEAlpha * smpte, const GstVideoFrame * in, GstVideoFrame * out,
     GstMask * mask, gint border, gint pos);
 };
-
-struct _GstSMPTEAlphaClass {
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_smpte_alpha_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (smptealpha);
 
