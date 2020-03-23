@@ -25,20 +25,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_SHAPE_WIPE \
-  (gst_shape_wipe_get_type())
-#define GST_SHAPE_WIPE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SHAPE_WIPE,GstShapeWipe))
-#define GST_SHAPE_WIPE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SHAPE_WIPE,GstShapeWipeClass))
-#define GST_SHAPE_WIPE_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj),GST_TYPE_SHAPE_WIPE,GstShapeWipeClass))
-#define GST_IS_SHAPE_WIPE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SHAPE_WIPE))
-#define GST_IS_SHAPE_WIPE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SHAPE_WIPE))
-
-typedef struct _GstShapeWipe GstShapeWipe;
-typedef struct _GstShapeWipeClass GstShapeWipeClass;
+#define GST_TYPE_SHAPE_WIPE (gst_shape_wipe_get_type())
+G_DECLARE_FINAL_TYPE (GstShapeWipe, gst_shape_wipe, GST, SHAPE_WIPE, GstElement)
 
 struct _GstShapeWipe
 {
@@ -68,13 +56,6 @@ struct _GstShapeWipe
   GstClockTime earliest_time;
   GstClockTime frame_duration;
 };
-
-struct _GstShapeWipeClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_shape_wipe_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (shapewipe);
 
