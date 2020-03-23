@@ -24,19 +24,11 @@
 #ifndef __GST_VIDEO_BOX_H__
 #define __GST_VIDEO_BOX_H__
 
-#define GST_TYPE_VIDEO_BOX \
-  (gst_video_box_get_type())
-#define GST_VIDEO_BOX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_BOX,GstVideoBox))
-#define GST_VIDEO_BOX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_BOX,GstVideoBoxClass))
-#define GST_IS_VIDEO_BOX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_BOX))
-#define GST_IS_VIDEO_BOX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_BOX))
+G_BEGIN_DECLS
 
-typedef struct _GstVideoBox GstVideoBox;
-typedef struct _GstVideoBoxClass GstVideoBoxClass;
+#define GST_TYPE_VIDEO_BOX (gst_video_box_get_type())
+G_DECLARE_FINAL_TYPE (GstVideoBox, gst_video_box, GST, VIDEO_BOX,
+    GstVideoFilter)
 
 typedef enum
 {
@@ -82,12 +74,7 @@ struct _GstVideoBox
   void (*copy) (guint i_alpha, GstVideoFrame * dest, gboolean dest_sdtv, gint dest_x, gint dest_y, GstVideoFrame * src, gboolean src_sdtv, gint src_x, gint src_y, gint w, gint h);
 };
 
-struct _GstVideoBoxClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_video_box_get_type (void);
+G_END_DECLS
 
 GST_ELEMENT_REGISTER_DECLARE (videobox);
 
