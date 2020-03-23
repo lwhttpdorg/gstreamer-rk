@@ -23,15 +23,11 @@
 #include <gst/gst.h>
 #include <gst/rtp/gstrtcpbuffer.h>
 
-typedef struct _RTPJitterBuffer RTPJitterBuffer;
-typedef struct _RTPJitterBufferClass RTPJitterBufferClass;
 typedef struct _RTPJitterBufferItem RTPJitterBufferItem;
 
-#define RTP_TYPE_JITTER_BUFFER             (rtp_jitter_buffer_get_type())
-#define RTP_JITTER_BUFFER(src)             (G_TYPE_CHECK_INSTANCE_CAST((src),RTP_TYPE_JITTER_BUFFER,RTPJitterBuffer))
-#define RTP_JITTER_BUFFER_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass),RTP_TYPE_JITTER_BUFFER,RTPJitterBufferClass))
-#define RTP_IS_JITTER_BUFFER(src)          (G_TYPE_CHECK_INSTANCE_TYPE((src),RTP_TYPE_JITTER_BUFFER))
-#define RTP_IS_JITTER_BUFFER_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass),RTP_TYPE_JITTER_BUFFER))
+#define RTP_TYPE_JITTER_BUFFER (rtp_jitter_buffer_get_type())
+G_DECLARE_FINAL_TYPE (RTPJitterBuffer, rtp_jitter_buffer, RTP, JITTER_BUFFER,
+    GObject)
 #define RTP_JITTER_BUFFER_CAST(src)        ((RTPJitterBuffer *)(src))
 
 /**
@@ -114,10 +110,6 @@ struct _RTPJitterBuffer {
   gboolean       rfc7273_sync;
 };
 
-struct _RTPJitterBufferClass {
-  GObjectClass   parent_class;
-};
-
 #define IS_DROPABLE(it) (((it)->type == ITEM_TYPE_BUFFER) || ((it)->type == ITEM_TYPE_LOST))
 #define ITEM_TYPE_BUFFER        0
 #define ITEM_TYPE_LOST          1
@@ -159,8 +151,6 @@ struct _RTPJitterBufferItem {
 
   GDestroyNotify free_data;
 };
-
-GType rtp_jitter_buffer_get_type (void);
 
 /* managing lifetime */
 RTPJitterBuffer*      rtp_jitter_buffer_new              (void);

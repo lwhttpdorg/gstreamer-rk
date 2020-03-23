@@ -77,11 +77,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_rtp_funnel_debug);
 
 /**************** GstRTPFunnelPad ****************/
 
-struct _GstRtpFunnelPadClass
-{
-  GstPadClass class;
-};
-
 struct _GstRtpFunnelPad
 {
   GstPad pad;
@@ -114,11 +109,6 @@ enum
 
 #define DEFAULT_COMMON_TS_OFFSET -1
 #define DEFAULT_FORWARD_UNKNOWN_SSRC FALSE
-
-struct _GstRtpFunnelClass
-{
-  GstElementClass class;
-};
 
 struct _GstRtpFunnel
 {

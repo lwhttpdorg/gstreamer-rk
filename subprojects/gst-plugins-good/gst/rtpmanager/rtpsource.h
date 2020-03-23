@@ -36,14 +36,8 @@
 
 #define RTP_SEQ_MOD          (1 << 16)
 
-typedef struct _RTPSource RTPSource;
-typedef struct _RTPSourceClass RTPSourceClass;
-
-#define RTP_TYPE_SOURCE             (rtp_source_get_type())
-#define RTP_SOURCE(src)             (G_TYPE_CHECK_INSTANCE_CAST((src),RTP_TYPE_SOURCE,RTPSource))
-#define RTP_SOURCE_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass),RTP_TYPE_SOURCE,RTPSourceClass))
-#define RTP_IS_SOURCE(src)          (G_TYPE_CHECK_INSTANCE_TYPE((src),RTP_TYPE_SOURCE))
-#define RTP_IS_SOURCE_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass),RTP_TYPE_SOURCE))
+#define RTP_TYPE_SOURCE (rtp_source_get_type())
+G_DECLARE_FINAL_TYPE (RTPSource, rtp_source, RTP, SOURCE, GObject)
 #define RTP_SOURCE_CAST(src)        ((RTPSource *)(src))
 
 /**
@@ -210,12 +204,6 @@ struct _RTPSource {
 
   gboolean      disable_rtcp;
 };
-
-struct _RTPSourceClass {
-  GObjectClass   parent_class;
-};
-
-GType rtp_source_get_type (void);
 
 /* managing lifetime of sources */
 RTPSource*      rtp_source_new                 (guint32 ssrc);
