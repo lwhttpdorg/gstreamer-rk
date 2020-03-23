@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_VIDEO_BALANCE \
-  (gst_video_balance_get_type())
-#define GST_VIDEO_BALANCE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_BALANCE,GstVideoBalance))
-#define GST_VIDEO_BALANCE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_BALANCE,GstVideoBalanceClass))
-#define GST_IS_VIDEO_BALANCE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_BALANCE))
-#define GST_IS_VIDEO_BALANCE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_BALANCE))
-
-typedef struct _GstVideoBalance GstVideoBalance;
-typedef struct _GstVideoBalanceClass GstVideoBalanceClass;
+#define GST_TYPE_VIDEO_BALANCE (gst_video_balance_get_type())
+G_DECLARE_FINAL_TYPE (GstVideoBalance, gst_video_balance, GST, VIDEO_BALANCE,
+    GstVideoFilter)
 
 /**
  * GstVideoBalance:
@@ -67,12 +57,6 @@ struct _GstVideoBalance {
 
   void (*process) (GstVideoBalance *balance, GstVideoFrame *frame);
 };
-
-struct _GstVideoBalanceClass {
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_video_balance_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (videobalance);
 

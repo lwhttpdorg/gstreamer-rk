@@ -52,19 +52,9 @@ typedef enum {
   GST_VIDEO_FLIP_METHOD_AUTO
 } GstVideoFlipMethod;
 
-#define GST_TYPE_VIDEO_FLIP \
-  (gst_video_flip_get_type())
-#define GST_VIDEO_FLIP(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_FLIP,GstVideoFlip))
-#define GST_VIDEO_FLIP_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_FLIP,GstVideoFlipClass))
-#define GST_IS_VIDEO_FLIP(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_FLIP))
-#define GST_IS_VIDEO_FLIP_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_FLIP))
-
-typedef struct _GstVideoFlip GstVideoFlip;
-typedef struct _GstVideoFlipClass GstVideoFlipClass;
+#define GST_TYPE_VIDEO_FLIP (gst_video_flip_get_type())
+G_DECLARE_FINAL_TYPE (GstVideoFlip, gst_video_flip, GST, VIDEO_FLIP,
+    GstVideoFilter)
 
 /**
  * GstVideoFlip:
@@ -90,12 +80,6 @@ struct _GstVideoFlip {
   GstVideoOrientationMethod active_method;
   void (*process) (GstVideoFlip *videoflip, GstVideoFrame *dest, const GstVideoFrame *src);
 };
-
-struct _GstVideoFlipClass {
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_video_flip_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (videoflip);
 

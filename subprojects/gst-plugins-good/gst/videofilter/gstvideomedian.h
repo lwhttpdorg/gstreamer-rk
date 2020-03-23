@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_VIDEO_MEDIAN \
-  (gst_video_median_get_type())
-#define GST_VIDEO_MEDIAN(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_MEDIAN,GstVideoMedian))
-#define GST_VIDEO_MEDIAN_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_MEDIAN,GstVideoMedianClass))
-#define GST_IS_VIDEO_MEDIAN(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_MEDIAN))
-#define GST_IS_VIDEO_MEDIAN_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_MEDIAN))
-
-typedef struct _GstVideoMedian GstVideoMedian;
-typedef struct _GstVideoMedianClass GstVideoMedianClass;
+#define GST_TYPE_VIDEO_MEDIAN (gst_video_median_get_type())
+G_DECLARE_FINAL_TYPE (GstVideoMedian, gst_video_median, GST, VIDEO_MEDIAN,
+    GstVideoFilter)
 
 typedef enum
 {
@@ -54,12 +44,6 @@ struct _GstVideoMedian {
   GstVideoMedianSize filtersize;
   gboolean lum_only;
 };
-
-struct _GstVideoMedianClass {
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_video_median_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (videomedian);
 
