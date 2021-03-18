@@ -31,6 +31,7 @@ GST_ELEMENT_REGISTER_DECLARE (unalignedaudioparse);
 GST_ELEMENT_REGISTER_DECLARE (unalignedvideoparse);
 GST_ELEMENT_REGISTER_DECLARE (rawaudioparse);
 GST_ELEMENT_REGISTER_DECLARE (rawvideoparse);
+GST_ELEMENT_REGISTER_DECLARE (rawbayerparse);
 
 G_END_DECLS
 

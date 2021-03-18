@@ -4,6 +4,7 @@ raw_sources = [
   'gstrawbaseparse.c',
   'gstrawaudioparse.c',
   'gstrawvideoparse.c',
+  'gstrawbayerparse.c',
   'plugin.c',
 ]
 
