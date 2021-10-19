@@ -173,6 +173,11 @@ struct GstBaseTsMux {
   guint audio_pes_target_time_ticks;
   guint audio_pes_target_bytes;
 
+  /* configuration */
+  gsize packet_size;
+  gsize automatic_alignment;
+  gint min_pid;
+
   /* state */
   gboolean first;
   GstClockTime pending_key_unit_ts;
@@ -188,9 +193,6 @@ struct GstBaseTsMux {
   gboolean is_delta;
   gboolean is_header;
   GstClockTime last_ts;
-
-  gsize packet_size;
-  gsize automatic_alignment;
 
   /* output buffer aggregation */
   GstAdapter *out_adapter;
@@ -232,6 +234,7 @@ struct GstBaseTsMuxClass {
 
 void gst_base_ts_mux_set_packet_size (GstBaseTsMux *mux, gsize size);
 void gst_base_ts_mux_set_automatic_alignment (GstBaseTsMux *mux, gsize alignment);
+void gst_base_ts_mux_set_min_pid (GstBaseTsMux *mux, gint min_pid);
 
 typedef GstBuffer * (*GstBaseTsPadDataPrepareFunction) (GstBuffer * buf,
     GstBaseTsPadData * data, GstBaseTsMux * mux);

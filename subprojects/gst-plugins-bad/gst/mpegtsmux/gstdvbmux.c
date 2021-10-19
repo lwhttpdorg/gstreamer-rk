@@ -36,6 +36,9 @@ GST_ELEMENT_REGISTER_DEFINE (dvbmux, "dvbmux", GST_RANK_PRIMARY,
 
 #define parent_class gst_dvb_mux_parent_class
 
+/* DVB standard, ETSI EN 300 468 */
+#define DVBMUX_START_ES_PID 0x0020
+
 static GstStaticPadTemplate gst_dvb_mux_src_factory =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -121,4 +124,5 @@ gst_dvb_mux_class_init (GstDVBMuxClass * klass)
 static void
 gst_dvb_mux_init (GstDVBMux * mux)
 {
+  gst_base_ts_mux_set_min_pid (GST_BASE_TS_MUX (mux), DVBMUX_START_ES_PID);
 }

@@ -36,6 +36,9 @@ GST_ELEMENT_REGISTER_DEFINE (atscmux, "atscmux", GST_RANK_PRIMARY,
 #define parent_class gst_atsc_mux_parent_class
 #define ATSCMUX_ST_PS_AUDIO_EAC3 0x87
 
+/* ATSC standard, A/53 Part 3 (2023), Sec 5.9 “PID Value Assignments” */
+#define ATSCMUX_START_ES_PID 0x0030
+
 static GstStaticPadTemplate gst_atsc_mux_src_factory =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -382,4 +385,5 @@ gst_atsc_mux_class_init (GstATSCMuxClass * klass)
 static void
 gst_atsc_mux_init (GstATSCMux * mux)
 {
+  gst_base_ts_mux_set_min_pid (GST_BASE_TS_MUX (mux), ATSCMUX_START_ES_PID);
 }
