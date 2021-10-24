@@ -148,6 +148,7 @@ if host_machine.system() != 'windows'
         not curl_dep.found() or not cdata.has('HAVE_UNISTD_H'), [curl_dep]],
     [['elements/curlftpsink.c'], not curl_dep.found(), [curl_dep]],
     [['elements/curlsmtpsink.c'], not curl_dep.found(), [curl_dep]],
+    [['elements/dash_demux.c'], not xml2_dep.found(), [xml2_dep], ['elements/test_http_src.c', 'elements/adaptive_demux_common.c', 'elements/adaptive_demux_engine.c']],
     [['elements/dash_mpd.c'], not xml2_dep.found(), [xml2_dep]],
     [['elements/dtls.c'], not libcrypto_dep.found() or not openssl_dep.found (), [libcrypto_dep]],
     [['elements/faac.c'],
