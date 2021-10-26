@@ -47,6 +47,7 @@ base_tests = [
   [['elements/hlsdemux_m3u8.c'], not hls_dep.found(), [hls_dep]],
   [['elements/id3mux.c'], get_option('id3tag').disabled()],
   [['elements/interlace.c'], get_option('interlace').disabled()],
+  [['elements/hls_demux.c'], not hls_dep.found(), [hls_dep], ['elements/test_http_src.c', 'elements/adaptive_demux_common.c', 'elements/adaptive_demux_engine.c']],
   [['elements/jpeg2000parse.c'], false, [libparser_dep, gstcodecparsers_dep]],
   [['elements/line21.c'], not closedcaption_dep.found(), ],
   [['elements/mfvideosrc.c'], host_machine.system() != 'windows', ],
