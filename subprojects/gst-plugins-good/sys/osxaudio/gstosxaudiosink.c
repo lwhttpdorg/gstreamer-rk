@@ -91,6 +91,7 @@ enum
   ARG_VOLUME,
   ARG_UNIQUE_ID,
   ARG_CONFIGURE_SESSION,
+  ARG_OUTPUT_CHANNELS,
 };
 
 #define DEFAULT_VOLUME 1.0
@@ -224,6 +225,22 @@ gst_osx_audio_sink_class_init (GstOsxAudioSinkClass * klass)
       g_param_spec_double ("volume", "Volume", "Volume of this stream",
           0, 1.0, 1.0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstOsxAudioSink:output-channels:
+   *
+   * Comma-separated list of 0-indexed channels to render. Useful for Audio
+   * interfaces and DACs which expose several unpositioned channels, where you
+   * only want to use only some of them. The default is to expose caps where
+   * all channels will be expected.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, ARG_OUTPUT_CHANNELS,
+      g_param_spec_string ("output-channels", "Output Channels",
+          "Comma-separated list of audio channels to output", NULL,
+          GST_PARAM_MUTABLE_READY | G_PARAM_READWRITE |
+          G_PARAM_STATIC_STRINGS));
+
   gstbasesink_class->get_caps = GST_DEBUG_FUNCPTR (gst_osx_audio_sink_getcaps);
 
   gstaudiobasesink_class->create_ringbuffer =
@@ -246,7 +263,6 @@ gst_osx_audio_sink_init (GstOsxAudioSink * sink)
 
   sink->device_id = kAudioDeviceUnknown;
   sink->volume = DEFAULT_VOLUME;
-
 #ifdef HAVE_IOS
   sink->configure_session = DEFAULT_CONFIGURE_SESSION;
 #endif
@@ -257,6 +273,7 @@ gst_osx_audio_sink_finalize (GObject * object)
 {
   GstOsxAudioSink *sink = GST_OSX_AUDIO_SINK (object);
   g_clear_pointer (&sink->unique_id, g_free);
+  g_clear_pointer (&sink->channel_map, g_free);
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -282,6 +299,9 @@ gst_osx_audio_sink_set_property (GObject * object, guint prop_id,
     case ARG_VOLUME:
       sink->volume = g_value_get_double (value);
       gst_osx_audio_sink_set_volume (sink);
+      break;
+    case ARG_OUTPUT_CHANNELS:
+      sink->channel_map = g_value_dup_string (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -358,6 +378,9 @@ gst_osx_audio_sink_get_property (GObject * object, guint prop_id,
 #endif
     case ARG_VOLUME:
       g_value_set_double (value, sink->volume);
+      break;
+    case ARG_OUTPUT_CHANNELS:
+      g_value_set_string (value, sink->channel_map);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -578,6 +601,10 @@ gst_osx_audio_sink_create_ringbuffer (GstAudioBaseSink * sink)
   ringbuffer->core_audio->osxbuf = GST_OBJECT (ringbuffer);
   ringbuffer->core_audio->element =
       GST_OSX_AUDIO_ELEMENT_GET_INTERFACE (osxsink);
+
+  if (osxsink->channel_map)
+    gst_core_audio_parse_channel_map (ringbuffer->core_audio,
+        osxsink->channel_map);
 
   return GST_AUDIO_RING_BUFFER (ringbuffer);
 }

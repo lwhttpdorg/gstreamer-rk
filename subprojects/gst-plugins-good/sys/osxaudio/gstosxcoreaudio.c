@@ -109,6 +109,8 @@ gst_core_audio_init (GstCoreAudio * core_audio)
 #else
   core_audio->configure_session = FALSE;
 #endif
+  core_audio->channel_map = NULL;
+  core_audio->channel_map_len = 0;
 
   mach_timebase_info (&core_audio->timebase);
   g_mutex_init (&core_audio->timing_lock);
@@ -253,6 +255,8 @@ gst_core_audio_close (GstCoreAudio * core_audio)
 
   AudioComponentInstanceDispose (core_audio->audiounit);
   core_audio->audiounit = NULL;
+  g_clear_pointer (&core_audio->channel_map, g_free);
+  core_audio->channel_map_len = 0;
   return TRUE;
 }
 
