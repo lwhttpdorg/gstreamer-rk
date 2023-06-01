@@ -24,6 +24,8 @@ stages:
 variables:
   GIT_DEPTH: 1
 
+  CI_ARTIFACTS_URL: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/"
+
   # Branch to track for modules that have no ref specified in the manifest
   GST_UPSTREAM_BRANCH: 'main'
 
@@ -362,6 +364,7 @@ pre-commit checks:
     when: "always"
     paths:
       - 'meson-logs/'
+      - 'diffs/job_plugins.diff'
   rules:
     - !reference [.upstream-branch-rules, rules]
     - changes:
@@ -384,6 +387,7 @@ pre-commit checks:
     - ./gst-env.py gst-inspect-1.0 --version
     - ./gst-env.py gst-inspect-1.0
     - G_DEBUG=fatal_criticals ./gst-env.py gst-inspect-1.0 --print-all --gst-disable-registry-fork > /dev/null
+    - ./gst-env.py python3 ./ci/scripts/check-plugins.py
     - meson install --destdir $CI_PROJECT_DIR/destdir -C build
     - rm -rf $CI_PROJECT_DIR/destdir
 
@@ -532,6 +536,7 @@ build debian x86_64:
    when: "always"
    paths:
      - 'build/meson-logs/'
+     - 'diffs/job_plugins.diff'
 
 build vs2022 amd64:
   extends: '.build windows'
@@ -541,6 +546,7 @@ build vs2022 amd64:
     - .\ci\run_retry.ps1 meson compile -C build --jobs $env:FDO_CI_CONCURRENT
     - .\gst-env.py gst-inspect-1.0.exe --version
     - .\gst-env.py gst-inspect-1.0.exe
+    - .\gst-env.py python ./ci/scripts/check-plugins.py
     - mkdir destdir
     - meson install -C build --destdir installdir
     - Remove-Item -Recurse -Force build\installdir
@@ -1029,7 +1035,6 @@ valgrind ges:
     # Disable werror for the docs build, we don't need it
     GST_WERROR: 'false'
     SUBPROJECTS_CACHE_DIR: "/subprojects"
-    CI_ARTIFACTS_URL: "${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/raw/"
   script:
     - $CI_PROJECT_DIR/ci/scripts/build-docs.sh build/
   artifacts:
