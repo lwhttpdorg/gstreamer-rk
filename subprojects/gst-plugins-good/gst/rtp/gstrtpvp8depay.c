@@ -79,6 +79,95 @@ enum
 #define PICTURE_ID_NONE (UINT_MAX)
 #define IS_PICTURE_ID_15BITS(pid) (((guint)(pid) & 0x8000) != 0)
 
+static gboolean
+gst_rtp_vp8_depay_src_handle_event (GstRTPBaseDepayload * depay,
+    GstEvent * event)
+{
+  GstRtpVP8Depay *self = GST_RTP_VP8_DEPAY (depay);
+  gboolean ret = FALSE;
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_CUSTOM_UPSTREAM:
+    {
+      const GstStructure *s = gst_event_get_structure (event);
+      if (gst_structure_has_name (s,
+              "GstReferencePictureSelectionIndication-vp8")) {
+        GstEvent *rpsi = NULL;
+
+        if (strcmp (gst_structure_get_string (s, "frame-type"), "golden") == 0
+            && self->golden_frame_picture_id != PICTURE_ID_NONE) {
+          GBytes *data_bytes = g_bytes_new (&self->golden_frame_picture_id, 8);
+          rpsi =
+              gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+              gst_structure_new ("GstReferencePictureSelectionIndication",
+                  "payload", G_TYPE_UINT, self->pt, "bit_string",
+                  G_TYPE_BYTES, data_bytes, NULL));
+        }
+
+        if (strcmp (gst_structure_get_string (s, "frame-type"),
+                "alternate") == 0
+            && self->alternate_frame_picture_id != PICTURE_ID_NONE) {
+          GBytes *data_bytes =
+              g_bytes_new (&self->alternate_frame_picture_id, 8);
+          rpsi =
+              gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+              gst_structure_new ("GstReferencePictureSelectionIndication",
+                  "payload", G_TYPE_UINT, self->pt, "bit_string", G_TYPE_BYTES,
+                  data_bytes, NULL));
+        }
+
+        if (rpsi)
+          ret =
+              gst_pad_push_event (GST_RTP_BASE_DEPAYLOAD_SINKPAD (self), rpsi);
+        gst_event_unref (event);
+        return ret;
+      }
+
+      if (gst_structure_has_name (s, "GstSliceLossIndication-vp8")) {
+        GstEvent *sli = NULL;
+
+        if (strcmp (gst_structure_get_string (s, "frame-type"), "golden") == 0
+            && self->golden_frame_picture_id != PICTURE_ID_NONE) {
+          GBytes *data_bytes = g_bytes_new (&self->golden_frame_picture_id, 8);
+          sli =
+              gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+              gst_structure_new ("GstSliceLossIndication",
+                  "payload", G_TYPE_UINT, self->pt, "bit_string",
+                  G_TYPE_BYTES, data_bytes, NULL));
+        }
+
+        if (strcmp (gst_structure_get_string (s, "frame-type"),
+                "alternate") == 0
+            && self->alternate_frame_picture_id != PICTURE_ID_NONE) {
+          GBytes *data_bytes =
+              g_bytes_new (&self->alternate_frame_picture_id, 8);
+          sli =
+              gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+              gst_structure_new ("GstSliceLossIndication",
+                  "payload", G_TYPE_UINT, self->pt, "bit_string", G_TYPE_BYTES,
+                  data_bytes, NULL));
+        }
+
+        if (sli)
+          ret = gst_pad_push_event (GST_RTP_BASE_DEPAYLOAD_SINKPAD (self), sli);
+        gst_event_unref (event);
+
+        return ret;
+      }
+
+      ret = GST_RTP_BASE_DEPAYLOAD_CLASS
+          (gst_rtp_vp8_depay_parent_class)->src_handle_event (depay, event);
+      break;
+    }
+    default:
+      ret = GST_RTP_BASE_DEPAYLOAD_CLASS
+          (gst_rtp_vp8_depay_parent_class)->src_handle_event (depay, event);
+      break;
+  }
+
+  return ret;
+}
+
 static void
 gst_rtp_vp8_depay_init (GstRtpVP8Depay * self)
 {
@@ -137,6 +226,7 @@ gst_rtp_vp8_depay_class_init (GstRtpVP8DepayClass * gst_rtp_vp8_depay_class)
 
   depay_class->process_rtp_packet = gst_rtp_vp8_depay_process;
   depay_class->handle_event = gst_rtp_vp8_depay_handle_event;
+  depay_class->src_handle_event = gst_rtp_vp8_depay_src_handle_event;
   depay_class->packet_lost = gst_rtp_vp8_depay_packet_lost;
 
   GST_DEBUG_CATEGORY_INIT (gst_rtp_vp8_depay_debug, "rtpvp8depay", 0,
@@ -283,6 +373,13 @@ send_last_lost_event_if_needed (GstRtpVP8Depay * self, guint new_picture_id)
   }
 }
 
+static gboolean
+gst_rtp_vp8_depay_parse_frame (GstRtpVP8Depay * self, GstBuffer * buffer,
+    gsize buffer_size)
+{
+  return gst_rtp_vp8_parse_header (buffer, buffer_size, &self->parsed_header);
+}
+
 static GstBuffer *
 gst_rtp_vp8_depay_process (GstRTPBaseDepayload * depay, GstRTPBuffer * rtp)
 {
@@ -296,6 +393,8 @@ gst_rtp_vp8_depay_process (GstRTPBaseDepayload * depay, GstRTPBuffer * rtp)
   guint part_id;
   gboolean frame_start;
   gboolean sent_lost_event = FALSE;
+
+  self->pt = gst_rtp_buffer_get_payload_type (rtp);
 
   if (G_UNLIKELY (GST_BUFFER_IS_DISCONT (rtp->buffer))) {
     GST_DEBUG_OBJECT (self, "Discontinuity, flushing adapter");
@@ -437,6 +536,30 @@ gst_rtp_vp8_depay_process (GstRTPBaseDepayload * depay, GstRTPBuffer * rtp)
         gst_pad_push_event (GST_RTP_BASE_DEPAYLOAD_SINKPAD (depay),
             gst_video_event_new_upstream_force_key_unit (GST_CLOCK_TIME_NONE,
                 TRUE, 0));
+      } else {
+        gst_rtp_vp8_depay_parse_frame (self, out, gst_buffer_get_size (out));
+
+        /* Save the golden frame picture id if it resfresh it */
+        if (self->parsed_header.refresh_golden_frame
+            && self->last_picture_id != PICTURE_ID_NONE)
+          self->golden_frame_picture_id = self->last_picture_id;
+
+        /* If not refreshing golden frame picture but got the same last picture id would mean that
+         * golden picture id isn't more valid so discard it */
+        if (!self->parsed_header.refresh_golden_frame
+            && self->golden_frame_picture_id == self->last_picture_id)
+          self->golden_frame_picture_id = PICTURE_ID_NONE;
+
+        /* Save the alternate frame picture id if it resfresh it */
+        if (self->parsed_header.refresh_alternate_frame
+            && self->last_picture_id != PICTURE_ID_NONE)
+          self->alternate_frame_picture_id = self->last_picture_id;
+
+        /* If not refreshing alternat frame picture but got the same last picture id would mean that
+         * alternate picture id isn't more valid so discard it */
+        if (!self->parsed_header.refresh_alternate_frame
+            && self->alternate_frame_picture_id == self->last_picture_id)
+          self->alternate_frame_picture_id = PICTURE_ID_NONE;
       }
     } else {
       guint profile, width, height;
@@ -504,6 +627,8 @@ gst_rtp_vp8_depay_change_state (GstElement * element, GstStateChange transition)
       self->waiting_for_keyframe = TRUE;
       self->caps_sent = FALSE;
       self->last_picture_id = PICTURE_ID_NONE;
+      self->golden_frame_picture_id = PICTURE_ID_NONE;
+      self->alternate_frame_picture_id = PICTURE_ID_NONE;
       gst_event_replace (&self->last_lost_event, NULL);
       self->stop_lost_events = FALSE;
       break;
@@ -527,6 +652,8 @@ gst_rtp_vp8_depay_handle_event (GstRTPBaseDepayload * depay, GstEvent * event)
       self->last_height = -1;
       self->last_width = -1;
       self->last_picture_id = PICTURE_ID_NONE;
+      self->golden_frame_picture_id = PICTURE_ID_NONE;
+      self->alternate_frame_picture_id = PICTURE_ID_NONE;
       gst_event_replace (&self->last_lost_event, NULL);
       self->stop_lost_events = FALSE;
       break;
