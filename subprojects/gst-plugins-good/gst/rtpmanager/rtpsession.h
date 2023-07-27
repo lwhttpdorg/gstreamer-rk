@@ -319,6 +319,18 @@ struct _RTPSession {
 
   gboolean timeout_inactive_sources;
 
+  /* RFC4585 RPSI */
+  gboolean have_rpsi;
+  guint8 rpsi_pt;
+  guint8 rpsi_payload[8];
+  gint rpsi_payload_length;
+
+  /* RFC4585 SLI */
+  gboolean have_sli;
+  guint8 sli_pt;
+  guint8 sli_payload[8];
+  gint sli_payload_length;
+
   /* Transport-wide cc-extension */
   RTPTWCCManager *twcc;
   RTPTWCCStats *twcc_stats;
@@ -448,5 +460,8 @@ gboolean        rtp_session_request_nack           (RTPSession * sess,
 
 void            rtp_session_update_recv_caps_structure (RTPSession * sess, const GstStructure * s);
 
+gboolean        rtp_session_rpsi (RTPSession * sess, guint8 pt, GBytes * bit_string);
+
+gboolean        rtp_session_sli (RTPSession * sess, guint8 pt, GBytes * bit_string);
 
 #endif /* __RTP_SESSION_H__ */

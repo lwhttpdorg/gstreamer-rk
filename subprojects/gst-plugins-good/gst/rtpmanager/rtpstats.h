@@ -162,6 +162,10 @@ typedef struct {
   guint        recv_fir_count;
   guint        sent_nack_count;
   guint        recv_nack_count;
+  guint        sent_rpsi_count;
+  guint        recv_rpsi_count;
+  guint        sent_sli_count;
+  guint        recv_sli_count;
 
   /* when we received stuff */
   GstClockTime prev_rtptime;
