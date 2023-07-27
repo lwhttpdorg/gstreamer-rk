@@ -239,6 +239,46 @@ gst_vp8_decoder_negotiate (GstVideoDecoder * decoder)
   return GST_VIDEO_DECODER_CLASS (parent_class)->negotiate (decoder);
 }
 
+static void
+gst_vp8_decoder_signal_decoded_frame (GstVp8Decoder * self,
+    GstVp8Picture * picture)
+{
+  GstVp8FrameHdr *frame_hdr = &picture->frame_hdr;
+  GstEvent *event = NULL;
+
+  if (frame_hdr->refresh_golden_frame)
+    event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+            "frame-type", G_TYPE_STRING, "golden", NULL));
+  else if (frame_hdr->refresh_alternate_frame)
+    event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+            "frame-type", G_TYPE_STRING, "alternate", NULL));
+
+  if (event)
+    gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (self), event);
+}
+
+static void
+gst_vp8_decoder_signal_error_frame (GstVp8Decoder * self,
+    GstVp8Picture * picture)
+{
+  GstVp8FrameHdr *frame_hdr = &picture->frame_hdr;
+  GstEvent *event = NULL;
+
+  if (frame_hdr->refresh_alternate_frame)
+    event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_new ("GstSliceLossIndication-vp8",
+            "frame-type", G_TYPE_STRING, "golden", NULL));
+  else if (frame_hdr->refresh_golden_frame)
+    event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_new ("GstSliceLossIndication-vp8",
+            "frame-type", G_TYPE_STRING, "alternate", NULL));
+
+  if (event)
+    gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (self), event);
+}
+
 static gboolean
 gst_vp8_decoder_update_reference (GstVp8Decoder * self, GstVp8Picture * picture)
 {
@@ -298,6 +338,7 @@ gst_vp8_decoder_update_reference (GstVp8Decoder * self, GstVp8Picture * picture)
     gst_vp8_picture_replace (&self->last_picture, picture);
 
 done:
+  gst_vp8_decoder_signal_decoded_frame (self, picture);
   gst_vp8_picture_unref (picture);
 
   return TRUE;
@@ -507,8 +548,10 @@ unmap_and_error:
 
 error:
   {
-    if (picture)
+    if (picture) {
+      gst_vp8_decoder_signal_error_frame (self, picture);
       gst_vp8_picture_unref (picture);
+    }
 
     if (ret == GST_FLOW_ERROR) {
       GST_VIDEO_DECODER_ERROR (self, 1, STREAM, DECODE,
