@@ -68,10 +68,39 @@ static GstStaticPadTemplate gst_dvb_mux_sink_factory =
 
 /* Internals */
 
+static TsMuxStream *
+gst_dvb_mux_create_new_stream (guint16 new_pid, TsMuxStreamType stream_type,
+    guint stream_number, GstTsMuxConformance conformance, gpointer user_data)
+{
+  TsMuxStream *ret =
+      tsmux_stream_new (new_pid, stream_type, stream_number, conformance);
+
+  if (stream_type == TSMUX_ST_PS_AUDIO_AC3) {
+    ret->id = 0xBD;
+    ret->id_extended = 0;
+    ret->gst_stream_type = GST_STREAM_TYPE_AUDIO;
+  }
+
+  return ret;
+}
+
+/* GstBaseTsMux implementation */
+
+static TsMux *
+gst_dvb_mux_create_ts_mux (GstBaseTsMux * mpegtsmux)
+{
+  TsMux *ret = GST_BASE_TS_MUX_CLASS (parent_class)->create_ts_mux (mpegtsmux);
+
+  tsmux_set_new_stream_func (ret, gst_dvb_mux_create_new_stream, mpegtsmux);
+
+  return ret;
+}
+
 static void
 gst_dvb_mux_class_init (GstDVBMuxClass * klass)
 {
   GstElementClass *gstelement_class = GST_ELEMENT_CLASS (klass);
+  GstBaseTsMuxClass *mpegtsmux_class = (GstBaseTsMuxClass *) klass;
 
   GST_DEBUG_CATEGORY_INIT (gst_dvb_mux_debug, "dvbmux", 0, "DVB muxer");
 
@@ -79,6 +108,8 @@ gst_dvb_mux_class_init (GstDVBMuxClass * klass)
       "DVB Transport Stream Muxer", "Codec/Muxer",
       "Multiplexes media streams into a DVB-compliant Transport Stream",
       "Jan Alexander Steffens (heftig) <jan.steffens@ltnglobal.com>");
+
+  mpegtsmux_class->create_ts_mux = gst_dvb_mux_create_ts_mux;
 
   gst_element_class_add_static_pad_template_with_gtype (gstelement_class,
       &gst_dvb_mux_sink_factory, GST_TYPE_BASE_TS_MUX_PAD);
