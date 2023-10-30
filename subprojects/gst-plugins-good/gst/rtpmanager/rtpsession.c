@@ -1295,6 +1295,10 @@ rtp_session_set_callbacks (RTPSession * sess, RTPSessionCallbacks * callbacks,
     sess->callbacks.notify_nack = callbacks->notify_nack;
     sess->notify_nack_user_data = user_data;
   }
+  if (callbacks->notify_rpsi) {
+    sess->callbacks.notify_rpsi = callbacks->notify_rpsi;
+    sess->notify_rpsi_user_data = user_data;
+  }
   if (callbacks->notify_twcc) {
     sess->callbacks.notify_twcc = callbacks->notify_twcc;
     sess->notify_twcc_user_data = user_data;
@@ -2928,7 +2932,10 @@ rtp_session_process_rpsi (RTPSession * sess, guint32 sender_ssrc,
 {
   RTPSource *src;
   guint8 pt;
-  guint64 *value = (guint64 *) & fci_data[2];
+  GBytes *data_bytes = g_bytes_new (&fci_data[2], 8);
+
+  if (!sess->callbacks.notify_rpsi)
+    return;
 
   if (fci_length < 4)
     return;
@@ -2938,6 +2945,11 @@ rtp_session_process_rpsi (RTPSession * sess, guint32 sender_ssrc,
     return;
 
   pt = fci_data[1] & 0x7F;      /* Leftmost bit is ignored */
+
+  RTP_SESSION_UNLOCK (sess);
+  sess->callbacks.notify_rpsi (sess, sender_ssrc, media_ssrc, pt,
+      data_bytes, sess->notify_rpsi_user_data);
+  RTP_SESSION_LOCK (sess);
 }
 
 static void

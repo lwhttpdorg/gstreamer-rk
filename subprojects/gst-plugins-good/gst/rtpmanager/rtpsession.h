@@ -170,6 +170,36 @@ typedef void (*RTPSessionNotifyTWCC) (RTPSession *sess,
     GstStructure * twcc_packets, GstStructure * twcc_stats, gpointer user_data);
 
 /**
+ * RTPSessionNotifyRPSI:
+ * @sess: an #RTPSession
+ * @sender_ssrc: SSRC of receiver notifying us
+ * @media_ssrc: SSRC of our sender stream
+ * @pt: Media payload type
+ * @data: rpsi data
+ * @user_data: user data specified when registering
+ *
+ * Notifies of RPSI messages
+ */
+typedef void (*RTPSessionNotifyRPSI) (RTPSession *sess,
+    guint32 sender_ssrc, guint32 media_ssrc, guint8 pt, GBytes * data,
+    gpointer user_data);
+
+/**
+ * RTPSessionNotifySLI:
+ * @sess: an #RTPSession
+ * @sender_ssrc: SSRC of receiver notifying us
+ * @media_ssrc: SSRC of our sender stream
+ * @pt: Media payload type
+ * @data: sli data
+ * @user_data: user data specified when registering
+ *
+ * Notifies of SLI messages
+ */
+typedef void (*RTPSessionNotifySLI) (RTPSession *sess,
+    guint32 sender_ssrc, guint32 media_ssrc, guint8 pt, GBytes * data,
+    gpointer user_data);
+
+/**
  * RTPSessionReconfigure:
  * @sess: an #RTPSession
  * @user_data: user data specified when registering
@@ -200,6 +230,8 @@ typedef void (*RTPSessionNotifyEarlyRTCP) (RTPSession *sess,
  * @RTPSessionRequestTime: callback for requesting the current time
  * @RTPSessionNotifyNACK: callback for notifying NACK
  * @RTPSessionNotifyTWCC: callback for notifying TWCC
+ * @RTPSessionNotifyRPSI: callback for notifying RPSI
+ * @RTPSessionNotifySLI: callback for notifying SLI
  * @RTPSessionReconfigure: callback for requesting reconfiguration
  * @RTPSessionNotifyEarlyRTCP: callback for notifying early RTCP
  *
@@ -218,6 +250,8 @@ typedef struct {
   RTPSessionRequestTime request_time;
   RTPSessionNotifyNACK  notify_nack;
   RTPSessionNotifyTWCC  notify_twcc;
+  RTPSessionNotifyRPSI  notify_rpsi;
+  RTPSessionNotifySLI   notify_sli;
   RTPSessionReconfigure reconfigure;
   RTPSessionNotifyEarlyRTCP notify_early_rtcp;
 } RTPSessionCallbacks;
@@ -296,6 +330,8 @@ struct _RTPSession {
   gpointer              request_time_user_data;
   gpointer              notify_nack_user_data;
   gpointer              notify_twcc_user_data;
+  gpointer              notify_rpsi_user_data;
+  gpointer              notify_sli_user_data;
   gpointer              reconfigure_user_data;
   gpointer              notify_early_rtcp_user_data;
 
