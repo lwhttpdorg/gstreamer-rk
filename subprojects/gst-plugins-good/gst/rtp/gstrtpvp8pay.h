@@ -60,6 +60,8 @@ struct _GstRtpVP8Pay
   GstVP8RtpPayPictureIDMode picture_id_mode;
   gint picture_id_offset;
   gint picture_id;
+  guint64 golden_frame_picture_id;
+  guint64 alternate_frame_picture_id;
   gboolean temporal_scalability_fields_present;
   guint8 tl0picidx;
 };

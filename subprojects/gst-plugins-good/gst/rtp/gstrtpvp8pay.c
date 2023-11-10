@@ -73,6 +73,8 @@ static void gst_rtp_vp8_pay_set_property (GObject * object, guint prop_id,
 
 static GstFlowReturn gst_rtp_vp8_pay_handle_buffer (GstRTPBasePayload * payload,
     GstBuffer * buffer);
+static gboolean gst_rtp_vp8_pay_src_event (GstRTPBasePayload * payload,
+    GstEvent * event);
 static gboolean gst_rtp_vp8_pay_sink_event (GstRTPBasePayload * payload,
     GstEvent * event);
 static gboolean gst_rtp_vp8_pay_set_caps (GstRTPBasePayload * payload,
@@ -123,6 +125,8 @@ gst_rtp_vp8_pay_picture_id_reset (GstRtpVP8Pay * self)
     picture_id &= (1 << nbits) - 1;
   }
   g_atomic_int_set (&self->picture_id, picture_id);
+  self->golden_frame_picture_id = -1;
+  self->alternate_frame_picture_id = -1;
 
   GST_LOG_OBJECT (self, "picture-id reset %d -> %d",
       old_picture_id, picture_id);
@@ -216,6 +220,7 @@ gst_rtp_vp8_pay_class_init (GstRtpVP8PayClass * gst_rtp_vp8_pay_class)
   pay_class->handle_buffer = gst_rtp_vp8_pay_handle_buffer;
   pay_class->sink_event = gst_rtp_vp8_pay_sink_event;
   pay_class->set_caps = gst_rtp_vp8_pay_set_caps;
+  pay_class->src_event = gst_rtp_vp8_pay_src_event;
 
   GST_DEBUG_CATEGORY_INIT (gst_rtp_vp8_pay_debug, "rtpvp8pay", 0,
       "VP8 Video RTP Payloader");
@@ -270,7 +275,7 @@ static gboolean
 gst_rtp_vp8_pay_parse_frame (GstRtpVP8Pay * self, GstBuffer * buffer,
     gsize buffer_size)
 {
-  return gst_rtp_vp8_parse_header(buffer, buffer_size, &self->parsed_header);
+  return gst_rtp_vp8_parse_header (buffer, buffer_size, &self->parsed_header);
 }
 
 static guint
@@ -538,9 +543,127 @@ gst_rtp_vp8_pay_handle_buffer (GstRTPBasePayload * payload, GstBuffer * buffer)
 
   ret = gst_rtp_base_payload_push_list (payload, list);
 
+  if (self->golden_frame_picture_id == self->picture_id)
+    self->golden_frame_picture_id = -1;
+
+  if (self->parsed_header.refresh_golden_frame)
+    self->golden_frame_picture_id = self->picture_id;
+
+  if (self->alternate_frame_picture_id == self->picture_id)
+    self->alternate_frame_picture_id = -1;
+
+  if (self->parsed_header.refresh_alternate_frame)
+    self->alternate_frame_picture_id = self->picture_id;
+
   gst_rtp_vp8_pay_picture_id_increment (self);
 
   gst_buffer_unref (buffer);
+
+  return ret;
+}
+
+static gboolean
+gst_rtp_vp8_pay_src_event (GstRTPBasePayload * payload, GstEvent * event)
+{
+  GstRtpVP8Pay *self = GST_RTP_VP8_PAY (payload);
+  gboolean ret = FALSE;
+  const GstStructure *s;
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_CUSTOM_UPSTREAM:
+      s = gst_event_get_structure (event);
+      if (gst_structure_has_name (s, "GstReferencePictureSelectionIndication")) {
+        guint pt;
+        if (gst_structure_get_uint (s, "payload", &pt)) {
+          const GValue *value = gst_structure_get_value (s, "bit_string");
+          GstEvent *decoded = NULL;
+          GBytes *bit_string;
+          const guint64 *picture_id;
+          gsize bytes_size;
+
+          if (!value)
+            break;
+
+          bit_string = g_value_get_boxed (value);
+          if (!bit_string)
+            break;
+
+          picture_id = g_bytes_get_data (bit_string, &bytes_size);
+
+          if (*picture_id == self->golden_frame_picture_id
+              && self->golden_frame_picture_id != -1)
+            decoded =
+                gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+                gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+                    "frame-type", G_TYPE_STRING, "golden", NULL));
+
+          if (*picture_id == self->alternate_frame_picture_id
+              && self->alternate_frame_picture_id != -1)
+            decoded =
+                gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+                gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+                    "frame-type", G_TYPE_STRING, "alternate", NULL));
+
+          if (decoded)
+            ret =
+                gst_pad_push_event (GST_RTP_BASE_PAYLOAD_SINKPAD (self),
+                decoded);
+          gst_event_unref (event);
+        }
+        return ret;
+      }
+
+      if (gst_structure_has_name (s, "GstSliceLossIndication")) {
+        guint pt;
+        if (gst_structure_get_uint (s, "payload", &pt)) {
+          const GValue *value = gst_structure_get_value (s, "bit_string");
+          GstEvent *decoded = NULL;
+          GBytes *bit_string;
+          const guint64 *picture_id;
+          gsize bytes_size;
+
+          if (!value)
+            break;
+
+          bit_string = g_value_get_boxed (value);
+          if (!bit_string)
+            break;
+
+          picture_id = g_bytes_get_data (bit_string, &bytes_size);
+
+          if (*picture_id == self->golden_frame_picture_id
+              && self->golden_frame_picture_id != -1)
+            decoded =
+                gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+                gst_structure_new ("GstSliceLossIndication-vp8",
+                    "frame-type", G_TYPE_STRING, "golden", NULL));
+
+          if (*picture_id == self->alternate_frame_picture_id
+              && self->alternate_frame_picture_id != -1)
+            decoded =
+                gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+                gst_structure_new ("GstSliceLossIndication-vp8",
+                    "frame-type", G_TYPE_STRING, "alternate", NULL));
+
+          if (decoded)
+            ret =
+                gst_pad_push_event (GST_RTP_BASE_PAYLOAD_SINKPAD (self),
+                decoded);
+          gst_event_unref (event);
+        }
+        return ret;
+      }
+
+      ret =
+          GST_RTP_BASE_PAYLOAD_CLASS (gst_rtp_vp8_pay_parent_class)->src_event
+          (payload, event);
+      break;
+    default:
+      ret =
+          GST_RTP_BASE_PAYLOAD_CLASS (gst_rtp_vp8_pay_parent_class)->src_event
+          (payload, event);
+      break;
+  }
 
   return ret;
 }
