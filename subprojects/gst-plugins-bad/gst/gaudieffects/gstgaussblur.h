@@ -68,11 +68,13 @@ struct _GstGaussianBlur
 
   float cur_sigma, sigma;
   int windowsize;
+  int n_threads;
 
   float *kernel;
   float *kernel_sum;
   float *tempim;
   gint16 *smoothedim;
+  gboolean first;
 };
 
 struct _GstGaussianBlurClass
