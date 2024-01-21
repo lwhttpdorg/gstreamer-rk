@@ -390,6 +390,10 @@ _priv_gst_tag_initialize (void)
   gst_tag_register_static (GST_TAG_DEVICE_MODEL, GST_TAG_FLAG_META,
       G_TYPE_STRING, _("device model"),
       _("Model of the device used to create this media"), NULL);
+  gst_tag_register_static (GST_TAG_DEVICE_SERIAL_NUMBER, GST_TAG_FLAG_META,
+      G_TYPE_STRING, _("device serial number"),
+      _("Serial number of the device that was used for producing the media"),
+      NULL);
   gst_tag_register_static (GST_TAG_APPLICATION_NAME, GST_TAG_FLAG_META,
       G_TYPE_STRING, _("application name"),
       _("Application used to create the media"), NULL);
@@ -411,6 +415,9 @@ _priv_gst_tag_initialize (void)
   gst_tag_register_static (GST_TAG_MIDI_BASE_NOTE, GST_TAG_FLAG_META,
       G_TYPE_UINT,
       _("midi-base-note"), _("Midi note number of the audio track."), NULL);
+  gst_tag_register_static (GST_TAG_MEDIA_UUID, GST_TAG_FLAG_META,
+      G_TYPE_STRING, _("media uuid"),
+      _("Universally Unique Identifier (UUID) of the media"), NULL);
   gst_tag_register_static (GST_TAG_PRIVATE_DATA, GST_TAG_FLAG_META,
       GST_TYPE_SAMPLE,
       _("private-data"), _("Private data"), gst_tag_merge_use_first);
