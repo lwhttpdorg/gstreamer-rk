@@ -1960,6 +1960,14 @@ GST_START_TEST (test_exif_tags_serialization_deserialization)
       GST_TAG_CAPTURING_FLASH_MODE, "always", NULL);
   do_exif_tag_serialization_deserialization (taglist);
   gst_tag_list_unref (taglist);
+
+  g_value_init (&value, G_TYPE_STRING);
+  g_value_set_string (&value, "test-serial-number");
+  do_simple_exif_tag_serialization_deserialization
+      (GST_TAG_DEVICE_SERIAL_NUMBER, &value);
+  g_value_set_string (&value, "01234567-89ab-cdef-0123-456789abcdef");
+  do_simple_exif_tag_serialization_deserialization (GST_TAG_MEDIA_UUID, &value);
+  g_value_unset (&value);
 }
 
 GST_END_TEST;

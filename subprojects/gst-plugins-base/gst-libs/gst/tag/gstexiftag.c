@@ -280,6 +280,7 @@ EXIF_SERIALIZATION_DESERIALIZATION_FUNC (source);
 EXIF_SERIALIZATION_DESERIALIZATION_FUNC (speed);
 EXIF_SERIALIZATION_DESERIALIZATION_FUNC (white_balance);
 EXIF_SERIALIZATION_DESERIALIZATION_FUNC (light_source);
+EXIF_SERIALIZATION_DESERIALIZATION_FUNC (image_unique_id);
 
 EXIF_DESERIALIZATION_FUNC (resolution);
 EXIF_DESERIALIZATION_FUNC (add_to_pending_tags);
@@ -339,6 +340,8 @@ EXIF_DESERIALIZATION_FUNC (add_to_pending_tags);
 #define EXIF_TAG_CONTRAST 0xA408
 #define EXIF_TAG_SATURATION 0xA409
 #define EXIF_TAG_SHARPNESS 0xA40A
+#define EXIF_TAG_IMAGE_UNIQUE_ID 0xA420
+#define EXIF_TAG_BODY_SERIAL_NUMBER 0xA431
 
 /* IFD pointer tags */
 #define EXIF_IFD_TAG 0x8769
@@ -450,6 +453,10 @@ static const GstExifTagMatch tag_map_exif[] = {
       serialize_saturation, deserialize_saturation},
   {GST_TAG_CAPTURING_SHARPNESS, EXIF_TAG_SHARPNESS, EXIF_TYPE_SHORT, 0,
       serialize_sharpness, deserialize_sharpness},
+  {GST_TAG_MEDIA_UUID, EXIF_TAG_IMAGE_UNIQUE_ID, EXIF_TYPE_ASCII, 0,
+      serialize_image_unique_id, deserialize_image_unique_id},
+  {GST_TAG_DEVICE_SERIAL_NUMBER, EXIF_TAG_BODY_SERIAL_NUMBER,
+      EXIF_TYPE_ASCII, 0, NULL, NULL},
   {NULL, 0, 0, 0, NULL, NULL}
 };
 
@@ -2914,6 +2921,109 @@ deserialize_scene_type (GstExifReader * exif_reader,
         GST_TAG_CAPTURING_SOURCE, "dsc", NULL);
   }
 
+  return 0;
+}
+
+static void
+serialize_image_unique_id (GstExifWriter * writer, const GstTagList * taglist,
+    const GstExifTagMatch * exiftag)
+{
+  const gchar *media_uuid;
+  gchar exif_str[33];
+  gint i;
+
+  if (!gst_tag_list_peek_string_index (taglist, exiftag->gst_tag, 0,
+          &media_uuid)) {
+    GST_WARNING ("Failed to get media UUID from from tag list");
+    return;
+  }
+
+  if (!g_uuid_string_is_valid (media_uuid)) {
+    GST_ERROR ("\"%s\" is not a valid UUID", media_uuid);
+    return;
+  }
+
+  /* Construct a UUID representation without the dashes,
+   * since this is what this EXIF tag requires. */
+  exif_str[32] = 0;
+  memcpy (exif_str + 0, media_uuid + 0, 8);
+  memcpy (exif_str + 8, media_uuid + 9, 4);
+  memcpy (exif_str + 12, media_uuid + 14, 4);
+  memcpy (exif_str + 16, media_uuid + 19, 4);
+  memcpy (exif_str + 20, media_uuid + 24, 12);
+
+  /* Following RFC 4122 section 3, UUID shall be output
+   * with the A-F hexadecimal digits as lowercase. */
+  for (i = 0; i < 32; ++i)
+    exif_str[i] = g_ascii_tolower (exif_str[i]);
+
+  write_exif_ascii_tag (writer, exiftag->exif_tag, exif_str);
+}
+
+static gint
+deserialize_image_unique_id (GstExifReader * exif_reader,
+    GstByteReader * reader, const GstExifTagMatch * exiftag,
+    GstExifTagData * tagdata)
+{
+  /* Make room for 32 hexadecimal digits, 4 dashes, and 1 nullbyte */
+  gchar media_uuid[37];
+  guint32 real_offset;
+  const gchar *exif_id;
+  GstMapInfo info;
+  gboolean mapped = FALSE;
+
+  if (tagdata->offset < exif_reader->base_offset) {
+    GST_WARNING ("Offset is smaller (%u) than base offset (%u)",
+        tagdata->offset, exif_reader->base_offset);
+    goto finish;
+  }
+
+  /* The UUID is stored in the EXIF tag as 32-character hex value,
+   * with a null terminating byte (since the EXIF tag type is ASCII),
+   * so the sum total is 33 characters. */
+  if (tagdata->count != 33) {
+    GST_ERROR ("Expected 33 characters (including the nullbyte), got %"
+        G_GUINT32_FORMAT, tagdata->count);
+    goto finish;
+  }
+
+  real_offset = tagdata->offset - exif_reader->base_offset;
+
+  if (!gst_buffer_map (exif_reader->buffer, &info, GST_MAP_READ)) {
+    GST_WARNING ("Failed to map buffer for reading");
+    goto finish;
+  }
+  mapped = TRUE;
+
+  if (real_offset >= info.size) {
+    GST_WARNING ("Invalid offset %u for buffer of size %" G_GSIZE_FORMAT
+        ", not adding media UUID tag", real_offset, info.size);
+    goto finish;
+  }
+
+  exif_id = (const gchar *) (info.data + real_offset);
+
+  memcpy (media_uuid + 0, exif_id + 0, 8);
+  memcpy (media_uuid + 9, exif_id + 8, 4);
+  memcpy (media_uuid + 14, exif_id + 12, 4);
+  memcpy (media_uuid + 19, exif_id + 16, 4);
+  memcpy (media_uuid + 24, exif_id + 20, 12);
+
+  media_uuid[8] = media_uuid[13] = media_uuid[18] = media_uuid[23] = '-';
+  media_uuid[36] = 0;
+
+  if (!g_uuid_string_is_valid (media_uuid)) {
+    GST_ERROR ("Got invalid UUID data");
+    GST_MEMDUMP ("Invalid UUID data", (const guint8 *) media_uuid, 36);
+    goto finish;
+  }
+
+  gst_tag_list_add (exif_reader->taglist, GST_TAG_MERGE_REPLACE,
+      GST_TAG_MEDIA_UUID, media_uuid, NULL);
+
+finish:
+  if (mapped)
+    gst_buffer_unmap (exif_reader->buffer, &info);
   return 0;
 }
 
