@@ -89,7 +89,7 @@ static const DecoderFormat format_list[] = {
       {DXGI_FORMAT_NV12, DXGI_FORMAT_P010}},
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 class GstD3D12Dpb
@@ -364,7 +364,7 @@ struct GstD3D12DecoderPrivate
   std::vector < GstD3D12DecoderPicture * >configured_ref_pics;
 };
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12Decoder
 {
@@ -2245,7 +2245,7 @@ gst_d3d12_decoder_check_feature_support (GstD3D12Device * device,
 
   std::string format_string;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter : supported_formats) {
     GstVideoFormat format = gst_d3d12_dxgi_format_to_gst (iter);
 
@@ -2259,7 +2259,7 @@ gst_d3d12_decoder_check_feature_support (GstD3D12Device * device,
 
      format_string += gst_video_format_to_string (format);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   std::string src_caps_string;
   /* TODO: support d3d12 memory */
@@ -2314,7 +2314,7 @@ gst_d3d12_decoder_check_feature_support (GstD3D12Device * device,
       return nullptr;
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (codec != GST_DXVA_CODEC_VP9 && codec != GST_DXVA_CODEC_VP8) {
     if (profiles.size () > 1) {
       profile_string = "{ ";
@@ -2335,7 +2335,7 @@ gst_d3d12_decoder_check_feature_support (GstD3D12Device * device,
     sink_caps_string += ", profile=(string) ";
     sink_caps_string += profile_string;
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   auto sink_caps = gst_caps_from_string (sink_caps_string.c_str ());
   auto raw_caps = gst_caps_from_string (src_caps_string.c_str ());

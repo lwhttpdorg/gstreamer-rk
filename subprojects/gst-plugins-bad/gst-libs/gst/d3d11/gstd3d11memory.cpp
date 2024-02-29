@@ -42,9 +42,9 @@
  * Since: 1.22
  */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_allocator_debug);
 #define GST_CAT_DEFAULT gst_d3d11_allocator_debug
@@ -1958,7 +1958,7 @@ gst_d3d11_allocator_set_active (GstD3D11Allocator * allocator, gboolean active)
 }
 
 /* GstD3D11PoolAllocator */
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstD3D11PoolAllocatorPrivate
 {
   _GstD3D11PoolAllocatorPrivate ()
@@ -1992,7 +1992,7 @@ struct _GstD3D11PoolAllocatorPrivate
   gsize mem_size = 0;
   guint mem_pitch = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d11_pool_allocator_finalize (GObject * object);
 

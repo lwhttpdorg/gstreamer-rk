@@ -22,7 +22,7 @@
 #define _OPENGL_VERSIONS_H_
 
 /* list of known OpenGL versions */
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct { int major, minor; } opengl_versions[] = {
    {4, 5},
    {4, 4},
@@ -49,6 +49,6 @@ static const struct { int major, minor; } opengl_versions[] = {
    {0, 0} /* end of list */
 };
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 #endif /* _OPENGL_VERSIONS_H_ */

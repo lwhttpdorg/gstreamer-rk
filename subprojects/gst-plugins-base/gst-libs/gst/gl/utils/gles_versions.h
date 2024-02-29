@@ -22,7 +22,7 @@
 #define _GLES_VERSIONS_H_
 
 /* list of known OpenGL versions */
-/* *INDENT-OFF* */
+/* clang-format off */
 
 static const struct { int major, minor; } gles2_versions[] = {
    {3, 2},
@@ -33,6 +33,6 @@ static const struct { int major, minor; } gles2_versions[] = {
 
    {0, 0} /* end of list */
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #endif /* _GLES_VERSIONS_H_ */

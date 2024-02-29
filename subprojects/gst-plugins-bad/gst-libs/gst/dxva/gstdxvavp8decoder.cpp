@@ -30,7 +30,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_dxva_vp8_decoder_debug);
 #define GST_CAT_DEFAULT gst_dxva_vp8_decoder_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDxvaVp8DecoderPrivate
 {
   DXVA_PicParams_VP8 pic_params;
@@ -42,7 +42,7 @@ struct _GstDxvaVp8DecoderPrivate
   gint width = 0;
   gint height = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_dxva_vp8_decoder_finalize (GObject * object);
 

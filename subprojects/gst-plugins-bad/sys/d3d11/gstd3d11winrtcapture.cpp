@@ -49,7 +49,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_screen_capture_debug);
 #define GST_CAT_DEFAULT gst_d3d11_screen_capture_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Graphics;
@@ -146,7 +146,7 @@ struct GstD3D11WinRTCaptureInner
 
   bool closed = false;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define LOAD_SYMBOL(module,name,func) G_STMT_START { \
   if (!g_module_symbol (module, G_STRINGIFY (name), (gpointer *) &winrt_vtable.func)) { \

@@ -171,7 +171,7 @@ static gboolean
 gst_v4l2_decoder_h265_api_check (GstV4l2Decoder * decoder)
 {
   guint i, ret_size;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   #define SET_ID(cid) .id = (cid), .name = #cid
   struct
   {
@@ -200,7 +200,7 @@ gst_v4l2_decoder_h265_api_check (GstV4l2Decoder * decoder)
     }
   };
   #undef SET_ID
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /*
    * Compatibility check: make sure the pointer controls are
@@ -232,7 +232,7 @@ static gboolean
 gst_v4l2_codec_h265_dec_open (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct v4l2_ext_control control[] = {
     {
       .id = V4L2_CID_STATELESS_HEVC_DECODE_MODE,
@@ -248,7 +248,7 @@ gst_v4l2_codec_h265_dec_open (GstVideoDecoder * decoder)
       .size = sizeof (self->scaling_matrix),
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_v4l2_decoder_open (self->decoder)) {
     GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
@@ -375,7 +375,7 @@ gst_v4l2_codec_h265_dec_negotiate (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
   GstH265Decoder *h265dec = GST_H265_DECODER (decoder);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct v4l2_ext_control control[] = {
     {
       .id = V4L2_CID_STATELESS_HEVC_SPS,
@@ -383,7 +383,7 @@ gst_v4l2_codec_h265_dec_negotiate (GstVideoDecoder * decoder)
       .size = sizeof (self->sps),
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
   GstCaps *peer_caps, *filter, *caps;
   GstStaticCaps *static_filter;
 
@@ -550,7 +550,7 @@ gst_v4l2_codec_h265_dec_fill_sequence (GstV4l2CodecH265Dec * self,
   /* Whenever we update teh sps, we need to send it again */
   self->need_sequence = TRUE;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->sps = (struct v4l2_ctrl_hevc_sps) {
         .video_parameter_set_id = sps->vps->id,
         .seq_parameter_set_id = sps->id,
@@ -580,7 +580,7 @@ gst_v4l2_codec_h265_dec_fill_sequence (GstV4l2CodecH265Dec * self,
             (sps->temporal_mvp_enabled_flag ? V4L2_HEVC_SPS_FLAG_SPS_TEMPORAL_MVP_ENABLED : 0) |
             (sps->strong_intra_smoothing_enabled_flag ? V4L2_HEVC_SPS_FLAG_STRONG_INTRA_SMOOTHING_ENABLED : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
   if (sps->pcm_enabled_flag) {
     self->sps.pcm_sample_bit_depth_luma_minus1 =
         sps->pcm_sample_bit_depth_luma_minus1;
@@ -601,7 +601,7 @@ gst_v4l2_codec_h265_dec_fill_pps (GstV4l2CodecH265Dec * self, GstH265PPS * pps)
 {
   gint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->pps = (struct v4l2_ctrl_hevc_pps) {
         .pic_parameter_set_id = pps->id,
 	.num_extra_slice_header_bits = pps->num_extra_slice_header_bits,
@@ -636,7 +636,7 @@ gst_v4l2_codec_h265_dec_fill_pps (GstV4l2CodecH265Dec * self, GstH265PPS * pps)
             (pps->deblocking_filter_control_present_flag ? V4L2_HEVC_PPS_FLAG_DEBLOCKING_FILTER_CONTROL_PRESENT : 0) |
             (pps->uniform_spacing_flag ? V4L2_HEVC_PPS_FLAG_UNIFORM_SPACING : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (pps->tiles_enabled_flag) {
     self->pps.num_tile_columns_minus1 = pps->num_tile_columns_minus1;
@@ -732,7 +732,7 @@ gst_v4l2_codec_h265_dec_fill_slice_params (GstV4l2CodecH265Dec * self,
   if (needs_start_codes (self))
     sc_offset = 3;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   params = &g_array_index (self->slice_params, struct v4l2_ctrl_hevc_slice_params, n);
   *params = (struct v4l2_ctrl_hevc_slice_params) {
     .bit_size = (slice_size + sc_offset) * 8,
@@ -778,7 +778,7 @@ gst_v4l2_codec_h265_dec_fill_slice_params (GstV4l2CodecH265Dec * self,
         (slice_hdr->dependent_slice_segment_flag ?
              V4L2_HEVC_SLICE_PARAMS_FLAG_DEPENDENT_SLICE_SEGMENT : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < slice_hdr->num_entry_point_offsets; i++) {
     guint32 entry_point_offset = slice_hdr->entry_point_offset_minus1[i] + 1;
@@ -1054,7 +1054,7 @@ gst_v4l2_codec_h265_dec_fill_decode_params (GstV4l2CodecH265Dec * self,
   GArray *refs = gst_h265_dpb_get_pictures_all (dpb);
   gint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->decode_params = (struct v4l2_ctrl_hevc_decode_params) {
     .pic_order_cnt_val = picture->pic_order_cnt,
     .num_poc_st_curr_before = decoder->NumPocStCurrBefore,
@@ -1066,7 +1066,7 @@ gst_v4l2_codec_h265_dec_fill_decode_params (GstV4l2CodecH265Dec * self,
       (GST_H265_IS_NAL_TYPE_IDR (slice->nalu.type) ? V4L2_HEVC_DECODE_PARAM_FLAG_IDR_PIC : 0) |
       (slice->header.no_output_of_prior_pics_flag ? V4L2_HEVC_DECODE_PARAM_FLAG_NO_OUTPUT_OF_PRIOR : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < refs->len; i++) {
     GstH265Picture *ref_pic = g_array_index (refs, GstH265Picture *, i);
@@ -1074,7 +1074,7 @@ gst_v4l2_codec_h265_dec_fill_decode_params (GstV4l2CodecH265Dec * self,
     if (!ref_pic->ref)
       continue;
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     self->decode_params.dpb[self->decode_params.num_active_dpb_entries++] =
         (struct v4l2_hevc_dpb_entry) {
       /*
@@ -1086,7 +1086,7 @@ gst_v4l2_codec_h265_dec_fill_decode_params (GstV4l2CodecH265Dec * self,
       .field_pic = ref_pic->pic_struct,
       .pic_order_cnt_val = ref_pic->pic_order_cnt,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   for (i = 0; i < 16; i++) {
@@ -1362,7 +1362,7 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
   gboolean ret = FALSE;
   gint num_controls = 0;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   /* Reserve space for controls */
   struct v4l2_ext_control control[] = {
     { }, /* SPS */
@@ -1372,7 +1372,7 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
     { }, /* SCALING_MATRIX */
     { }, /* ENTRY_POINT_OFFSETS */
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   prev_request = gst_h265_picture_get_user_data (picture);
 

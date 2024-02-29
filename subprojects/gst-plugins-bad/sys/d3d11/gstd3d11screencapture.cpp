@@ -31,9 +31,9 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_screen_capture_debug);
 #define GST_CAT_DEFAULT gst_d3d11_screen_capture_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define gst_d3d11_screen_capture_parent_class parent_class
 G_DEFINE_ABSTRACT_TYPE (GstD3D11ScreenCapture, gst_d3d11_screen_capture,

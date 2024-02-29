@@ -36,10 +36,10 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_plugin_utils_debug);
 #define GST_CAT_DEFAULT gst_d3d11_plugin_utils_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * GstD3D11AlphaMode:

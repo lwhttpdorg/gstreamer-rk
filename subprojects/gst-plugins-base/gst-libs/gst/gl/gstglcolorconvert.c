@@ -68,7 +68,7 @@ static GstBuffer *_gst_gl_color_convert_perform_unlocked (GstGLColorConvert *
 static gboolean _do_convert_draw (GstGLContext * context,
     GstGLColorConvert * convert);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 
 typedef struct
 {
@@ -879,7 +879,7 @@ static const GLfloat vertices[] = {
 
 static const GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef struct
 {
@@ -3926,7 +3926,7 @@ gst_gl_color_convert_swizzle_shader_string (GstGLContext * context)
   return g_strdup (glsl_func_swizzle);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const char glsl_func_yuv_to_rgb[] =
     "vec3 yuv_to_rgb (vec3 yuv, vec3 offset, vec3 ycoeff, vec3 ucoeff, vec3 vcoeff) {\n"
     "  vec3 rgb;\n"
@@ -3936,7 +3936,7 @@ static const char glsl_func_yuv_to_rgb[] =
     "  rgb.b = dot(yuv, vcoeff);\n"
     "  return rgb;\n"
     "}\n";
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * gst_gl_color_convert_yuv_to_rgb_shader_string:

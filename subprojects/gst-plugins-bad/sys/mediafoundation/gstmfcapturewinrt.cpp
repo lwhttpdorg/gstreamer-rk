@@ -30,13 +30,13 @@
 #include <memory>
 #include <algorithm>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::Media::MediaProperties;
 using namespace ABI::Windows::Graphics::Imaging;
 using namespace ABI::Windows::Foundation;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_source_object_debug);
 #define GST_CAT_DEFAULT gst_mf_source_object_debug
@@ -253,7 +253,7 @@ gst_mf_capture_winrt_thread_func (GstMFCaptureWinRT * self)
 
   hr = self->capture->EnumrateFrameSourceGroup (group_list);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
 #ifndef GST_DISABLE_GST_DEBUG
   index = 0;
   for (const auto& iter: group_list) {
@@ -291,7 +291,7 @@ gst_mf_capture_winrt_thread_func (GstMFCaptureWinRT * self)
 
     index++;
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!target_group) {
     GST_WARNING_OBJECT (self, "No matching device");
@@ -311,10 +311,10 @@ gst_mf_capture_winrt_thread_func (GstMFCaptureWinRT * self)
 
   self->supported_caps = gst_caps_new_empty ();
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto iter: target_group->source_list_)
     gst_caps_append (self->supported_caps, gst_caps_copy (iter.caps_));
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_DEBUG_OBJECT (self, "Available output caps %" GST_PTR_FORMAT,
       self->supported_caps);
@@ -669,7 +669,7 @@ gst_mf_capture_winrt_get_caps (GstMFSourceObject * object)
   return nullptr;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static gboolean
 gst_mf_capture_winrt_set_caps (GstMFSourceObject * object, GstCaps * caps)
 {
@@ -705,7 +705,7 @@ gst_mf_capture_winrt_set_caps (GstMFSourceObject * object, GstCaps * caps)
 
   return TRUE;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_mf_capture_winrt_frame_clear (GstMFCaptureWinRTFrame * winrt_frame)

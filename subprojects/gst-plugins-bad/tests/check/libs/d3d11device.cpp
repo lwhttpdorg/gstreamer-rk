@@ -26,9 +26,9 @@
 #include <gst/d3d11/gstd3d11.h>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static gboolean have_multiple_adapters = FALSE;
 

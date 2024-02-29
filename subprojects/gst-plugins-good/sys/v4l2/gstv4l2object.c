@@ -103,7 +103,7 @@ typedef struct
 #define MAP_ENC_FMT(v4l2_format, gst_format) \
   V4L2_PIX_FMT_##v4l2_format, GST_VIDEO_FORMAT_##gst_format, DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static GstV4L2FormatDesc gst_v4l2_formats[] = {
   /* RGB formats */
   {MAP_FMT (RGB332, UNKNOWN),         MAP_DRM (RGB332,   LINEAR),     GST_V4L2_RAW},
@@ -243,7 +243,7 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_ENC_FMT (PWC2, ENCODED),     GST_V4L2_CODEC | GST_V4L2_RESOLUTION_AND_RATE},
 };
 #undef MAP_FMT
-/* *INDENT-ON* */
+/* clang-format on */
 #define GST_V4L2_FORMAT_COUNT (G_N_ELEMENTS (gst_v4l2_formats))
 
 static GSList *gst_v4l2_object_get_format_list (GstV4l2Object * v4l2object);

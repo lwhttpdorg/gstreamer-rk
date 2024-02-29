@@ -74,16 +74,16 @@ struct _GstVaH266Dec
 
 static GstElementClass *parent_class = NULL;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *src_caps_str =
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_VA,
         "{ NV12, P010_10LE }") " ;"
     GST_VIDEO_CAPS_MAKE ("{ NV12, P010_10LE }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static const gchar *sink_caps_str = "video/x-h266";
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct
 {
   GstH266Profile profile_idc;
@@ -96,7 +96,7 @@ static const struct
   P (MULTILAYER_MAIN_10_STILL_PICTURE, MultilayerMain10),
 #undef P
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static VAProfile
 _get_profile (GstVaH266Dec * self, const GstH266SPS * sps, gint max_dpb_size)
@@ -256,7 +256,7 @@ gst_va_h266_dec_new_sequence (GstH266Decoder * decoder, const GstH266SPS * sps,
   base->need_valign = GST_VIDEO_INFO_WIDTH (info) < base->width ||
       GST_VIDEO_INFO_HEIGHT (info) < base->height;
   if (base->need_valign) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     if (base->valign.padding_left != padding_left ||
         base->valign.padding_right != padding_right ||
         base->valign.padding_top != padding_top ||
@@ -271,7 +271,7 @@ gst_va_h266_dec_new_sequence (GstH266Decoder * decoder, const GstH266SPS * sps,
       .padding_top = padding_top,
       .padding_bottom = padding_bottom,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   base->min_buffers = self->dpb_size + 4;       /* dpb size + scratch surfaces */
@@ -346,7 +346,7 @@ gst_va_h266_dec_new_picture (GstH266Decoder * decoder,
   }
 
   if (base->need_negotiation) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     base->need_valign = need_valign;
     base->valign = (GstVideoAlignment) {
       .padding_left = padding_left,
@@ -354,7 +354,7 @@ gst_va_h266_dec_new_picture (GstH266Decoder * decoder,
       .padding_top = padding_top,
       .padding_bottom = padding_bottom,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   ret = gst_va_base_dec_prepare_output_frame (base, frame);
@@ -450,7 +450,7 @@ _fill_vaapi_subpicture (GstVaH266Dec * self, GstH266SPS * sps, GstH266PPS * pps,
       SubpicIdVal = i;
     }
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     VASubPicVVC subpic_param = {
       .sps_subpic_ctu_top_left_x = sps->subpic_ctu_top_left_x[i],
       .sps_subpic_ctu_top_left_y = sps->subpic_ctu_top_left_y[i],
@@ -463,7 +463,7 @@ _fill_vaapi_subpicture (GstVaH266Dec * self, GstH266SPS * sps, GstH266PPS * pps,
           sps->loop_filter_across_subpic_enabled_flag[i],
       }
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     if (!gst_va_decoder_add_param_buffer (base->decoder, va_pic,
             VASubPicBufferType, &subpic_param, sizeof (VASubPicVVC)))
@@ -482,7 +482,7 @@ _fill_vaapi_alf_aps (GstVaH266Dec * self,
   gint sfIdx, filtIdx, altIdx, j, k;
   gint8 filtCoeff[GST_H266_NUM_ALF_FILTERS][12];
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   VAAlfDataVVC alf_param = {
     .aps_adaptation_parameter_set_id = aps->aps_id,
     .alf_luma_num_filters_signalled_minus1 = alf->luma_filter_signal_flag ?
@@ -502,7 +502,7 @@ _fill_vaapi_alf_aps (GstVaH266Dec * self,
       .alf_chroma_clip_flag = alf->chroma_clip_flag,
     }
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* Luma coeff */
   for (sfIdx = 0; sfIdx <= alf->luma_num_filters_signalled_minus1; sfIdx++) {
@@ -656,7 +656,7 @@ gst_va_h266_dec_start_picture (GstH266Decoder * decoder,
   pps = ph->pps;
   sps = pps->sps;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
 #define F(S, FIELD)  .G_PASTE(G_PASTE(S, _), FIELD)=S->FIELD
   *pic_param = (VAPictureParameterBufferVVC) {
     .pps_pic_width_in_luma_samples  = pps->width,
@@ -804,7 +804,7 @@ gst_va_h266_dec_start_picture (GstH266Decoder * decoder,
     }
   };
 #undef F
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   _fill_vaapi_pic (decoder, &pic_param->CurrPic, picture);
   _fill_vaapi_reference_frames (decoder, pic_param, dpb);
@@ -1012,7 +1012,7 @@ gst_va_h266_dec_decode_slice (GstH266Decoder * decoder,
 
   va_pic = gst_h266_picture_get_user_data (picture);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
 #define F(S, FIELD)  .G_PASTE(G_PASTE(S, _), FIELD)=S->FIELD
   slice_param = (VASliceParameterBufferVVC) {
     .slice_data_size = nalu->size,
@@ -1067,7 +1067,7 @@ gst_va_h266_dec_decode_slice (GstH266Decoder * decoder,
     },
   };
 #undef F
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < 7; i++)
     slice_param.sh_alf_aps_id_luma[i] = sh->alf_aps_id_luma[i];

@@ -31,9 +31,9 @@
 
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 #else
 #include "gstqsvallocator_va.h"
 #endif /* G_OS_WIN32 */

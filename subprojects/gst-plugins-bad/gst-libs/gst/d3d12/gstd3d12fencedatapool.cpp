@@ -45,7 +45,7 @@ notify_data_clear_func (NotifyData * data)
   data->notify = nullptr;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstD3D12FenceData : public GstMiniObject
 {
   _GstD3D12FenceData ()
@@ -80,7 +80,7 @@ struct _GstD3D12FenceDataPoolPrivate
   std::mutex lock;
   std::queue<GstD3D12FenceData *>data_pool;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d12_fence_data_pool_finalize (GObject * object);
 

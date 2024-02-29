@@ -150,7 +150,7 @@ gst_cuda_ipc_pkt_build_need_data (std::vector < guint8 > &buf)
   memcpy (&buf[0], &header, GST_CUDA_IPC_PKT_HEADER_SIZE);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 bool
 gst_cuda_ipc_pkt_build_have_data (std::vector < guint8 > &buf, GstClockTime pts,
     const GstVideoInfo & info, const CUipcMemHandle & handle, GstCaps * caps,
@@ -212,7 +212,7 @@ gst_cuda_ipc_pkt_build_have_data (std::vector < guint8 > &buf, GstClockTime pts,
 
   return true;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define DO_OFFSET(p,r,s) G_STMT_START { \
   (p) += s; \
@@ -284,7 +284,7 @@ gst_cuda_ipc_pkt_parse_have_data (const std::vector < guint8 > &buf,
   return true;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 bool
 gst_cuda_ipc_pkt_build_have_mmap_data (std::vector<guint8> & buf,
     GstClockTime pts, const GstVideoInfo & info, guint32 max_size,
@@ -348,7 +348,7 @@ gst_cuda_ipc_pkt_build_have_mmap_data (std::vector<guint8> & buf,
 
   return true;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 bool
 gst_cuda_ipc_pkt_parse_have_mmap_data (const std::vector < guint8 > &buf,
@@ -568,14 +568,14 @@ gst_cuda_ipc_clock_is_system (GstClock * clock)
 }
 
 #ifdef G_OS_WIN32
-/* *INDENT-OFF* */
+/* clang-format off */
 static inline void rtrim(std::string &s) {
   s.erase (std::find_if (s.rbegin(), s.rend(),
       [](unsigned char ch) {
         return !std::isspace (ch);
       }).base (), s.end ());
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 std::string
 gst_cuda_ipc_win32_error_to_string (guint err)

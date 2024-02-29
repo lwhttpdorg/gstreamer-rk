@@ -67,9 +67,9 @@
 #include "gstd3d12upload.h"
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 plugin_deinit (gpointer data)

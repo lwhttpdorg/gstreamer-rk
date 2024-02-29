@@ -187,26 +187,26 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
 
   switch (self->codec) {
     case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
-      /* *INDENT-OFF* */
+      /* clang-format off */
       priv->caps.decoder.codec.h264 = (VkVideoDecodeH264CapabilitiesKHR) {
           .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_KHR,
       };
-      /* *INDENT-ON* */
+      /* clang-format on */
       codec_idx = GST_VK_VIDEO_EXTENSION_DECODE_H264;
       break;
     case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
-      /* *INDENT-OFF* */
+      /* clang-format off */
       priv->caps.decoder.codec.h265 = (VkVideoDecodeH265CapabilitiesKHR) {
           .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_CAPABILITIES_KHR,
       };
-      /* *INDENT-ON* */
+      /* clang-format on */
       codec_idx = GST_VK_VIDEO_EXTENSION_DECODE_H265;
       break;
     default:
       g_assert_not_reached ();
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   priv->caps.decoder.caps = (VkVideoDecodeCapabilitiesKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR,
     .pNext = &priv->caps.decoder.codec,
@@ -215,7 +215,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
     .sType = VK_STRUCTURE_TYPE_VIDEO_CAPABILITIES_KHR,
     .pNext = &priv->caps.decoder.caps,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gpu = gst_vulkan_device_get_physical_device (self->queue->device);
   res = priv->vk.GetPhysicalDeviceVideoCapabilities (gpu,
@@ -359,7 +359,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
   GST_INFO_OBJECT (self, "Using output format %s",
       gst_video_format_to_string (format));
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   session_create = (VkVideoSessionCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_CREATE_INFO_KHR,
     .queueFamilyIndex = self->queue->family,
@@ -371,7 +371,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
     .maxActiveReferencePictures = priv->caps.caps.maxActiveReferencePictures,
     .pStdHeaderVersion = &_vk_codec_extensions[codec_idx],
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* create video session */
   if (!gst_vulkan_video_session_create (&priv->session, self->queue->device,
@@ -381,18 +381,18 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
   /* create empty codec params */
   switch (self->profile.profile.videoCodecOperation) {
     case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
-      /* *INDENT-OFF* */
+      /* clang-format off */
       empty_params.h264 = (VkVideoDecodeH264SessionParametersCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_PARAMETERS_CREATE_INFO_KHR,
       };
-      /* *INDENT-ON* */
+      /* clang-format on */
       break;
     case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
-      /* *INDENT-OFF* */
+      /* clang-format off */
       empty_params.h265 = (VkVideoDecodeH265SessionParametersCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_CREATE_INFO_KHR,
       };
-      /* *INDENT-ON* */
+      /* clang-format on */
       break;
     default:
       g_assert_not_reached ();
@@ -515,13 +515,13 @@ gst_vulkan_decoder_flush (GstVulkanDecoder * self, GError ** error)
   if (!(priv->empty_params && priv->exec))
     return FALSE;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   decode_start = (VkVideoBeginCodingInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
     .videoSession = priv->session.session->handle,
     .videoSessionParameters = priv->empty_params->handle,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_vulkan_operation_begin (priv->exec, error))
     return FALSE;
@@ -642,7 +642,7 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
 
   priv = gst_vulkan_decoder_get_instance_private (self);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   decode_start = (VkVideoBeginCodingInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
     .videoSession = priv->session.session->handle,
@@ -650,7 +650,7 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
     .referenceSlotCount = pic->decode_info.referenceSlotCount,
     .pReferenceSlots = pic->decode_info.pReferenceSlots,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!(priv->started && priv->session_params)) {
     g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
@@ -763,14 +763,14 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
 
   /* change image layout */
   barriers = gst_vulkan_operation_retrieve_image_barriers (priv->exec);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   vkCmdPipelineBarrier2 (cmd_buf->cmd, &(VkDependencyInfo) {
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
       .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
       .pImageMemoryBarriers = (VkImageMemoryBarrier2 *) barriers->data,
       .imageMemoryBarrierCount = barriers->len,
     });
-  /* *INDENT-ON* */
+  /* clang-format on */
   g_array_unref (barriers);
 
   priv->vk.CmdBeginVideoCoding (cmd_buf->cmd, &decode_start);
@@ -914,13 +914,13 @@ gst_vulkan_decoder_new_video_session_parameters (GstVulkanDecoder * self,
   if (!priv->session.session)
     return NULL;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   session_params_info = (VkVideoSessionParametersCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_PARAMETERS_CREATE_INFO_KHR,
     .pNext = params,
     .videoSession = priv->session.session->handle,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   res = priv->vk.CreateVideoSessionParameters (self->queue->device->device,
       &session_params_info, NULL, &session_params);
@@ -1043,7 +1043,7 @@ gst_vulkan_decoder_update_ycbcr_sampler (GstVulkanDecoder * self,
 
   priv = gst_vulkan_decoder_get_instance_private (self);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   create_info = (VkSamplerYcbcrConversionCreateInfo) {
     .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO,
     .components = _vk_identity_component_map,
@@ -1053,7 +1053,7 @@ gst_vulkan_decoder_update_ycbcr_sampler (GstVulkanDecoder * self,
     .yChromaOffset = yloc,
     .format = priv->format.format,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   res = vkCreateSamplerYcbcrConversion (device->device, &create_info, NULL,
       &ycbr_conversion);

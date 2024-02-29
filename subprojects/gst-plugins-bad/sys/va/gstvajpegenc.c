@@ -549,7 +549,7 @@ _jpeg_fill_picture (GstVaJpegEnc * self, GstVaEncFrame * frame,
   GstVaBaseEnc *base = GST_VA_BASE_ENC (self);
   guint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *pic_param = (VAEncPictureParameterBufferJPEG) {
     .reconstructed_picture =
         gst_va_encode_picture_get_reconstruct_surface (frame->picture),
@@ -571,7 +571,7 @@ _jpeg_fill_picture (GstVaJpegEnc * self, GstVaEncFrame * frame,
     .num_components = self->n_components,
     .quality = quality,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < pic_param->num_components; i++) {
     pic_param->component_id[i] = i + 1;
@@ -747,7 +747,7 @@ _jpeg_fill_slice (GstVaJpegEnc * self,
     VAEncPictureParameterBufferJPEG * pic_param,
     VAEncSliceParameterBufferJPEG * slice_param)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *slice_param = (VAEncSliceParameterBufferJPEG) {
     .restart_interval = 0,
     .num_components = pic_param->num_components,
@@ -761,7 +761,7 @@ _jpeg_fill_slice (GstVaJpegEnc * self,
     .components[2].dc_table_selector = 1,
     .components[2].ac_table_selector = 1,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gboolean
@@ -834,14 +834,14 @@ _jpeg_create_and_add_packed_segments (GstVaJpegEnc * self,
     return FALSE;
 
   /* SOF */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame_hdr = (GstJpegFrameHdr) {
     .sample_precision = 8,
     .width = pic_param->picture_width,
     .height = pic_param->picture_height,
     .num_components = pic_param->num_components,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
   for (i = 0; i < frame_hdr.num_components; i++) {
     frame_hdr.components[i].identifier = pic_param->component_id[i];
     frame_hdr.components[i].horizontal_factor = self->h_samp[i];
@@ -999,12 +999,12 @@ gst_va_jpeg_enc_prepare_output (GstVaBaseEnc * base,
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *sink_caps_str =
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_VA,
         "{ NV12 }") " ;"
     GST_VIDEO_CAPS_MAKE ("{ NV12 }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static const gchar *src_caps_str = "image/jpeg";
 

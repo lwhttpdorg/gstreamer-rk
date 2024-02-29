@@ -157,7 +157,7 @@ gst_y4m_video_unpadded_info (GstVideoInfo * y4m_info,
  * Will assume little-endian because this is an on-disk serialization format.
  */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct {
   const char *chroma_tag;
   const char *yscss_tag;
@@ -193,7 +193,7 @@ static const struct {
   /* { "mono9", AV_PIX_FMT_GRAY9, GST_VIDEO_CHROMA_SITE_UNKNOWN }, */
   { "mono", NULL, GST_VIDEO_FORMAT_GRAY8, GST_VIDEO_CHROMA_SITE_UNKNOWN },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 gboolean
 gst_y4m_video_get_format_from_chroma_tag (const char *chroma_tag,
@@ -255,7 +255,7 @@ gst_y4m_video_get_yscss_tag_from_format (GstVideoFormat format,
   return NULL;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct {
   const char *range_tag;
   GstVideoColorRange range;
@@ -263,7 +263,7 @@ static const struct {
   { "FULL", GST_VIDEO_COLOR_RANGE_0_255 },
   { "LIMITED", GST_VIDEO_COLOR_RANGE_16_235 },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstVideoColorRange
 gst_y4m_video_get_color_range_from_range_tag (const char *range_tag)

@@ -29,7 +29,7 @@
 GST_DEBUG_CATEGORY_EXTERN (dwrite_overlay_object_debug);
 #define GST_CAT_DEFAULT dwrite_overlay_object_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GstDWriteD3D11RenderPrivate
@@ -73,7 +73,7 @@ struct GstDWriteD3D11RenderPrivate
   GstD3D11Converter *blend_conv = nullptr;
   GstD3D11Converter *post_conv = nullptr;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstDWriteD3D11Render
 {

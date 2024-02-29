@@ -290,7 +290,7 @@ gst_caps_to_at_format (GstCaps * caps, AudioStreamBasicDescription * format)
 /* These are the position orders that AudioToolbox outputs,
  * derived experimentally.
  */
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct
 {
   gint channels;
@@ -334,7 +334,7 @@ channel_layouts[] = {
     GST_AUDIO_CHANNEL_POSITION_LFE1,
   }},
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_atdec_get_channel_positions (GstATDec * atdec, gint channels,

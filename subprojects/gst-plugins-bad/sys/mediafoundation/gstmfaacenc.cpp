@@ -43,9 +43,9 @@
 #include <vector>
 #include <string>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_mf_aac_enc_debug);
 #define GST_CAT_DEFAULT gst_mf_aac_enc_debug
@@ -72,7 +72,7 @@ typedef struct _GstMFAacEncClass
 
 } GstMFAacEncClass;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef struct
 {
   GstCaps *sink_caps;
@@ -82,7 +82,7 @@ typedef struct
   guint device_index;
   std::set<UINT32> bitrate_list;
 } GstMFAacEncClassData;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstElementClass *parent_class = nullptr;
 
@@ -116,14 +116,14 @@ gst_mf_aac_enc_class_init (GstMFAacEncClass * klass, gpointer data)
 
   bitrate_blurb = "Bitrate in bit/sec, (0 = auto), valid values are { 0";
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto iter: cdata->bitrate_list) {
     bitrate_blurb += ", " + std::to_string (iter);
     /* std::set<> stores values in a sorted fashion */
     max_bitrate = iter;
   }
   bitrate_blurb += " }";
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   g_object_class_install_property (gobject_class, PROP_BITRATE,
       g_param_spec_uint ("bitrate", "Bitrate", bitrate_blurb.c_str (), 0,
@@ -317,7 +317,7 @@ gst_mf_aac_enc_get_output_type (GstMFAudioEncoder * encoder,
 
   GST_DEBUG_OBJECT (self, "Available bitrates");
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it: bitrate_list)
     GST_DEBUG_OBJECT (self, "\t%d", it);
 
@@ -343,7 +343,7 @@ gst_mf_aac_enc_get_output_type (GstMFAudioEncoder * encoder,
       break;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!target_output) {
     GST_ERROR_OBJECT (self, "Failed to decide final output type");
@@ -663,7 +663,7 @@ gst_mf_aac_enc_plugin_init_internal (GstPlugin * plugin, guint rank,
   g_value_init (&channles_value, GST_TYPE_LIST);
   g_value_init (&rate_value, GST_TYPE_LIST);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it: channels_list) {
     GValue channles = G_VALUE_INIT;
 
@@ -679,7 +679,7 @@ gst_mf_aac_enc_plugin_init_internal (GstPlugin * plugin, guint rank,
     g_value_set_int (&rate, (gint) it);
     gst_value_list_append_and_take_value (&rate_value, &rate);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gst_caps_set_value (src_caps, "channels", &channles_value);
   gst_caps_set_value (sink_caps, "channels", &channles_value);

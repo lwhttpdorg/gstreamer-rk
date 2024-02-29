@@ -34,7 +34,7 @@
 #include <algorithm>
 #include <iterator>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace ABI::Windows::ApplicationModel::Core;
 using namespace ABI::Windows::Foundation::Collections;
 using namespace ABI::Windows::Media::Devices;
@@ -1174,4 +1174,4 @@ WinRTCapsCompareFunc (const GstWinRTMediaDescription & a,
   return gst_mf_source_object_caps_compare (a.caps_, b.caps_) < 0;
 }
 
-/* *INDENT-ON* */
+/* clang-format on */

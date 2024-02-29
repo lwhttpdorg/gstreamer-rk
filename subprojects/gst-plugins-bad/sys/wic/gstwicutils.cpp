@@ -24,7 +24,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_wic_utils_debug);
 #define GST_CAT_DEFAULT gst_wic_utils_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 static struct
@@ -45,7 +45,7 @@ static struct
   {GUID_WICPixelFormat32bppBGRA, GST_VIDEO_FORMAT_BGRA},
   {GUID_WICPixelFormat64bppRGBA, GST_VIDEO_FORMAT_RGBA64_LE},
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 gboolean
 gst_wic_pixel_format_to_gst (REFWICPixelFormatGUID guid,

@@ -292,7 +292,7 @@ upload_buffer_to_image (GstBufferPool * pool, GstBuffer * inbuf,
     else
       plane_aspect = aspects[i];
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     region = (VkBufferImageCopy) {
         .bufferOffset = 0,
         .bufferRowLength = GST_VIDEO_INFO_COMP_WIDTH (&in_info, i),
@@ -385,7 +385,7 @@ setup_codec_pic (GstVulkanEncoderPicture * pic, VkVideoEncodeInfoKHR * info,
   pic->dpb_slot.pNext = &frame->dpb_slot_info;
 
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     frame->enc_pic_info = (VkVideoEncodeH264PictureInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PICTURE_INFO_KHR,
       .pNext = NULL,
@@ -401,7 +401,7 @@ setup_codec_pic (GstVulkanEncoderPicture * pic, VkVideoEncodeInfoKHR * info,
       .pNext = NULL,
       .pStdReferenceInfo = &frame->ref_info,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 }
 
@@ -412,7 +412,7 @@ setup_rc_codec (GstVulkanEncoderPicture * pic,
 {
   GstVulkanH264EncodeFrame *frame = (GstVulkanH264EncodeFrame *) pic;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame->rc_info = (VkVideoEncodeH264RateControlInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_KHR,
     .flags = VK_VIDEO_ENCODE_H264_RATE_CONTROL_REFERENCE_PATTERN_FLAT_BIT_KHR |
@@ -423,7 +423,7 @@ setup_rc_codec (GstVulkanEncoderPicture * pic,
     .consecutiveBFrameCount = 0,
     .temporalLayerCount = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   rc_info->pNext = &frame->rc_info;
 }
@@ -447,7 +447,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
   gst_vulkan_encoder_set_callbacks (enc, &cb, &enc_caps, NULL);
 
   frame->slice_hdr = (StdVideoEncodeH264SliceHeader) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoEncodeH264SliceHeaderFlags) {
       .direct_spatial_mv_pred_flag = 0,
       .num_ref_idx_active_override_flag = (slice_type != STD_VIDEO_H264_SLICE_TYPE_I && (list0_num > 0 || list1_num > 0)),
@@ -459,11 +459,11 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
     .slice_alpha_c0_offset_div2 = 0,
     .slice_beta_offset_div2 = 0,
     .pWeightTable = NULL,
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   frame->pic_info = (StdVideoEncodeH264PictureInfo) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoEncodeH264PictureInfoFlags) {
         .IdrPicFlag = (slice_type == STD_VIDEO_H264_SLICE_TYPE_I && frame->is_ref),
         .is_reference = frame->is_ref,   /* TODO: Check why it creates a deadlock in query result when TRUE  */
@@ -476,13 +476,13 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
     .primary_pic_type = PICTURE_TYPE (slice_type, frame->is_ref),
     .frame_num = frame_num,
     .PicOrderCnt = frame->pic_order_cnt,
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   ref_pics_num = list0_num + list1_num;
 
   if (ref_pics_num > 0) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     frame->ref_list_info = (StdVideoEncodeH264ReferenceListsInfo) {
       .flags = {
         .ref_pic_list_modification_flag_l0 = 0,
@@ -500,7 +500,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
       .pRefList1ModOperations = NULL,
       .pRefPicMarkingOperations = NULL,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
     frame->pic_info.pRefLists = &frame->ref_list_info;
   }
 
@@ -509,7 +509,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
   memset (frame->ref_list_info.RefPicList1, STD_VIDEO_H264_NO_REFERENCE_PICTURE,
       STD_VIDEO_H264_MAX_NUM_LIST_REF);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame->slice_info = (VkVideoEncodeH264NaluSliceInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_NALU_SLICE_INFO_KHR,
     .pNext = NULL,
@@ -534,7 +534,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH264EncodeFrame * frame,
     .long_term_frame_idx = 0,
     .temporal_id = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   picture->codec_rc_info = &frame->rc_info;
 
@@ -640,7 +640,7 @@ setup_h264_encoder (guint32 width, gint32 height, gint sps_id, gint pps_id)
   VkVideoEncodeH264SessionParametersAddInfoKHR params_add;
   GstVulkanEncoderQualityProperties quality_props;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   profile = (GstVulkanVideoProfile) {
     .profile = {
       .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
@@ -668,7 +668,7 @@ setup_h264_encoder (guint32 width, gint32 height, gint sps_id, gint pps_id)
       .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_QUALITY_LEVEL_PROPERTIES_KHR,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < instance->n_physical_devices; i++) {
     GstVulkanDevice *device = gst_vulkan_device_new_with_index (instance, i);
@@ -719,7 +719,7 @@ setup_h264_encoder (guint32 width, gint32 height, gint sps_id, gint pps_id)
   h264_std_sps.frame_crop_right_offset = mbAlignedWidth - width;
   h264_std_sps.frame_crop_bottom_offset = mbAlignedHeight - height;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   params_add = (VkVideoEncodeH264SessionParametersAddInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_ADD_INFO_KHR,
     .pStdSPSs = &h264_std_sps,
@@ -733,7 +733,7 @@ setup_h264_encoder (guint32 width, gint32 height, gint sps_id, gint pps_id)
     .maxStdPPSCount = 1,
     .pParametersAddInfo = &params_add
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   fail_unless (gst_vulkan_encoder_update_video_session_parameters (enc,
           &enc_params, &err));

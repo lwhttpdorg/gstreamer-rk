@@ -28,7 +28,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_debug);
 #define GST_CAT_DEFAULT gst_mf_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #define LOAD_SYMBOL(name,func) G_STMT_START { \
   if (!g_module_symbol (module, G_STRINGIFY (name), (gpointer *) &vtable->func)) { \
     GST_WARNING ("Failed to load '%s', %s", G_STRINGIFY (name), g_module_error()); \
@@ -54,7 +54,7 @@ typedef struct _GstMFPlatVTable
   HRESULT (__stdcall * GstMFCreateVideoSampleAllocatorEx) (REFIID riid,
                                                            void** ppSampleAllocator);
 } GstMFPlatVTable;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstMFPlatVTable gst_mf_plat_vtable = { 0, };
 

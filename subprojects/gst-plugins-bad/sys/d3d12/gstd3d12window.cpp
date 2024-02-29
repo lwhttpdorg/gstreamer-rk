@@ -34,9 +34,9 @@
 #include <wrl.h>
 #include <string>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_d3d12_window_debug);
 #define GST_CAT_DEFAULT gst_d3d12_window_debug
@@ -106,7 +106,7 @@ gst_d3d12_window_overlay_mode_get_type (void)
   return mode_type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 
 struct GstD3D12WindowPrivate
 {
@@ -193,7 +193,7 @@ struct _GstD3D12Window
 
   GstD3D12WindowPrivate *priv;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define gst_d3d12_window_parent_class parent_class
 G_DEFINE_TYPE (GstD3D12Window, gst_d3d12_window, GST_TYPE_OBJECT);

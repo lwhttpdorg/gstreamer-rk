@@ -45,9 +45,9 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_deinterlace_debug);
 #define GST_CAT_DEFAULT gst_d3d11_deinterlace_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 /* Deinterlacing Methods:
  * Direct3D11 provides Blend, Bob, Adaptive, Motion Compensation, and
@@ -1109,10 +1109,10 @@ gst_d3d11_deinterlace_set_caps (GstBaseTransform * trans,
 {
   GstD3D11Deinterlace *self = GST_D3D11_DEINTERLACE (trans);
   GstVideoInfo in_info, out_info;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<ID3D11VideoProcessorEnumerator> video_enum;
   ComPtr<ID3D11VideoProcessor> video_proc;
-  /* *INDENT-ON* */
+  /* clang-format on */
   D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc;
   D3D11_VIDEO_PROCESSOR_CAPS proc_caps;
   D3D11_VIDEO_PROCESSOR_RATE_CONVERSION_CAPS rate_conv_caps;
@@ -2222,12 +2222,12 @@ gst_d3d11_deinterlace_register (GstPlugin * plugin, GstD3D11Device * device,
   GstCapsFeatures *caps_features;
   ID3D11Device *device_handle;
   ID3D11DeviceContext *context_handle;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<ID3D11VideoDevice> video_device;
   ComPtr<ID3D11VideoContext> video_context;
   ComPtr<ID3D11VideoProcessorEnumerator> video_proc_enum;
   ComPtr<ID3D11VideoProcessorEnumerator1> video_proc_enum1;
-  /* *INDENT-ON* */
+  /* clang-format on */
   HRESULT hr;
   D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc;
   D3D11_VIDEO_PROCESSOR_CAPS proc_caps = { 0, };

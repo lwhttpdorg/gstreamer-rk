@@ -485,7 +485,7 @@ static const struct
   gint bpp;
   GstVideoFormat vformat;
 } formats[] = {
-    /* *INDENT-OFF* */
+  /* clang-format off */
   {bmdFormat8BitYUV, 2, GST_VIDEO_FORMAT_UYVY},  /* auto */
     {bmdFormat8BitYUV, 2, GST_VIDEO_FORMAT_UYVY},
     {bmdFormat10BitYUV, 4, GST_VIDEO_FORMAT_v210},
@@ -497,7 +497,7 @@ static const struct
       {bmdFormat12BitRGBLE, FIXME, FIXME},
       {bmdFormat10BitRGBXLE, FIXME, FIXME},
       {bmdFormat10BitRGBX, FIXME, FIXME} */
-    /* *INDENT-ON* */
+  /* clang-format on */
 };
 
 enum ProfileSetOperationResult
@@ -526,7 +526,7 @@ static const struct
   BMDTimecodeFormat format;
   GstDecklinkTimecodeFormat gstformat;
 } tcformats[] = {
-    /* *INDENT-OFF* */
+  /* clang-format off */
     {bmdTimecodeRP188VITC1, GST_DECKLINK_TIMECODE_FORMAT_RP188VITC1},
     {bmdTimecodeRP188VITC2, GST_DECKLINK_TIMECODE_FORMAT_RP188VITC2},
     {bmdTimecodeRP188LTC, GST_DECKLINK_TIMECODE_FORMAT_RP188LTC},
@@ -534,7 +534,7 @@ static const struct
     {bmdTimecodeVITC, GST_DECKLINK_TIMECODE_FORMAT_VITC},
     {bmdTimecodeVITCField2, GST_DECKLINK_TIMECODE_FORMAT_VITCFIELD2},
     {bmdTimecodeSerial, GST_DECKLINK_TIMECODE_FORMAT_SERIAL}
-    /* *INDENT-ON* */
+  /* clang-format on */
 };
 
 static const struct
@@ -542,11 +542,11 @@ static const struct
   BMDKeyerMode keymode;
   GstDecklinkKeyerMode gstkeymode;
 } kmodes[] = {
-    /* *INDENT-OFF* */
+  /* clang-format off */
     {bmdKeyerModeOff, GST_DECKLINK_KEYER_MODE_OFF},
     {bmdKeyerModeInternal, GST_DECKLINK_KEYER_MODE_INTERNAL},
     {bmdKeyerModeExternal, GST_DECKLINK_KEYER_MODE_EXTERNAL}
-    /* *INDENT-ON* */
+  /* clang-format on */
 };
 
 const GstDecklinkMode *

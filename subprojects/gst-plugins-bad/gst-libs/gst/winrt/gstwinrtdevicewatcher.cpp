@@ -32,7 +32,7 @@
 #include <wrl.h>
 #include <wrl/wrappers/corewrappers.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef __FITypedEventHandler_2_Windows__CDevices__CEnumeration__CDeviceWatcher_Windows__CDevices__CEnumeration__CDeviceInformation IAddedHandler;
 typedef __FITypedEventHandler_2_Windows__CDevices__CEnumeration__CDeviceWatcher_Windows__CDevices__CEnumeration__CDeviceInformationUpdate IUpdatedHandler;
 typedef __FITypedEventHandler_2_Windows__CDevices__CEnumeration__CDeviceWatcher_Windows__CDevices__CEnumeration__CDeviceInformationUpdate IRemovedHandler;
@@ -193,7 +193,7 @@ public:
 private:
   GstWinRTDeviceWatcher * listener_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef struct
 {

@@ -27,9 +27,9 @@
 #include <thread>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_dwrite_bitmap_allocator_debug);
 #define GST_CAT_DEFAULT gst_dwrite_bitmap_allocator_debug

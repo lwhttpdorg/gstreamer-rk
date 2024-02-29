@@ -167,7 +167,7 @@ static GstStaticPadTemplate sink_template =
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_video_sink_debug);
 #define GST_CAT_DEFAULT gst_d3d12_video_sink_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D12VideoSinkPrivate
 {
   GstD3D12VideoSinkPrivate ()
@@ -258,7 +258,7 @@ struct GstD3D12VideoSinkPrivate
   gdouble brightness = DEFAULT_BRIGHTNESS;
   gdouble contrast = DEFAULT_CONTRAST;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12VideoSink
 {

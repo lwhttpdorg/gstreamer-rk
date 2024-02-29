@@ -501,13 +501,13 @@ fail_unless_vp9_ss (GstBuffer * buf, gint width, gint height)
   fail_unless_equals_int (0, (gint) (payload[0] & 0x80));
 
   /* Now assuming no picture ID signaled, we should find the SS right after */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   fail_unless_equals_int (0x18,           (gint) payload[1]); /* N_S=0 Y=1 G=1 */
   fail_unless_equals_int (width >> 8,     (gint) payload[2]);
   fail_unless_equals_int (width & 0xFF,   (gint) payload[3]);
   fail_unless_equals_int (height >> 8,    (gint) payload[4]);
   fail_unless_equals_int (height & 0xFF,  (gint) payload[5]);
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   fail_unless_equals_int (0x01, (gint) payload[6]);     /* N_G=1 */
   fail_unless_equals_int (0x04, (gint) payload[7]);     /* T=0 U=0 R=1 */

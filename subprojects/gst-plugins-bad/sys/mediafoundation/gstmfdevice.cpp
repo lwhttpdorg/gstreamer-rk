@@ -44,9 +44,9 @@ DEFINE_GUID (GST_KSCATEGORY_CAPTURE, 0x65E8773DL, 0x8F56,
 
 #if GST_MF_WINAPI_APP
 #include <gst/winrt/gstwinrt.h>
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace ABI::Windows::Devices::Enumeration;
-/* *INDENT-ON* */
+/* clang-format on */
 #endif
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_debug);

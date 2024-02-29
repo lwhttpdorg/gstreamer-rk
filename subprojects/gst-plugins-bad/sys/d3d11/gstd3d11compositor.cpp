@@ -50,9 +50,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_compositor_debug);
 #define GST_CAT_DEFAULT gst_d3d11_compositor_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef enum
 {
@@ -149,7 +149,7 @@ gst_d3d11_compositor_sizing_policy_get_type (void)
   return sizing_policy_type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static D3D11_RENDER_TARGET_BLEND_DESC blend_templ[] = {
   /* SOURCE */
   {
@@ -166,7 +166,7 @@ static D3D11_RENDER_TARGET_BLEND_DESC blend_templ[] = {
     D3D11_COLOR_WRITE_ENABLE_ALL,
   },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11CompositorPad
 {

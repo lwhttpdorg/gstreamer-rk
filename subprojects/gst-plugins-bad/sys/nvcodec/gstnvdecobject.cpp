@@ -41,7 +41,7 @@ extern "C"
 GST_DEFINE_MINI_OBJECT_TYPE (GstNvDecSurface, gst_nv_dec_surface);
 static GstNvDecSurface *gst_nv_dec_surface_new (guint seq_num);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstNvDecOutput
 {
   GstNvDecObject *self = nullptr;
@@ -58,7 +58,7 @@ struct GstNvDecObjectPrivate
   std::mutex lock;
   std::condition_variable cond;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstNvDecObject
 {
@@ -110,14 +110,14 @@ gst_nv_dec_object_finalize (GObject * object)
   GST_DEBUG_OBJECT (self, "Finalize");
 
   gst_cuda_context_push (self->context);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it : priv->surface_queue)
     gst_nv_dec_surface_unref (it);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it : priv->free_output_map)
     gst_memory_unref (it.second);
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   delete self->priv;
 
@@ -221,10 +221,10 @@ gst_nv_dec_object_reconfigure (GstNvDecObject * object,
   }
 
   /* Release old surfaces and create new ones */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it : priv->surface_queue)
     gst_nv_dec_surface_unref (it);
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   priv->surface_queue.clear ();
 
@@ -575,7 +575,7 @@ gst_nv_dec_surface_dispose (GstNvDecSurface * surf)
   object = (GstNvDecObject *) g_steal_pointer (&surf->object);
   priv = object->priv;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   {
     std::lock_guard < std::mutex > lk (priv->lock);
 
@@ -599,7 +599,7 @@ gst_nv_dec_surface_dispose (GstNvDecSurface * surf)
       ret = TRUE;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gst_object_unref (object);
 

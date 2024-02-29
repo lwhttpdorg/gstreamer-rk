@@ -61,9 +61,9 @@
 #include <mmsystem.h>
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_decoder_debug);
 #define GST_CAT_DEFAULT gst_d3d11_decoder_debug
@@ -131,7 +131,7 @@ static const GUID *profile_av1_list[] = {
 DEFINE_GUID (IID_GST_D3D11_DECODER_VIEW_DATA, 0xe1fd3e17, 0x1e33,
     0x4198, 0x9e, 0x48, 0xdb, 0x01, 0x55, 0x2b, 0xf1, 0x78);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class IGstD3D11DecoderViewData: public IUnknown
 {
 public:
@@ -205,7 +205,7 @@ private:
   guint8 index_;
   ULONG ref_count_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11Decoder
 {
@@ -2293,7 +2293,7 @@ typedef struct _GstD3D11DecoderDocCaps
   const gchar *src_caps;
 } GstD3D11DecoderDocCaps;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const GstD3D11DecoderDocCaps doc_caps_list[] = {
   {
     GST_DXVA_CODEC_MPEG2,
@@ -2359,7 +2359,7 @@ static const GstD3D11DecoderDocCaps doc_caps_list[] = {
     "width = (int) [ 1, 16384 ], height = (int) [ 1, 16384 ]"
   },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 void
 gst_d3d11_decoder_proxy_class_init (GstElementClass * klass,

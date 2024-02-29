@@ -57,7 +57,7 @@
 #include <DirectXMath.h>
 #include "../key-handler.h"
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace DirectX;
 using namespace Microsoft::WRL;
 
@@ -115,7 +115,7 @@ void CSMain(uint3 DTid : SV_DispatchThreadID)
   uvLUT[int2(DTid.xy)] = fishUV;
 }
 )";
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GMainLoop *loop = nullptr;
 

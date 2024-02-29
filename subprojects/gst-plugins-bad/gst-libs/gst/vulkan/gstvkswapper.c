@@ -848,7 +848,7 @@ _allocate_swapchain (GstVulkanSwapper * swapper, GstCaps * caps,
 
     old_swap_chain = priv->swap_chain;
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     swap_chain_info = (VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .pNext = NULL,
@@ -868,7 +868,7 @@ _allocate_swapchain (GstVulkanSwapper * swapper, GstCaps * caps,
         .clipped = TRUE,
         .oldSwapchain = old_swap_chain
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     err =
         priv->CreateSwapchainKHR (swapper->device->device,
@@ -1045,14 +1045,14 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
     return FALSE;
 
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     VkCommandBufferBeginInfo cmd_buf_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = NULL,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = NULL
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     gst_vulkan_command_buffer_lock (cmd_buf);
     err = vkBeginCommandBuffer (cmd_buf->cmd, &cmd_buf_info);
@@ -1061,7 +1061,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
   }
 
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     VkImageMemoryBarrier image_memory_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext = NULL,
@@ -1075,7 +1075,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
         .image = swap_img->image,
         .subresourceRange = swap_img->barrier.subresource_range
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     vkCmdPipelineBarrier (cmd_buf->cmd,
         swap_img->barrier.parent.pipeline_stages,
@@ -1111,7 +1111,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
   in_mem = gst_buffer_peek_memory (buffer, 0);
   {
     GstVulkanImageMemory *img_mem = (GstVulkanImageMemory *) in_mem;
-    /* *INDENT-OFF* */
+    /* clang-format off */
     VkImageBlit blit = {
         .srcSubresource = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1155,7 +1155,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
         .baseArrayLayer = 0,
         .layerCount = 1,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     vkCmdPipelineBarrier (cmd_buf->cmd, img_mem->barrier.parent.pipeline_stages,
         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
@@ -1168,7 +1168,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
     vkCmdClearColorImage (cmd_buf->cmd, swap_img->image,
         swap_img->barrier.image_layout, &clear, 1, &clear_range);
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     image_memory_barrier = (VkImageMemoryBarrier) {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext = NULL,
@@ -1182,7 +1182,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
         .image = swap_img->image,
         .subresourceRange = swap_img->barrier.subresource_range
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     vkCmdPipelineBarrier (cmd_buf->cmd,
         swap_img->barrier.parent.pipeline_stages,
@@ -1198,7 +1198,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
         VK_FILTER_LINEAR);
   }
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     VkImageMemoryBarrier image_memory_barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .pNext = NULL,
@@ -1212,7 +1212,7 @@ _build_render_buffer_cmd (GstVulkanSwapper * swapper, guint32 swap_idx,
         .image = swap_img->image,
         .subresourceRange = swap_img->barrier.subresource_range
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     vkCmdPipelineBarrier (cmd_buf->cmd,
         swap_img->barrier.parent.pipeline_stages,
@@ -1268,13 +1268,13 @@ _render_buffer_unlocked (GstVulkanSwapper * swapper,
 
   gst_buffer_replace (&priv->current_buffer, buffer);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   semaphore_info = (VkSemaphoreCreateInfo) {
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
 reacquire:
   err = vkCreateSemaphore (swapper->device->device, &semaphore_info,
@@ -1311,7 +1311,7 @@ reacquire:
     VkPipelineStageFlags stages = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     VkSubmitInfo submit_info = { 0, };
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     submit_info = (VkSubmitInfo) {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pNext = NULL,
@@ -1323,7 +1323,7 @@ reacquire:
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &present_semaphore,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     fence = gst_vulkan_device_create_fence (swapper->device, error);
     if (!fence)
@@ -1350,7 +1350,7 @@ reacquire:
     fence = NULL;
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   present = (VkPresentInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = NULL,
@@ -1361,7 +1361,7 @@ reacquire:
       .pImageIndices = &swap_idx,
       .pResults = &present_err,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   err = priv->QueuePresentKHR (swapper->queue->queue, &present);
 
@@ -1377,13 +1377,13 @@ reacquire:
     VkSubmitInfo submit_info = { 0, };
     VkPipelineStageFlags stages = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     submit_info = (VkSubmitInfo) {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pWaitDstStageMask = &stages,
         0,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     fence = gst_vulkan_device_create_fence (swapper->device, error);
     if (!fence)

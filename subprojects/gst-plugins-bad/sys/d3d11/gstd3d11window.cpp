@@ -36,9 +36,9 @@
 
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_window_debug);
 #define GST_CAT_DEFAULT gst_d3d11_window_debug
@@ -1174,11 +1174,11 @@ gst_d3d11_window_get_native_type_from_handle (guintptr handle)
 #endif
 #if GST_D3D11_WINAPI_ONLY_APP
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     ComPtr<IInspectable> window = reinterpret_cast<IInspectable*> (handle);
     ComPtr<ABI::Windows::UI::Core::ICoreWindow> core_window;
     ComPtr<ABI::Windows::UI::Xaml::Controls::ISwapChainPanel> panel;
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     if (SUCCEEDED (window.As (&core_window)))
       return GST_D3D11_WINDOW_NATIVE_TYPE_CORE_WINDOW;

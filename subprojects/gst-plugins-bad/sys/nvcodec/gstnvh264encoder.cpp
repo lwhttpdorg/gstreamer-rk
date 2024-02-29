@@ -1221,7 +1221,7 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
   if (downstream_profiles.size () == 0)
     return gst_video_encoder_proxy_getcaps (encoder, nullptr, filter);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: downstream_profiles) {
     if (iter == "high" || iter == "main")
       profile_support_interlaced = TRUE;
@@ -1238,7 +1238,7 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
       allowed_formats.insert("BGRx");
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_DEBUG_OBJECT (self, "Downstream %s support interlaced format",
       profile_support_interlaced ? "can" : "cannot");
@@ -1254,7 +1254,7 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
   GValue formats = G_VALUE_INIT;
 
   g_value_init (&formats, GST_TYPE_LIST);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: allowed_formats) {
     GValue val = G_VALUE_INIT;
     g_value_init (&val, G_TYPE_STRING);
@@ -1262,7 +1262,7 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
     g_value_set_string (&val, iter.c_str());
     gst_value_list_append_and_take_value (&formats, &val);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gst_caps_set_value (allowed_caps, "format", &formats);
   g_value_unset (&formats);
@@ -1352,13 +1352,13 @@ gst_nv_h264_encoder_set_format (GstNvEncoder * encoder,
       downstream_supports_bframe = TRUE;
     }
   } else {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (const auto &iter: downstream_profiles) {
       if (iter == "high" || iter == "main" || iter == "progressive-high") {
         downstream_supports_bframe = TRUE;
       }
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   g_mutex_lock (&self->prop_lock);
@@ -1969,14 +1969,14 @@ gst_nv_h264_encoder_create_output_buffer (GstNvEncoder * encoder,
     buffer = gst_buffer_new_and_alloc (total_size);
     gst_buffer_map (buffer, &info, GST_MAP_WRITE);
     data = (guint8 *) info.data;
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (const auto & it : nalu_list) {
       GST_WRITE_UINT32_BE (data, it.size);
       data += 4;
       memcpy (data, it.data + it.offset, it.size);
       data += it.size;
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     gst_buffer_unmap (buffer, &info);
   }
@@ -2361,13 +2361,13 @@ gst_nv_h264_encoder_create_class_data (GstObject * device, gpointer session,
   cdata->device_caps = dev_caps;
   cdata->device_mode = device_mode;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: formats)
     cdata->formats = g_list_append (cdata->formats, g_strdup (iter.c_str()));
 
   for (const auto &iter: profiles)
     cdata->profiles = g_list_append (cdata->profiles, g_strdup (iter.c_str()));
-  /* *INDENT-ON* */
+  /* clang-format on */
 
 #ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11)

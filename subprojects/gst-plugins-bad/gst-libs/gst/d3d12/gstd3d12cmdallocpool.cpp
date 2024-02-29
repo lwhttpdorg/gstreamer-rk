@@ -29,7 +29,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_cmd_alloc_pool_debug);
 #define GST_CAT_DEFAULT gst_d3d12_cmd_alloc_pool_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct _GstD3D12CmdAlloc : public GstMiniObject
@@ -56,7 +56,7 @@ struct _GstD3D12CmdAllocPoolPrivate
   std::queue<GstD3D12CmdAlloc *>cmd_pool;
   D3D12_COMMAND_LIST_TYPE cmd_type;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstD3D12CmdAlloc, gst_d3d12_cmd_alloc);
 

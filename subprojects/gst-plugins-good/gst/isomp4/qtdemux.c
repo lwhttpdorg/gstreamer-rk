@@ -12671,7 +12671,7 @@ qtdemux_set_info_from_uncv (GstQTDemux * qtdemux,
 
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 
 // ISO/IEC 23091-3
 static const GstAudioChannelPosition chnl_positions[] = {
@@ -12840,7 +12840,7 @@ static const GstAudioChannelPosition chnl_layouts[][25] = {
  },
 
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 qtdemux_parse_chnl (GstQTDemux * qtdemux, GstByteReader * br,

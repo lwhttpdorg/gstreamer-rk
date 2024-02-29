@@ -31,7 +31,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_overlay_compositor_debug);
 #define GST_CAT_DEFAULT gst_d3d11_overlay_compositor_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 typedef struct
@@ -85,7 +85,7 @@ struct _GstD3D11OverlayCompositorPrivate
 
   std::vector<GstD3D11CompositionOverlayPtr> overlays;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d11_overlay_compositor_finalize (GObject * object);
 
@@ -495,7 +495,7 @@ gst_d3d11_overlay_compositor_upload (GstD3D11OverlayCompositor * compositor,
       " overlay rectangles, %" G_GSIZE_FORMAT " in current queue",
       priv->rects_to_upload.size (), priv->overlays.size ());
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto it : priv->rects_to_upload) {
     if (std::find_if (priv->overlays.begin (), priv->overlays.end (),
           [&] (const auto & overlay) -> bool {
@@ -508,13 +508,13 @@ gst_d3d11_overlay_compositor_upload (GstD3D11OverlayCompositor * compositor,
       priv->overlays.push_back (new_overlay);
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_LOG_OBJECT (compositor, "Overlay rectangles in queue after uploaded %"
       G_GSIZE_FORMAT, priv->overlays.size ());
 
   /* Remove old overlay */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   auto it = priv->overlays.begin ();
   while (it != priv->overlays.end ()) {
     auto old_overlay = *it;
@@ -529,7 +529,7 @@ gst_d3d11_overlay_compositor_upload (GstD3D11OverlayCompositor * compositor,
       it++;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_LOG_OBJECT (compositor, "Final queue size %" G_GSIZE_FORMAT,
       priv->overlays.size ());
@@ -593,7 +593,7 @@ gst_d3d11_overlay_compositor_draw_unlocked (GstD3D11OverlayCompositor *
   context->OMSetRenderTargets (1, rtv, nullptr);
   context->OMSetBlendState (priv->blend.Get (), nullptr, 0xffffffff);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto overlay : priv->overlays) {
     ID3D11ShaderResourceView *srv[] = { overlay->srv.Get () };
     ID3D11Buffer *vertex_buf[] = { overlay->vertex_buffer.Get () };
@@ -618,7 +618,7 @@ gst_d3d11_overlay_compositor_draw_unlocked (GstD3D11OverlayCompositor *
     if (mem)
       gst_memory_unmap (mem, &info);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   context->PSSetShaderResources (0, 1, clear_view);
   context->OMSetRenderTargets (0, nullptr, nullptr);

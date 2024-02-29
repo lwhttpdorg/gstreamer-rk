@@ -3891,7 +3891,7 @@ generate_backtrace_trace (void)
 #endif /* HAVE_BACKTRACE */
 
 #ifdef HAVE_DBGHELP
-/* *INDENT-OFF* */
+/* clang-format off */
 static struct
 {
   DWORD (WINAPI * pSymSetOptions) (DWORD SymOptions);
@@ -3923,7 +3923,7 @@ static struct
                                          PDWORD pdwDisplacement,
                                          PIMAGEHLP_LINE64 Line64);
 } dbg_help_vtable = { NULL,};
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GModule *dbg_help_module = NULL;
 

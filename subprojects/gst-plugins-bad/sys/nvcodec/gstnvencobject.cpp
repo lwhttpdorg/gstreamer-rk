@@ -31,7 +31,7 @@ GST_DEBUG_CATEGORY_EXTERN (gst_nv_encoder_debug);
 #define GST_MAP_NVENC (GST_MAP_FLAG_LAST << 1)
 #define GST_MAP_READ_NVENC (GstMapFlags)(GST_MAP_READ | GST_MAP_NVENC)
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static GstNvEncBuffer * gst_nv_enc_buffer_new (const std::string & id,
     guint seq_num);
 static GstNvEncResource * gst_nv_enc_resource_new (const std::string & id,
@@ -1029,7 +1029,7 @@ GstNvEncObject::DeactivateResource (GstNvEncResource * resource)
   active_resource_queue_.erase (resource);
 }
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 NVENCSTATUS
 gst_nv_enc_buffer_lock (GstNvEncBuffer * buffer,

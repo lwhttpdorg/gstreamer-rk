@@ -50,9 +50,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_compositor_debug);
 #define GST_CAT_DEFAULT gst_d3d12_compositor_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum GstD3D12CompositorBackground
 {
@@ -225,7 +225,7 @@ static const D3D12_ROOT_SIGNATURE_FLAGS g_rs_flags =
     D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
     D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct PadContext
 {
   PadContext (GstD3D12Device * dev)
@@ -258,7 +258,7 @@ struct PadContext
   GstD3D12Converter *conv = nullptr;
   guint64 fence_val = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GstD3D12CompositorPadPrivate
 {
@@ -313,7 +313,7 @@ struct VertexData
   } texture;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct BackgroundRender
 {
   BackgroundRender (GstD3D12Device * dev, const GstVideoInfo & info)
@@ -572,7 +572,7 @@ struct GStD3D12CompositorPrivate
   GstD3D12CompositorBackground background = DEFAULT_BACKGROUND;
   std::atomic<guint> async_depth = { DEFAULT_ASYNC_DEPTH };
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12Compositor
 {

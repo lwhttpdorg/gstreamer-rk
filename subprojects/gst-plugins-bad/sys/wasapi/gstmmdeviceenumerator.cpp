@@ -27,7 +27,7 @@
 #include <initguid.h>
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 G_BEGIN_DECLS
 
 GST_DEBUG_CATEGORY_EXTERN (gst_wasapi_debug);
@@ -219,7 +219,7 @@ private:
   gpointer user_data_;
   GWeakRef enumerator_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstMMDeviceEnumerator
 {

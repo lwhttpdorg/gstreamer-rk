@@ -51,13 +51,13 @@ struct _GstVaapiEncodeInitData
   GstCaps *src_caps;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #define GST_VAAPI_ENCODE_STATIC_SINK_CAPS                \
   GST_VAAPI_MAKE_SURFACE_CAPS ", "                       \
   GST_CAPS_INTERLACED_FALSE "; "                         \
   GST_VIDEO_CAPS_MAKE (GST_VAAPI_FORMATS_ALL) ", "       \
   GST_CAPS_INTERLACED_FALSE
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define GST_VAAPI_ENCODE_REGISTER_TYPE(NAME, CODEC, CLASS, _EXT_FMT_, FUN) \
   static GstVaapiEncodeInitData encode_init_data = { NULL, NULL };         \

@@ -23,7 +23,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_video_buffer_debug);
 #define GST_CAT_DEFAULT gst_mf_video_buffer_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 IGstMFVideoBuffer::IGstMFVideoBuffer ()
   : ref_count_ (1)
   , current_len_ (0)
@@ -547,4 +547,4 @@ IGstMFVideoBuffer::ContiguousCopyFromUnlocked (const BYTE * src_buffer,
   return S_OK;
 }
 
-/* *INDENT-ON* */
+/* clang-format on */

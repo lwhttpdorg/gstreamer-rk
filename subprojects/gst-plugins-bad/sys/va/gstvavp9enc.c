@@ -2286,7 +2286,7 @@ static void
 _vp9_fill_sequence_param (GstVaVp9Enc * self,
     VAEncSequenceParameterBufferVP9 * sequence)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *sequence = (VAEncSequenceParameterBufferVP9) {
     .max_frame_width = MAX_FRAME_WIDTH,
     .max_frame_height = MAX_FRAME_HEIGHT,
@@ -2296,7 +2296,7 @@ _vp9_fill_sequence_param (GstVaVp9Enc * self,
     .intra_period = self->gop.keyframe_interval,
     .bits_per_second = self->rc.target_bitrate_bits,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gboolean
@@ -2332,7 +2332,7 @@ _vp9_fill_frame_param (GstVaVp9Enc * self, GstVaVp9EncFrame * va_frame,
   while ((MAX_TILE_WIDTH_B64 << min_log2_tile_columns) < sb_cols)
     ++min_log2_tile_columns;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (va_frame->type != GST_VP9_KEY_FRAME) {
     if (va_frame->update_index >= 0) {
       refresh_frame_flags = (1 << va_frame->update_index);
@@ -2406,7 +2406,7 @@ _vp9_fill_frame_param (GstVaVp9Enc * self, GstVaVp9EncFrame * va_frame,
     .log2_tile_columns = min_log2_tile_columns,
     .skip_frame_flag = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (va_frame->type == GST_VP9_INTER_FRAME) {
     for (i = 0; i < 8; i++) {
@@ -2494,13 +2494,13 @@ _vp9_add_repeat_frame_header (GstVaVp9Enc * self, GstVaVp9EncFrame * va_frame)
 
   g_assert (va_frame->repeat_index >= 0 && va_frame->repeat_index <= 7);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame_hdr = (GstVp9FrameHdr) {
     .profile = profile,
     .show_existing_frame = 1,
     .frame_to_show = va_frame->repeat_index,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   memset (va_frame->repeat_frame_header, 0,
       sizeof (va_frame->repeat_frame_header));
@@ -2754,12 +2754,12 @@ gst_va_vp9_enc_prepare_output (GstVaBaseEnc * base,
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *sink_caps_str =
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_VA,
         "{ NV12 }") " ;"
     GST_VIDEO_CAPS_MAKE ("{ NV12 }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static const gchar *src_caps_str = "video/x-vp9,alignment=(string)super-frame";
 

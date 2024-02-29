@@ -727,7 +727,7 @@ gst_qsv_av1_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
   sink_caps_str += ", width=(int) [ 16, " + std::to_string (resolution) + " ]";
   sink_caps_str += ", height=(int) [ 16, " + std::to_string (resolution) + " ]";
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (supported_formats.size () > 1) {
     sink_caps_str += ", format=(string) { ";
     bool first = true;
@@ -743,7 +743,7 @@ gst_qsv_av1_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
   } else {
     sink_caps_str += ", format=(string) " + supported_formats[0];
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GstCaps *sink_caps = gst_caps_from_string (sink_caps_str.c_str ());
 

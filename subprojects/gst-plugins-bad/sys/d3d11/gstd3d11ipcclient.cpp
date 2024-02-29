@@ -30,17 +30,17 @@
 #include <memory>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_ipc_client_debug);
 #define GST_CAT_DEFAULT gst_d3d11_ipc_client_debug
 
 static GThreadPool *gc_thread_pool = nullptr;
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::mutex gc_pool_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 void
 gst_d3d11_ipc_client_deinit (void)
@@ -91,7 +91,7 @@ gst_d3d11_ipc_io_mode_get_type (void)
   return type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D11IpcClientConn : public OVERLAPPED
 {
   GstD3D11IpcClientConn (GstD3D11IpcClient * client, HANDLE pipe_handle)
@@ -196,7 +196,7 @@ struct GstD3D11IpcClientPrivate
   std::queue<HANDLE> unused_data;
   std::vector<std::weak_ptr<GstD3D11IpcImportData>> imported;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11IpcClient
 {

@@ -28,9 +28,9 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_qt6_d3d11_debug);
 #define GST_CAT_DEFAULT gst_qt6_d3d11_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstQSG6D3D11Node::GstQSG6D3D11Node (QQuickItem * item, GstD3D11Device * device)
 {

@@ -557,7 +557,7 @@ static void
 gst_vulkan_video_profile_from_h264_sps (GstVulkanVideoProfile * profile,
     const GstH264SPS * sps)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *profile = (GstVulkanVideoProfile) {
     .profile = {
       .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
@@ -580,7 +580,7 @@ gst_vulkan_video_profile_from_h264_sps (GstVulkanVideoProfile * profile,
           VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_INTERLACED_INTERLEAVED_LINES_BIT_KHR,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static GstFlowReturn
@@ -748,7 +748,7 @@ _fill_sps (const GstH264SPS * sps, SPS * std_sps)
   const GstH264HRDParams *hrd;
   int i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   std_sps->scaling_lists = (StdVideoH264ScalingLists) {
     .scaling_list_present_mask = sps->scaling_matrix_present_flag,
     .use_default_scaling_matrix_mask = 0, /* We already fill in the default matrix */
@@ -876,7 +876,7 @@ _fill_sps (const GstH264SPS * sps, SPS * std_sps)
     .pScalingLists = &std_sps->scaling_lists,
     .pSequenceParameterSetVui = sps->vui_parameters_present_flag ? &std_sps->vui : NULL,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return;
 }
@@ -886,7 +886,7 @@ _fill_pps (const GstH264PPS * pps, PPS * std_pps)
 {
   int i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   std_pps->scaling_lists = (StdVideoH264ScalingLists) {
     .scaling_list_present_mask = pps->pic_scaling_matrix_present_flag,
     .use_default_scaling_matrix_mask = 0, /* We already fill in the default matrix */
@@ -929,7 +929,7 @@ _fill_pps (const GstH264PPS * pps, PPS * std_pps)
         (int8_t) pps->second_chroma_qp_index_offset,
     .pScalingLists = &std_pps->scaling_lists,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return;
 }
@@ -995,7 +995,7 @@ _fill_h264_pic (const GstH264Picture * picture, const GstH264Slice * slice,
   GstH264PPS *pps = slice->header.pps;
   GstH264SPS *sps = pps->sequence;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *std_h264pic = (StdVideoDecodeH264PictureInfo) {
     .flags = {
       .field_pic_flag = slice->header.field_pic_flag,
@@ -1022,7 +1022,7 @@ _fill_h264_pic (const GstH264Picture * picture, const GstH264Slice * slice,
     /* .slicesCount = , *//* filled in end_picture() */
     /* .pSlicesDataOffsets = *//* filled in end_picture() */
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gint32
@@ -1059,7 +1059,7 @@ _fill_h264_slot (GstH264Picture * picture,
     VkVideoDecodeH264DpbSlotInfoKHR * vkh264_slot,
     StdVideoDecodeH264ReferenceInfo * stdh264_ref)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *stdh264_ref = (StdVideoDecodeH264ReferenceInfo) {
     .flags = {
       .top_field_flag = 0,
@@ -1073,7 +1073,7 @@ _fill_h264_slot (GstH264Picture * picture,
     /* .reserved = */
     /* .PicOrderCnt = */
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   switch (picture->field) {
     case GST_H264_PICTURE_FIELD_FRAME:
@@ -1104,13 +1104,12 @@ _fill_h264_slot (GstH264Picture * picture,
       break;
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *vkh264_slot = (VkVideoDecodeH264DpbSlotInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_DPB_SLOT_INFO_KHR,
     .pStdReferenceInfo = stdh264_ref,
   };
-  /* *INDENT-ON* */
-
+  /* clang-format on */
 }
 
 static inline void
@@ -1127,7 +1126,7 @@ _fill_ref_slot (GstVulkanH264Decoder * self, GstH264Picture * picture,
   pic = gst_h264_picture_get_user_data (picture);
   g_assert (pic);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *res = (VkVideoPictureResourceInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
     .codedOffset = {
@@ -1148,7 +1147,7 @@ _fill_ref_slot (GstVulkanH264Decoder * self, GstH264Picture * picture,
     .slotIndex = pic->slot_idx,
     .pPictureResource = res,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (ref)
     *ref = &pic->base;
@@ -1222,7 +1221,7 @@ gst_vulkan_h264_decoder_start_picture (GstH264Decoder * decoder,
   g_array_set_size (refs, 0);
   g_array_unref (refs);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   pic->base.decode_info = (VkVideoDecodeInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR,
     .pNext = &pic->vk_h264pic,
@@ -1247,7 +1246,7 @@ gst_vulkan_h264_decoder_start_picture (GstH264Decoder * decoder,
     .referenceSlotCount = j,
     .pReferenceSlots = pic->base.slots,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* only wait if there's a buffer processed */
   if (GST_CODEC_PICTURE_FRAME_NUMBER (picture) > 0) {

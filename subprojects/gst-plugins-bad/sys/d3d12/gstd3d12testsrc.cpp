@@ -49,9 +49,9 @@
 #include <atomic>
 #include <gst/d3dshader/gstd3dshader.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_test_src_debug);
 #define GST_CAT_DEFAULT gst_d3d12_test_src_debug
@@ -222,7 +222,7 @@ struct StaticColor
   gboolean is_valid = FALSE;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct RenderContext
 {
   RenderContext (GstD3D12Device * dev)
@@ -324,7 +324,7 @@ struct GstD3D12TestSrcPrivate
   GstClockTime running_time = 0;
   std::atomic<guint> async_depth = { DEFAULT_ASYNC_DEPTH };
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12TestSrc
 {

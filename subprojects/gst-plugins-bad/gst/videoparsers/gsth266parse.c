@@ -104,7 +104,7 @@ enum
   GST_H266_PARSE_FFI = 2,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstH266ParsePrivate
 {
   /* Private structures are limited to a size of 64KiB
@@ -119,7 +119,7 @@ struct _GstH266ParsePrivate
     GstH266PicHdr ph;
   } *cache;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define GST_H266_PARSE_STATE_VALID(parse, expected_state) \
   (((parse)->state & (expected_state)) == (expected_state))

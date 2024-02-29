@@ -266,13 +266,13 @@ gst_media_source_track_buffer_get_ranges (GstMediaSourceTrackBuffer * self)
     .current_range = {.start = GST_CLOCK_TIME_NONE,.end = GST_CLOCK_TIME_NONE},
   };
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   GstIterator *iter = gst_media_source_sample_map_iter_samples_by_pts (
       self->samples,
       &self->new_data_mutex,
       &self->master_cookie
   );
-  /* *INDENT-ON* */
+  /* clang-format on */
   while (gst_iterator_fold (iter, (GstIteratorFoldFunction) get_ranges_fold,
           (GValue *) & acc, NULL) == GST_ITERATOR_RESYNC) {
     gst_iterator_resync (iter);

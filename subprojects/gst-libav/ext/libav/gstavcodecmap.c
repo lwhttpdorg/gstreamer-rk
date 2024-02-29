@@ -38,7 +38,7 @@
 #include <gst/pbutils/codec-utils.h>
 
 /* IMPORTANT: Keep this sorted by the ffmpeg channel masks */
-/* *INDENT-OFF* */
+/* clang-format off */
 static const struct
 {
   guint64 ff;
@@ -77,7 +77,7 @@ static const struct
   { AV_CH_BOTTOM_FRONT_RIGHT, GST_AUDIO_CHANNEL_POSITION_BOTTOM_FRONT_RIGHT },
 #endif
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 28, 100)
 static void

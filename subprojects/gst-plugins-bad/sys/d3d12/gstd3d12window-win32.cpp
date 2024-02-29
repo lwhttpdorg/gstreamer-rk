@@ -44,7 +44,7 @@ GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_window_debug);
 #define GET_Y_LPARAM(lp) ((int)(short)HIWORD(lp))
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 SwapChainProxy::SwapChainProxy (GstD3D12Window * window, SIZE_T id)
 {
   g_assert (GST_IS_D3D12_WINDOW (window));
@@ -1332,4 +1332,4 @@ HwndServer::get_direct_proxy (HWND parent_hwnd)
   return it->second.lock ();
 }
 
-/* *INDENT-ON* */
+/* clang-format on */

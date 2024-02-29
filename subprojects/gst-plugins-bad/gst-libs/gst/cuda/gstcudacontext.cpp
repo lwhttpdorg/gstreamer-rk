@@ -32,9 +32,9 @@
 #include <gst/d3d11/gstd3d11.h>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 #endif
 
 GST_DEBUG_CATEGORY_STATIC (gst_cuda_context_debug);
@@ -43,9 +43,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_cuda_context_debug);
 /* store all context object with weak ref */
 static GList *context_list = nullptr;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::mutex list_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum
 {
@@ -354,7 +354,7 @@ init_cuda_ctx (void)
   return ret;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static gboolean
 gst_create_cucontext (guint * device_id, CUcontext * context)
 {
@@ -410,7 +410,7 @@ gst_create_cucontext (guint * device_id, CUcontext * context)
 
   return TRUE;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 /* must be called with list_lock taken */
 static void

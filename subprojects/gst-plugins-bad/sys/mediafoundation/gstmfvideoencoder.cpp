@@ -34,9 +34,9 @@
 #include <d3d10.h>
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_video_encoder_debug);
 #define GST_CAT_DEFAULT gst_mf_video_encoder_debug

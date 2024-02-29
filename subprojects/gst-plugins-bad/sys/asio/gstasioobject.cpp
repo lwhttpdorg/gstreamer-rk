@@ -35,13 +35,13 @@ GST_DEBUG_CATEGORY_STATIC (gst_asio_object_debug);
 /* List of GstAsioObject */
 static GList *asio_object_list = nullptr;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 /* Protect asio_object_list and other global values */
 std::mutex global_lock;
 
 /* Protect callback slots */
 std::mutex slot_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 /* ASIO COM interface */
 struct IASIO : public IUnknown
@@ -84,7 +84,7 @@ static glong gst_asio_object_messages (GstAsioObject * self, glong selector,
 static ASIOTime *gst_asio_object_buffer_switch_time_info (GstAsioObject * self,
     ASIOTime * time_info, glong index, ASIOBool process_now);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 /* Object to delegate ASIO callbacks to dedicated GstAsioObject */
 class GstAsioCallbacks
 {
@@ -242,7 +242,7 @@ GstAsioCallbacksSlot<5> cb_slot_5;
 GstAsioCallbacksSlot<6> cb_slot_6;
 GstAsioCallbacksSlot<7> cb_slot_7;
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef struct
 {

@@ -1852,7 +1852,7 @@ GST_START_TEST (test_nested)
 {
   GstCaps *caps1, *caps2, *caps3, *caps4, *capsi1, *capsi2, *capsi3;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   caps1 = gst_caps_from_string (
             "data/tensors, "
               "model-name=ssd,"
@@ -1941,7 +1941,7 @@ GST_START_TEST (test_nested)
             "]"
       );
 
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   capsi3 = gst_caps_intersect (caps3, caps4);
 

@@ -124,10 +124,10 @@ gst_d3d11_converter_alpha_mode_get_type (void)
   return type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define CONVERTER_MAX_QUADS 2
 #define GAMMA_LUT_SIZE 4096
@@ -185,7 +185,7 @@ struct GammaLut
   guint16 lut[GAMMA_LUT_SIZE];
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef std::shared_ptr<GammaLut> GammaLutPtr;
 
 static const XMFLOAT4X4A g_matrix_identity = XMFLOAT4X4A (
@@ -235,7 +235,7 @@ static const XMFLOAT4X4A g_matrix_ur_ll = XMFLOAT4X4A (
     1.0f, 0.0f, 0.0f, 0.0f,
     0.0f, 0.0f, 1.0f, 0.0f,
     0.0f, 0.0f, 0.0f, 1.0f);
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum
 {

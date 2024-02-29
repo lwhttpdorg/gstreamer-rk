@@ -1150,7 +1150,7 @@ gst_amf_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
   if (downstream_profiles.size () == 0)
     return gst_video_encoder_proxy_getcaps (encoder, NULL, filter);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter : downstream_profiles) {
     if (iter == "main") {
       allowed_formats.insert("NV12");
@@ -1158,7 +1158,7 @@ gst_amf_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
       allowed_formats.insert("P010_10LE");
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
   template_caps = gst_pad_get_pad_template_caps (encoder->sinkpad);
   template_caps = gst_caps_make_writable (template_caps);
 
@@ -1166,7 +1166,7 @@ gst_amf_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 
   g_value_init (&formats, GST_TYPE_LIST);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: allowed_formats) {
     GValue val = G_VALUE_INIT;
     g_value_init (&val, G_TYPE_STRING);
@@ -1174,7 +1174,7 @@ gst_amf_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
     g_value_set_string (&val, iter.c_str());
     gst_value_list_append_and_take_value (&formats, &val);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gst_caps_set_value (template_caps, "format", &formats);
   g_value_unset (&formats);

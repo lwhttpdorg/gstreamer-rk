@@ -1799,9 +1799,9 @@ gst_cuda_buffer_copy (GstBuffer * dst, GstCudaBufferCopyType dst_type,
 gint64
 gst_cuda_create_user_token (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static std::atomic < gint64 > user_token { 0 };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return user_token.fetch_add (1);
 }

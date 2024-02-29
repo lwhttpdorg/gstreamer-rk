@@ -29,7 +29,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_desc_heap_pool_debug);
 #define GST_CAT_DEFAULT gst_d3d12_desc_heap_pool_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct _GstD3D12DescHeap : public GstMiniObject
@@ -55,7 +55,7 @@ struct _GstD3D12DescHeapPoolPrivate
   std::queue<GstD3D12DescHeap *>heap_pool;
   D3D12_DESCRIPTOR_HEAP_DESC heap_desc;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstD3D12DescHeap, gst_d3d12_desc_heap);
 

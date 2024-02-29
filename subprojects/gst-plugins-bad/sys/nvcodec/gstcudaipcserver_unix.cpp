@@ -32,7 +32,7 @@
 GST_DEBUG_CATEGORY_EXTERN (cuda_ipc_server_debug);
 #define GST_CAT_DEFAULT cuda_ipc_server_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcServerConnUnix : public GstCudaIpcServerConn
 {
   GstCudaIpcServerConnUnix (GSocketConnection * conn)
@@ -81,7 +81,7 @@ struct GstCudaIpcServerUnixPrivate
   GMainContext *main_context;
   GCancellable *cancellable;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaIpcServerUnix
 {

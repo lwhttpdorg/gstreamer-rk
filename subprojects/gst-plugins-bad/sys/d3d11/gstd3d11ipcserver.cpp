@@ -31,7 +31,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_ipc_server_debug);
 #define GST_CAT_DEFAULT gst_d3d11_ipc_server_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D11IpcServerData
 {
   ~GstD3D11IpcServerData ()
@@ -122,7 +122,7 @@ struct GstD3D11IpcServerPrivate
   HANDLE wakeup_event;
   DWORD pid;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11IpcServer
 {
@@ -505,7 +505,7 @@ gst_d3d11_ipc_server_on_idle (GstD3D11IpcServer * self)
     }
 
     std::vector < std::shared_ptr < GstD3D11IpcServerConn >> to_send_eos;
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (auto it : priv->conn_map) {
       auto conn = it.second;
       if (conn->eos || !conn->pending_have_data)
@@ -542,7 +542,7 @@ gst_d3d11_ipc_server_on_idle (GstD3D11IpcServer * self)
         num_closed++;
       }
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     if (priv->conn_map.size () == num_closed) {
       GST_DEBUG_OBJECT (self, "All connections were closed");
@@ -561,7 +561,7 @@ gst_d3d11_ipc_server_on_idle (GstD3D11IpcServer * self)
   if (!priv->data)
     return;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   std::vector < std::shared_ptr < GstD3D11IpcServerConn >> to_config_data;
   std::vector < std::shared_ptr < GstD3D11IpcServerConn >> to_send_have_data;
   for (auto it : priv->conn_map) {
@@ -582,7 +582,7 @@ gst_d3d11_ipc_server_on_idle (GstD3D11IpcServer * self)
 
   for (auto it: to_send_have_data)
     gst_d3d11_ipc_server_have_data (self, it.get ());
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static void WINAPI
@@ -655,9 +655,9 @@ gst_d3d11_ipc_server_on_incoming_connection (GstD3D11IpcServer * self,
 
   GST_DEBUG_OBJECT (self, "New connection, conn-id: %u", conn->id);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   priv->conn_map.insert ({conn->id, conn});
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (conn->data) {
     conn->configured = true;

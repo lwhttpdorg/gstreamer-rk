@@ -35,7 +35,7 @@
 #include <wrl/wrappers/corewrappers.h>
 #include <windows.graphics.display.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace Microsoft::WRL::Wrappers;
 using namespace ABI::Windows::UI;
@@ -60,7 +60,7 @@ typedef struct _CoreWindowWinRTStorage
   HANDLE cancellable;
   EventRegistrationToken event_token;
 } CoreWindowWinRTStorage;
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11WindowCoreWindow
 {
@@ -97,9 +97,9 @@ static void gst_d3d11_window_core_window_unprepare (GstD3D11Window * window);
 static float
 get_logical_dpi (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<Display::IDisplayPropertiesStatics> properties;
-  /* *INDENT-ON* */
+  /* clang-format on */
   HRESULT hr;
   HStringReference str_ref =
       HStringReference
@@ -125,7 +125,7 @@ dip_to_pixel (float dip)
   return dip * get_logical_dpi () / 96.0f;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class CoreResizeHandler
     : public RuntimeClass<RuntimeClassFlags<ClassicCom>,
         IWindowSizeChangedEventHandler>
@@ -235,7 +235,7 @@ get_window_size (const ComPtr<Core::ICoreDispatcher> &dispatcher,
         return hr;
       });
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_d3d11_window_core_window_class_init (GstD3D11WindowCoreWindowClass * klass)
@@ -271,7 +271,7 @@ gst_d3d11_window_core_window_init (GstD3D11WindowCoreWindow * self)
   self->storage->cancellable = CreateEvent (NULL, TRUE, FALSE, NULL);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static void
 gst_d3d11_window_core_window_constructed (GObject * object)
 {
@@ -335,7 +335,7 @@ error:
   GST_ERROR_OBJECT (self, "Invalid window handle");
   return;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_d3d11_window_core_window_dispose (GObject * object)
@@ -345,7 +345,7 @@ gst_d3d11_window_core_window_dispose (GObject * object)
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static void
 gst_d3d11_window_core_window_unprepare (GstD3D11Window * window)
 {
@@ -373,7 +373,7 @@ gst_d3d11_window_core_window_unprepare (GstD3D11Window * window)
 
   self->storage = NULL;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static IDXGISwapChain1 *
 create_swap_chain_for_core_window (GstD3D11WindowCoreWindow * self,
@@ -411,9 +411,9 @@ gst_d3d11_window_core_window_create_swap_chain (GstD3D11Window * window,
     IDXGISwapChain ** swap_chain)
 {
   GstD3D11WindowCoreWindow *self = GST_D3D11_WINDOW_CORE_WINDOW (window);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<IDXGISwapChain1> new_swapchain;
-  /* *INDENT-ON* */
+  /* clang-format on */
   GstD3D11Device *device = window->device;
   DXGI_SWAP_CHAIN_DESC1 desc1 = { 0, };
 
@@ -515,13 +515,13 @@ gst_d3d11_window_core_window_on_resize (GstD3D11Window * window,
   GstD3D11WindowCoreWindow *self = GST_D3D11_WINDOW_CORE_WINDOW (window);
   CoreWindowWinRTStorage *storage = self->storage;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   run_async (storage->dispatcher, storage->cancellable, INFINITE,
       [window] {
         gst_d3d11_window_core_window_on_resize_sync (window);
         return S_OK;
       });
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static void

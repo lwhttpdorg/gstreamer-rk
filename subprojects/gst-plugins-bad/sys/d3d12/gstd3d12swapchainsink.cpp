@@ -42,10 +42,9 @@
 #include <vector>
 #include <memory>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
-
+/* clang-format on */
 
 enum
 {
@@ -105,7 +104,7 @@ static GstStaticPadTemplate sink_template =
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_swapchain_sink_debug);
 #define GST_CAT_DEFAULT gst_d3d12_swapchain_sink_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct BackBuffer
 {
   BackBuffer (GstBuffer * buffer, ID3D12Resource * res)
@@ -240,7 +239,7 @@ struct GstD3D12SwapChainSinkPrivate
   gdouble contrast = DEFAULT_CONTRAST;
   guint mip_levels = DEFAULT_MAX_MIP_LEVELS;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12SwapChainSink
 {

@@ -76,7 +76,7 @@ enum
 #endif
 #define DEFAULT_IPC_MODE GST_CUDA_IPC_LEGACY
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcSinkPrivate
 {
   GstCudaIpcSinkPrivate ()
@@ -111,7 +111,7 @@ struct GstCudaIpcSinkPrivate
   GstCudaIpcMode ipc_mode = DEFAULT_IPC_MODE;
   GstCudaIpcMode configured_ipc_mode = DEFAULT_IPC_MODE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaIpcSink
 {

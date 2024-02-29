@@ -64,7 +64,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_screen_capture_debug);
 #define GST_CAT_DEFAULT gst_d3d12_screen_capture_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
@@ -1110,7 +1110,7 @@ struct GstD3D12DxgiCapturePrivate
 
   std::mutex lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12DxgiCapture
 {

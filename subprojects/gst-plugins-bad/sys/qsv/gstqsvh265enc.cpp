@@ -871,7 +871,7 @@ gst_qsv_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 
     g_value_init (&formats, GST_TYPE_LIST);
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (const auto & iter : downstream_profiles) {
       GValue val = G_VALUE_INIT;
       g_value_init (&val, G_TYPE_STRING);
@@ -888,7 +888,7 @@ gst_qsv_h265_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 
       gst_value_list_append_and_take_value (&formats, &val);
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     gst_caps_set_value (template_caps, "format", &formats);
     g_value_unset (&formats);
@@ -1556,7 +1556,7 @@ gst_qsv_h265_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
   sink_caps_str += ", width=(int) [ 16, " + std::to_string (resolution) + " ]";
   sink_caps_str += ", height=(int) [ 16, " + std::to_string (resolution) + " ]";
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (supported_formats.size () > 1) {
     sink_caps_str += ", format=(string) { ";
     bool first = true;
@@ -1572,7 +1572,7 @@ gst_qsv_h265_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
   } else {
     sink_caps_str += ", format=(string) " + supported_formats[0];
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GstCaps *sink_caps = gst_caps_from_string (sink_caps_str.c_str ());
 
@@ -1608,7 +1608,7 @@ gst_qsv_h265_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
 
   src_caps_str += ", stream-format= (string) byte-stream";
   src_caps_str += ", alignment=(string) au";
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (supported_profiles.size () > 1) {
     src_caps_str += ", profile=(string) { ";
     bool first = true;
@@ -1625,7 +1625,7 @@ gst_qsv_h265_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
     src_caps_str += ", profile=(string) ";
     src_caps_str += gst_qsv_h265_profile_to_string (supported_profiles[0]);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GstCaps *src_caps = gst_caps_from_string (src_caps_str.c_str ());
 

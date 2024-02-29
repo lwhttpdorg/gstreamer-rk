@@ -45,9 +45,9 @@
 #include <memory>
 #include <vector>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_test_src_debug);
 #define GST_CAT_DEFAULT gst_d3d11_test_src_debug
@@ -226,7 +226,7 @@ struct StaticColor
   gboolean is_valid = FALSE;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D11TestSrcRender
 {
   StaticColor static_color[2];
@@ -234,7 +234,7 @@ struct GstD3D11TestSrcRender
   ComPtr <ID3D11RasterizerState> rs;
   GstD3D11TestSrcPattern pattern;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11TestSrc
 {
@@ -1851,7 +1851,7 @@ gst_d3d11_test_src_draw_pattern (GstD3D11TestSrc * self,
   context->OMSetRenderTargets (1, &rtv, nullptr);
   context->OMSetBlendState (nullptr, nullptr, 0xffffffff);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (auto quad : render->quad) {
     if (quad->const_buffer) {
       hr = context->Map (quad->const_buffer.Get (),
@@ -1892,7 +1892,7 @@ gst_d3d11_test_src_draw_pattern (GstD3D11TestSrc * self,
 
     context->DrawIndexed (quad->index_count, 0, 0);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   context->OMSetRenderTargets (0, nullptr, nullptr);
 

@@ -39,7 +39,7 @@ typedef struct
   gint num_planes;
 } GstV4l2FormatDesc;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 /* Keep the same order as GST_V4L2_DEFAULT_VIDEO_FORMATS */
 static const GstV4l2FormatDesc gst_v4l2_descriptions[] = {
   {V4L2_PIX_FMT_NV20,             GST_VIDEO_FORMAT_NV16_10LE40,     DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
@@ -57,7 +57,7 @@ static const GstV4l2FormatDesc gst_v4l2_descriptions[] = {
   {V4L2_PIX_FMT_NV12,             GST_VIDEO_FORMAT_NV12,            DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
   {V4L2_PIX_FMT_YUV420M,          GST_VIDEO_FORMAT_I420,            DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
 };
-/* *INDENT-ON* */
+/* clang-format on */
 #define GST_V4L2_FORMAT_DESC_COUNT (G_N_ELEMENTS (gst_v4l2_descriptions))
 
 static const GstV4l2FormatDesc *

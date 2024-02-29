@@ -23,7 +23,7 @@
 
 #include "gstdwrite-effect.h"
 
-/* *INDENT-OFF* */
+/* clang-format off */
 STDMETHODIMP
 IGstDWriteTextEffect::CreateInstance (IGstDWriteTextEffect ** effect)
 {
@@ -160,4 +160,4 @@ IGstDWriteTextEffect::IGstDWriteTextEffect (void)
 IGstDWriteTextEffect::~IGstDWriteTextEffect (void)
 {
 }
-/* *INDENT-ON* */
+/* clang-format on */

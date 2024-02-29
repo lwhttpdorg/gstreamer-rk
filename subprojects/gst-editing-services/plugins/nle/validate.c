@@ -138,7 +138,7 @@ register_action_types (void)
   GST_DEBUG_CATEGORY_INIT (nle_validate_debug, "nlevalidate",
       GST_DEBUG_FG_BLUE | GST_DEBUG_BOLD, "NLE validate");
 
-/* *INDENT-OFF* */
+  /* clang-format off */
   gst_validate_register_action_type ("nle-add-child", "nle",
     _add_object,
       (GstValidateActionParameter [])  {
@@ -159,7 +159,7 @@ register_action_types (void)
        },
        "Add a child to a NleObject\n",
        GST_VALIDATE_ACTION_TYPE_NONE);
-/* *INDENT-ON* */
+  /* clang-format on */
 }
 
 

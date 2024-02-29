@@ -129,10 +129,10 @@ gst_d3d12_converter_mip_gen_get_type (void)
   return type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define GAMMA_LUT_SIZE 4096
 #define DEFAULT_BUFFER_COUNT 2
@@ -188,7 +188,7 @@ struct VertexData
   } texture;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const XMFLOAT4X4A g_matrix_identity = XMFLOAT4X4A (
     1.0f, 0.0f, 0.0f, 0.0f,
     0.0f, 1.0f, 0.0f, 0.0f,
@@ -240,7 +240,7 @@ static const XMFLOAT4X4A g_matrix_ur_ll = XMFLOAT4X4A (
 constexpr UINT g_vertex_buf_size = sizeof (VertexData) * 4;
 constexpr UINT g_index_buf_size = sizeof (g_indices);
 constexpr UINT g_const_buf_size = sizeof (PSConstBuffer);
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum
 {
@@ -265,7 +265,7 @@ enum
   PROP_MAX_MIP_LEVELS,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct QuadData
 {
   D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = { };
@@ -463,7 +463,7 @@ struct _GstD3D12ConverterPrivate
       GST_D3D12_CONVERTER_ALPHA_MODE_UNSPECIFIED;
   guint mip_levels = DEFAULT_MAX_MIP_LEVELS;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d12_converter_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);

@@ -36,7 +36,7 @@
 GST_DEBUG_CATEGORY_EXTERN (wpe_view_debug);
 #define GST_CAT_DEFAULT wpe_view_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class GMutexHolder {
 public:
   GMutexHolder (GMutex & mutex)
@@ -52,15 +52,15 @@ public:
 private:
   GMutex &m;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstWPEContextThread *s_view = NULL;
 
 GstWPEContextThread & GstWPEContextThread::singleton ()
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static gsize initialized = 0;
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (g_once_init_enter (&initialized)) {
     s_view = new GstWPEContextThread;
@@ -101,7 +101,7 @@ GstWPEContextThread::~GstWPEContextThread ()
 template < typename Function > void
 GstWPEContextThread::dispatch (Function func)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct Job {
     Job (Function & f)
       :func (f)
@@ -137,17 +137,17 @@ GstWPEContextThread::dispatch (Function func)
     GCond cond;
     gboolean dispatched;
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   struct Job job (func);
   GSource *source = g_idle_source_new ();
-  /* *INDENT-OFF*  */
+  /* clang-format off  */
   g_source_set_callback (source,[](gpointer data)->gboolean {
       auto job = static_cast<struct Job *>(data);
       job->dispatch ();
       return G_SOURCE_REMOVE;
   }, &job, nullptr);
-  /* *INDENT-ON*  */
+  /* clang-format on  */
   g_source_set_priority (source, G_PRIORITY_DEFAULT);
   g_source_attach (source, glib.context);
   job.waitCompletion ();
@@ -157,9 +157,9 @@ GstWPEContextThread::dispatch (Function func)
 gpointer
 GstWPEContextThread::s_viewThread (gpointer data)
 {
-  /* *INDENT-OFF*  */
+  /* clang-format off  */
   auto &view = *static_cast<GstWPEContextThread *>(data);
-  /* *INDENT-ON*  */
+  /* clang-format on  */
 
   view.glib.context = g_main_context_new ();
   view.glib.loop = g_main_loop_new (view.glib.context, FALSE);
@@ -168,7 +168,7 @@ GstWPEContextThread::s_viewThread (gpointer data)
 
   {
     GSource *source = g_idle_source_new ();
-    /* *INDENT-OFF*  */
+    /* clang-format off  */
     g_source_set_callback(source, [](gpointer data) -> gboolean {
       auto& view = *static_cast<GstWPEContextThread*>(data);
       GMutexHolder lock (view.threading.mutex);
@@ -176,7 +176,7 @@ GstWPEContextThread::s_viewThread (gpointer data)
       g_cond_signal(&view.threading.cond);
       return G_SOURCE_REMOVE;
     }, &view, nullptr);
-    /* *INDENT-ON*  */
+    /* clang-format on  */
     g_source_attach (source, view.glib.context);
     g_source_unref (source);
   }
@@ -201,7 +201,7 @@ GstWPEContextThread::createWPEView (GstWpeVideoSrc2 * src,
       height);
 
   GstWPEThreadedView *view = nullptr;
-  /* *INDENT-OFF*  */
+  /* clang-format off  */
   dispatch([&]() mutable {
     if (!glib.web_context) {
       glib.web_context =
@@ -211,7 +211,7 @@ GstWPEContextThread::createWPEView (GstWpeVideoSrc2 * src,
       new GstWPEThreadedView (glib.web_context, src, context, display, wpe_display,
                               width, height);
   });
-  /* *INDENT-ON*  */
+  /* clang-format on  */
 
   if (view && view->hasUri ()) {
     GST_DEBUG ("waiting load to finish");
@@ -269,9 +269,9 @@ static void
 s_webProcessCrashed (WebKitWebView *, WebKitWebProcessTerminationReason reason,
     gpointer data)
 {
-  /* *INDENT-OFF*  */
+  /* clang-format off  */
   auto &view = *static_cast<GstWPEThreadedView *>(data);
-  /* *INDENT-ON*  */
+  /* clang-format on  */
   auto *src = view.src ();
   gchar *reason_str =
       g_enum_to_string (WEBKIT_TYPE_WEB_PROCESS_TERMINATION_REASON, reason);
@@ -288,7 +288,7 @@ s_webProcessCrashed (WebKitWebView *, WebKitWebProcessTerminationReason reason,
   g_free (reason_str);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 GstWPEThreadedView::GstWPEThreadedView(
     WebKitWebContext *web_context, GstWpeVideoSrc2 *src, GstGLContext *context,
     GstGLDisplay *display, WPEDisplay *wpe_display, int width, int height)
@@ -346,7 +346,7 @@ GstWPEThreadedView::GstWPEThreadedView(
     g_free (location);
   }
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstWPEThreadedView::~GstWPEThreadedView ()
 {
@@ -392,14 +392,14 @@ GstWPEThreadedView::~GstWPEThreadedView ()
   if (shm_committed)
     gst_buffer_unref (shm_committed);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   GstWPEContextThread::singleton().dispatch([&]() {
     if (webkit.view) {
       g_object_unref (webkit.view);
       webkit.view = nullptr;
     }
   });
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (gst.display_egl) {
     gst_object_unref (gst.display_egl);
@@ -608,24 +608,24 @@ s_runJavascriptFinished (GObject * object, GAsyncResult * result,
 void
 GstWPEThreadedView::runJavascript (const char *script)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   s_view->dispatch([&]() {
     webkit_web_view_evaluate_javascript(webkit.view, script, -1, nullptr,
                                         nullptr, nullptr,
                                         s_runJavascriptFinished, nullptr);
   });
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 void
 GstWPEThreadedView::loadData (GBytes * bytes)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   s_view->dispatch([this, bytes = g_bytes_ref(bytes)]() {
     webkit_web_view_load_bytes(webkit.view, bytes, nullptr, nullptr, nullptr);
     g_bytes_unref(bytes);
   });
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 void
@@ -647,7 +647,7 @@ struct WPEBufferContext
 void
 GstWPEThreadedView::s_releaseBuffer (gpointer data)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   s_view->dispatch([&]() {
     WPEBufferContext *context = static_cast<WPEBufferContext *>(data);
     wpe_view_buffer_released(WPE_VIEW(context->view->wpe.view),
@@ -655,10 +655,10 @@ GstWPEThreadedView::s_releaseBuffer (gpointer data)
     g_object_unref(context->buffer);
     g_free(context);
   });
-/* *INDENT-ON* */
+  /* clang-format on */
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 gboolean GstWPEThreadedView::setPendingBuffer(WPEBuffer *buffer, GError **error)
 {
   WPEBufferContext *bufferContext = g_new (WPEBufferContext, 1);
@@ -726,7 +726,7 @@ gboolean GstWPEThreadedView::setPendingBuffer(WPEBuffer *buffer, GError **error)
   }
   return TRUE;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static uint32_t
 _pointer_modifiers_from_gst_event (GstEvent * ev)
@@ -773,18 +773,18 @@ _keyboard_modifiers_from_gst_event (GstEvent * ev)
 static WPEModifiers
 modifiers_from_gst_event (GstEvent * event)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   return static_cast<WPEModifiers>
       (_pointer_modifiers_from_gst_event (event) |
       _keyboard_modifiers_from_gst_event (event));
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 void
 GstWPEThreadedView::frameComplete ()
 {
   GST_TRACE ("frame complete");
-  /* *INDENT-OFF* */
+  /* clang-format off */
   s_view->dispatch([&]() {
     if (m_committed_buffer) {
       wpe_view_buffer_released(WPE_VIEW(wpe.view), m_committed_buffer);
@@ -793,21 +793,21 @@ GstWPEThreadedView::frameComplete ()
     m_committed_buffer = m_pending_buffer;
     wpe_view_buffer_rendered (WPE_VIEW (wpe.view), m_committed_buffer);
   });
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 void
 GstWPEThreadedView::dispatchEvent (WPEEvent * wpe_event)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   s_view->dispatch([&]() {
     wpe_view_event(WPE_VIEW(wpe.view), wpe_event);
     wpe_event_unref(wpe_event);
   });
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 gboolean GstWPEThreadedView::dispatchKeyboardEvent(GstEvent *event) {
   const gchar *key;
   if (!gst_navigation_event_parse_key_event (event, &key)) {
@@ -943,4 +943,4 @@ gboolean GstWPEThreadedView::dispatchTouchEvent (GstEvent * event)
           WPE_INPUT_SOURCE_TOUCHPAD, timestamp, modifiers, touch_id, x, y));
   return TRUE;
 }
-/* *INDENT-ON* */
+/* clang-format on */

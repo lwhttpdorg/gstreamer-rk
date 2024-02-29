@@ -36,7 +36,7 @@
 GST_DEBUG_CATEGORY (dwrite_overlay_object_debug);
 #define GST_CAT_DEFAULT dwrite_overlay_object_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GstDWriteOverlayObjectPrivate
@@ -80,7 +80,7 @@ struct GstDWriteOverlayObjectPrivate
 
   std::recursive_mutex ctx_lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstDWriteOverlayObject
 {

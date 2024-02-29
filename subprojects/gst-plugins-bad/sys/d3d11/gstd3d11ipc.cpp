@@ -137,7 +137,7 @@ gst_d3d11_ipc_pkt_build_need_data (std::vector < guint8 > &buf)
   memcpy (&buf[0], &header, GST_D3D11_IPC_PKT_HEADER_SIZE);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 bool
 gst_d3d11_ipc_pkt_build_have_data (std::vector < guint8 > &buf,
     GstClockTime pts, const GstD3D11IpcMemLayout & layout,
@@ -189,7 +189,7 @@ gst_d3d11_ipc_pkt_build_have_data (std::vector < guint8 > &buf,
 
   return true;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 bool
 gst_d3d11_ipc_pkt_parse_have_data (const std::vector < guint8 > &buf,
@@ -358,14 +358,14 @@ gst_d3d11_ipc_string_to_wstring (const std::string & str)
   return conv.from_bytes (str);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static inline void rtrim(std::string &s) {
   s.erase (std::find_if (s.rbegin(), s.rend(),
       [](unsigned char ch) {
         return !std::isspace (ch);
       }).base (), s.end ());
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 std::string
 gst_d3d11_ipc_win32_error_to_string (guint err)

@@ -29,14 +29,14 @@
 #include <dxgi.h>
 #include <string>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 extern "C" {
 GST_DEBUG_CATEGORY_EXTERN (gstva_debug);
 #define GST_CAT_DEFAULT gstva_debug
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstVaDevice, gst_va_device);
 

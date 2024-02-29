@@ -29,7 +29,7 @@
 GST_DEBUG_CATEGORY_EXTERN (dwrite_overlay_object_debug);
 #define GST_CAT_DEFAULT dwrite_overlay_object_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GstDWriteBitmapRenderPrivate
@@ -50,7 +50,7 @@ struct GstDWriteBitmapRenderPrivate
   GstVideoInfo layout_info;
   GstVideoInfo info;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstDWriteBitmapRender
 {

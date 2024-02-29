@@ -47,9 +47,9 @@
 #include <gst/d3d11/gstd3d11.h>
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_mf_h264_enc_debug);
 #define GST_CAT_DEFAULT gst_mf_h264_enc_debug

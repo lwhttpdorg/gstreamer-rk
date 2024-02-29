@@ -31,7 +31,7 @@
 #include <string>
 #include <queue>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct DisplayContext
@@ -93,7 +93,7 @@ static const gchar templ_ps_color[] =
     "{\n"
     "  return input.Color;\n"
     "}";
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define DISPLAY_CONTEXT_PROP "d3d11videosink.example.context"
 

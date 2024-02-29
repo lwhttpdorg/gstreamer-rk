@@ -64,7 +64,7 @@ enum
 /* Higher sample rates were failing when initializing the encoder.
  * Probably supported only in specific circumstances, hard to find documentation about that. */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const GstATEncLayout aac_layouts[] = {
   {
     1, kAudioChannelLayoutTag_Mono, { GST_AUDIO_CHANNEL_POSITION_MONO }}, {
@@ -156,7 +156,7 @@ static const GstATEncLayout aac_layouts[] = {
     /* Only used when iterating through all positions */
     0, kAudioChannelLayoutTag_Unknown, { 0 } }
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,

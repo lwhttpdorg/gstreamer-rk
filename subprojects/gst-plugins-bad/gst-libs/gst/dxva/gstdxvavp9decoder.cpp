@@ -30,7 +30,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_dxva_vp9_decoder_debug);
 #define GST_CAT_DEFAULT gst_dxva_vp9_decoder_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDxvaVp9DecoderPrivate
 {
   DXVA_PicParams_VP9 pic_params;
@@ -44,7 +44,7 @@ struct _GstDxvaVp9DecoderPrivate
   guint last_frame_height = 0;
   gboolean last_show_frame = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_dxva_vp9_decoder_finalize (GObject * object);
 

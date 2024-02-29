@@ -30,7 +30,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_dxva_av1_decoder_debug);
 #define GST_CAT_DEFAULT gst_dxva_av1_decoder_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDxvaAV1DecoderPrivate
 {
   GstAV1SequenceHeaderOBU seq_hdr;
@@ -46,7 +46,7 @@ struct _GstDxvaAV1DecoderPrivate
 
   gboolean configured = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_dxva_av1_decoder_finalize (GObject * object);
 

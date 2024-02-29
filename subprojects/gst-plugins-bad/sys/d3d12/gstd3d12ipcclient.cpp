@@ -31,10 +31,10 @@
 #include <memory>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 static std::mutex gc_pool_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_ipc_client_debug);
 #define GST_CAT_DEFAULT gst_d3d12_ipc_client_debug
@@ -90,7 +90,7 @@ gst_d3d12_ipc_io_mode_get_type (void)
   return type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D12IpcClientConn : public OVERLAPPED
 {
   GstD3D12IpcClientConn (GstD3D12IpcClient * client, HANDLE pipe_handle)
@@ -195,7 +195,7 @@ struct GstD3D12IpcClientPrivate
   std::vector<std::weak_ptr<GstD3D12IpcImportData>> imported;
   ComPtr<ID3D12Fence> server_fence;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12IpcClient
 {

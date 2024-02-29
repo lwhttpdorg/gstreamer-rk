@@ -28,7 +28,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_dwrite_debug);
 #define GST_CAT_DEFAULT gst_dwrite_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 enum class RenderPath
@@ -49,7 +49,7 @@ struct RenderContext
   ComPtr<ID2D1Geometry> bg_rect;
   D2D1_COLOR_F bg_color = D2D1::ColorF (D2D1::ColorF::Black, 0.0);
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static HRESULT
 CombineTwoGeometries (ID2D1Factory * factory, ID2D1Geometry * a,

@@ -33,9 +33,9 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_converter_debug);
 #define GST_CAT_DEFAULT gst_d3d12_converter_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 PixelShaderBlobList
 gst_d3d12_get_converter_pixel_shader_blob (GstVideoFormat in_format,

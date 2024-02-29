@@ -93,7 +93,7 @@
 #define GST_CAT_DEFAULT gst_debug_qml6_gl_overlay
 GST_DEBUG_CATEGORY (GST_CAT_DEFAULT);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static GstStaticPadTemplate qml6_overlay_src_pad_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -117,7 +117,7 @@ GST_STATIC_PAD_TEMPLATE ("sink",
       "framerate = " GST_VIDEO_FPS_RANGE ","
       "texture-target = (string) 2D"
     ));
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_qml6_gl_overlay_finalize (GObject * object);
 static void gst_qml6_gl_overlay_set_property (GObject * object, guint prop_id,

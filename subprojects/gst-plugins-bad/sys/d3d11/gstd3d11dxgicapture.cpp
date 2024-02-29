@@ -59,7 +59,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_screen_capture_debug);
 #define GST_CAT_DEFAULT gst_d3d11_screen_capture_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
@@ -1421,7 +1421,7 @@ private:
   BYTE *vertex_buffer_;
   UINT vertex_buffer_size_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum
 {
@@ -1511,12 +1511,12 @@ static void
 gst_d3d11_dxgi_capture_constructed (GObject * object)
 {
   GstD3D11DxgiCapture *self = GST_D3D11_DXGI_CAPTURE (object);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<IDXGIDevice> dxgi_device;
   ComPtr<IDXGIAdapter1> adapter;
   ComPtr<IDXGIOutput> output;
   ComPtr<IDXGIOutput1> output1;
-  /* *INDENT-ON* */
+  /* clang-format on */
   HRESULT hr;
   gboolean ret = FALSE;
   DXGI_OUTPUT_DESC output_desc;

@@ -29,7 +29,7 @@
 #include <condition_variable>
 #include <vector>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GstCudaD3D12InteropResource : public GstMiniObject
@@ -58,7 +58,7 @@ struct GstCudaD3D12InteropResource : public GstMiniObject
   CUdeviceptr devptr = 0;
   CUexternalMemory ext_mem = nullptr;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstCudaD3D12InteropResource,
     gst_cuda_d3d12_interop_resource);

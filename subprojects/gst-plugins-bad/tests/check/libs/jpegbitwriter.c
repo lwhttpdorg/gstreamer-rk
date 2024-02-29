@@ -70,7 +70,7 @@ GST_START_TEST (test_jpeg_bitwriter_segments)
       data + offset, &size);
   fail_if (writer_res != GST_JPEG_BIT_WRITER_OK);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame_hdr = (GstJpegFrameHdr) {
     .sample_precision = 8,
     .width = 1920,
@@ -95,7 +95,7 @@ GST_START_TEST (test_jpeg_bitwriter_segments)
       .quant_table_selector = 3,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   offset += size;
   size = sizeof (data) - offset;
@@ -110,7 +110,7 @@ GST_START_TEST (test_jpeg_bitwriter_segments)
       data + offset, &size);
   fail_if (writer_res != GST_JPEG_BIT_WRITER_OK);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   scan_hdr = (GstJpegScanHdr) {
     .num_components = 3,
     .components[0] = {
@@ -129,7 +129,7 @@ GST_START_TEST (test_jpeg_bitwriter_segments)
       .ac_selector = 1,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
   offset += size;
   size = sizeof (data) - offset;
   writer_res = gst_jpeg_bit_writer_scan_header (&scan_hdr,

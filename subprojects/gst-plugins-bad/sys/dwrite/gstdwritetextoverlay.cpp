@@ -39,16 +39,16 @@ enum
   PROP_REMOVE_CC_META,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::vector<GParamSpec *> _pspec;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define DEFAULT_ENABLE_CC TRUE
 #define DEFAULT_CC_FIELD -1
 #define DEFAULT_CC_TIMEOUT GST_CLOCK_TIME_NONE
 #define DEFAULT_REMOVE_CC_META FALSE
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstDWriteTextOverlayPrivate
 {
   std::mutex lock;
@@ -66,7 +66,7 @@ struct GstDWriteTextOverlayPrivate
   GstClockTime timeout = DEFAULT_CC_TIMEOUT;
   gboolean remove_caption_meta = DEFAULT_REMOVE_CC_META;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstDWriteTextOverlay
 {

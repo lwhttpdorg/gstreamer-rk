@@ -30,7 +30,7 @@
 GST_DEBUG_CATEGORY_EXTERN (cuda_ipc_client_debug);
 #define GST_CAT_DEFAULT cuda_ipc_client_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcClientConnWin32 : public GstCudaIpcClientConn
 {
   GstCudaIpcClientConnWin32 (HANDLE pipe) : pipe (pipe)
@@ -80,7 +80,7 @@ struct GstCudaIpcClientWin32Private
   guint last_err = ERROR_SUCCESS;
   bool flushing = false;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaIpcClientWin32
 {

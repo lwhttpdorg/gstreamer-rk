@@ -187,7 +187,7 @@ enum
 #define DEFAULT_BATCHED TRUE
 #define DEFAULT_ASYNC_DEPTH 2
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace nvcomp;
 
 struct EncoderTask
@@ -366,7 +366,7 @@ struct GstNvCompVideoEncPrivate
   gboolean batched = DEFAULT_BATCHED;
   guint async_depth = DEFAULT_ASYNC_DEPTH;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstNvCompVideoEnc
 {

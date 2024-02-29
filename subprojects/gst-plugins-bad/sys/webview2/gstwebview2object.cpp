@@ -52,7 +52,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_webview2_src_debug);
 #define GST_CAT_DEFAULT gst_webview2_src_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace ABI::Windows::System;
 using namespace ABI::Windows::UI::Composition;
@@ -726,7 +726,7 @@ struct GstWebView2ObjectPrivate
   WebView2State state = WEBVIEW2_STATE_INIT;
   gboolean flushing = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstWebView2Object
 {

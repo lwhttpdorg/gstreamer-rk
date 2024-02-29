@@ -27,7 +27,7 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_window_debug);
 #define GST_CAT_DEFAULT gst_d3d12_window_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 #define BACK_BUFFER_COUNT 3
@@ -608,4 +608,4 @@ void SwapChain::after_rendering ()
 {
   resource_->prev_fence_val.push (resource_->fence_val);
 }
-/* *INDENT-ON* */
+/* clang-format on */
