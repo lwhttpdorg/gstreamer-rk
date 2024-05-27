@@ -35,10 +35,13 @@ plugin_init (GstPlugin * plugin)
 {
   gboolean ret = FALSE;
 
+  ret |= GST_ELEMENT_REGISTER (qml6swsink, plugin);
+#ifdef HAVE_QT_GL
   ret |= GST_ELEMENT_REGISTER (qml6glsink, plugin);
   ret |= GST_ELEMENT_REGISTER (qml6glsrc, plugin);
   ret |= GST_ELEMENT_REGISTER (qml6glmixer, plugin);
   ret |= GST_ELEMENT_REGISTER (qml6gloverlay, plugin);
+#endif
 
   return ret;
 }
