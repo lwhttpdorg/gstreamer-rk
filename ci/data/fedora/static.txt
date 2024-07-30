@@ -27,9 +27,6 @@ alsa:  alsadeviceprovider (GstDeviceProviderFactory)
 alsa:  alsamidisrc: AlsaMidi Source
 alsa:  alsasink: Audio sink (ALSA)
 alsa:  alsasrc: Audio source (ALSA)
-amrnb:  amrnbdec: AMR-NB audio decoder
-amrnb:  amrnbenc: AMR-NB audio encoder
-amrwbdec:  amrwbdec: AMR-WB audio decoder
 analyticsoverlay:  objectdetectionoverlay: Object Detection Overlay
 aom:  av1dec: AV1 Decoder
 aom:  av1enc: AV1 Encoder
@@ -323,6 +320,8 @@ ipcpipeline:  ipcpipelinesink: Inter-process Pipeline Sink
 ipcpipeline:  ipcpipelinesrc: Inter-process Pipeline Source
 ipcpipeline:  ipcslavepipeline: Inter-process slave pipeline
 iqa:  iqa: Iqa
+isac:  isacdec: iSAC decoder
+isac:  isacenc: iSAC encoder
 isomp4:  3gppmux: 3GPP Muxer
 isomp4:  ismlmux: ISML Muxer
 isomp4:  mj2mux: MJ2 Muxer
@@ -349,12 +348,17 @@ ladspa:  ladspa-filter-so-hpf: Simple High Pass Filter
 ladspa:  ladspa-filter-so-lpf: Simple Low Pass Filter
 ladspa:  ladspa-ladspa-rubberband-so-rubberband-pitchshifter-mono: Rubber Band Mono Pitch Shifter
 ladspa:  ladspa-ladspa-rubberband-so-rubberband-pitchshifter-stereo: Rubber Band Stereo Pitch Shifter
+ladspa:  ladspa-ladspa-rubberband-so-rubberband-r3-pitchshifter-mono: Rubber Band R3 Mono Pitch Shifter
+ladspa:  ladspa-ladspa-rubberband-so-rubberband-r3-pitchshifter-stereo: Rubber Band R3 Stereo Pitch Shifter
 ladspa:  ladspa-sine-so-sine-faaa: Sine Oscillator (Freq:audio, Amp:audio)
 ladspa:  ladspa-sine-so-sine-faac: Sine Oscillator (Freq:audio, Amp:control)
 ladspa:  ladspa-sine-so-sine-fcaa: Sine Oscillator (Freq:control, Amp:audio)
 ladspa:  ladspasrc-noise-so-noise-white: White Noise Source
 ladspa:  ladspasrc-sine-so-sine-fcac: Sine Oscillator (Freq:control, Amp:control)
 lame:  lamemp3enc: L.A.M.E. mp3 encoder
+lc3:  lc3dec: LC3 Bluetooth Audio decoder
+lc3:  lc3enc: LC3 Bluetooth Audio encoder
+ldac:  ldacenc: Bluetooth LDAC audio encoder
 legacyrawparse:  audioparse: Audio Parse
 legacyrawparse:  videoparse: Video Parse
 level:  level: Level
@@ -609,6 +613,7 @@ libav:  avenc_adpcm_adx: libav SEGA CRI ADX ADPCM encoder
 libav:  avenc_adpcm_ima_amv: libav ADPCM IMA AMV encoder
 libav:  avenc_adpcm_ima_qt: libav ADPCM IMA QuickTime encoder
 libav:  avenc_adpcm_ima_wav: libav ADPCM IMA WAV encoder
+libav:  avenc_adpcm_ima_ws: libav ADPCM IMA Westwood encoder
 libav:  avenc_adpcm_ms: libav ADPCM Microsoft encoder
 libav:  avenc_adpcm_swf: libav ADPCM Shockwave Flash encoder
 libav:  avenc_adpcm_yamaha: libav ADPCM Yamaha encoder
@@ -648,6 +653,7 @@ libav:  avenc_mpeg2video: libav MPEG-2 video encoder
 libav:  avenc_mpeg4: libav MPEG-4 part 2 encoder
 libav:  avenc_msmpeg4: libav MPEG-4 part 2 Microsoft variant version 3 encoder
 libav:  avenc_msmpeg4v2: libav MPEG-4 part 2 Microsoft variant version 2 encoder
+libav:  avenc_msrle: libav Microsoft RLE encoder
 libav:  avenc_msvideo1: libav Microsoft Video-1 encoder
 libav:  avenc_nellymoser: libav Nellymoser Asao encoder
 libav:  avenc_opus: libav Opus encoder
@@ -670,6 +676,7 @@ libav:  avenc_rv10: libav RealVideo 1.0 encoder
 libav:  avenc_rv20: libav RealVideo 2.0 encoder
 libav:  avenc_s302m: libav SMPTE 302M encoder
 libav:  avenc_sgi: libav SGI image encoder
+libav:  avenc_smc: libav QuickTime Graphics (SMC) encoder
 libav:  avenc_speedhq: libav NewTek SpeedHQ encoder
 libav:  avenc_sunrast: libav Sun Rasterfile image encoder
 libav:  avenc_svq1: libav Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1 encoder
@@ -694,12 +701,15 @@ libav:  avmux_amv: libav AMV muxer
 libav:  avmux_apm: libav Ubisoft Rayman 2 APM muxer
 libav:  avmux_apng: libav Animated Portable Network Graphics muxer
 libav:  avmux_argo_asf: libav Argonaut Games ASF muxer
+libav:  avmux_argo_cvg: libav Argonaut Games CVG muxer
 libav:  avmux_asf: libav ASF (Advanced / Active Streaming Format) muxer (not recommended, use asfmux instead)
 libav:  avmux_asf_stream: libav ASF (Advanced / Active Streaming Format) muxer (not recommended, use asfmux instead)
 libav:  avmux_ast: libav AST (Audio Stream) muxer
 libav:  avmux_au: libav Sun AU muxer
 libav:  avmux_avi: libav AVI (Audio Video Interleaved) muxer (not recommended, use avimux instead)
+libav:  avmux_avif: libav AVIF muxer
 libav:  avmux_avm2: libav SWF (ShockWave Flash) (AVM2) muxer
+libav:  avmux_avs3: libav AVS3-P2/IEEE1857.10 muxer
 libav:  avmux_bit: libav G.729 BIT file format muxer
 libav:  avmux_caf: libav Apple CAF (Core Audio Format) muxer
 libav:  avmux_chromaprint: libav Chromaprint muxer
@@ -740,6 +750,7 @@ libav:  avmux_mxf: libav MXF (Material eXchange Format) muxer (not recommended, 
 libav:  avmux_mxf_d10: libav MXF (Material eXchange Format) D-10 Mapping muxer
 libav:  avmux_mxf_opatom: libav MXF (Material eXchange Format) Operational Pattern Atom muxer
 libav:  avmux_nut: libav NUT muxer
+libav:  avmux_obu: libav AV1 low overhead OBU muxer
 libav:  avmux_oga: libav Ogg Audio muxer
 libav:  avmux_ogg: libav Ogg muxer (not recommended, use oggmux instead)
 libav:  avmux_ogv: libav Ogg Video muxer
@@ -750,10 +761,9 @@ libav:  avmux_rm: libav RealMedia muxer
 libav:  avmux_rso: libav Lego Mindstorms RSO muxer
 libav:  avmux_rtsp: libav RTSP output muxer
 libav:  avmux_sap: libav SAP output muxer
-libav:  avmux_singlejpeg: libav JPEG single image muxer
 libav:  avmux_smjpeg: libav Loki SDL MJPEG muxer
 libav:  avmux_smoothstreaming: libav Smooth Streaming Muxer muxer
-libav:  avmux_sox: libav SoX native muxer
+libav:  avmux_sox: libav SoX (Sound eXchange) native muxer
 libav:  avmux_spdif: libav IEC 61937 (used on S/PDIF - IEC958) muxer
 libav:  avmux_spx: libav Ogg Speex muxer
 libav:  avmux_streamhash: libav Per-stream hash testing muxer
@@ -769,9 +779,14 @@ libav:  avmux_voc: libav Creative Voice muxer
 libav:  avmux_w64: libav Sony Wave64 muxer
 libav:  avmux_wav: libav WAV / WAVE (Waveform Audio) muxer (not recommended, use wavenc instead)
 libav:  avmux_webp: libav WebP muxer
+libav:  avmux_wsaud: libav Westwood Studios audio muxer
 libav:  avmux_wtv: libav Windows Television (WTV) muxer
 libav:  avmux_yuv4mpegpipe: libav YUV4MPEG pipe muxer (not recommended, use y4menc instead)
 libav:  avvideocompare: A libav video compare element
+lv2:  breakfastquay-com-rdf-lv2-rubberband-mono: Rubber Band Mono Pitch Shifter
+lv2:  breakfastquay-com-rdf-lv2-rubberband-r3mono: Rubber Band R3 Mono Pitch Shifter
+lv2:  breakfastquay-com-rdf-lv2-rubberband-r3stereo: Rubber Band R3 Stereo Pitch Shifter
+lv2:  breakfastquay-com-rdf-lv2-rubberband-stereo: Rubber Band Stereo Pitch Shifter
 matroska:  matroskademux: Matroska demuxer
 matroska:  matroskamux: Matroska muxer
 matroska:  matroskaparse: Matroska parser
@@ -801,6 +816,7 @@ multifile:  splitmuxsink: Split Muxing Bin
 multifile:  splitmuxsrc: Split File Demuxing Bin
 multipart:  multipartdemux: Multipart demuxer
 multipart:  multipartmux: Multipart muxer
+musepack:  musepackdec: Musepack decoder
 mxf:  mxfdemux: MXF Demuxer
 mxf:  mxfmux: MXF muxer
 navigationtest:  navigationtest: Video navigation test
@@ -934,9 +950,12 @@ proxy:  proxysrc: Proxy source
 pulseaudio:  pulsedeviceprovider (GstDeviceProviderFactory)
 pulseaudio:  pulsesink: PulseAudio Audio Sink
 pulseaudio:  pulsesrc: PulseAudio Audio Source
-qmlgl:  qmlgloverlay: Qt Video Overlay
-qmlgl:  qmlglsink: Qt Video Sink
-qmlgl:  qmlglsrc: Qt Video Source
+qml6:  qml6glmixer: Qt6 Video Mixer
+qml6:  qml6gloverlay: Qt Video Overlay
+qml6:  qml6glsink: Qt6 Video Sink
+qml6:  qml6glsrc: Qt Video Source
+qroverlay:  debugqroverlay: qroverlay
+qroverlay:  qroverlay: qroverlay
 rawparse:  rawaudioparse: rawaudioparse
 rawparse:  rawvideoparse: rawvideoparse
 rawparse:  unalignedaudioparse: unalignedaudioparse
@@ -1131,6 +1150,7 @@ subenc:  webvttenc: WebVTT encoder
 subparse:  ssaparse: SSA Subtitle Parser
 subparse:  subparse: Subtitle parser
 subparse: subparse_typefind: srt, sub, mpsub, mdvd, smi, txt, dks, vtt
+svtav1:  svtav1enc: SvtAv1Enc
 svthevcenc:  svthevcenc: svthevcenc
 switchbin:  switchbin: switchbin
 taglib:  apev2mux: TagLib-based APEv2 Muxer
@@ -1370,6 +1390,8 @@ vpx:  vp9enc: On2 VP9 Encoder
 vulkan:  vulkancolorconvert: Vulkan Color Convert
 vulkan:  vulkandeviceprovider (GstDeviceProviderFactory)
 vulkan:  vulkandownload: Vulkan Downloader
+vulkan:  vulkanh264dec: Vulkan H.264 decoder
+vulkan:  vulkanh265dec: Vulkan H.265 decoder
 vulkan:  vulkanimageidentity: Vulkan Image Identity
 vulkan:  vulkanoverlaycompositor: Vulkan Overlay Compositor
 vulkan:  vulkanshaderspv: Vulkan Shader SPV
@@ -1384,6 +1406,8 @@ waylandsink:  waylandsink: wayland video sink
 webp:  webpdec: WebP image decoder
 webp:  webpenc: WEBP image encoder
 webrtc:  webrtcbin: WebRTC Bin
+webrtcdsp:  webrtcdsp: Voice Processor (AGC, AEC, filters, etc.)
+webrtcdsp:  webrtcechoprobe: Acoustic Echo Canceller probe
 wildmidi:  wildmididec: WildMidi-based MIDI music decoder
 x264:  x264enc: x264 H.264 Encoder
 x265:  x265enc: x265enc
