@@ -446,7 +446,6 @@ if building_full
   # be manually marked as exported through a module definition file.
   # See e.g. https://github.com/FFmpeg/FFmpeg/blob/3057ce797f6e1348b978f5ffe9e2afd2224544f0/configure#L5726
   glib_deps = []
-  glib_dep = dependency('glib-2.0')
   gobject_dep = dependency('gobject-2.0')
   if gobject_dep.type_name() == 'internal'
     glib_subproject = subproject('glib')
@@ -505,6 +504,12 @@ if building_full
     include_directories: include_directories('.')
   )
 
+  # When building gstreamer full statically, embed all of the dependencies
+  # inside gstfull
+  if building_full_static
+    gst_full_dep = gst_full_dep.as_link_whole()
+  endif
+
   gst_full_libs_private = cc.get_supported_link_arguments(['-Wl,--undefined=gst_init_static_plugins'])
   if gst_full_libs_private == []
     warning('The compiler does not support `-Wl,--undefined` linker flag. The method `gst_init_static_plugins` might be dropped during the link stage of an application using libgstreamer-full-1.0.a, preventing plugins registration.')
@@ -538,6 +543,26 @@ if building_full
     extra_cflags: gst_full_c_flags,
     subdirs : 'gstreamer-1.0')
   meson.override_dependency('gstreamer-full-1.0', gst_full_dep)
+
+  # We override the pkg-config files of all of the libraries linked inside the
+  # static gstreamer-full to point to it, they are already contained inside
+  # This is useful because pkg-config can then automatically resolve any library
+  # and only link to gstreamer-full automatically
+  if building_full_static
+    foreach lib : gstfull.all_libraries()
+      lib_name = lib.name()
+      if lib_name in wanted_libs or all_libs
+        pkgconfig.generate(gstfull,
+          filebase: lib_name,
+          name: lib_name,
+          # Since the version comes from dependencies and we only have access to
+          # libraries, we use an arbirarily big number to ensure that pkg-config
+          # recognizes it
+          version : '99.0.0',
+        )
+      endif
+    endforeach
+  endif
 
   if not get_option('tools').disabled()
     # Loop for tools
