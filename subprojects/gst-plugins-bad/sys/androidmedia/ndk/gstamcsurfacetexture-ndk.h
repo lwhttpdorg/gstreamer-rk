@@ -5,6 +5,8 @@
  * Copyright (C) 2014,2018 Collabora Ltd.
  *   Author: Matthieu Bouron <matthieu.bouron@collabora.com>
  *
+ * Copyright (C) 2024, Ratchanan Srirattanamet <peathot@hotmail.com>
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation
@@ -21,24 +23,20 @@
  *
  */
 
-#ifndef __GST_AMC_SURFACE_TEXTURE_JNI_H__
-#define __GST_AMC_SURFACE_TEXTURE_JNI_H__
+#ifndef __GST_AMC_SURFACE_TEXTURE_NDK_H__
+#define __GST_AMC_SURFACE_TEXTURE_NDK_H__
 
+#include "../gstamc-codec.h"
 #include "../gstamcsurfacetexture.h"
+#include "../jni/gstamcsurfacetexture-jni.h"
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AMC_SURFACE_TEXTURE_JNI gst_amc_surface_texture_jni_get_type ()
-G_DECLARE_DERIVABLE_TYPE (GstAmcSurfaceTextureJNI, gst_amc_surface_texture_jni, GST, AMC_SURFACE_TEXTURE_JNI, GstAmcSurfaceTexture)
+#define GST_TYPE_AMC_SURFACE_TEXTURE_NDK gst_amc_surface_texture_ndk_get_type ()
+G_DECLARE_FINAL_TYPE (GstAmcSurfaceTextureNDK, gst_amc_surface_texture_ndk, GST, AMC_SURFACE_TEXTURE_NDK, GstAmcSurfaceTextureJNI)
 
-struct _GstAmcSurfaceTextureJNIClass
-{
-  GstAmcSurfaceTextureClass parent_class;
-};
-
-GstAmcSurfaceTextureJNI * gst_amc_surface_texture_jni_new (GError ** err);
-
-jobject gst_amc_surface_texture_jni_get_jobject (GstAmcSurfaceTextureJNI * self);
+gboolean gst_amc_surface_texture_ndk_is_available (void);
+GstAmcSurfaceTextureNDK * gst_amc_surface_texture_ndk_new (GError ** err);
 
 G_END_DECLS
 

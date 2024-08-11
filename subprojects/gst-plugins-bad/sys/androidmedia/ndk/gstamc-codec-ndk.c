@@ -30,6 +30,7 @@
 #include "../gstamc-constants.h"
 
 #include "gstjniutils.h"
+#include "gstamcsurfacetexture-ndk.h"
 #include "../jni/gstamcsurfacetexture-jni.h"
 
 #include <android/native_window.h>
@@ -524,8 +525,10 @@ gst_amc_codec_ndk_release_output_buffer (GstAmcCodec * codec, gint index,
 static GstAmcSurfaceTexture *
 gst_amc_codec_ndk_new_surface_texture (GError ** err)
 {
-  /* TODO: support NDK-based ASurfaceTexture. */
-  return (GstAmcSurfaceTexture *) gst_amc_surface_texture_jni_new (err);
+  if (gst_amc_surface_texture_ndk_is_available ())
+    return (GstAmcSurfaceTexture *) gst_amc_surface_texture_ndk_new (err);
+  else
+    return (GstAmcSurfaceTexture *) gst_amc_surface_texture_jni_new (err);
 }
 
 GstAmcCodecVTable gst_amc_codec_ndk_vtable = {

@@ -25,3 +25,4 @@ extern GstAmcFormatVTable gst_amc_format_ndk_vtable;
 
 gboolean gst_amc_format_ndk_static_init (void);
 gboolean gst_amc_codec_ndk_static_init (void);
+gboolean gst_amc_surface_texture_ndk_static_init (void);
