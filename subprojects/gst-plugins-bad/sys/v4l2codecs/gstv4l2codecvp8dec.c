@@ -26,6 +26,8 @@
 #include "gstv4l2codecpool.h"
 #include "gstv4l2codecvp8dec.h"
 #include "gstv4l2format.h"
+#include <gst/base/gstadapter.h>
+#include <gst/base/gstbytereader.h>
 
 #define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
 
@@ -45,7 +47,8 @@ enum
 static GstStaticPadTemplate sink_template =
 GST_STATIC_PAD_TEMPLATE (GST_VIDEO_DECODER_SINK_NAME,
     GST_PAD_SINK, GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-vp8")
+    GST_STATIC_CAPS ("video/x-vp8;"
+                     "image/webp;")
     );
 
 static GstStaticPadTemplate alpha_template =
@@ -91,6 +94,10 @@ struct _GstV4l2CodecVp8Dec
 
   GstMemory *bitstream;
   GstMapInfo bitstream_map;
+
+  gboolean saw_header;
+  guint frame_size;
+  gboolean webp;
 };
 
 G_DEFINE_ABSTRACT_TYPE (GstV4l2CodecVp8Dec, gst_v4l2_codec_vp8_dec,
@@ -458,7 +465,8 @@ gst_v4l2_codec_vp8_dec_fill_frame_header (GstV4l2CodecVp8Dec * self,
              (frame_hdr->show_frame ? V4L2_VP8_FRAME_FLAG_SHOW_FRAME : 0) |
              (frame_hdr->mb_no_skip_coeff ? V4L2_VP8_FRAME_FLAG_MB_NO_SKIP_COEFF : 0) |
              (frame_hdr->sign_bias_golden ? V4L2_VP8_FRAME_FLAG_SIGN_BIAS_GOLDEN : 0) |
-             (frame_hdr->sign_bias_alternate ? V4L2_VP8_FRAME_FLAG_SIGN_BIAS_ALT : 0),
+             (frame_hdr->sign_bias_alternate ? V4L2_VP8_FRAME_FLAG_SIGN_BIAS_ALT : 0) |
+             (self->webp ? V4L2_VP8_FRAME_FLAG_WEBP : 0),
   };
   /* *INDENT-ON* */
 
@@ -610,6 +618,7 @@ gst_v4l2_codec_vp8_dec_decode_picture (GstVp8Decoder * decoder,
 static void
 gst_v4l2_codec_vp8_dec_reset_picture (GstV4l2CodecVp8Dec * self)
 {
+  self->saw_header = FALSE;
   if (self->bitstream) {
     if (self->bitstream_map.memory)
       gst_memory_unmap (self->bitstream, &self->bitstream_map);
@@ -888,6 +897,7 @@ gst_v4l2_codec_vp8_dec_get_property (GObject * object, guint prop_id,
 static void
 gst_v4l2_codec_vp8_dec_init (GstV4l2CodecVp8Dec * self)
 {
+  self->saw_header = FALSE;
 }
 
 static void
@@ -912,6 +922,116 @@ gst_v4l2_codec_vp8_dec_dispose (GObject * object)
 static void
 gst_v4l2_codec_vp8_dec_class_init (GstV4l2CodecVp8DecClass * klass)
 {
+}
+
+static gboolean
+gst_v4l2_codec_vp8_dec_set_format (GstVideoDecoder * decoder,
+    GstVideoCodecState * state)
+{
+  GstV4l2CodecVp8Dec *self = GST_V4L2_CODEC_VP8_DEC (decoder);
+  GstVp8Decoder *vp8dec = GST_VP8_DECODER (decoder);
+  GstCaps *webp_caps = gst_caps_intersect (gst_caps_new_empty_simple ("image/webp"),
+                                           state->caps);
+
+  if (vp8dec->input_state)
+    gst_video_codec_state_unref (vp8dec->input_state);
+  vp8dec->input_state = gst_video_codec_state_ref (state);
+
+  if (!gst_caps_is_empty (webp_caps)) {
+    /* WebP requires parsing for right packetization */
+    gst_video_decoder_set_packetized (decoder, FALSE);
+    self->webp = TRUE;
+  }
+
+  return TRUE;
+}
+
+/*
+ * Webp image RIFF header
+ *
+ * 52 49 46 46 f6 00 00 00 57 45 42 50 56 50 38 20  RIFF....WEBPVP8 
+ * ea 00 00 00 90 09 00 9d 01 2a 30 00 30 00 3e 35  .........*0.0.>5
+ *           | \______/ \______/
+ *           |       |         \__VP8 startcode
+ *           |        \__VP8 frame_tag
+ *           |
+ *            \__End of WebP RIFF header: 20 bytes, then VP8 chunk
+ *
+ * copied from gstwebpdec.c: gst_webp_dec_parse()
+ */
+static GstFlowReturn
+gst_v4l2_codec_vp8_dec_parse (GstVideoDecoder * decoder,
+    GstVideoCodecFrame * frame, GstAdapter * adapter, gboolean at_eos)
+{
+  gsize toadd = 0;
+  gsize size;
+  gconstpointer data;
+  GstByteReader reader;
+  GstV4l2CodecVp8Dec *self = (GstV4l2CodecVp8Dec *) decoder;
+
+  size = gst_adapter_available (adapter);
+  GST_DEBUG_OBJECT (decoder,
+      "parsing webp image data (%" G_GSIZE_FORMAT " bytes)", size);
+
+  if (at_eos) {
+    GST_DEBUG ("Flushing all data out");
+    toadd = size;
+
+    /* If we have leftover data, throw it away */
+    if (!self->saw_header)
+      goto drop_frame;
+    goto have_full_frame;
+  }
+
+  if (!self->saw_header) {
+    guint32 code;
+
+    if (size < 12)
+      goto need_more_data;
+
+    data = gst_adapter_map (adapter, size);
+    gst_byte_reader_init (&reader, data, size);
+
+    if (!gst_byte_reader_get_uint32_le (&reader, &code))
+      goto error;
+
+    if (code == GST_MAKE_FOURCC ('R', 'I', 'F', 'F')) {
+      if (!gst_byte_reader_get_uint32_le (&reader, &self->frame_size))
+        goto error;
+
+      if (!gst_byte_reader_get_uint32_le (&reader, &code))
+        goto error;
+
+      if (code == GST_MAKE_FOURCC ('W', 'E', 'B', 'P'))
+        self->saw_header = TRUE;
+    }
+  }
+
+  if (!self->saw_header)
+    goto error;
+
+  if (size >= (self->frame_size + 8)) {
+    toadd = self->frame_size + 8;
+    self->saw_header = FALSE;
+
+    goto have_full_frame;
+  }
+
+need_more_data:
+  return GST_VIDEO_DECODER_FLOW_NEED_DATA;
+
+have_full_frame:
+  if (toadd)
+    gst_video_decoder_add_to_frame (decoder, toadd);
+  return gst_video_decoder_have_frame (decoder);
+
+drop_frame:
+  gst_adapter_flush (adapter, size);
+  return GST_FLOW_OK;
+
+error:
+  GST_WARNING("parsing webp GST_FLOW_ERROR");
+  return GST_FLOW_ERROR;
 }
 
 static void
@@ -941,6 +1061,9 @@ gst_v4l2_codec_vp8_dec_subclass_init (GstV4l2CodecVp8DecClass * klass,
   decoder_class->open = GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_open);
   decoder_class->close = GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_close);
   decoder_class->stop = GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_stop);
+  decoder_class->parse = GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_parse);
+  decoder_class->set_format =
+      GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_set_format);
   decoder_class->negotiate =
       GST_DEBUG_FUNCPTR (gst_v4l2_codec_vp8_dec_negotiate);
   decoder_class->decide_allocation =

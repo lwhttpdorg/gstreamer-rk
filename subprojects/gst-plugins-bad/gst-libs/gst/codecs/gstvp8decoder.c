@@ -35,6 +35,8 @@
 GST_DEBUG_CATEGORY (gst_vp8_decoder_debug);
 #define GST_CAT_DEFAULT gst_vp8_decoder_debug
 
+#define WEBP_RIFF_HEADER_SIZE 20
+
 struct _GstVp8DecoderPrivate
 {
   gint width;
@@ -377,6 +379,8 @@ gst_vp8_decoder_handle_frame (GstVideoDecoder * decoder,
   GstFlowReturn ret = GST_FLOW_OK;
   GstFlowReturn output_ret = GST_FLOW_OK;
   GstVp8DecoderOutputFrame output_frame;
+  GstCaps *webp_caps = gst_caps_intersect (gst_caps_new_empty_simple ("image/webp"),
+                                           self->input_state->caps);
 
   GST_LOG_OBJECT (self,
       "handle frame, PTS: %" GST_TIME_FORMAT ", DTS: %"
@@ -387,6 +391,12 @@ gst_vp8_decoder_handle_frame (GstVideoDecoder * decoder,
     GST_ERROR_OBJECT (self, "Cannot map buffer");
     ret = GST_FLOW_ERROR;
     goto error;
+  }
+
+  if (!gst_caps_is_empty (webp_caps)) {
+    /* Drop WebP RIFF header */
+    map.data += WEBP_RIFF_HEADER_SIZE;
+    map.size -= WEBP_RIFF_HEADER_SIZE;
   }
 
   pres = gst_vp8_parser_parse_frame_header (&priv->parser,
