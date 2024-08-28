@@ -93,14 +93,10 @@ gst_compositor_operator_get_type_and_default_value (int *default_operator_value)
   static GType operator_gtype = G_TYPE_NONE;
 
   if (g_once_init_enter (&_init)) {
-    GstElement *compositor =
-        gst_element_factory_create (ges_get_compositor_factory (), NULL);
-
-    GstPad *compositorPad =
-        gst_element_request_pad_simple (compositor, "sink_%u");
+    GstPad *compositor_pad = ges_compositor_pad_new ();
 
     GParamSpec *pspec =
-        g_object_class_find_property (G_OBJECT_GET_CLASS (compositorPad),
+        g_object_class_find_property (G_OBJECT_GET_CLASS (compositor_pad),
         "operator");
 
     if (pspec) {
@@ -109,9 +105,7 @@ gst_compositor_operator_get_type_and_default_value (int *default_operator_value)
       operator_gtype = pspec->value_type;
     }
 
-    gst_element_release_request_pad (compositor, compositorPad);
-    gst_object_unref (compositorPad);
-    gst_object_unref (compositor);
+    gst_object_unref (compositor_pad);
 
     g_once_init_leave (&_init, 1);
   }
@@ -750,6 +744,8 @@ gst_frame_positioner_init (GstFramePositioner * framepositioner)
   int default_operator_value;
   gst_compositor_operator_get_type_and_default_value (&default_operator_value);
 
+  framepositioner->proxied_pad = ges_compositor_pad_new ();
+  g_assert (framepositioner->proxied_pad != NULL);
   framepositioner->alpha = 1.0;
   framepositioner->posx = 0.0;
   framepositioner->posy = 0.0;
@@ -913,13 +909,32 @@ gst_frame_positioner_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
 {
   GESFrameCompositionMeta *meta;
   GstFramePositioner *framepositioner = GST_FRAME_POSITIONNER (trans);
-  GstClockTime timestamp = GST_BUFFER_PTS (buf);
+  GstClockTime stream_time;
 
-  if (GST_CLOCK_TIME_IS_VALID (timestamp)) {
-    gst_object_sync_values (GST_OBJECT (trans), timestamp);
+  stream_time = gst_segment_to_stream_time (&trans->segment, GST_FORMAT_TIME,
+      GST_BUFFER_PTS (buf));
+  if (GST_CLOCK_TIME_IS_VALID (stream_time)) {
+    gst_object_sync_values (GST_OBJECT (trans), stream_time);
+    gst_object_sync_values (GST_OBJECT (framepositioner->proxied_pad),
+        stream_time);
+  } else {
+    GST_WARNING_OBJECT (framepositioner,
+        "Got invalid timestamp on buffer %" GST_PTR_FORMAT, buf);
   }
 
-  meta = ges_buffer_add_frame_composition_meta (buf);
+  meta =
+      (GESFrameCompositionMeta *) gst_buffer_get_meta (buf,
+      ges_frame_composition_meta_api_get_type ());
+  if (!meta) {
+    meta = ges_buffer_add_frame_composition_meta (buf);
+  }
+
+  meta->extra_properties =
+      ges_util_object_properties_to_structure (G_OBJECT
+      (framepositioner->proxied_pad),
+      gst_frame_positioner_ignore_proxied_properties_names);
+  gst_structure_set_parent_refcount (meta->extra_properties,
+      &GST_MINI_OBJECT_REFCOUNT (meta));
 
   GST_OBJECT_LOCK (framepositioner);
   meta->alpha = framepositioner->alpha;
