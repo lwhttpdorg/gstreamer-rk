@@ -167,6 +167,7 @@ tsmux_stream_new (guint16 pid, guint stream_type, guint stream_number)
       stream->pi.flags |= TSMUX_PACKET_FLAG_PES_FULL_HEADER;
       supports_user_specified_stream_number = TRUE;
       break;
+    case TSMUX_ST_PS_AUDIO_TRUEHD:
     case TSMUX_ST_VIDEO_DIRAC:
     case TSMUX_ST_PS_AUDIO_LPCM:
     case TSMUX_ST_PS_AUDIO_AC3:
@@ -189,6 +190,10 @@ tsmux_stream_new (guint16 pid, guint stream_type, guint stream_number)
         case TSMUX_ST_PS_AUDIO_DTS:
           stream->gst_stream_type = GST_STREAM_TYPE_AUDIO;
           stream->id_extended = 0x82;
+          break;
+        case TSMUX_ST_PS_AUDIO_TRUEHD:
+          stream->is_audio = TRUE;
+          stream->id_extended = 0x72;
           break;
         default:
           break;
@@ -907,6 +912,9 @@ tsmux_stream_default_get_es_descrs (TsMuxStream * stream,
       g_ptr_array_add (pmt_stream->descriptors, descriptor);
       break;
     }
+    case TSMUX_ST_PS_AUDIO_TRUEHD:
+      /* FIXME : Unclear if extra descriptor is needed */
+      break;
     case TSMUX_ST_PS_AUDIO_DTS:
       /* FIXME */
       break;

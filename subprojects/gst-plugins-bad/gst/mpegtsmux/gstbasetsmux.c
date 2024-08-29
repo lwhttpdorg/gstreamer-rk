@@ -580,6 +580,13 @@ gst_base_ts_mux_create_or_update_stream (GstBaseTsMux * mux,
     st = TSMUX_ST_PS_TELETEXT;
     /* needs a particularly sized layout */
     ts_pad->prepare_func = gst_base_ts_mux_prepare_teletext;
+  } else if (strcmp (mt, "audio/x-true-hd") == 0) {
+    if (mux->packet_size != 192) {
+      GST_ERROR_OBJECT (ts_pad,
+          "audio/x-true-hd is only supported in m2ts mode");
+      goto not_negotiated;
+    }
+    st = TSMUX_ST_PS_AUDIO_TRUEHD;
   } else if (strcmp (mt, "audio/x-opus") == 0) {
     guint8 channels, mapping_family, stream_count, coupled_count;
     guint8 channel_mapping[256];

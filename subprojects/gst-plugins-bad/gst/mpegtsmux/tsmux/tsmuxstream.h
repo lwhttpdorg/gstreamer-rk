@@ -125,6 +125,7 @@ enum TsMuxStreamType {
 
   /* private stream types */
   TSMUX_ST_PS_AUDIO_AC3               = 0x81,
+  TSMUX_ST_PS_AUDIO_TRUEHD            = 0x83,
   TSMUX_ST_PS_AUDIO_DTS               = 0x8a,
   TSMUX_ST_PS_AUDIO_LPCM              = 0x8b,
   TSMUX_ST_PS_DVB_SUBPICTURE          = 0x8c,
