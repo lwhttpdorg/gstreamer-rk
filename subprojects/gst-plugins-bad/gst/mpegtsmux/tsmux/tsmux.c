@@ -1836,6 +1836,10 @@ tsmux_write_pmt (TsMux * mux, TsMuxProgram * program)
     else
       pmt->pcr_pid = tsmux_stream_get_pid (program->pcr_stream);
 
+    if (program->registration) {
+      descriptor = gst_mpegts_descriptor_from_registration ("HDMV", NULL, 0);
+      g_ptr_array_add (pmt->descriptors, descriptor);
+    }
 #if 0
     /* FIXME : These two descriptors should not be added in all PMT
      * but only in "bluray-compatible" mpeg-ts output. I even have my

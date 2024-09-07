@@ -953,6 +953,10 @@ gst_base_ts_mux_create_pad_stream (GstBaseTsMux * mux, GstPad * pad,
     ts_pad->prog = tsmux_program_new (mux->tsmux, ts_pad->prog_id);
     if (ts_pad->prog == NULL)
       goto no_program;
+    if (mux->packet_size == 192) {
+      /* Add HDMV registration */
+      ts_pad->prog->registration = "HDMV";
+    }
     tsmux_set_pmt_interval (ts_pad->prog, mux->pmt_interval);
     tsmux_program_set_scte35_pid (ts_pad->prog, mux->scte35_pid);
     tsmux_program_set_scte35_interval (ts_pad->prog, mux->scte35_null_interval);

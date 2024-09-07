@@ -130,6 +130,9 @@ struct TsMuxProgram {
 
   /* programs TsMuxStream's */
   GPtrArray *streams;
+
+  /* Optional registration */
+  const gchar *registration;
 };
 
 struct TsMux {
