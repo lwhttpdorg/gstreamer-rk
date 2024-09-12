@@ -937,6 +937,8 @@ gst_time_map_set_values (GstHLSTimeMap * map, GstClockTimeDiff stream_time,
   map->stream_time = stream_time;
   map->internal_time = internal_time;
   if (pdt) {
+    if (map->pdt)
+      g_date_time_unref (map->pdt);
     if (offset)
       map->pdt = g_date_time_add (pdt, offset / GST_USECOND);
     else

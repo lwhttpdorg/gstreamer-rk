@@ -350,6 +350,8 @@ remove_HLS_directives_from_uri (const gchar * playlist_uri)
     keys = g_list_sort (keys, (GCompareFunc) g_strcmp0);
   gchar *out_uri = gst_uri_to_string_with_keys (uri, keys);
   gst_uri_unref (uri);
+  if (keys)
+    g_list_free (keys);
 
   return out_uri;
 }
