@@ -545,7 +545,7 @@ gst_v4l2_open (GstV4l2Object * v4l2object, GstV4l2Error * error)
 
   /* open the device */
   v4l2object->video_fd =
-      open (v4l2object->videodev, O_RDWR /* | O_NONBLOCK */ );
+      open (v4l2object->videodev, O_RDWR | O_CLOEXEC /* | O_NONBLOCK */ );
 
   if (!GST_V4L2_IS_OPEN (v4l2object))
     goto not_open;
