@@ -478,6 +478,13 @@ if building_full
     giomodules_deps += dependency(module)
   endforeach
 
+  gstfull_deps = []
+  foreach deps : [incdir_deps, glib_deps, all_plugins, giomodules_deps]
+    foreach dep : deps
+      gstfull_deps += dep.as_link_whole()
+    endforeach
+  endforeach
+
   # Build shared library
   gstfull = build_target('gstreamer-full-1.0',
     init_static_plugins_c,
@@ -485,7 +492,7 @@ if building_full
     target_type: get_option('gst-full-target-type'),
     link_args: gstfull_link_args,
     link_whole : exposed_libs,
-    dependencies : [incdir_deps, glib_deps, all_plugins, giomodules_deps],
+    dependencies : gstfull_deps,
     link_depends : link_deps,
     install : true,
   )
