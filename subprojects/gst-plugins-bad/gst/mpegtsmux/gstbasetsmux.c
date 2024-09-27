@@ -430,6 +430,9 @@ gst_base_ts_mux_reset (GstBaseTsMux * mux, gboolean alloc)
     g_hash_table_unref (si_sections);
 
   mux->last_scte35_event_seqnum = GST_SEQNUM_INVALID;
+  if (mux->prefered_scte35_pad) {
+    mux->prefered_scte35_pad = NULL;
+  }
 
   if (klass->reset)
     klass->reset (mux);
@@ -1818,6 +1821,9 @@ gst_base_ts_mux_release_pad (GstElement * element, GstPad * pad)
       tsmux_resend_pmt (program);
     }
   }
+  if (mux->prefered_scte35_pad == (GstAggregatorPad *) pad) {
+    mux->prefered_scte35_pad = NULL;
+  }
   g_mutex_unlock (&mux->lock);
 
   GST_ELEMENT_CLASS (parent_class)->release_pad (element, pad);
@@ -2176,6 +2182,8 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
   }
 
   if (!translate) {
+    GstClockTime event_running_time_offset =
+        gst_event_get_running_time_offset (event);
     g_assert (section->data);
     /* Calculate the final adjustment, as a sum of:
      * - The adjustment in the original packet
@@ -2186,10 +2194,24 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
     pts_adjust = sit->pts_adjustment + mpeg_pts_offset + TS_MUX_CLOCK_BASE;
 
     /* Account for offsets potentially introduced between the demuxer and us */
-    pts_adjust +=
-        GSTTIME_TO_MPEGTIME (gst_event_get_running_time_offset (event));
+    pts_adjust += GSTTIME_TO_MPEGTIME (event_running_time_offset);
+
+    GST_DEBUG_OBJECT (mux,
+        "pts_adjust %" G_GUINT64_FORMAT " sit->pts_adjustment: %"
+        G_GUINT64_FORMAT " mpeg_pts_offset: %" G_GUINT64_FORMAT " (%"
+        GST_TIME_FORMAT ") TS_MUX_CLOCK_BASE: %" G_GUINT64_FORMAT
+        " event running_time_offset %" GST_TIME_FORMAT, pts_adjust,
+        sit->pts_adjustment, mpeg_pts_offset,
+        GST_TIME_ARGS (MPEGTIME_TO_GSTTIME (mpeg_pts_offset)),
+        TS_MUX_CLOCK_BASE, GST_TIME_ARGS (event_running_time_offset));
+
+    GST_DEBUG_OBJECT (mux, "pts_adjust %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (MPEGTIME_TO_GSTTIME (pts_adjust)));
 
     pts_adjust &= 0x1ffffffff;
+    GST_DEBUG_OBJECT (mux, "pts_adjust %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (MPEGTIME_TO_GSTTIME (pts_adjust)));
+
     section_data = g_memdup2 (section->data, section->section_length);
     section_data[4] |= pts_adjust >> 32;
     section_data[5] = pts_adjust >> 24;
@@ -2324,41 +2346,54 @@ gst_base_ts_mux_sink_event (GstAggregator * agg, GstAggregatorPad * agg_pad,
 
       s = gst_event_get_structure (event);
 
-      if (gst_structure_has_name (s, "scte-sit") && mux->scte35_pid != 0) {
-
-        /* When operating downstream of tsdemux, tsdemux will send out events
-         * on all its source pads for each splice table it encounters. If we
-         * are remuxing multiple streams it has demuxed, this means we could
-         * unnecessarily repeat the same table multiple times, we avoid that
-         * by deduplicating thanks to the event sequm
-         */
-        if (gst_event_get_seqnum (event) != mux->last_scte35_event_seqnum) {
-          GstMpegtsSection *section;
-
-          gst_structure_get (s, "section", GST_TYPE_MPEGTS_SECTION, &section,
-              NULL);
-          if (section) {
-            guint64 mpeg_pts_offset = 0;
-            GstStructure *rtime_map = NULL;
-
-            gst_structure_get (s, "running-time-map", GST_TYPE_STRUCTURE,
-                &rtime_map, NULL);
-            gst_structure_get_uint64 (s, "mpeg-pts-offset", &mpeg_pts_offset);
-
-            handle_scte35_section (mux, event, section, mpeg_pts_offset,
-                rtime_map);
-            if (rtime_map)
-              gst_structure_free (rtime_map);
-            mux->last_scte35_event_seqnum = gst_event_get_seqnum (event);
-          } else {
-            GST_WARNING_OBJECT (ts_pad,
-                "Ignoring scte-sit event without a section");
-          }
-        } else {
-          GST_DEBUG_OBJECT (ts_pad, "Ignoring duplicate scte-sit event");
-        }
+      if (gst_structure_has_name (s, "scte-sit")) {
+        /* We never want SCTE SIT to be forwarded */
         res = TRUE;
         forward = FALSE;
+
+        if (mux->scte35_pid == 0)
+          goto out;
+
+        /* When operating downstream of tsdemux, tsdemux will send out events on
+         * all its source pads for each splice table it encounters. If we are
+         * remuxing multiple streams it has demuxed, this means we could
+         * unnecessarily repeat the same table multiple times, we avoid that by:
+         * * Prefering a target input pad
+         * * *AND* using the event seqnum to ignore duplicated sections
+         */
+        if (mux->prefered_scte35_pad == NULL)
+          mux->prefered_scte35_pad = agg_pad;
+        else if (mux->prefered_scte35_pad != agg_pad) {
+          GST_DEBUG_OBJECT (ts_pad, "Ignoring SIT from other pad");
+          goto out;
+        }
+
+        if (gst_event_get_seqnum (event) == mux->last_scte35_event_seqnum) {
+          GST_DEBUG_OBJECT (ts_pad, "Ignoring duplicate scte-sit event");
+          goto out;
+        }
+
+        GstMpegtsSection *section;
+
+        gst_structure_get (s, "section", GST_TYPE_MPEGTS_SECTION, &section,
+            NULL);
+        if (!section) {
+          GST_WARNING_OBJECT (ts_pad,
+              "Ignoring scte-sit event without a section");
+          goto out;
+        }
+
+        guint64 mpeg_pts_offset = 0;
+        GstStructure *rtime_map = NULL;
+
+        gst_structure_get (s, "running-time-map", GST_TYPE_STRUCTURE,
+            &rtime_map, NULL);
+        gst_structure_get_uint64 (s, "mpeg-pts-offset", &mpeg_pts_offset);
+
+        handle_scte35_section (mux, event, section, mpeg_pts_offset, rtime_map);
+        if (rtime_map)
+          gst_structure_free (rtime_map);
+        mux->last_scte35_event_seqnum = gst_event_get_seqnum (event);
         goto out;
       }
 
