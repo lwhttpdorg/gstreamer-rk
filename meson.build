@@ -478,12 +478,11 @@ if building_full
     giomodules_deps += dependency(module)
   endforeach
 
-  gstfull_deps = []
-  foreach deps : [incdir_deps, glib_deps, all_plugins, giomodules_deps]
-    foreach dep : deps
-      gstfull_deps += dep.as_link_whole()
-    endforeach
-  endforeach
+  # When building gstreamer full statically, embed all of the dependencies
+  # inside gstfull using a recursive link_whole
+  gst_full_libs_dep = declare_dependency(
+    dependencies : [incdir_deps, glib_deps, all_plugins, giomodules_deps]
+  ).as_link_whole()
 
   # Build shared library
   gstfull = build_target('gstreamer-full-1.0',
@@ -492,11 +491,12 @@ if building_full
     target_type: get_option('gst-full-target-type'),
     link_args: gstfull_link_args,
     link_whole : exposed_libs,
-    dependencies : gstfull_deps,
+    dependencies : gst_full_libs_dep,
     link_depends : link_deps,
     install : true,
   )
   gst_full_c_flags =  ['-DGST_STATIC_COMPILATION']
+  gst_full_c_flags += cc.first_supported_link_argument(['-lstdc++', '-lc++', '/MT'])
 
   gst_full_libs = [gstfull]
 
@@ -510,12 +510,6 @@ if building_full
     dependencies : incdir_deps + glib_deps,
     include_directories: include_directories('.')
   )
-
-  # When building gstreamer full statically, embed all of the dependencies
-  # inside gstfull
-  if building_full_static
-    gst_full_dep = gst_full_dep.as_link_whole()
-  endif
 
   gst_full_libs_private = cc.get_supported_link_arguments(['-Wl,--undefined=gst_init_static_plugins'])
   if gst_full_libs_private == []
@@ -578,11 +572,13 @@ if building_full
       exe_name = '@0@-@1@'.format(tool, apiversion)
 
       deps = []
-      foreach d : data.get('deps', [])
-        if d not in exposed_deps
-          deps += d
-        endif
-      endforeach
+      if not building_full_static
+        foreach d : data.get('deps', [])
+          if d not in exposed_deps
+            deps += d
+          endif
+        endforeach
+      endif
 
       exe = executable(exe_name,
         data.get('files'),
@@ -618,11 +614,13 @@ if building_full
       exe_name = '@0@'.format(helper)
 
       deps = []
-      foreach d : data.get('deps', [])
-        if d not in exposed_deps
-          deps += d
-        endif
-      endforeach
+      if not building_full_static
+        foreach d : data.get('deps', [])
+          if d not in exposed_deps
+            deps += d
+          endif
+        endforeach
+      endif
 
       exe = executable(exe_name,
         data.get('files'),
