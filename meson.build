@@ -92,6 +92,9 @@ if building_full
   building_full_options = ['gstreamer-static-full=false']
   building_full_static = get_option('gst-full-target-type') == 'static_library'
   if building_full_static
+    if not meson.version().version_compare('>=1.6')
+      error('Building gstreamer-full statically requires meson 1.6 or above')
+    endif
     building_full_options = ['gstreamer-static-full=true']
   endif
 endif
@@ -478,11 +481,19 @@ if building_full
     giomodules_deps += dependency(module)
   endforeach
 
-  # When building gstreamer full statically, embed all of the dependencies
-  # inside gstfull using a recursive link_whole
-  gst_full_libs_dep = declare_dependency(
-    dependencies : [incdir_deps, glib_deps, all_plugins, giomodules_deps]
-  ).as_link_whole()
+  gst_full_deps = [incdir_deps, glib_deps, all_plugins, giomodules_deps]
+  gst_full_libs = []
+  # See above re: symbol exports in Win32
+  if ['windows', 'cygwin'].contains(host_machine.system())
+    gst_full_libs += exposed_libs
+  endif
+
+  # When building gstreamer full statically, embed all of the dependencies inside gstfull using a recursive link_whole
+  if building_full_static and meson.version().version_compare('>=1.6')
+    message('Generating link whole dependencies')
+    gst_full_deps = declare_dependency(dependencies : gst_full_deps, link_whole : exposed_libs).as_link_whole(recursive: true)
+    exposed_libs = [] # This prevents unnecesary library linking
+  endif
 
   # Build shared library
   gstfull = build_target('gstreamer-full-1.0',
@@ -491,19 +502,14 @@ if building_full
     target_type: get_option('gst-full-target-type'),
     link_args: gstfull_link_args,
     link_whole : exposed_libs,
-    dependencies : gst_full_libs_dep,
+    dependencies : gst_full_deps,
     link_depends : link_deps,
     install : true,
   )
+  gst_full_libs += [gstfull]
+
   gst_full_c_flags =  ['-DGST_STATIC_COMPILATION']
   gst_full_c_flags += cc.first_supported_link_argument(['-lstdc++', '-lc++', '/MT'])
-
-  gst_full_libs = [gstfull]
-
-  # See above re: symbol exports in Win32
-  if ['windows', 'cygwin'].contains(host_machine.system())
-    gst_full_libs += exposed_libs
-  endif
 
   gst_full_dep = declare_dependency(link_with: gst_full_libs,
     compile_args: gst_full_c_flags,
@@ -549,17 +555,31 @@ if building_full
   # static gstreamer-full to point to it, they are already contained inside
   # This is useful because pkg-config can then automatically resolve any library
   # and only link to gstreamer-full automatically
-  if building_full_static
-    foreach lib : gstfull.all_libraries()
+  if building_full_static and meson.version().version_compare('>=1.6')
+    message('Overriding pkg-config for gstfull dependencies, the warnings are expected')
+    fs = import('fs')
+    uninstalled_dir = '@0@/meson-uninstalled'.format(meson.current_build_dir())
+
+    foreach lib : gstfull.get_link_whole_targets()
       lib_name = lib.name()
       if lib_name in wanted_libs or all_libs
+        # Try to get the version from the generated file before overriding it
+        file_path = '@0@/@1@-uninstalled.pc'.format(uninstalled_dir, lib_name)
+        if not fs.exists(file_path)
+          continue
+        endif
+        prev_version = run_command(python3, '-c', 'print([l[9:] for l in open("@0@") if l.startswith("Version: ")][0])'.format(file_path), check: false)
+        version = prev_version.stdout().strip()
+        if prev_version.returncode() != 0
+          warning('Could not get previous pkg-config version for', lib_name)
+          version = meson.project_version()
+          continue
+        endif
+
         pkgconfig.generate(gstfull,
           filebase: lib_name,
           name: lib_name,
-          # Since the version comes from dependencies and we only have access to
-          # libraries, we use an arbirarily big number to ensure that pkg-config
-          # recognizes it
-          version : '99.0.0',
+          version : version,
         )
       endif
     endforeach
@@ -585,8 +605,8 @@ if building_full
         install: data.get('install', true),
         install_tag: data.get('install_tag', 'bin'),
         install_dir: data.get('install_dir', get_option('bindir')),
-        include_directories : data.get('include_directories', [configinc]),
-        dependencies : [gst_full_dep] + deps,
+        include_directories: data.get('include_directories', [configinc]),
+        dependencies: [gst_full_dep] + deps,
         c_args: data.get('extra_c_args', []) + gst_c_args + ['-DG_LOG_DOMAIN="@0@"'.format(exe_name)],
         cpp_args: data.get('extra_cpp_args', []),
         objc_args: data.get('extra_objc_args', []),
@@ -627,8 +647,8 @@ if building_full
         install: data.get('install', true),
         install_tag: data.get('install_tag', 'bin'),
         install_dir: data.get('install_dir', get_option('bindir')),
-        include_directories : data.get('include_directories', [configinc]),
-        dependencies : [gst_full_dep] + deps,
+        include_directories: data.get('include_directories', [configinc]),
+        dependencies: [gst_full_dep] + deps,
         c_args: data.get('extra_c_args', []) + gst_c_args + ['-DG_LOG_DOMAIN="@0@"'.format(exe_name)],
         cpp_args: data.get('extra_cpp_args', []),
         objc_args: data.get('extra_objc_args', []),
