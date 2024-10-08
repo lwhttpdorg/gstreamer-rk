@@ -949,6 +949,7 @@ gst_matroska_parse_add_stream (GstMatroskaParse * parse, GstEbmlRead * ebml)
 
         /* we ignore these because they're nothing useful (i.e. crap)
          * or simply not implemented yet. */
+      case GST_MATROSKA_ID_TRACKLANGUAGEBCP47:
       case GST_MATROSKA_ID_TRACKMINCACHE:
       case GST_MATROSKA_ID_TRACKMAXCACHE:
       case GST_MATROSKA_ID_MAXBLOCKADDITIONID:

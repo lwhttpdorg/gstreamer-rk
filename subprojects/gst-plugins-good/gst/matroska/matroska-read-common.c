@@ -1197,6 +1197,11 @@ gst_matroska_read_common_parse_chapter_titles (GstMatroskaReadCommon * common,
       case GST_MATROSKA_ID_CHAPSTRING:
         ret = gst_ebml_read_utf8 (ebml, &id, &title);
         break;
+      case GST_MATROSKA_ID_CHAPLANGUAGE:
+      case GST_MATROSKA_ID_CHAPLANGUAGEBCP47:
+      case GST_MATROSKA_ID_CHAPCOUNTRY:
+        ret = gst_ebml_read_skip (ebml);
+        break;
 
       default:
         ret =
@@ -1636,9 +1641,11 @@ gst_matroska_read_common_parse_index_cuetrack (GstMatroskaReadCommon * common,
   GstMatroskaIndex idx;
 
   idx.pos = (guint64) - 1;
-  idx.track = 0;
+  idx.rel_pos = (guint64) - 1;
   idx.time = GST_CLOCK_TIME_NONE;
   idx.block = 1;
+  idx.duration = GST_CLOCK_TIME_NONE;
+  idx.track = 0;
 
   DEBUG_ELEMENT_START (common, ebml, "CueTrackPositions");
 
@@ -1682,10 +1689,36 @@ gst_matroska_read_common_parse_index_cuetrack (GstMatroskaReadCommon * common,
         if (num > G_MAXINT64) {
           GST_WARNING_OBJECT (common->sinkpad,
               "CueClusterPosition %" G_GUINT64_FORMAT " too large", num);
-          break;
+        } else {
+          idx.pos = num;
+          GST_DEBUG_OBJECT (common->sinkpad,
+              "CueClusterPosition: %" G_GUINT64_FORMAT, idx.pos);
         }
+        break;
+      }
 
-        idx.pos = num;
+        /* relative position inside the Cluster of the referenced
+         * SimpleBlock or BlockGroup */
+      case GST_MATROSKA_ID_CUERELATIVEPOSITION:
+      {
+        if ((ret = gst_ebml_read_uint (ebml, &id, &idx.rel_pos)) != GST_FLOW_OK)
+          break;
+        GST_DEBUG_OBJECT (common->sinkpad,
+            "CueRelativePosition: %" G_GUINT64_FORMAT, idx.rel_pos);
+        break;
+      }
+
+        /* duration of the block expressed in segment ticks */
+      case GST_MATROSKA_ID_CUEDURATION:
+      {
+        guint64 num;
+
+        if ((ret = gst_ebml_read_uint (ebml, &id, &num)) != GST_FLOW_OK)
+          break;
+
+        idx.duration = num * common->time_scale;
+        GST_DEBUG_OBJECT (common->sinkpad,
+            "CueDuration: %" G_GUINT64_FORMAT, idx.duration);
         break;
       }
 
