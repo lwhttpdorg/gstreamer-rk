@@ -3833,7 +3833,7 @@ qtdemux_get_cenc_sample_properties (GstQTDemux * qtdemux,
 static gboolean
 qtdemux_parse_sbgp (GstQTDemux * qtdemux, QtDemuxStream * stream,
     GstByteReader * br, guint32 group, GPtrArray ** sample_to_group_array,
-    GstStructure * default_properties, GPtrArray * tack_properties_array,
+    GstStructure * default_properties, GPtrArray * track_properties_array,
     GPtrArray * group_properties_array)
 {
   guint32 flags = 0;
@@ -3899,8 +3899,8 @@ qtdemux_parse_sbgp (GstQTDemux * qtdemux, QtDemuxStream * stream,
     } else if (index > 0) {
       /* Index is referring to the whole track. */
       index--;
-      if (index < tack_properties_array->len)
-        properties = g_ptr_array_index (tack_properties_array, index);
+      if (index < track_properties_array->len)
+        properties = g_ptr_array_index (track_properties_array, index);
       else
         GST_ERROR_OBJECT (qtdemux, "invalid group index %u", index);
     } else {
