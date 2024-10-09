@@ -930,7 +930,11 @@ if need_win_gbm != 'no'
     endif
   endif
 
-  gbm_gudev_dep = dependency('gudev-1.0', version : '>=147', required : false, allow_fallback: true)
+  options = []
+  if get_option('introspection').disabled()
+    options = ['introspection=disabled']
+  endif
+  gbm_gudev_dep = dependency('gudev-1.0', version : '>=147', required : false, allow_fallback: true, default_options: options )
   gbm_libdrm_dep = dependency('libdrm', version : '>= 2.4.55', required : false)
   gbm_dep = dependency('gbm', required : false)
   if egl_dep.found() and gbm_gudev_dep.found() and gbm_libdrm_dep.found() and gbm_dep.found()
