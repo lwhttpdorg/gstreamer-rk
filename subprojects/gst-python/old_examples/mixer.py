@@ -10,13 +10,13 @@ pipeline = "alsasrc"
 if sys.argv[1:]:
     pipeline = " ".join(sys.argv[1:])
 a = gst.element_factory_make(pipeline)
-print dir(a)
+print(dir(a))
 
 res = a.set_state(gst.STATE_PAUSED)
 if res != gst.STATE_CHANGE_SUCCESS:
-    print "Could not set pipeline %s to PAUSED" % pipeline
+    print("Could not set pipeline %s to PAUSED" % pipeline)
 
-print "Inputs:"
+print("Inputs:")
 for t in a.list_tracks():
     if t.flags & gst.interfaces.MIXER_TRACK_INPUT:
         sys.stdout.write(t.label)

@@ -32,12 +32,12 @@ def main(args):
     options, args = parser.parse_args(args)
 
     if options.verbose:
-        print 'Verbose mode'
+        print('Verbose mode')
 
     import gst
 
     if options.version:
-        print sys.version, gst.version
+        print(sys.version, gst.version)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))

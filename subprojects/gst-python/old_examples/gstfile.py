@@ -41,7 +41,7 @@ class GstFile:
         discoverer.print_info()
         self.current = None
         if len(self.files):
-            print "\n"
+            print("\n")
         gobject.idle_add(self._discover_one)
         
     def _discover_one(self):
@@ -52,7 +52,7 @@ class GstFile:
         if not os.path.isfile(filename):
             gobject.idle_add(self._discover_one)
             return False
-        print "Running on", filename
+        print("Running on", filename)
         # create a discoverer for that file
         self.current = Discoverer(filename)
         # connect a callback on the 'discovered' signal
@@ -63,7 +63,7 @@ class GstFile:
 
 def main(args):
     if len(args) < 2:
-        print 'usage: %s files...' % args[0]
+        print('usage: %s files...' % args[0])
         return 2
 
     gstfile = GstFile(args[1:])

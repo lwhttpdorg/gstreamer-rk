@@ -45,7 +45,7 @@ class GstPlayer:
         t = message.type
         if t == gst.MESSAGE_ERROR:
             err, debug = message.parse_error()
-            print "Error: %s" % err, debug
+            print("Error: %s" % err, debug)
             if self.on_eos:
                 self.on_eos()
             self.playing = False
@@ -84,7 +84,7 @@ class GstPlayer:
         res = self.player.send_event(event)
         if res:
             gst.info("setting new stream time to 0")
-            self.player.set_new_stream_time(0L)
+            self.player.set_new_stream_time(0)
         else:
             gst.error("seek to %r failed" % location)
 
@@ -137,7 +137,7 @@ class PlayerWindow(gtk.Window):
         self.player = GstPlayer(self.videowidget)
 
         def on_eos():
-            self.player.seek(0L)
+            self.player.seek(0)
             self.play_toggled()
         self.player.on_eos = lambda *x: on_eos()
         
@@ -237,7 +237,7 @@ class PlayerWindow(gtk.Window):
             
     def scale_value_changed_cb(self, scale):
         # see seek.c:seek_cb
-        real = long(scale.get_value() * self.p_duration / 100) # in ns
+        real = int(scale.get_value() * self.p_duration / 100) # in ns
         gst.debug('value changed, perform seek to %r' % real)
         self.player.seek(real)
         # allow for a preroll

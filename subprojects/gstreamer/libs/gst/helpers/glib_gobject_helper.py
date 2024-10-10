@@ -2,10 +2,6 @@
 # imported from glib: glib/glib_gdb.py
 ##
 import gdb
-import sys
-
-if sys.version_info[0] >= 3:
-    long = int
 
 # This is not quite right, as local vars may override symname
 
@@ -17,14 +13,14 @@ def read_global_var(symname):
 def g_quark_to_string(quark):
     if quark is None:
         return None
-    quark = long(quark)
+    quark = int(quark)
     if quark == 0:
         return None
     max_q = None
     try:
         val = read_global_var("quarks")
         try:
-            max_q = long(read_global_var("quark_seq_id"))
+            max_q = int(read_global_var("quark_seq_id"))
         # quark_seq_id gets optimized out in some builds so work around it
         except gdb.error:
             pass
@@ -32,7 +28,7 @@ def g_quark_to_string(quark):
         try:
             val = read_global_var("g_quarks")
             try:
-                max_q = long(read_global_var("g_quark_seq_id"))
+                max_q = int(read_global_var("g_quark_seq_id"))
             except gdb.error:
                 pass
         except Exception:
@@ -50,7 +46,7 @@ def g_quark_to_string(quark):
 
 
 def is_fundamental(gtype):
-    gtype = long(gtype)
+    gtype = int(gtype)
     typenode = gtype - gtype % 4
 
     return typenode < (255 << 2)
@@ -65,7 +61,7 @@ def g_type_to_typenode(gtype):
             return None
         return val[typenode >> 2].address
 
-    gtype = long(gtype)
+    gtype = int(gtype)
     typenode = gtype - gtype % 4
     if not is_fundamental(gtype):
         res = gdb.Value(typenode).cast(gdb.lookup_type("TypeNode").pointer())
@@ -99,7 +95,7 @@ def g_type_to_name(gtype):
 
 
 def g_type_name_from_instance(instance):
-    if long(instance) != 0:
+    if int(instance) != 0:
         try:
             inst = instance.cast(gdb.lookup_type("GTypeInstance").pointer())
             klass = inst["g_class"]

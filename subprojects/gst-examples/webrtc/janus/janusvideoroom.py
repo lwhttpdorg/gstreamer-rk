@@ -254,14 +254,14 @@ class WebRTCClient:
 
     def send_sdp_offer(self, offer):
         text = offer.sdp.as_text()
-        print ('Sending offer:\n%s' % text)
+        print('Sending offer:\n%s' % text)
         # configure media
         media = {'audio': True, 'video': True}
         request = {'request': 'publish'}
         request.update(media)
         self.request = request
         self.offermsg = { 'sdp': text, 'trickle': True, 'type': 'offer' }
-        print (self.offermsg)
+        print(self.offermsg)
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self.signaling.sendmessage(self.request, self.offermsg))
 
@@ -280,13 +280,13 @@ class WebRTCClient:
 
     def send_ice_candidate_message(self, _, mlineindex, candidate):
         icemsg = {'candidate': candidate, 'sdpMLineIndex': mlineindex}
-        print ("Sending ICE", icemsg)
+        print("Sending ICE", icemsg)
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self.signaling.sendtrickle(icemsg))
 
     def on_incoming_decodebin_stream(self, _, pad):
         if not pad.has_current_caps():
-            print (pad, 'has no caps, ignoring')
+            print(pad, 'has no caps, ignoring')
             return
 
         caps = pad.get_current_caps()
@@ -347,7 +347,7 @@ class WebRTCClient:
                 if mlineindex < 0:
                     print("Received ice candidate in SDP before any m= line")
                     continue
-                print ('Received remote ice-candidate mlineindex {}: {}'.format(mlineindex, candidate))
+                print('Received remote ice-candidate mlineindex {}: {}'.format(mlineindex, candidate))
                 self.webrtc.emit('add-ice-candidate', mlineindex, candidate)
             elif line.startswith("m="):
                 mlineindex += 1
@@ -357,7 +357,7 @@ class WebRTCClient:
         if 'sdp' in msg:
             sdp = msg['sdp']
             assert(msg['type'] == 'answer')
-            print ('Received answer:\n%s' % sdp)
+            print('Received answer:\n%s' % sdp)
             res, sdpmsg = GstSdp.SDPMessage.new_from_text(sdp)
             answer = GstWebRTC.WebRTCSessionDescription.new(GstWebRTC.WebRTCSDPType.ANSWER, sdpmsg)
             promise = Gst.Promise.new()
@@ -423,7 +423,7 @@ class WebRTCClient:
 def check_plugins():
     needed = ["opus", "vpx", "nice", "webrtc", "dtls", "srtp", "rtp",
               "rtpmanager", "videotestsrc", "audiotestsrc"]
-    missing = list(filter(lambda p: Gst.Registry.get().find_plugin(p) is None, needed))
+    missing = list([p for p in needed if Gst.Registry.get().find_plugin(p) is None])
     if len(missing):
         print('Missing gstreamer plugins:', missing)
         return False

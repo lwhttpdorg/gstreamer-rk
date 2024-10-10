@@ -47,7 +47,7 @@ class SwitchTest:
         t = message.type
         if t == gst.MESSAGE_ERROR:
             err, debug = message.parse_error()
-            print "Error: %s" % err, debug
+            print("Error: %s" % err, debug)
             if self.on_eos:
                 self.on_eos()
             self.playing = False

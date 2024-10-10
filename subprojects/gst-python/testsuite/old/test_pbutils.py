@@ -24,32 +24,32 @@ class Descriptions(TestCase):
 
     def testSourceDescription(self):
         assert hasattr(gst.pbutils, 'get_source_description')
-        self.assertEquals(gst.pbutils.get_source_description("file"),
+        self.assertEqual(gst.pbutils.get_source_description("file"),
                           "FILE protocol source")
 
     def testSinkDescription(self):
         assert hasattr(gst.pbutils, 'get_sink_description')
-        self.assertEquals(gst.pbutils.get_sink_description("file"),
+        self.assertEqual(gst.pbutils.get_sink_description("file"),
                           "FILE protocol sink")
 
     def testDecoderDescription(self):
         assert hasattr(gst.pbutils, 'get_decoder_description')
-        self.assertEquals(gst.pbutils.get_decoder_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
+        self.assertEqual(gst.pbutils.get_decoder_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
                           'MPEG-1 Layer 3 (MP3) decoder')
 
     def testCodecDescription(self):
         assert hasattr(gst.pbutils, 'get_codec_description')
-        self.assertEquals(gst.pbutils.get_codec_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
+        self.assertEqual(gst.pbutils.get_codec_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
                           'MPEG-1 Layer 3 (MP3)')
 
     def testEncoderDescription(self):
         assert hasattr(gst.pbutils, 'get_encoder_description')
-        self.assertEquals(gst.pbutils.get_encoder_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
+        self.assertEqual(gst.pbutils.get_encoder_description(gst.caps_from_string("audio/mpeg,mpegversion=1,layer=3")),
                           'MPEG-1 Layer 3 (MP3) encoder')
 
     def testElementDescription(self):
         assert hasattr(gst.pbutils, 'get_element_description')
-        self.assertEquals(gst.pbutils.get_element_description("something"),
+        self.assertEqual(gst.pbutils.get_element_description("something"),
                           "GStreamer element something")
 
     def testAddCodecDescription(self):

@@ -27,12 +27,12 @@ class CapsTest(TestCase):
     def setUp(self):
         TestCase.setUp(self)
         self.caps = gst.caps_from_string('video/x-raw-yuv,width=10,framerate=5/1;video/x-raw-rgb,width=15,framerate=10/1')
-        self.assertEquals(self.caps.__refcount__, 1)
+        self.assertEqual(self.caps.__refcount__, 1)
         self.structure = self.caps[0]
         self.any = gst.Caps("ANY")
-        self.assertEquals(self.any.__refcount__, 1)
+        self.assertEqual(self.any.__refcount__, 1)
         self.empty = gst.Caps()
-        self.assertEquals(self.empty.__refcount__, 1)
+        self.assertEqual(self.empty.__refcount__, 1)
 
     def testCapsMime(self):
         mime = self.structure.get_name()
@@ -92,13 +92,13 @@ class CapsTest(TestCase):
         struct = caps[0]
         assert isinstance(struct, gst.Structure), struct
         assert struct.get_name() == 'video/x-raw-yuv', struct.get_name()
-        assert struct.has_key('width')
+        assert 'width' in struct
         assert isinstance(struct['width'], int)
         assert struct['width'] == 10
         struct = caps[1]
         assert isinstance(struct, gst.Structure), struct
         assert struct.get_name() == 'video/x-raw-rgb', struct.get_name()
-        assert struct.has_key('height')
+        assert 'height' in struct
         assert isinstance(struct['height'], float)
         assert struct['height'] == 20.0
 

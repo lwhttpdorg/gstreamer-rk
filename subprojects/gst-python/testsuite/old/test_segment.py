@@ -29,9 +29,9 @@ class SegmentTest(TestCase):
         update = segment.set_seek(1.0, gst.FORMAT_BYTES, gst.SEEK_FLAG_NONE,
                                   gst.SEEK_TYPE_SET, 100,
                                   gst.SEEK_TYPE_NONE, -1)
-        self.assertEquals(update, True)
-        self.assertEquals(segment.start, 100)
-        self.assertEquals(segment.stop, -1)
+        self.assertEqual(update, True)
+        self.assertEqual(segment.start, 100)
+        self.assertEqual(segment.stop, -1)
 
         # configure segment to stop relative, should not do anything since
         # size is unknown
@@ -41,22 +41,22 @@ class SegmentTest(TestCase):
 
         # the update flag is deprecated, we cannot check for proper behaviour.
         #self.assertEquals(update, False)
-        self.assertEquals(segment.start, 100)
-        self.assertEquals(segment.stop, -1)
+        self.assertEqual(segment.start, 100)
+        self.assertEqual(segment.stop, -1)
 
         # clipping on outside range, always returns False
         res, cstart, cstop = segment.clip(gst.FORMAT_BYTES, 0, 50)
-        self.assertEquals(res, False)
+        self.assertEqual(res, False)
 
         # touching lower bound but outside
         res, cstart, cstop = segment.clip(gst.FORMAT_BYTES, 50, 100)
-        self.assertEquals(res, False)
+        self.assertEqual(res, False)
 
         # partially inside
         res, cstart, cstop = segment.clip(gst.FORMAT_BYTES, 50, 150)
-        self.assertEquals(res, True)
-        self.assertEquals(cstart, 100)
-        self.assertEquals(cstop, 150)
+        self.assertEqual(res, True)
+        self.assertEqual(cstart, 100)
+        self.assertEqual(cstop, 150)
 
 if __name__ == "__main__":
     unittest.main()

@@ -176,12 +176,12 @@ class QueryTest(TestCase):
     def setUp(self):
         TestCase.setUp(self)
         self.pipeline = gst.parse_launch('fakesrc name=source ! fakesink')
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
 
         self.element = self.pipeline.get_by_name('source')
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
-        self.assertEquals(self.element.__gstrefcount__, 2)
-        self.assertEquals(sys.getrefcount(self.element), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(self.element.__gstrefcount__, 2)
+        self.assertEqual(sys.getrefcount(self.element), pygobject_2_13 and 2 or 3)
 
     def tearDown(self):
         del self.pipeline
@@ -191,10 +191,10 @@ class QueryTest(TestCase):
     def testQuery(self):
         gst.debug('querying fakesrc in FORMAT_BYTES')
         res = self.element.query_position(gst.FORMAT_BYTES)
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
-        self.assertEquals(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
-        self.assertEquals(self.element.__gstrefcount__, 2)
-        self.assertEquals(sys.getrefcount(self.element), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.element.__gstrefcount__, 2)
+        self.assertEqual(sys.getrefcount(self.element), pygobject_2_13 and 2 or 3)
         assert res
         assert res[0] == 0
         self.assertRaises(gst.QueryError, self.element.query_position,
@@ -205,7 +205,7 @@ class QueueTest(TestCase):
     def testConstruct(self):
         queue = gst.element_factory_make('queue')
         assert queue.get_name() == 'queue0'
-        self.assertEquals(queue.__gstrefcount__, 1)
+        self.assertEqual(queue.__gstrefcount__, 1)
 
 class DebugTest(TestCase):
     def testDebug(self):
@@ -231,7 +231,7 @@ class LinkTest(TestCase):
     def testLink(self):
         src = gst.element_factory_make('fakesrc')
         sink = gst.element_factory_make('fakesink')
-        self.failUnless(src.link(sink))
+        self.assertTrue(src.link(sink))
         # FIXME: this unlink leaks, no idea why
         # src.unlink(sink)
         # print src.__gstrefcount__
@@ -240,7 +240,7 @@ class LinkTest(TestCase):
         src = gst.element_factory_make('fakesrc')
         sink = gst.element_factory_make('fakesink')
         # print src.__gstrefcount__
-        self.failUnless(src.link_pads("src", sink, "sink"))
+        self.assertTrue(src.link_pads("src", sink, "sink"))
         src.unlink_pads("src", sink, "sink")
 
     def testLinkFiltered(self):
@@ -251,7 +251,7 @@ class LinkTest(TestCase):
         bin.add(src, sink)
         caps = gst.caps_from_string("audio/x-raw-int")
 
-        self.failUnless(src.link(sink, caps))
+        self.assertTrue(src.link(sink, caps))
 
         # DANGER WILL.  src is not actually connected to sink, since
         # there's a capsfilter in the way.  What a leaky abstraction.

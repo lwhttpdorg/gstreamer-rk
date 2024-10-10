@@ -31,7 +31,7 @@ pygst.require('0.10')
 import gst
 
 def handoff_cb(sender, *args):
-   print sender.get_name(), args
+   print(sender.get_name(), args)
 
 def main(args):
    # create a new bin to hold the elements
@@ -45,7 +45,7 @@ def main(args):
    sink.connect('handoff', handoff_cb)
    sink.get_pad("sink").connect('have-data', handoff_cb)
 
-   print source, sink
+   print(source, sink)
 
    bus = bin.get_bus()
    

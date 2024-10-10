@@ -44,7 +44,7 @@ class GstPlayer:
         t = message.type
         if t == gst.MESSAGE_ERROR:
             err, debug = message.parse_error()
-            print "Error: %s" % err, debug
+            print("Error: %s" % err, debug)
             if self.on_eos:
                 self.on_eos()
             self.playing = False
@@ -87,7 +87,7 @@ class GstPlayer:
         res = self.player.send_event(event)
         if res:
             gst.info("setting new stream time to 0")
-            self.player.set_new_stream_time(0L)
+            self.player.set_new_stream_time(0)
         else:
             gst.error("seek to %r failed" % location)
 
@@ -135,7 +135,7 @@ class TimeControl(gtk.HBox):
     __gproperties__ = {'time': (gobject.TYPE_UINT64, 'Time', 'Time',
                                 # not actually usable: see #335854
                                 # kept for .notify() usage
-                                0L, (1<<63)-1, 0L,
+                                0, (1<<63)-1, 0,
                                 gobject.PARAM_READABLE)}
 
     def __init__(self, window, label):
@@ -212,7 +212,7 @@ class TimeControl(gtk.HBox):
 
     def set_time(self, time):
         if time == gst.CLOCK_TIME_NONE:
-            print "Can't set '%s' (invalid time)" % self.label
+            print("Can't set '%s' (invalid time)" % self.label)
             return
         self.freeze_notify()
         for w, multiplier in ((self.minutes, gst.SECOND*60),
@@ -430,7 +430,7 @@ class Remuxer(gst.Pipeline):
 
     def _bus_watch(self, bus, message):
         if message.type == gst.MESSAGE_ERROR:
-            print 'error', message
+            print('error', message)
             self._stop_queries()
             m = gtk.MessageDialog(self.window,
                                   gtk.DIALOG_MODAL|gtk.DIALOG_DESTROY_WITH_PARENT,
@@ -445,7 +445,7 @@ class Remuxer(gst.Pipeline):
             m.destroy()
             self.response(FAILURE)
         elif message.type == gst.MESSAGE_WARNING:
-            print 'warning', message
+            print('warning', message)
         elif message.type == gst.MESSAGE_EOS:
             # print 'eos, woot', message.src
             name = self.touri
@@ -582,7 +582,7 @@ class PlayerWindow(gtk.Window):
         self.player = GstPlayer(self.videowidget)
 
         def on_eos():
-            self.player.seek(0L)
+            self.player.seek(0)
             self.play_toggled()
         self.player.on_eos = lambda *x: on_eos()
         
@@ -779,7 +779,7 @@ class PlayerWindow(gtk.Window):
             
     def scale_value_changed_cb(self, scale):
         # see seek.c:seek_cb
-        real = long(scale.get_value() * self.p_duration / 100) # in ns
+        real = int(scale.get_value() * self.p_duration / 100) # in ns
         gst.debug('value changed, perform seek to %r' % real)
         self.player.seek(real)
         # allow for a preroll

@@ -75,27 +75,27 @@ class Decodebin:
 	def on_new_decoded_pad(self, element, pad, last):
 		caps = pad.get_caps()
 		name = caps[0].get_name()
-		print 'on_new_decoded_pad:', name
+		print('on_new_decoded_pad:', name)
 		if name == 'audio/x-raw-float' or name == 'audio/x-raw-int':
 			if not self.apad.is_linked(): # Only link once
 				pad.link(self.apad)
 			
 			
 	def on_eos(self, bus, msg):
-		print 'on_eos'
+		print('on_eos')
 		self.mainloop.quit()
 		
 		
 	def on_tag(self, bus, msg):
 		taglist = msg.parse_tag()
-		print 'on_tag:'
+		print('on_tag:')
 		for key in taglist.keys():
-			print '\t%s = %s' % (key, taglist[key])
+			print('\t%s = %s' % (key, taglist[key]))
 			
 			
 	def on_error(self, bus, msg):
 		error = msg.parse_error()
-		print 'on_error:', error[1]
+		print('on_error:', error[1])
 		self.mainloop.quit()
 
 
@@ -106,4 +106,4 @@ if __name__ == '__main__':
 	if len(sys.argv) == 2:
 		Decodebin(sys.argv[1])
 	else:
-		print 'Usage: %s /path/to/media/file' % sys.argv[0]
+		print('Usage: %s /path/to/media/file' % sys.argv[0])

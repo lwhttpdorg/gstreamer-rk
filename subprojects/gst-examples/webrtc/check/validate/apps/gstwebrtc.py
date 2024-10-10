@@ -276,14 +276,14 @@ class GstWebRTCTestsManager(TestsManager):
                 if not SCENARIO_OVERRIDES_SUPPORTED[name]:
                     # no override choices supported
                     classname = browser + '.' + name
-                    print ("adding", classname)
+                    print("adding", classname)
                     self.add_test(GstWebRTCTest(classname, self, scenario, browser))
                 else:
                     for overrides in itertools.product(*[OVERRIDE_CHOICES[c] for c in SCENARIO_OVERRIDES_SUPPORTED[name]]):
                         oname = '.'.join (overrides)
                         opaths = [SCENARIO_OVERRIDES[p] for p in overrides]
                         classname = browser + '.' + oname + '.' + name
-                        print ("adding", classname)
+                        print("adding", classname)
                         self.add_test(GstWebRTCTest(classname, self, scenario, browser, opaths))
 
         return self.tests

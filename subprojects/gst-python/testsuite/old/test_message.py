@@ -52,7 +52,7 @@ class NewTest(TestCase):
         self.loop.run()
         bus.remove_signal_watch()
         bin.set_state(gst.STATE_NULL)
-        self.failUnless(self.got_message == True)
+        self.assertTrue(self.got_message == True)
         self.gccollect()
 
 class TestCreateMessages(TestCase):
@@ -74,7 +74,7 @@ class TestCreateMessages(TestCase):
         assert e2
 
         # make sure the two structures are equal
-        self.assertEquals(e1.structure.to_string(),
+        self.assertEqual(e1.structure.to_string(),
                           e2.structure.to_string())
 
     def testTagMessage(self):
@@ -92,18 +92,18 @@ class TestCreateMessages(TestCase):
         # make sure the two messages have the same taglist
         t1 = m1.parse_tag()
         assert t1
-        keys = t1.keys()
+        keys = list(t1.keys())
         keys.sort()
-        self.assertEquals(keys, ['another', 'something'])
-        self.assertEquals(t1['something'], "else")
-        self.assertEquals(t1['another'], 42)
+        self.assertEqual(keys, ['another', 'something'])
+        self.assertEqual(t1['something'], "else")
+        self.assertEqual(t1['another'], 42)
         t2 = m2.parse_tag()
         assert t2
-        keys = t2.keys()
+        keys = list(t2.keys())
         keys.sort()
-        self.assertEquals(keys, ['another', 'something'])
-        self.assertEquals(t2['something'], "else")
-        self.assertEquals(t2['another'], 42)
+        self.assertEqual(keys, ['another', 'something'])
+        self.assertEqual(t2['something'], "else")
+        self.assertEqual(t2['another'], 42)
 
     def testTagFullMessage(self):
         if hasattr(gst.Message, 'parse_tag_full'):
@@ -122,49 +122,49 @@ class TestCreateMessages(TestCase):
             # make sure the two messages have the same taglist
             p1, t1 = m1.parse_tag_full()
             assert t1
-            keys = t1.keys()
+            keys = list(t1.keys())
             keys.sort()
-            self.assertEquals(p1, p)
-            self.assertEquals(keys, ['another', 'something'])
-            self.assertEquals(t1['something'], "else")
-            self.assertEquals(t1['another'], 42)
+            self.assertEqual(p1, p)
+            self.assertEqual(keys, ['another', 'something'])
+            self.assertEqual(t1['something'], "else")
+            self.assertEqual(t1['another'], 42)
             p2, t2 = m2.parse_tag_full()
             assert t2
-            keys = t2.keys()
+            keys = list(t2.keys())
             keys.sort()
-            self.assertEquals(p2, p)
-            self.assertEquals(keys, ['another', 'something'])
-            self.assertEquals(t2['something'], "else")
-            self.assertEquals(t2['another'], 42)
+            self.assertEqual(p2, p)
+            self.assertEqual(keys, ['another', 'something'])
+            self.assertEqual(t2['something'], "else")
+            self.assertEqual(t2['another'], 42)
 
     def testStepStartMessage(self):
         if hasattr(gst, 'message_new_step_start'):
             m = gst.message_new_step_start(self.element, True,
                                            gst.FORMAT_TIME, 42, 1.0,
                                            True, True)
-            self.assertEquals(m.type, gst.MESSAGE_STEP_START)
+            self.assertEqual(m.type, gst.MESSAGE_STEP_START)
             active, format, amount, rate, flush, intermediate = m.parse_step_start()
-            self.assertEquals(active, True)
-            self.assertEquals(format, gst.FORMAT_TIME)
-            self.assertEquals(amount, 42)
-            self.assertEquals(rate, 1.0)
-            self.assertEquals(flush, True)
-            self.assertEquals(intermediate, True)
+            self.assertEqual(active, True)
+            self.assertEqual(format, gst.FORMAT_TIME)
+            self.assertEqual(amount, 42)
+            self.assertEqual(rate, 1.0)
+            self.assertEqual(flush, True)
+            self.assertEqual(intermediate, True)
 
     def testStepDoneMessage(self):
         if hasattr(gst, 'message_new_step_done'):
             m = gst.message_new_step_done(self.element, gst.FORMAT_TIME, 42,
                                           1.0, True, True, 54, True)
-            self.assertEquals(m.type, gst.MESSAGE_STEP_DONE)
+            self.assertEqual(m.type, gst.MESSAGE_STEP_DONE)
 
             fmt, am, rat, flu, inter, dur, eos = m.parse_step_done()
-            self.assertEquals(fmt, gst.FORMAT_TIME)
-            self.assertEquals(am, 42)
-            self.assertEquals(rat, 1.0)
-            self.assertEquals(flu, True)
-            self.assertEquals(inter, True)
-            self.assertEquals(dur, 54)
-            self.assertEquals(eos, True)
+            self.assertEqual(fmt, gst.FORMAT_TIME)
+            self.assertEqual(am, 42)
+            self.assertEqual(rat, 1.0)
+            self.assertEqual(flu, True)
+            self.assertEqual(inter, True)
+            self.assertEqual(dur, 54)
+            self.assertEqual(eos, True)
 
     def testStructureChangeMessage(self):
         if hasattr(gst, 'message_new_structure_change'):
@@ -173,17 +173,17 @@ class TestCreateMessages(TestCase):
                                                  gst.STRUCTURE_CHANGE_TYPE_PAD_LINK,
                                                  self.element, True)
 
-            self.assertEquals(m.type, gst.MESSAGE_STRUCTURE_CHANGE)
+            self.assertEqual(m.type, gst.MESSAGE_STRUCTURE_CHANGE)
             sct, owner, busy = m.parse_structure_change()
-            self.assertEquals(sct, gst.STRUCTURE_CHANGE_TYPE_PAD_LINK)
-            self.assertEquals(owner, self.element)
-            self.assertEquals(busy, True)
+            self.assertEqual(sct, gst.STRUCTURE_CHANGE_TYPE_PAD_LINK)
+            self.assertEqual(owner, self.element)
+            self.assertEqual(busy, True)
 
     def testRequestStateMessage(self):
         if hasattr(gst, 'message_new_request_state'):
             m = gst.message_new_request_state(self.element, gst.STATE_NULL)
-            self.assertEquals(m.type, gst.MESSAGE_REQUEST_STATE)
-            self.assertEquals(m.parse_request_state(), gst.STATE_NULL)
+            self.assertEqual(m.type, gst.MESSAGE_REQUEST_STATE)
+            self.assertEqual(m.parse_request_state(), gst.STATE_NULL)
 
     def testBufferingStatsMessage(self):
         if hasattr(gst.Message, 'set_buffering_stats'):
@@ -191,12 +191,12 @@ class TestCreateMessages(TestCase):
             m = gst.message_new_buffering(self.element, 50)
             gst.debug("Setting stats")
             m.set_buffering_stats(gst.BUFFERING_LIVE, 30, 1024, 123456)
-            self.assertEquals(m.type, gst.MESSAGE_BUFFERING)
+            self.assertEqual(m.type, gst.MESSAGE_BUFFERING)
             mode, ain, aout, left = m.parse_buffering_stats()
-            self.assertEquals(mode, gst.BUFFERING_LIVE)
-            self.assertEquals(ain, 30)
-            self.assertEquals(aout, 1024)
-            self.assertEquals(left, 123456)
+            self.assertEqual(mode, gst.BUFFERING_LIVE)
+            self.assertEqual(ain, 30)
+            self.assertEqual(aout, 1024)
+            self.assertEqual(left, 123456)
 
 if __name__ == "__main__":
     unittest.main()

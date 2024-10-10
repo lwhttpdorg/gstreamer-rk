@@ -33,7 +33,7 @@ def on_message_application(cutter, message, loop):
     s = message.structure
     which = 'below'
     if s['above']: which = 'above'
-    print "%s: %s threshold" % (gst.TIME_ARGS(s['timestamp']), which)
+    print("%s: %s threshold" % (gst.TIME_ARGS(s['timestamp']), which))
     if s['above']: count += 1
     if count > 2: loop.quit()
 

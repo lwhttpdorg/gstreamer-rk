@@ -33,15 +33,15 @@ class BusSignalTest(TestCase):
         bus = pipeline.get_bus()
         gst.info ("got bus")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
-        self.assertEquals(bus.__gstrefcount__, 2)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 2)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
         gst.info ("about to add a watch on the bus")
         watch_id = bus.connect("message", self._message_received, pipeline, loop, "one")
         bus.add_signal_watch()
         gst.info ("added a watch on the bus")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
-        self.assertEquals(bus.__gstrefcount__, 3)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 3)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("setting to playing")
         ret = pipeline.set_state(gst.STATE_PLAYING)
@@ -69,12 +69,12 @@ class BusSignalTest(TestCase):
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
         gst.info("set to NULL %s" % ret)
         self.gccollect()
-        self.assertEquals(bus.__gstrefcount__, 3)
+        self.assertEqual(bus.__gstrefcount__, 3)
         # FIXME: state change thread needs to die
         while pipeline.__gstrefcount__ > 1:
             gst.debug('waiting for pipeline refcount to drop')
             time.sleep(0.1)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("about to remove the watch id")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
@@ -86,8 +86,8 @@ class BusSignalTest(TestCase):
         self.gccollect()
         gst.info("pipeliner:%d/%d busr:%d" % (pipeline.__gstrefcount__, pipeline.__grefcount__, bus.__gstrefcount__))
         
-        self.assertEquals(bus.__gstrefcount__, 2)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 2)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("removing pipeline")
         del pipeline
@@ -101,12 +101,12 @@ class BusSignalTest(TestCase):
         bus.set_flushing(False)
         self.gccollect()
         # FIXME: refcount is still 2
-        self.assertEquals(bus.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 1)
 
     def _message_received(self, bus, message, pipeline, loop, id):
-        self.failUnless(isinstance(bus, gst.Bus))
-        self.failUnless(isinstance(message, gst.Message))
-        self.assertEquals(id, "one")
+        self.assertTrue(isinstance(bus, gst.Bus))
+        self.assertTrue(isinstance(message, gst.Message))
+        self.assertEqual(id, "one")
         loop.quit()
         return True
 
@@ -120,26 +120,26 @@ class BusSignalTest(TestCase):
         bus = gst.Bus()
 
         # set
-        self.failUnless(sys.getrefcount(callback1), 2)
+        self.assertTrue(sys.getrefcount(callback1), 2)
         bus.set_sync_handler(callback1)
-        self.failUnless(sys.getrefcount(callback1), 3)
+        self.assertTrue(sys.getrefcount(callback1), 3)
 
         # set again
-        self.failUnless(sys.getrefcount(callback1), 3)
+        self.assertTrue(sys.getrefcount(callback1), 3)
         bus.set_sync_handler(callback1)
-        self.failUnless(sys.getrefcount(callback1), 3)
+        self.assertTrue(sys.getrefcount(callback1), 3)
 
         # replace
         # this erros out in gst_bus_set_sync_handler, but we need to check that
         # we don't leak anyway
-        self.failUnless(sys.getrefcount(callback2), 2)
+        self.assertTrue(sys.getrefcount(callback2), 2)
         bus.set_sync_handler(callback2)
-        self.failUnless(sys.getrefcount(callback1), 2)
-        self.failUnless(sys.getrefcount(callback2), 3)
+        self.assertTrue(sys.getrefcount(callback1), 2)
+        self.assertTrue(sys.getrefcount(callback2), 3)
 
         # unset
         bus.set_sync_handler(None)
-        self.failUnless(sys.getrefcount(callback2), 2)
+        self.assertTrue(sys.getrefcount(callback2), 2)
 
 class BusAddWatchTest(TestCase):
 
@@ -166,14 +166,14 @@ class BusAddWatchTest(TestCase):
         bus = pipeline.get_bus()
         gst.info ("got bus")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
-        self.assertEquals(bus.__gstrefcount__, 2)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 2)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
         gst.info ("about to add a watch on the bus")
         watch_id = bus.add_watch(self._message_received, pipeline, loop, "one")
         gst.info ("added a watch on the bus")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
-        self.assertEquals(bus.__gstrefcount__, 3)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 3)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("setting to playing")
         ret = pipeline.set_state(gst.STATE_PLAYING)
@@ -201,19 +201,19 @@ class BusAddWatchTest(TestCase):
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
         gst.info("set to NULL %s" % ret)
         self.gccollect()
-        self.assertEquals(bus.__gstrefcount__, 3)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 3)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("about to remove the watch id")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
-        self.failUnless(gobject.source_remove(watch_id))
+        self.assertTrue(gobject.source_remove(watch_id))
         gst.info("bus watch id removed")
         gst.info("pipeliner:%d busr:%d" % (pipeline.__gstrefcount__, bus.__gstrefcount__))
         self.gccollect()
         gst.info("pipeliner:%d/%d busr:%d" % (pipeline.__gstrefcount__, pipeline.__grefcount__, bus.__gstrefcount__))
         
-        self.assertEquals(bus.__gstrefcount__, 2)
-        self.assertEquals(pipeline.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 2)
+        self.assertEqual(pipeline.__gstrefcount__, 1)
 
         gst.info("removing pipeline")
         del pipeline
@@ -227,12 +227,12 @@ class BusAddWatchTest(TestCase):
         bus.set_flushing(False)
         self.gccollect()
         # FIXME: refcount is still 2
-        self.assertEquals(bus.__gstrefcount__, 1)
+        self.assertEqual(bus.__gstrefcount__, 1)
 
     def _message_received(self, bus, message, pipeline, loop, id):
-        self.failUnless(isinstance(bus, gst.Bus))
-        self.failUnless(isinstance(message, gst.Message))
-        self.assertEquals(id, "one")
+        self.assertTrue(isinstance(bus, gst.Bus))
+        self.assertTrue(isinstance(message, gst.Message))
+        self.assertEqual(id, "one")
         # doesn't the following line stop the mainloop before the end of the state change ?
         loop.quit()
         return True

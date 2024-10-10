@@ -60,12 +60,12 @@ class BufferTest(TestCase):
             s += '%02d' % i
             
         buffer = gst.Buffer(s)
-        self.assertEquals(len(buffer), 128)
+        self.assertEqual(len(buffer), 128)
 
         sub = buffer.create_sub(16, 16)
-        self.assertEquals(sub.size, 16)
-        self.assertEquals(sub.data, buffer.data[16:32])
-        self.assertEquals(sub.offset, gst.CLOCK_TIME_NONE)
+        self.assertEqual(sub.size, 16)
+        self.assertEqual(sub.data, buffer.data[16:32])
+        self.assertEqual(sub.offset, gst.CLOCK_TIME_NONE)
 
     def testBufferMerge(self):
         buffer1 = gst.Buffer('foo')
@@ -85,15 +85,15 @@ class BufferTest(TestCase):
         buffer1 = gst.Buffer('foo')
         buffer2 = gst.Buffer('bar')
 
-        spaned_buffer = buffer1.span(0L, buffer2, 6L)
+        spaned_buffer = buffer1.span(0, buffer2, 6)
         assert str(spaned_buffer) == 'foobar'
     def testBufferCopyOnWrite(self):
         s='test_vector'
         buffer = gst.Buffer(s)
         sub = buffer.create_sub(0, buffer.size)
-        self.assertEquals(sub.size, buffer.size)
+        self.assertEqual(sub.size, buffer.size)
         out = sub.copy_on_write ()
-        self.assertEquals(out.size, sub.size)
+        self.assertEqual(out.size, sub.size)
         assert str(out) == str(buffer)
         out[5] = 'w'
         assert str(out) == 'test_wector'
@@ -123,7 +123,7 @@ class BufferTest(TestCase):
     def testAttrTimestamp(self):
         buffer = gst.Buffer()
         assert hasattr(buffer, "timestamp")
-        assert isinstance(buffer.timestamp, long)
+        assert isinstance(buffer.timestamp, int)
 
         assert buffer.timestamp == gst.CLOCK_TIME_NONE
         buffer.timestamp = 0
@@ -134,7 +134,7 @@ class BufferTest(TestCase):
     def testAttrDuration(self):
         buffer = gst.Buffer()
         assert hasattr(buffer, "duration")
-        assert isinstance(buffer.duration, long)
+        assert isinstance(buffer.duration, int)
 
         assert buffer.duration == gst.CLOCK_TIME_NONE
         buffer.duration = 0
@@ -145,7 +145,7 @@ class BufferTest(TestCase):
     def testAttrOffset(self):
         buffer = gst.Buffer()
         assert hasattr(buffer, "offset")
-        assert isinstance(buffer.offset, long)
+        assert isinstance(buffer.offset, int)
 
         assert buffer.offset == gst.CLOCK_TIME_NONE
         buffer.offset = 0
@@ -156,7 +156,7 @@ class BufferTest(TestCase):
     def testAttrOffset_end(self):
         buffer = gst.Buffer()
         assert hasattr(buffer, "offset_end")
-        assert isinstance(buffer.offset_end, long)
+        assert isinstance(buffer.offset_end, int)
 
         assert buffer.offset_end == gst.CLOCK_TIME_NONE
         buffer.offset_end = 0
@@ -172,7 +172,7 @@ class BufferTest(TestCase):
         gst.info("after settings caps")
         c = buffer.get_caps()
         gst.info("after getting caps")
-        self.assertEquals(caps, c)
+        self.assertEqual(caps, c)
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,14 +29,14 @@ class IteratorTest(TestCase):
         fakesink = pipeline.get_by_name("sink")
         
         self.assertEqual(len(elements), 2)
-        self.failUnless(fakesrc in elements)
-        self.failUnless(fakesink in elements)
+        self.assertTrue(fakesrc in elements)
+        self.assertTrue(fakesink in elements)
 
         pipeline.remove(fakesrc)
         elements = list(pipeline.elements())
 
         self.assertEqual(len(elements), 1)
-        self.failUnless(not fakesrc in pipeline)
+        self.assertTrue(not fakesrc in pipeline)
 
         # XXX : There seems to be a problem about the GType
         #       set in gst_bin_iterated_sorted
@@ -66,8 +66,8 @@ class IteratorTest(TestCase):
         fakesink = pipeline.get_by_name("sink")
 
         self.assertEqual(len(elements), 1)
-        self.failUnless(fakesink in elements)
-        self.failUnless(not fakesrc in elements)
+        self.assertTrue(fakesink in elements)
+        self.assertTrue(not fakesrc in elements)
 
     
     def testIteratePadsFakeSrc(self):

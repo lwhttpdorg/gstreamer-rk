@@ -28,10 +28,10 @@ class TesLibTag(TestCase):
         taglist['geo-location-latitude'] = 23.25
 
         xmp = tag.tag_list_to_xmp_buffer (taglist, True)
-        self.assertNotEquals(xmp, None)
+        self.assertNotEqual(xmp, None)
         taglist2 = tag.tag_list_from_xmp_buffer (xmp)
 
-        self.assertEquals(len(taglist2), 2)
-        self.assertEquals(taglist2['title'], 'my funny title')
-        self.assertEquals(taglist2['geo-location-latitude'], 23.25)
+        self.assertEqual(len(taglist2), 2)
+        self.assertEqual(taglist2['title'], 'my funny title')
+        self.assertEqual(taglist2['geo-location-latitude'], 23.25)
 

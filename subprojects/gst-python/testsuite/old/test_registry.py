@@ -34,8 +34,8 @@ class RegistryTest(TestCase):
         assert(self.registry)
 
     def testPluginList(self):
-        names = map(lambda p: p.get_name(), self.plugins)
-        self.failUnless('staticelements' in names)
+        names = [p.get_name() for p in self.plugins]
+        self.assertTrue('staticelements' in names)
 
     def testGetPathList(self):
         # FIXME: this returns an empty list; probably due to core;
@@ -55,13 +55,13 @@ class RegistryFeatureTest(TestCase):
     def testFeatureList(self):
         self.assertRaises(TypeError, self.registry.get_feature_list, "kaka")
         
-        elements = map(lambda f: f.get_name(), self.efeatures)
-        self.failUnless('fakesink' in elements)
+        elements = [f.get_name() for f in self.efeatures]
+        self.assertTrue('fakesink' in elements)
 
-        typefinds = map(lambda f: f.get_name(), self.tfeatures)
+        typefinds = [f.get_name() for f in self.tfeatures]
 
-        indexers = map(lambda f: f.get_name(), self.ifeatures)
-        self.failUnless('memindex' in indexers)
+        indexers = [f.get_name() for f in self.ifeatures]
+        self.assertTrue('memindex' in indexers)
         
         
 if __name__ == "__main__":

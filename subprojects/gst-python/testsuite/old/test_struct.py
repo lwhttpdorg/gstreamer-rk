@@ -34,35 +34,35 @@ class StructureTest(TestCase):
         assert self.struct.get_name() == 'foobar'
         
     def testInt(self):
-        assert self.struct.has_key('width')
+        assert 'width' in self.struct
         assert isinstance(self.struct['width'], int)
         assert self.struct['width'] == 10, self.struct['width']
         self.struct['width'] = 5
-        assert self.struct.has_key('width')
+        assert 'width' in self.struct
         assert isinstance(self.struct['width'], int)
         assert self.struct['width'] == 5, self.struct['width']
 
     def testString(self):
-        assert self.struct.has_key('foo')
-        assert isinstance(self.struct['foo'], unicode)
+        assert 'foo' in self.struct
+        assert isinstance(self.struct['foo'], str)
         assert self.struct['foo'] == 'bar', self.struct['foo']
         self.struct['foo'] = 'baz'
-        assert self.struct.has_key('foo')
-        assert isinstance(self.struct['foo'], unicode)
+        assert 'foo' in self.struct
+        assert isinstance(self.struct['foo'], str)
         assert self.struct['foo'] == 'baz', self.struct['foo']
 
     def testBoolean(self):
-        assert self.struct.has_key('boolean')
+        assert 'boolean' in self.struct
         assert isinstance(self.struct['boolean'], bool)
         assert self.struct['boolean'] == True, self.struct['boolean']
         self.struct['boolean'] = False
-        assert self.struct.has_key('boolean')
+        assert 'boolean' in self.struct
         assert isinstance(self.struct['boolean'], bool)
         assert self.struct['boolean'] == False, self.struct['boolean']
 
     def testCreateInt(self):
         self.struct['integer'] = 5
-        assert self.struct.has_key('integer')
+        assert 'integer' in self.struct
         assert isinstance(self.struct['integer'], int)
         assert self.struct['integer'] == 5, self.struct['integer']
         
@@ -110,14 +110,14 @@ class StructureTest(TestCase):
         assert self.struct['pixel-aspect-ratio'].denom == 1
 
     def testKeys(self):
-        k = self.struct.keys()
-        self.failUnless(k)
-        self.assertEquals(len(k), 5)
-        self.failUnless("width" in k)
-        self.failUnless("foo" in k)
-        self.failUnless("framerate" in k)
-        self.failUnless("pixel-aspect-ratio" in k)
-        self.failUnless("boolean" in k)
+        k = list(self.struct.keys())
+        self.assertTrue(k)
+        self.assertEqual(len(k), 5)
+        self.assertTrue("width" in k)
+        self.assertTrue("foo" in k)
+        self.assertTrue("framerate" in k)
+        self.assertTrue("pixel-aspect-ratio" in k)
+        self.assertTrue("boolean" in k)
  
 if __name__ == "__main__":
     unittest.main()

@@ -42,7 +42,7 @@ class EventTest(TestCase):
         while self.pipeline.__gstrefcount__ > 1:
             gst.debug('waiting for self.pipeline G rc to drop to 1')
             time.sleep(0.1)
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
 
         del self.sink
         del self.pipeline
@@ -77,7 +77,7 @@ class EventFileSrcTest(TestCase):
        TestCase.setUp(self)
        gst.info("start")
        self.filename = tempfile.mktemp()
-       open(self.filename, 'w').write(''.join(map(str, range(10))))
+       open(self.filename, 'w').write(''.join(map(str, list(range(10)))))
        
        self.pipeline = gst.parse_launch('filesrc name=source location=%s blocksize=1 ! fakesink signal-handoffs=1 name=sink' % self.filename)
        self.source = self.pipeline.get_by_name('source')
@@ -120,7 +120,7 @@ class EventFileSrcTest(TestCase):
       
    def testSimple(self):
        handoffs = self.playAndIter()
-       assert handoffs == map(str, range(10))
+       assert handoffs == list(map(str, list(range(10))))
    
    def testSeekCur(self):
        self.sink_seek(8)
@@ -162,7 +162,7 @@ class TestDelayedEventProbe(TestCase):
         while self.pipeline.__gstrefcount__ > 1:
             gst.debug('waiting for self.pipeline G rc to drop to 1')
             time.sleep(0.1)
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
 
     def testProbe(self):
         self.srcpad.add_event_probe(self._event_probe_cb)
@@ -179,19 +179,19 @@ class TestDelayedEventProbe(TestCase):
             time.sleep(0.1)
 
         # verify if our newsegment event is still around and valid
-        self.failUnless(self._newsegment)
-        self.assertEquals(self._newsegment.type, gst.EVENT_NEWSEGMENT)
-        self.assertEquals(self._newsegment.__grefcount__, 1)
+        self.assertTrue(self._newsegment)
+        self.assertEqual(self._newsegment.type, gst.EVENT_NEWSEGMENT)
+        self.assertEqual(self._newsegment.__grefcount__, 1)
 
         # verify if our eos event is still around and valid
-        self.failUnless(self._eos)
-        self.assertEquals(self._eos.type, gst.EVENT_EOS)
-        self.assertEquals(self._eos.__grefcount__, 1)
+        self.assertTrue(self._eos)
+        self.assertEqual(self._eos.type, gst.EVENT_EOS)
+        self.assertEqual(self._eos.__grefcount__, 1)
  
     def _event_probe_cb(self, pad, event):
         if event.type == gst.EVENT_NEWSEGMENT:
             self._newsegment = event
-            self.assertEquals(event.__grefcount__, 3)
+            self.assertEqual(event.__grefcount__, 3)
             # drop the event, we're storing it for later sending
             return False
 
@@ -207,7 +207,7 @@ class TestDelayedEventProbe(TestCase):
         self.fail("Got an unknown event %r" % event)
 
     def _buffer_probe_cb(self, pad, buffer):
-        self.failUnless(self._newsegment)
+        self.assertTrue(self._newsegment)
 
         # fake autoplugging by now putting in a fakesink
         sink = gst.element_factory_make('fakesink')
@@ -231,14 +231,14 @@ class TestEventCreationParsing(TestCase):
         if hasattr(gst.Event, "parse_step"):
             e = gst.event_new_step(gst.FORMAT_TIME, 42, 1.0, True, True)
 
-            self.assertEquals(e.type, gst.EVENT_STEP)
+            self.assertEqual(e.type, gst.EVENT_STEP)
 
             fmt, amount, rate, flush, intermediate = e.parse_step()
-            self.assertEquals(fmt, gst.FORMAT_TIME)
-            self.assertEquals(amount, 42)
-            self.assertEquals(rate, 1.0)
-            self.assertEquals(flush, True)
-            self.assertEquals(intermediate, True)
+            self.assertEqual(fmt, gst.FORMAT_TIME)
+            self.assertEqual(amount, 42)
+            self.assertEqual(rate, 1.0)
+            self.assertEqual(flush, True)
+            self.assertEqual(intermediate, True)
 
 if __name__ == "__main__":
     unittest.main()

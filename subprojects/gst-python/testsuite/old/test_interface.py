@@ -49,7 +49,7 @@ class FunctionCall(TestCase):
         element = gst.element_factory_make('xvimagesink')
         assert isinstance(element, gst.Element)
         assert isinstance(element, gst.interfaces.XOverlay)
-        element.set_xwindow_id(0L)
+        element.set_xwindow_id(0)
 
 class MixerTest(TestCase):
     def setUp(self):
@@ -67,7 +67,7 @@ class MixerTest(TestCase):
     def testGetProperty(self):
         if self.mixer == None:
             return
-        self.failUnless(self.mixer.probe_get_property('device'))
+        self.assertTrue(self.mixer.probe_get_property('device'))
         self.assertRaises(ValueError,
                           self.mixer.probe_get_property, 'non-existent')
 
@@ -75,7 +75,7 @@ class MixerTest(TestCase):
         if self.mixer == None:
             return
         properties = self.mixer.probe_get_properties()
-        self.failUnless(properties)
+        self.assertTrue(properties)
         self.assertEqual(type(properties), list)
         prop = properties[0]
         self.assertEqual(prop.name, 'device')

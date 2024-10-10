@@ -44,7 +44,7 @@ class GstPlayer:
         t = message.type
         if t == gst.MESSAGE_ERROR:
             err, debug = message.parse_error()
-            print "Error: %s" % err, debug
+            print("Error: %s" % err, debug)
             if self.on_eos:
                 self.on_eos()
             self.playing = False
@@ -87,7 +87,7 @@ class GstPlayer:
         res = self.player.send_event(event)
         if res:
             gst.info("setting new stream time to 0")
-            self.player.set_new_stream_time(0L)
+            self.player.set_new_stream_time(0)
         else:
             gst.error("seek to %r failed" % location)
 
@@ -227,11 +227,11 @@ class SyncPoints(gtk.VBox):
         return ret, maxdiff
 
     def changed(self):
-        print 'Sync times now:'
+        print('Sync times now:')
         for index, row in enumerate(self.model):
-            print 'A/V %d: %s -- %s' % (index,
+            print('A/V %d: %s -- %s' % (index,
                                         self.get_time_as_str(row.iter, 0),
-                                        self.get_time_as_str(row.iter, 1))
+                                        self.get_time_as_str(row.iter, 1)))
             
 
     def set_selected_audio(self, time):
@@ -347,9 +347,10 @@ class Resynchronizer(gst.Pipeline):
 
     __gsignals__ = {'done': (gobject.SIGNAL_RUN_LAST, None, (int,))}
 
-    def __init__(self, fromuri, touri, (syncpoints, maxdiff)):
+    def __init__(self, fromuri, touri, xxx_todo_changeme):
         # HACK: should do Pipeline.__init__, but that doesn't do what we
         # want; there's a bug open aboooot that
+        (syncpoints, maxdiff) = xxx_todo_changeme
         self.__gobject_init__()
 
         self.fromuri = fromuri
@@ -429,7 +430,7 @@ class Resynchronizer(gst.Pipeline):
 
     def _bus_watch(self, bus, message):
         if message.type == gst.MESSAGE_ERROR:
-            print 'error', message
+            print('error', message)
             self._stop_queries()
             m = gtk.MessageDialog(self.window,
                                   gtk.DIALOG_MODAL|gtk.DIALOG_DESTROY_WITH_PARENT,
@@ -444,7 +445,7 @@ class Resynchronizer(gst.Pipeline):
             m.destroy()
             self.response(FAILURE)
         elif message.type == gst.MESSAGE_WARNING:
-            print 'warning', message
+            print('warning', message)
         elif message.type == gst.MESSAGE_EOS:
             # print 'eos, woot', message.src
             name = self.touri
@@ -545,7 +546,7 @@ class ResyncBin(gst.Bin):
         queue = gst.element_factory_make('queue', 'queue_' + format)
         queue.set_property('max-size-buffers', 0)
         queue.set_property('max-size-bytes', 0)
-        print self.maxdiff
+        print(self.maxdiff)
         queue.set_property('max-size-time', int(self.maxdiff * 1.5))
         parser = gst.element_factory_make(self.parsefactories[format])
         self.add(queue)
@@ -557,7 +558,7 @@ class ResyncBin(gst.Bin):
         parser.link(self.mux)
         self.parsers.append(parser)
 
-        print repr(self.sync_points)
+        print(repr(self.sync_points))
 
         if 'video' in format:
             parser.set_property('synchronization-points',
@@ -574,7 +575,7 @@ class PlayerWindow(gtk.Window):
         self.player = GstPlayer(self.videowidget)
 
         def on_eos():
-            self.player.seek(0L)
+            self.player.seek(0)
             self.play_toggled()
         self.player.on_eos = lambda *x: on_eos()
         
@@ -761,7 +762,7 @@ class PlayerWindow(gtk.Window):
             
     def scale_value_changed_cb(self, scale):
         # see seek.c:seek_cb
-        real = long(scale.get_value() * self.p_duration / 100) # in ns
+        real = int(scale.get_value() * self.p_duration / 100) # in ns
         gst.debug('value changed, perform seek to %r' % real)
         self.player.seek(real)
         # allow for a preroll
