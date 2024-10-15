@@ -1461,6 +1461,114 @@ gst_matroska_demux_parse_stream (GstMatroskaDemux * demux, GstEbmlRead * ebml,
         break;
       }
 
+        /* parse additional codec data in BlockAdditionMapping element */
+      case GST_MATROSKA_ID_BLOCKADDITIONMAPPING:{
+        if ((ret = gst_ebml_read_master (ebml, &id)) != GST_FLOW_OK) {
+          break;
+        }
+
+        while (ret == GST_FLOW_OK
+            && gst_ebml_read_has_remaining (ebml, 1, TRUE)) {
+          if ((ret = gst_ebml_peek_id (ebml, &id)) != GST_FLOW_OK) {
+            break;
+          }
+
+          switch (id) {
+            case GST_MATROSKA_ID_BLOCKADDIDVALUE:{
+              guint64 num;
+              if ((ret = gst_ebml_read_uint (ebml, &id, &num)) != GST_FLOW_OK)
+                break;
+              GST_DEBUG_OBJECT (demux,
+                  "BlockAdditionMapping BlockAddIDValue: %" G_GUINT64_FORMAT,
+                  num);
+              break;
+            }
+
+            case GST_MATROSKA_ID_BLOCKADDIDNAME:{
+              gchar *text;
+              if ((ret = gst_ebml_read_ascii (ebml, &id, &text)) != GST_FLOW_OK) {
+                break;
+              }
+              GST_DEBUG_OBJECT (demux,
+                  "BlockAdditionMapping BlockAddIDName: %s",
+                  GST_STR_NULL (text));
+
+              /* recognize Dolby Vision by name */
+              if (g_strcmp0 (text, "Dolby Vision configuration") == 0) {
+                GST_DEBUG_OBJECT (demux,
+                    "This is Dolby Vision stream: %s", GST_STR_NULL (text));
+              }
+              g_free (text);
+              break;
+            }
+
+            case GST_MATROSKA_ID_BLOCKADDIDTYPE:{
+              guint64 num;
+              if ((ret = gst_ebml_read_uint (ebml, &id, &num)) != GST_FLOW_OK)
+                break;
+              GST_DEBUG_OBJECT (demux,
+                  "BlockAdditionMapping BlockAddIDType: %" G_GUINT64_FORMAT,
+                  num);
+
+              /* recognize DV by identifier number */
+              /* dvcC, profile equal to or less than 7 */
+              if (num == 1685480259) {
+                GST_DEBUG_OBJECT (demux,
+                    "This is Dolby Vision stream with dvcC, profile equal to or less than 7");
+              }
+              /* dvvC, profile greater than 7 */
+              else if (num == 1685485123) {
+                GST_DEBUG_OBJECT (demux,
+                    "This is Dolby Vision stream with dvvC, profile greater than 7");
+              }
+              break;
+            }
+
+            case GST_MATROSKA_ID_BLOCKADDIDEXTRADATA:{
+              guint8 *data;
+              guint64 size;
+              if ((ret =
+                      gst_ebml_read_binary (ebml, &id, &data,
+                          &size)) != GST_FLOW_OK)
+                break;
+
+              /* parse DOVIDecoderConfigurationData */
+              guint8 version_major;
+              guint8 version_minor;
+              guint8 profile;
+              guint8 level;
+              guint8 rpu_flag;
+              guint8 el_flag;
+              guint8 bl_flag;
+              guint8 dv_bl_signal_compatilbility_id;
+
+              version_major = data[0];
+              version_minor = data[1];
+              profile = (data[2] >> 1) & 0x7f;
+              level = (data[3] >> 3) & 0x7f;
+              rpu_flag = (data[3] >> 2) & 0x01;
+              el_flag = (data[3] >> 1) & 0x01;
+              bl_flag = data[3] & 0x01;
+              dv_bl_signal_compatilbility_id = (data[4] >> 4) & 0x0f;
+
+              GST_DEBUG_OBJECT (demux,
+                  "Dolby Vision Version: %u.%u, Profile: %u, Level: %u, RPU Flag: %u. EL Flag: %u, BL Flag: %u, BL Signal Compatibility ID: %u",
+                  version_major, version_minor, profile, level, rpu_flag,
+                  el_flag, bl_flag, dv_bl_signal_compatilbility_id);
+              break;
+            }
+
+            default:{
+              ret =
+                  gst_matroska_read_common_parse_skip (&demux->common, ebml,
+                  "BlockAdditionMapping", id);
+              break;
+            }
+          }
+        }
+        break;
+      }
+
       default:
         GST_WARNING ("Unknown TrackEntry subelement 0x%x - ignoring", id);
         /* pass-through */
