@@ -167,7 +167,7 @@ static void gst_raw_bayer_parse_init_config (GstRawBayerParseConfig * config);
 GType
 gst_raw_bayer_parse_format_type (void)
 {
-  static volatile gsize type = 0;
+  static gsize type = 0;
   static const GEnumValue types[] = {
     {GST_RAW_BAYER_PARSE_FORMAT_BGGR, "GST_RAW_BAYER_PARSE_FORMAT_BGGR",
         "bggr"},
