@@ -2,8 +2,26 @@ runtests = files('runtests.py')
 
 tests = [
     ['Test gst', 'test_gst.py'],
-    ['Test fundamentals', 'test_types.py'],
+    ['Test fundamentals - types', 'test_types.py'],
+    ['Test fundamentals - adapters', 'test_adapter.py'],
+    ['Test fundamentals - audio', 'test_audio.py'],
+    ['Test fundamentals - bin', 'test_bin.py'],
+    ['Test fundamentals - buffers', 'test_buffer.py'],
+    ['Test fundamentals - bus', 'test_bus.py'],
+    ['Test fundamentals - caps', 'test_caps.py'],
+    ['Test fundamentals - elements', 'test_element.py'],
+    ['Test fundamentals - events', 'test_event.py'],
+    ['Test fundamentals - interfaces', 'test_interface.py'],
+    ['Test fundamentals - iterators', 'test_iterator.py'],
+    ['Test fundamentals - messages', 'test_message.py'],
+    ['Test fundamentals - pipelines', 'test_pipeline.py'],
+    ['Test fundamentals - registry', 'test_registry.py'],
+    ['Test fundamentals - segment', 'test_segment.py'],
+    ['Test fundamentals - struct', 'test_struct.py'],
+    ['Test fundamentals - tags', 'test_tag.py'],
+    ['Test fundamentals - xml', 'test_xml.py'],
     ['Test plugins', 'test_plugin.py'],
+    ['Test pbutils', 'test_pbutils.py'],
     ['Test analytics', 'test_analytics.py', ['gst-plugins-bad/gst-libs/gst/analytics', 'gst-plugins-base/gst-libs/gst/video']],
 ]
 
