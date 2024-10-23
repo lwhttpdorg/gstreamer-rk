@@ -24,8 +24,7 @@ import logging
 import subprocess as _subprocess
 
 
-class SingletonMeta (type):
-
+class SingletonMeta(type):
     def __init__(cls, name, bases, dict_):
 
         from weakref import WeakValueDictionary
@@ -65,7 +64,7 @@ def gettext_cache():
     return gettext_cache_access
 
 
-class ClassProperty (property):
+class ClassProperty(property):
 
     "Like the property class, but also invokes the getter for class access."
 
@@ -84,7 +83,7 @@ class ClassProperty (property):
             return ret
 
 
-class _XDGClass (object):
+class _XDGClass(object):
 
     """Partial implementation of the XDG Base Directory specification v0.6.
 
@@ -108,8 +107,7 @@ class _XDGClass (object):
 XDG = _XDGClass()
 
 
-class SaveWriteFile (object):
-
+class SaveWriteFile(object):
     def __init__(self, filename, mode="wt"):
 
         from tempfile import mkstemp
@@ -142,7 +140,11 @@ class SaveWriteFile (object):
 
     def __exit__(self, *exc_args):
 
-        if exc_args == (None, None, None,):
+        if exc_args == (
+            None,
+            None,
+            None,
+        ):
             self.close()
         else:
             self.discard()
@@ -172,13 +174,13 @@ class SaveWriteFile (object):
         for temp_filename in glob(pattern):
             mtime = os.stat(temp_filename).st_mtime
             if now - mtime > 3600:
-                self.logger.info("deleting stale temporary file %s",
-                                 temp_filename)
+                self.logger.info("deleting stale temporary file %s", temp_filename)
                 try:
                     os.unlink(temp_filename)
                 except EnvironmentError as exc:
-                    self.logger.warning("deleting stale temporary file "
-                                        "failed: %s", exc)
+                    self.logger.warning(
+                        "deleting stale temporary file " "failed: %s", exc
+                    )
 
     def tell(self, *a, **kw):
 
@@ -197,6 +199,7 @@ class SaveWriteFile (object):
                 os.rename(self.temp_name, self.target_name)
             except OSError as exc:
                 import errno
+
                 if exc.errno == errno.EEXIST:
                     # We are probably on windows.
                     os.unlink(self.target_name)
@@ -216,7 +219,7 @@ class SaveWriteFile (object):
             self.temp_name = None
 
 
-class TeeWriteFile (object):
+class TeeWriteFile(object):
 
     # TODO Py2.5: Add context manager methods.
 
@@ -245,8 +248,7 @@ class TeeWriteFile (object):
             file.writelines(lines)
 
 
-class FixedPopen (_subprocess.Popen):
-
+class FixedPopen(_subprocess.Popen):
     def __init__(self, args, **kw):
 
         # Unconditionally specify all descriptors as redirected, to
@@ -255,7 +257,11 @@ class FixedPopen (_subprocess.Popen):
 
         close = []
 
-        for name in ("stdin", "stdout", "stderr",):
+        for name in (
+            "stdin",
+            "stdout",
+            "stderr",
+        ):
             target = kw.get(name)
             if not target:
                 kw[name] = _subprocess.PIPE
@@ -269,18 +275,17 @@ class FixedPopen (_subprocess.Popen):
             setattr(self, name, None)
 
 
-class DevhelpError (EnvironmentError):
+class DevhelpError(EnvironmentError):
 
     pass
 
 
-class DevhelpUnavailableError (DevhelpError):
+class DevhelpUnavailableError(DevhelpError):
 
     pass
 
 
-class DevhelpClient (object):
-
+class DevhelpClient(object):
     def available(self):
 
         try:
@@ -301,6 +306,7 @@ class DevhelpClient (object):
     def _check_os_error(self, exc):
 
         import errno
+
         if exc.errno == errno.ENOENT:
             raise DevhelpUnavailableError()
 
@@ -309,8 +315,7 @@ class DevhelpClient (object):
         from subprocess import PIPE
 
         try:
-            proc = FixedPopen(("devhelp",) + args,
-                              stdout=PIPE)
+            proc = FixedPopen(("devhelp",) + args, stdout=PIPE)
         except OSError as exc:
             self._check_os_error(exc)
             raise
@@ -318,8 +323,7 @@ class DevhelpClient (object):
         out, err = proc.communicate()
 
         if proc.returncode is not None and proc.returncode != 0:
-            raise DevhelpError("devhelp exited with status %i"
-                               % (proc.returncode,))
+            raise DevhelpError("devhelp exited with status %i" % (proc.returncode,))
         return out
 
     def _invoke_no_interact(self, *args):

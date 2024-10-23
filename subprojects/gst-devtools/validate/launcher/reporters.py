@@ -29,7 +29,7 @@ from .loggable import Loggable
 from xml.sax import saxutils
 from .utils import Result, printc, Colors
 
-UNICODE_STRINGS = (type(str()) == type(str()))  # noqa
+UNICODE_STRINGS = type(str()) == type(str())  # noqa
 
 
 class UnknownResult(Exception):
@@ -41,28 +41,29 @@ CONTROL_CHARACTERS = re.compile(r"[\000-\010\013\014\016-\037]")
 
 def xml_safe(value):
     """Replaces invalid XML characters with '?'."""
-    return CONTROL_CHARACTERS.sub('?', value)
+    return CONTROL_CHARACTERS.sub("?", value)
 
 
 def escape_cdata(cdata):
     """Escape a string for an XML CDATA section."""
-    return xml_safe(cdata).replace(']]>', ']]>]]&gt;<![CDATA[')
+    return xml_safe(cdata).replace("]]>", "]]>]]&gt;<![CDATA[")
 
 
 class Reporter(Loggable):
-    name = 'simple'
+    name = "simple"
 
     def __init__(self, options):
         Loggable.__init__(self)
 
         self.options = options
         self._start_time = 0
-        self.stats = {'timeout': 0,
-                      'failures': 0,
-                      'passed': 0,
-                      'skipped': 0,
-                      'known_error': 0
-                      }
+        self.stats = {
+            "timeout": 0,
+            "failures": 0,
+            "passed": 0,
+            "skipped": 0,
+            "known_error": 0,
+        }
         self.results = []
 
     def init_timer(self):
@@ -83,12 +84,13 @@ class Reporter(Loggable):
 
     def add_results(self, test):
         self.debug("%s", test)
-        if test.result == Result.PASSED or \
-                test.result == Result.KNOWN_ERROR:
+        if test.result == Result.PASSED or test.result == Result.KNOWN_ERROR:
             self.set_passed(test)
-        elif test.result == Result.FAILED or \
-                test.result == Result.TIMEOUT or \
-                test.result == Result.SKIPPED:
+        elif (
+            test.result == Result.FAILED
+            or test.result == Result.TIMEOUT
+            or test.result == Result.SKIPPED
+        ):
             self.set_failed(test)
         else:
             raise UnknownResult("%s" % test.result)
@@ -101,23 +103,25 @@ class Reporter(Loggable):
 
     def final_report(self):
         print("\n")
-        lenstat = (len("Statistics") + 1)
+        lenstat = len("Statistics") + 1
         printc("Statistics:\n%s" % (lenstat * "-"), Colors.OKBLUE)
         if self._start_time > 0:
-            printc("\n%sTotal time spent: %s seconds\n" %
-                   ((lenstat * " "), datetime.timedelta(
-                    seconds=(time.time() - self._start_time))),
-                   Colors.OKBLUE)
-        printc("%sPassed: %d" %
-               (lenstat * " ", self.stats["passed"]), Colors.OKGREEN)
-        printc("%sSkipped: %d" %
-               (lenstat * " ", self.stats["skipped"]), Colors.WARNING)
-        printc("%sFailed: %d" %
-               (lenstat * " ", self.stats["failures"]), Colors.FAIL)
-        printc("%sKnown error: %d" %
-               (lenstat * " ", self.stats["known_error"]), Colors.OKBLUE)
-        printc("%s%s" %
-               (lenstat * " ", (len("Failed: 0")) * "-"), Colors.OKBLUE)
+            printc(
+                "\n%sTotal time spent: %s seconds\n"
+                % (
+                    (lenstat * " "),
+                    datetime.timedelta(seconds=(time.time() - self._start_time)),
+                ),
+                Colors.OKBLUE,
+            )
+        printc("%sPassed: %d" % (lenstat * " ", self.stats["passed"]), Colors.OKGREEN)
+        printc("%sSkipped: %d" % (lenstat * " ", self.stats["skipped"]), Colors.WARNING)
+        printc("%sFailed: %d" % (lenstat * " ", self.stats["failures"]), Colors.FAIL)
+        printc(
+            "%sKnown error: %d" % (lenstat * " ", self.stats["known_error"]),
+            Colors.OKBLUE,
+        )
+        printc("%s%s" % (lenstat * " ", (len("Failed: 0")) * "-"), Colors.OKBLUE)
 
         total = self.stats["failures"] + self.stats["passed"]
         color = Colors.WARNING
@@ -134,8 +138,9 @@ class Reporter(Loggable):
 class XunitReporter(Reporter):
 
     """This reporter provides test results in the standard XUnit XML format."""
-    name = 'xunit'
-    encoding = 'UTF-8'
+
+    name = "xunit"
+    encoding = "UTF-8"
 
     def __init__(self, options):
         super(XunitReporter, self).__init__(options)
@@ -156,14 +161,15 @@ class XunitReporter(Reporter):
             captured += escape_cdata(value)
         for extralog in test.extra_logfiles:
             captured += "\n\n===== %s =====\n\n" % escape_cdata(
-                os.path.basename(extralog))
+                os.path.basename(extralog)
+            )
             value = test.get_extra_log_content(extralog)
             captured += escape_cdata(value)
 
         return captured
 
     def _get_captured(self, test):
-        return '<system-out><![CDATA[%s]]></system-out>' % self._get_all_logs_data(test)
+        return "<system-out><![CDATA[%s]]></system-out>" % self._get_all_logs_data(test)
 
     def _quoteattr(self, attr):
         """Escape an XML attribute. Value can be unicode."""
@@ -179,25 +185,33 @@ class XunitReporter(Reporter):
 
         """
         self.debug("Writing XML file to: %s", self.options.xunit_file)
-        xml_file = codecs.open(self.options.xunit_file, 'w',
-                               self.encoding, errors = 'replace')
+        xml_file = codecs.open(
+            self.options.xunit_file, "w", self.encoding, errors="replace"
+        )
 
-        self.stats['encoding'] = self.encoding
-        self.stats['total'] = (self.stats['timeout'] + self.stats['failures']
-                               + self.stats['passed'] + self.stats['skipped'])
+        self.stats["encoding"] = self.encoding
+        self.stats["total"] = (
+            self.stats["timeout"]
+            + self.stats["failures"]
+            + self.stats["passed"]
+            + self.stats["skipped"]
+        )
 
-        xml_file.write('<?xml version="1.0" encoding="%(encoding)s"?>'
-                       '<testsuite name="gst-validate-launcher" tests="%(total)d" '
-                       'errors="%(timeout)d" failures="%(failures)d" '
-                       'skipped="%(skipped)d">' % self.stats)
+        xml_file.write(
+            '<?xml version="1.0" encoding="%(encoding)s"?>'
+            '<testsuite name="gst-validate-launcher" tests="%(total)d" '
+            'errors="%(timeout)d" failures="%(failures)d" '
+            'skipped="%(skipped)d">' % self.stats
+        )
 
-        tmp_xml_file = codecs.open(self.tmp_xml_file.name, 'r',
-                                   self.encoding, errors = 'replace')
+        tmp_xml_file = codecs.open(
+            self.tmp_xml_file.name, "r", self.encoding, errors="replace"
+        )
 
         for l in tmp_xml_file:
             xml_file.write(l)
 
-        xml_file.write('</testsuite>')
+        xml_file.write("</testsuite>")
         xml_file.close()
         tmp_xml_file.close()
         os.remove(self.tmp_xml_file.name)
@@ -209,42 +223,54 @@ class XunitReporter(Reporter):
         self.tmp_xml_file.close()
 
     def set_failed(self, test):
-        """Add failure output to Xunit report.
-        """
+        """Add failure output to Xunit report."""
         super().set_failed(test)
 
-        xml_file = codecs.open(self.tmp_xml_file.name, 'a',
-                               self.encoding, errors = 'replace')
-        xml_file.write(self._forceUnicode(
-            '<testcase name=%(name)s time="%(taken).3f">%(systemout)s'
-            '<failure type=%(errtype)s message=%(message)s>'
-            '</failure></testcase>' %
-            {'name': self._quoteattr(test.get_classname() + '.' + test.get_name()),
-             'taken': test.time_taken,
-             'systemout': self._get_captured(test),
-             'errtype': self._quoteattr(test.result),
-             'message': self._quoteattr(test.message),
-             }))
+        xml_file = codecs.open(
+            self.tmp_xml_file.name, "a", self.encoding, errors="replace"
+        )
+        xml_file.write(
+            self._forceUnicode(
+                '<testcase name=%(name)s time="%(taken).3f">%(systemout)s'
+                "<failure type=%(errtype)s message=%(message)s>"
+                "</failure></testcase>"
+                % {
+                    "name": self._quoteattr(
+                        test.get_classname() + "." + test.get_name()
+                    ),
+                    "taken": test.time_taken,
+                    "systemout": self._get_captured(test),
+                    "errtype": self._quoteattr(test.result),
+                    "message": self._quoteattr(test.message),
+                }
+            )
+        )
         xml_file.close()
 
     def set_passed(self, test):
-        """Add success output to Xunit report.
-        """
-        self.stats['passed'] += 1
+        """Add success output to Xunit report."""
+        self.stats["passed"] += 1
 
-        xml_file = codecs.open(self.tmp_xml_file.name, 'a',
-                               self.encoding, errors = 'replace')
-        xml_file.write(self._forceUnicode(
-            '<testcase name=%(name)s '
-            'time="%(taken).3f">%(systemout)s</testcase>' %
-            {'name': self._quoteattr(test.get_classname() + '.' + test.get_name()),
-             'taken': test.time_taken,
-             'systemout': self._get_captured(test),
-             }))
+        xml_file = codecs.open(
+            self.tmp_xml_file.name, "a", self.encoding, errors="replace"
+        )
+        xml_file.write(
+            self._forceUnicode(
+                "<testcase name=%(name)s "
+                'time="%(taken).3f">%(systemout)s</testcase>'
+                % {
+                    "name": self._quoteattr(
+                        test.get_classname() + "." + test.get_name()
+                    ),
+                    "taken": test.time_taken,
+                    "systemout": self._get_captured(test),
+                }
+            )
+        )
         xml_file.close()
 
     def _forceUnicode(self, s):
         if not UNICODE_STRINGS:
             if isinstance(s, str):
-                s = s.decode(self.encoding, errors = 'replace')
+                s = s.decode(self.encoding, errors="replace")
         return s

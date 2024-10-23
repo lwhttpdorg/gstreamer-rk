@@ -22,8 +22,9 @@
 import os.path
 
 import gi
-gi.require_version('Gdk', '3.0')
-gi.require_version('Gtk', '3.0')
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
 
 from gi.repository import GObject
 from gi.repository import Gdk
@@ -34,7 +35,7 @@ from GstDebugViewer.GUI.columns import ViewColumnManager
 from GstDebugViewer.GUI.window import Window
 
 
-class AppStateSection (Common.GUI.StateSection):
+class AppStateSection(Common.GUI.StateSection):
 
     _name = "state"
 
@@ -42,14 +43,12 @@ class AppStateSection (Common.GUI.StateSection):
     maximized = Common.GUI.StateBool("window-maximized")
 
     column_order = Common.GUI.StateItemList("column-order", ViewColumnManager)
-    columns_visible = Common.GUI.StateItemList(
-        "columns-visible", ViewColumnManager)
+    columns_visible = Common.GUI.StateItemList("columns-visible", ViewColumnManager)
 
     zoom_level = Common.GUI.StateInt("zoom-level")
 
 
-class AppState (Common.GUI.State):
-
+class AppState(Common.GUI.State):
     def __init__(self, *a, **kw):
 
         Common.GUI.State.__init__(self, *a, **kw)
@@ -57,8 +56,7 @@ class AppState (Common.GUI.State):
         self.add_section_class(AppStateSection)
 
 
-class App (object):
-
+class App(object):
     def __init__(self):
 
         self.attach()
@@ -67,8 +65,7 @@ class App (object):
 
         from GstDebugViewer import Plugins
 
-        plugin_classes = list(
-            Plugins.load([os.path.dirname(Plugins.__file__)]))
+        plugin_classes = list(Plugins.load([os.path.dirname(Plugins.__file__)]))
         self.plugins = []
         for plugin_class in plugin_classes:
             plugin = plugin_class(self)
@@ -84,8 +81,7 @@ class App (object):
 
         config_home = Common.utils.XDG.CONFIG_HOME
 
-        state_filename = os.path.join(
-            config_home, "gst-debug-viewer", "state")
+        state_filename = os.path.join(config_home, "gst-debug-viewer", "state")
 
         self.state = AppState(state_filename)
         self.state_section = self.state.sections["state"]
@@ -122,7 +118,7 @@ class App (object):
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
             style_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
         self.open_window()

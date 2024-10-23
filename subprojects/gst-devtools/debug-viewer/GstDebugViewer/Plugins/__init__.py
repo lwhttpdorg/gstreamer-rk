@@ -56,8 +56,7 @@ def _load_plugins(path):
         yield module
 
 
-class FeatureBase (object):
-
+class FeatureBase(object):
     def __init__(self, app):
 
         pass
@@ -93,7 +92,7 @@ class FeatureBase (object):
         pass
 
 
-class PluginBase (object):
+class PluginBase(object):
     """
     All plugins must implement a class called Plugin inheriting from PluginBase.
     They should place a tuple of features they export into 'features'. Each

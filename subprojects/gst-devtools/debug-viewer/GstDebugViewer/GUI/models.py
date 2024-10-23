@@ -29,18 +29,30 @@ from gi.repository import Gtk
 from GstDebugViewer import Common, Data
 
 
-class LogModelBase (Common.GUI.GenericTreeModel, metaclass=Common.GUI.MetaModel):
+class LogModelBase(Common.GUI.GenericTreeModel, metaclass=Common.GUI.MetaModel):
 
-    columns = ("COL_TIME", GObject.TYPE_UINT64,
-               "COL_PID", int,
-               "COL_THREAD", GObject.TYPE_UINT64,
-               "COL_LEVEL", object,
-               "COL_CATEGORY", str,
-               "COL_FILENAME", str,
-               "COL_LINE_NUMBER", int,
-               "COL_FUNCTION", str,
-               "COL_OBJECT", str,
-               "COL_MESSAGE", str,)
+    columns = (
+        "COL_TIME",
+        GObject.TYPE_UINT64,
+        "COL_PID",
+        int,
+        "COL_THREAD",
+        GObject.TYPE_UINT64,
+        "COL_LEVEL",
+        object,
+        "COL_CATEGORY",
+        str,
+        "COL_FILENAME",
+        str,
+        "COL_LINE_NUMBER",
+        int,
+        "COL_FUNCTION",
+        str,
+        "COL_OBJECT",
+        str,
+        "COL_MESSAGE",
+        str,
+    )
 
     def __init__(self):
 
@@ -76,7 +88,10 @@ class LogModelBase (Common.GUI.GenericTreeModel, metaclass=Common.GUI.MetaModel)
             row[COL_LEVEL] = line_levels[i]
             msg_offset = row[COL_MESSAGE]
             row[COL_MESSAGE] = access_offset(offset + msg_offset)
-            yield (row, offset,)
+            yield (
+                row,
+                offset,
+            )
             row[COL_MESSAGE] = msg_offset
 
     def on_get_flags(self):
@@ -190,8 +205,7 @@ class LogModelBase (Common.GUI.GenericTreeModel, metaclass=Common.GUI.MetaModel)
     # pass
 
 
-class LazyLogModel (LogModelBase):
-
+class LazyLogModel(LogModelBase):
     def __init__(self, log_obj=None):
 
         LogModelBase.__init__(self)
@@ -229,8 +243,7 @@ class LazyLogModel (LogModelBase):
         self.line_cache[line_offset] = Data.LogLine.parse_full(line)
 
 
-class FilteredLogModelBase (LogModelBase):
-
+class FilteredLogModelBase(LogModelBase):
     def __init__(self, super_model):
 
         LogModelBase.__init__(self)
@@ -251,8 +264,7 @@ class FilteredLogModelBase (LogModelBase):
         raise NotImplementedError("index conversion not supported")
 
 
-class FilteredLogModel (FilteredLogModelBase):
-
+class FilteredLogModel(FilteredLogModelBase):
     def __init__(self, super_model):
 
         FilteredLogModelBase.__init__(self, super_model)
@@ -262,7 +274,7 @@ class FilteredLogModel (FilteredLogModelBase):
         self.filters = []
         self.reset()
         self.__active_process = None
-        self.__filter_progress = 0.
+        self.__filter_progress = 0.0
 
     def reset(self):
 
@@ -289,10 +301,15 @@ class FilteredLogModel (FilteredLogModelBase):
             i = 0
             for row, offset in self.iter_rows_offset():
                 line_index = self.super_index[i]
-                yield (line_index, row, offset,)
+                yield (
+                    line_index,
+                    row,
+                    offset,
+                )
                 i += 1
+
         self.logger.debug("running filter")
-        progress = 0.
+        progress = 0.0
         progress_full = float(len(self))
         y = YIELD_LIMIT
         for i, row, offset in enum():
@@ -311,7 +328,7 @@ class FilteredLogModel (FilteredLogModelBase):
         self.super_index = new_super_index
         self.logger.debug("filtering finished")
 
-        self.__filter_progress = 1.
+        self.__filter_progress = 1.0
         self.__handle_filter_process_finished()
         yield False
 
@@ -366,30 +383,40 @@ class FilteredLogModel (FilteredLogModelBase):
     def set_range(self, super_start, super_stop):
 
         old_super_start = self.line_index_to_super(0)
-        old_super_stop = self.line_index_to_super(
-            len(self.super_index) - 1) + 1
+        old_super_stop = self.line_index_to_super(len(self.super_index) - 1) + 1
 
-        self.logger.debug("set range (%i, %i), current (%i, %i)",
-                          super_start, super_stop, old_super_start, old_super_stop)
+        self.logger.debug(
+            "set range (%i, %i), current (%i, %i)",
+            super_start,
+            super_stop,
+            old_super_start,
+            old_super_stop,
+        )
 
         if len(self.filters) == 0:
             # Identity.
             self.super_index = range(super_start, super_stop)
-            self.line_offsets = SubRange(self.super_model.line_offsets,
-                                         super_start, super_stop)
-            self.line_levels = SubRange(self.super_model.line_levels,
-                                        super_start, super_stop)
+            self.line_offsets = SubRange(
+                self.super_model.line_offsets, super_start, super_stop
+            )
+            self.line_levels = SubRange(
+                self.super_model.line_levels, super_start, super_stop
+            )
             return
 
         if super_start < old_super_start:
             # TODO:
-            raise NotImplementedError("Only handling further restriction of the range"
-                                      " (start offset = %i)" % (super_start,))
+            raise NotImplementedError(
+                "Only handling further restriction of the range"
+                " (start offset = %i)" % (super_start,)
+            )
 
         if super_stop > old_super_stop:
             # TODO:
-            raise NotImplementedError("Only handling further restriction of the range"
-                                      " (end offset = %i)" % (super_stop,))
+            raise NotImplementedError(
+                "Only handling further restriction of the range"
+                " (end offset = %i)" % (super_stop,)
+            )
 
         start = self.line_index_from_super(super_start)
         stop = self.line_index_from_super(super_stop)
@@ -399,15 +426,24 @@ class FilteredLogModel (FilteredLogModelBase):
         self.line_levels = SubRange(self.line_levels, start, stop)
 
 
-class SubRange (object):
+class SubRange(object):
 
-    __slots__ = ("size", "start", "stop",)
+    __slots__ = (
+        "size",
+        "start",
+        "stop",
+    )
 
     def __init__(self, size, start, stop):
 
         if start > stop:
             raise ValueError(
-                "need start <= stop (got %r, %r)" % (start, stop,))
+                "need start <= stop (got %r, %r)"
+                % (
+                    start,
+                    stop,
+                )
+            )
 
         if isinstance(size, type(self)):
             # Another SubRange, don't stack:
@@ -428,7 +464,7 @@ class SubRange (object):
             else:
                 stop += self.stop
 
-            return self.size[i.start + self.start:stop]
+            return self.size[i.start + self.start : stop]
         else:
             return self.size[i + self.start]
 
@@ -443,8 +479,7 @@ class SubRange (object):
             yield size[i]
 
 
-class LineViewLogModel (FilteredLogModelBase):
-
+class LineViewLogModel(FilteredLogModelBase):
     def __init__(self, super_model):
 
         FilteredLogModelBase.__init__(self, super_model)
@@ -489,9 +524,11 @@ class LineViewLogModel (FilteredLogModelBase):
 
     def remove_line(self, line_index):
 
-        for l in (self.line_offsets,
-                  self.line_levels,
-                  self.parent_indices,):
+        for l in (
+            self.line_offsets,
+            self.line_levels,
+            self.parent_indices,
+        ):
             del l[line_index]
 
         path = (line_index,)

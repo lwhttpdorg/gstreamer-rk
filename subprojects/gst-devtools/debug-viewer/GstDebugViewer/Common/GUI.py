@@ -25,7 +25,7 @@ import logging
 
 import gi
 
-gi.require_version('Gtk', '3.0')
+gi.require_version("Gtk", "3.0")
 from gi.repository import GObject
 from gi.repository import Gtk
 from gi.repository import Gdk
@@ -37,19 +37,16 @@ from .generictreemodel import GenericTreeModel
 
 
 def widget_add_popup_menu(widget, menu, button=3):
-
     def popup_callback(widget, event):
 
         if event.button == button:
-            menu.popup(
-                None, None, None, None, event.button, event.get_time())
+            menu.popup(None, None, None, None, event.button, event.get_time())
         return False
 
     widget.connect("button-press-event", popup_callback)
 
 
-class Actions (dict):
-
+class Actions(dict):
     def __init__(self):
 
         dict.__init__(self)
@@ -79,15 +76,21 @@ class Actions (dict):
             self[action.props.name] = action
 
 
-class Widgets (dict):
-
+class Widgets(dict):
     def __init__(self, builder):
 
-        widgets = (obj for obj in builder.get_objects()
-                   if isinstance(obj, Gtk.Buildable))
+        widgets = (
+            obj for obj in builder.get_objects() if isinstance(obj, Gtk.Buildable)
+        )
         # Gtk.Widget.get_name() shadows out the GtkBuildable interface method
         # of the same name, hence calling the unbound interface method here:
-        items = ((Gtk.Buildable.get_name(w), w,) for w in widgets)
+        items = (
+            (
+                Gtk.Buildable.get_name(w),
+                w,
+            )
+            for w in widgets
+        )
 
         dict.__init__(self, items)
 
@@ -105,8 +108,7 @@ class Widgets (dict):
         raise AttributeError("no widget with name %r" % (name,))
 
 
-class WidgetFactory (object):
-
+class WidgetFactory(object):
     def __init__(self, directory):
 
         self.directory = directory
@@ -137,8 +139,7 @@ class WidgetFactory (object):
         return builder.get_object(widget_name)
 
 
-class UIFactory (object):
-
+class UIFactory(object):
     def __init__(self, ui_filename, actions=None):
 
         self.filename = ui_filename
@@ -161,7 +162,7 @@ class UIFactory (object):
         return ui_manager
 
 
-class MetaModel (GObjectMeta):
+class MetaModel(GObjectMeta):
 
     """Meta class for easy setup of gtk tree models.
 
@@ -201,14 +202,17 @@ class MetaModel (GObjectMeta):
         column_types = spec[1::2]
         column_indices = list(range(len(column_names)))
 
-        for col_index, col_name, in zip(column_indices, column_names):
+        for (
+            col_index,
+            col_name,
+        ) in zip(column_indices, column_names):
             setattr(cls, col_name, col_index)
 
         cls.column_types = column_types
         cls.column_ids = tuple(column_indices)
 
 
-class Manager (object):
+class Manager(object):
 
     """GUI Manager base class."""
 
@@ -247,10 +251,16 @@ class Manager (object):
             if getter(item) == value:
                 return item
         else:
-            raise KeyError("no item such that item.%s == %r" % (attr, value,))
+            raise KeyError(
+                "no item such that item.%s == %r"
+                % (
+                    attr,
+                    value,
+                )
+            )
 
 
-class StateString (object):
+class StateString(object):
 
     """Descriptor for binding to StateSection classes."""
 
@@ -268,8 +278,10 @@ class StateString (object):
 
         try:
             return self.get(section)
-        except (configparser.NoSectionError,
-                configparser.NoOptionError,):
+        except (
+            configparser.NoSectionError,
+            configparser.NoOptionError,
+        ):
             return self.get_default(section)
 
     def __set__(self, section, value):
@@ -294,7 +306,7 @@ class StateString (object):
         section.set(self, str(value))
 
 
-class StateBool (StateString):
+class StateBool(StateString):
 
     """Descriptor for binding to StateSection classes."""
 
@@ -303,7 +315,7 @@ class StateBool (StateString):
         return section.state._parser.getboolean(section._name, self.option)
 
 
-class StateInt (StateString):
+class StateInt(StateString):
 
     """Descriptor for binding to StateSection classes."""
 
@@ -312,7 +324,7 @@ class StateInt (StateString):
         return section.state._parser.getint(section._name, self.option)
 
 
-class StateInt4 (StateString):
+class StateInt4(StateString):
 
     """Descriptor for binding to StateSection classes.  This implements storing
     a tuple of 4 integers."""
@@ -327,7 +339,11 @@ class StateInt4 (StateString):
                 return None
             else:
                 return tuple((int(v) for v in l))
-        except (AttributeError, TypeError, ValueError,):
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ):
             return None
 
     def set(self, section, value):
@@ -342,7 +358,7 @@ class StateInt4 (StateString):
         return StateString.set(self, section, svalue)
 
 
-class StateItem (StateString):
+class StateItem(StateString):
 
     """Descriptor for binding to StateSection classes.  This implements storing
     a class controlled by a Manager class."""
@@ -381,7 +397,7 @@ class StateItem (StateString):
             return None
 
 
-class StateItemList (StateItem):
+class StateItemList(StateItem):
 
     """Descriptor for binding to StateSection classes.  This implements storing
     an ordered set of Manager items."""
@@ -421,7 +437,7 @@ class StateItemList (StateItem):
         StateString.set(self, section, svalue)
 
 
-class StateSection (object):
+class StateSection(object):
 
     _name = None
 
@@ -430,8 +446,7 @@ class StateSection (object):
         self.state = state
 
         if self._name is None:
-            raise NotImplementedError(
-                "subclasses must override the _name attribute")
+            raise NotImplementedError("subclasses must override the _name attribute")
 
     def get(self, state_string):
 
@@ -450,8 +465,7 @@ class StateSection (object):
             parser.set(self._name, state_string.option, value)
 
 
-class State (object):
-
+class State(object):
     def __init__(self, filename, old_filenames=()):
 
         import configparser
@@ -477,8 +491,7 @@ class State (object):
             self._parser.write(fp)
 
 
-class WindowState (object):
-
+class WindowState(object):
     def __init__(self):
 
         self.logger = logging.getLogger("ui.window-state")
@@ -490,8 +503,7 @@ class WindowState (object):
         self.window = window
         self.state = state
 
-        self.window.connect("window-state-event",
-                            self.handle_window_state_event)
+        self.window.connect("window-state-event", self.handle_window_state_event)
 
         geometry = self.state.geometry
         if geometry:

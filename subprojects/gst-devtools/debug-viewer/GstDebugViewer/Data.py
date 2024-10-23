@@ -32,10 +32,12 @@ def time_args(ts):
 
     secs = ts // SECOND
 
-    return "%i:%02i:%02i.%09i" % (secs // 60 ** 2,
-                                  secs // 60 % 60,
-                                  secs % 60,
-                                  ts % SECOND,)
+    return "%i:%02i:%02i.%09i" % (
+        secs // 60**2,
+        secs // 60 % 60,
+        secs % 60,
+        ts % SECOND,
+    )
 
 
 def time_diff_args(time_diff):
@@ -47,19 +49,23 @@ def time_diff_args(time_diff):
 
     secs = abs(time_diff) // SECOND
 
-    return "%s%02i:%02i.%09i" % (sign,
-                                 secs // 60,
-                                 secs % 60,
-                                 abs(time_diff) % SECOND,)
+    return "%s%02i:%02i.%09i" % (
+        sign,
+        secs // 60,
+        secs % 60,
+        abs(time_diff) % SECOND,
+    )
 
 
 def time_args_no_hours(ts):
 
     secs = ts // SECOND
 
-    return "%02i:%02i.%09i" % (secs // 60,
-                               secs % 60,
-                               ts % SECOND,)
+    return "%02i:%02i.%09i" % (
+        secs // 60,
+        secs % 60,
+        ts % SECOND,
+    )
 
 
 def parse_time(st):
@@ -68,21 +74,36 @@ def parse_time(st):
     h, m, s = st.split(":")
     secs, subsecs = s.split(".")
 
-    return int((int(h) * 60 ** 2 + int(m) * 60) * SECOND) + \
-        int(secs) * SECOND + int(subsecs)
+    return (
+        int((int(h) * 60**2 + int(m) * 60) * SECOND)
+        + int(secs) * SECOND
+        + int(subsecs)
+    )
 
 
-class DebugLevel (int):
+class DebugLevel(int):
 
-    __names = ["NONE", "ERROR", "WARN", "FIXME",
-               "INFO", "DEBUG", "LOG", "TRACE", "MEMDUMP"]
+    __names = [
+        "NONE",
+        "ERROR",
+        "WARN",
+        "FIXME",
+        "INFO",
+        "DEBUG",
+        "LOG",
+        "TRACE",
+        "MEMDUMP",
+    ]
     __instances = {}
 
     def __new__(cls, level):
 
         try:
             level_int = int(level)
-        except (ValueError, TypeError,):
+        except (
+            ValueError,
+            TypeError,
+        ):
             try:
                 level_int = cls.__names.index(level.upper())
             except ValueError:
@@ -97,7 +118,11 @@ class DebugLevel (int):
 
     def __repr__(self):
 
-        return "<%s %s (%i)>" % (type(self).__name__, self.__names[self], self,)
+        return "<%s %s (%i)>" % (
+            type(self).__name__,
+            self.__names[self],
+            self,
+        )
 
     def higher_level(self):
 
@@ -123,15 +148,17 @@ debug_level_log = DebugLevel("LOG")
 debug_level_fixme = DebugLevel("FIXME")
 debug_level_trace = DebugLevel("TRACE")
 debug_level_memdump = DebugLevel("MEMDUMP")
-debug_levels = [debug_level_none,
-                debug_level_trace,
-                debug_level_fixme,
-                debug_level_log,
-                debug_level_debug,
-                debug_level_info,
-                debug_level_warning,
-                debug_level_error,
-                debug_level_memdump]
+debug_levels = [
+    debug_level_none,
+    debug_level_trace,
+    debug_level_fixme,
+    debug_level_log,
+    debug_level_debug,
+    debug_level_info,
+    debug_level_warning,
+    debug_level_error,
+    debug_level_memdump,
+]
 
 # For stripping color codes:
 _escape = re.compile(b"\x1b\\[[0-9;]*m")
@@ -168,9 +195,24 @@ def default_log_line_regex_():
     ANSI = "(?:\x1b\\[[0-9;]*m\\s*)*\\s*"
 
     # New log format:
-    expressions = [TIME, ANSI, PID, ANSI, THREAD, ANSI, LEVEL, ANSI,
-                   CATEGORY, FILENAME, LINE, FUNCTION, ANSI,
-                   OBJECT, ANSI, MESSAGE]
+    expressions = [
+        TIME,
+        ANSI,
+        PID,
+        ANSI,
+        THREAD,
+        ANSI,
+        LEVEL,
+        ANSI,
+        CATEGORY,
+        FILENAME,
+        LINE,
+        FUNCTION,
+        ANSI,
+        OBJECT,
+        ANSI,
+        MESSAGE,
+    ]
     # Old log format:
     # expressions = [LEVEL, THREAD, TIME, CATEGORY, PID, FILENAME, LINE,
     # FUNCTION, OBJECT, MESSAGE]
@@ -183,8 +225,7 @@ def default_log_line_regex():
     return re.compile("".join(default_log_line_regex_()))
 
 
-class Producer (object):
-
+class Producer(object):
     def __init__(self):
 
         self.consumers = []
@@ -200,8 +241,7 @@ class Producer (object):
             consumer.handle_load_finished()
 
 
-class SortHelper (object):
-
+class SortHelper(object):
     def __init__(self, fileobj, offsets):
 
         self._gen = self.__gen(fileobj, offsets)
@@ -222,6 +262,7 @@ class SortHelper (object):
     def __gen(fileobj, offsets):
 
         from math import floor
+
         tell = fileobj.tell
         seek = fileobj.seek
         read = fileobj.read
@@ -237,7 +278,7 @@ class SortHelper (object):
 
         insert_pos = None
         while True:
-            insert_time_string = (yield insert_pos)
+            insert_time_string = yield insert_pos
 
             save_offset = tell()
 
@@ -256,7 +297,7 @@ class SortHelper (object):
                 mid = int(floor(lo * 0.1 + hi * 0.9))
                 seek(offsets[mid])
                 mid_time_string = read(time_len)
-                if insert_time_string.encode('utf8') < mid_time_string:
+                if insert_time_string.encode("utf8") < mid_time_string:
                     hi = mid
                 else:
                     lo = mid + 1
@@ -270,7 +311,7 @@ class SortHelper (object):
             seek(save_offset)
 
 
-class LineCache (Producer):
+class LineCache(Producer):
     """
     offsets: file position for each line
     levels: the debug level for each line
@@ -308,16 +349,27 @@ class LineCache (Producer):
         offsets = self.offsets
         levels = self.levels
 
-        dict_levels = {"T": debug_level_trace, "F": debug_level_fixme,
-                       "L": debug_level_log, "D": debug_level_debug,
-                       "I": debug_level_info, "W": debug_level_warning,
-                       "E": debug_level_error, " ": debug_level_none,
-                       "M": debug_level_memdump, }
+        dict_levels = {
+            "T": debug_level_trace,
+            "F": debug_level_fixme,
+            "L": debug_level_log,
+            "D": debug_level_debug,
+            "I": debug_level_info,
+            "W": debug_level_warning,
+            "E": debug_level_error,
+            " ": debug_level_none,
+            "M": debug_level_memdump,
+        }
         ANSI = "(?:\x1b\\[[0-9;]*m)?"
-        ANSI_PATTERN = r"\d:\d\d:\d\d\.\d+ " + ANSI + \
-                       r" *\d+" + ANSI + \
-                       r" +0x[0-9a-f]+ +" + ANSI + \
-                       r"([TFLDIEWM ])"
+        ANSI_PATTERN = (
+            r"\d:\d\d:\d\d\.\d+ "
+            + ANSI
+            + r" *\d+"
+            + ANSI
+            + r" +0x[0-9a-f]+ +"
+            + ANSI
+            + r"([TFLDIEWM ])"
+        )
         BARE_PATTERN = ANSI_PATTERN.replace(ANSI, "")
         rexp_bare = re.compile(BARE_PATTERN)
         rexp_ansi = re.compile(ANSI_PATTERN)
@@ -344,7 +396,7 @@ class LineCache (Producer):
                 yield True
 
             offset = tell()
-            line = readline().decode('utf-8', errors='replace')
+            line = readline().decode("utf-8", errors="replace")
             if not line:
                 break
             match = rexp_match(line)
@@ -364,27 +416,25 @@ class LineCache (Producer):
             # time to integer. We also don't have to take a substring here,
             # which would be a useless memcpy.
             if line >= last_line:
-                levels_append(
-                    dict_levels_get(match.group(1), debug_level_none))
+                levels_append(dict_levels_get(match.group(1), debug_level_none))
                 offsets_append(offset)
                 last_line = line
             else:
                 pos = find_insert_position(line)
-                levels.insert(
-                    pos, dict_levels_get(match.group(1), debug_level_none))
+                levels.insert(pos, dict_levels_get(match.group(1), debug_level_none))
                 offsets.insert(pos, offset)
 
         self.have_load_finished()
         yield False
 
 
-class LogLine (list):
+class LogLine(list):
 
     _line_regex = default_log_line_regex()
 
     @classmethod
     def parse_full(cls, line_string):
-        match = cls._line_regex.match(line_string.decode('utf8', errors='replace'))
+        match = cls._line_regex.match(line_string.decode("utf8", errors="replace"))
         if match is None:
             # raise ValueError ("not a valid log line (%r)" % (line_string,))
             groups = [0, 0, 0, 0, "", "", 0, "", "", 0]
@@ -404,17 +454,18 @@ class LogLine (list):
         # Message start offset.
         line[9] = match.start(9 + 1)
 
-        for col_id in (4,   # COL_CATEGORY
-                       5,   # COL_FILENAME
-                       7,   # COL_FUNCTION,
-                       8,):  # COL_OBJECT
+        for col_id in (
+            4,  # COL_CATEGORY
+            5,  # COL_FILENAME
+            7,  # COL_FUNCTION,
+            8,
+        ):  # COL_OBJECT
             line[col_id] = sys.intern(line[col_id] or "")
 
         return line
 
 
-class LogLines (object):
-
+class LogLines(object):
     def __init__(self, fileobj, line_cache):
 
         self.__fileobj = fileobj
@@ -430,7 +481,7 @@ class LogLines (object):
         self.__fileobj.seek(offset)
         line_string = self.__fileobj.readline()
         line = LogLine.parse_full(line_string)
-        msg = line_string[line[-1]:]
+        msg = line_string[line[-1] :]
         line[-1] = msg
         return line
 
@@ -443,8 +494,7 @@ class LogLines (object):
             i += 1
 
 
-class LogFile (Producer):
-
+class LogFile(Producer):
     def __init__(self, filename, dispatcher):
 
         import mmap
@@ -456,7 +506,8 @@ class LogFile (Producer):
         self.path = os.path.normpath(os.path.abspath(filename))
         self.__real_fileobj = open(filename, "rb")
         self.fileobj = mmap.mmap(
-            self.__real_fileobj.fileno(), 0, access=mmap.ACCESS_READ)
+            self.__real_fileobj.fileno(), 0, access=mmap.ACCESS_READ
+        )
         self.line_cache = LineCache(self.fileobj, dispatcher)
         self.line_cache.consumers.append(self)
 

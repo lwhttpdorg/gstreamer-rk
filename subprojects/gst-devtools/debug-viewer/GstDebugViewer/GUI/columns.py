@@ -31,10 +31,11 @@ from GstDebugViewer.GUI.models import LazyLogModel, LogModelBase
 def _(s):
     return s
 
+
 # Sync with gst-inspector!
 
 
-class Column (object):
+class Column(object):
 
     """A single list view column, managed by a ColumnManager instance."""
 
@@ -53,7 +54,7 @@ class Column (object):
         self.view_column = view_column
 
 
-class SizedColumn (Column):
+class SizedColumn(Column):
 
     default_size = None
 
@@ -61,10 +62,11 @@ class SizedColumn (Column):
 
         return None
 
+
 # Sync with gst-inspector?
 
 
-class TextColumn (SizedColumn):
+class TextColumn(SizedColumn):
 
     font_family = None
 
@@ -76,7 +78,7 @@ class TextColumn (SizedColumn):
         cell = Gtk.CellRendererText()
         column.pack_start(cell, True)
 
-        cell.props.yalign = 0.
+        cell.props.yalign = 0.0
         cell.props.ypad = 0
 
         if self.font_family:
@@ -88,8 +90,10 @@ class TextColumn (SizedColumn):
             assert data_func
             id_ = self.id
             if id_ is not None:
+
                 def cell_data_func(column, cell, model, tree_iter, user_data):
                     data_func(cell.props, model.get_value(tree_iter, id_))
+
             else:
                 cell_data_func = data_func
             column.set_cell_data_func(cell, cell_data_func)
@@ -107,6 +111,7 @@ class TextColumn (SizedColumn):
 
         def cell_data_func(column, cell, model, tree_iter, user_data):
             cell.props.text = modify_func(model.get_value(tree_iter, id_))
+
         column.set_cell_data_func(cell, cell_data_func)
 
     def compute_default_size(self):
@@ -120,8 +125,10 @@ class TextColumn (SizedColumn):
         if self.get_modify_func is not None:
             format = self.get_modify_func()
         else:
+
             def identity(x):
                 return x
+
             format = identity
         max_width = 0
         for value in values:
@@ -136,7 +143,7 @@ class TextColumn (SizedColumn):
         return ()
 
 
-class TimeColumn (TextColumn):
+class TimeColumn(TextColumn):
 
     name = "time"
     label_header = _("Time")
@@ -157,6 +164,7 @@ class TimeColumn (TextColumn):
 
             def format_time(value):
                 return time_diff_args(value - base_time)
+
         else:
             time_args = Data.time_args
 
@@ -181,7 +189,7 @@ class TimeColumn (TextColumn):
         self.update_modify_func(column, cell)
 
 
-class LevelColumn (TextColumn):
+class LevelColumn(TextColumn):
 
     name = "level"
     label_header = _("L")
@@ -192,11 +200,10 @@ class LevelColumn (TextColumn):
         TextColumn.__init__(self)
 
         cell = self.view_column.get_cells()[0]
-        cell.props.xalign = .5
+        cell.props.xalign = 0.5
 
     @staticmethod
     def get_modify_func():
-
         def format_level(value):
             return value.name[0]
 
@@ -206,17 +213,25 @@ class LevelColumn (TextColumn):
     def get_data_func():
 
         theme = LevelColorThemeTango()
-        colors = dict((level, tuple((c.gdk_color()
-                                     for c in theme.colors[level])),)
-                      for level in Data.debug_levels
-                      if level != Data.debug_level_none)
+        colors = dict(
+            (
+                level,
+                tuple((c.gdk_color() for c in theme.colors[level])),
+            )
+            for level in Data.debug_levels
+            if level != Data.debug_level_none
+        )
 
         def level_data_func(cell_props, level):
             cell_props.text = level.name[0]
             if level in colors:
                 cell_colors = colors[level]
             else:
-                cell_colors = (None, None, None,)
+                cell_colors = (
+                    None,
+                    None,
+                    None,
+                )
             cell_props.foreground_gdk = cell_colors[0]
             cell_props.background_gdk = cell_colors[1]
 
@@ -224,14 +239,19 @@ class LevelColumn (TextColumn):
 
     def get_values_for_size(self):
 
-        values = [Data.debug_level_log, Data.debug_level_debug,
-                  Data.debug_level_info, Data.debug_level_warning,
-                  Data.debug_level_error, Data.debug_level_memdump]
+        values = [
+            Data.debug_level_log,
+            Data.debug_level_debug,
+            Data.debug_level_info,
+            Data.debug_level_warning,
+            Data.debug_level_error,
+            Data.debug_level_memdump,
+        ]
 
         return values
 
 
-class PidColumn (TextColumn):
+class PidColumn(TextColumn):
 
     name = "pid"
     label_header = _("PID")
@@ -248,7 +268,7 @@ class PidColumn (TextColumn):
         return ["999999"]
 
 
-class ThreadColumn (TextColumn):
+class ThreadColumn(TextColumn):
 
     name = "thread"
     label_header = _("Thread")
@@ -257,7 +277,6 @@ class ThreadColumn (TextColumn):
 
     @staticmethod
     def get_modify_func():
-
         def format_thread(value):
             return "0x%07x" % (value,)
 
@@ -268,7 +287,7 @@ class ThreadColumn (TextColumn):
         return [int("ffffff", 16)]
 
 
-class CategoryColumn (TextColumn):
+class CategoryColumn(TextColumn):
 
     name = "category"
     label_header = _("Category")
@@ -279,7 +298,7 @@ class CategoryColumn (TextColumn):
         return ["GST_LONG_CATEGORY", "somelongelement"]
 
 
-class CodeColumn (TextColumn):
+class CodeColumn(TextColumn):
 
     name = "code"
     label_header = _("Code")
@@ -302,7 +321,7 @@ class CodeColumn (TextColumn):
         return ["gstsomefilename.c:1234"]
 
 
-class FunctionColumn (TextColumn):
+class FunctionColumn(TextColumn):
 
     name = "function"
     label_header = _("Function")
@@ -313,7 +332,7 @@ class FunctionColumn (TextColumn):
         return ["gst_this_should_be_enough"]
 
 
-class ObjectColumn (TextColumn):
+class ObjectColumn(TextColumn):
 
     name = "object"
     label_header = _("Object")
@@ -324,7 +343,7 @@ class ObjectColumn (TextColumn):
         return ["longobjectname00"]
 
 
-class MessageColumn (TextColumn):
+class MessageColumn(TextColumn):
 
     name = "message"
     label_header = _("Message")
@@ -363,11 +382,12 @@ class MessageColumn (TextColumn):
                 end = None
                 for start, end in ranges:
                     if prev_end < start:
-                        tags.append(
-                            GLib.markup_escape_text(msg[prev_end:start]))
+                        tags.append(GLib.markup_escape_text(msg[prev_end:start]))
                     msg_escape = GLib.markup_escape_text(msg[start:end])
-                    tags.append("<span foreground=\'#FFFFFF\'"
-                                " background=\'#0000FF\'>%s</span>" % (msg_escape,))
+                    tags.append(
+                        "<span foreground='#FFFFFF'"
+                        " background='#0000FF'>%s</span>" % (msg_escape,)
+                    )
                     prev_end = end
                 if end is not None:
                     tags.append(GLib.markup_escape_text(msg[end:]))
@@ -382,7 +402,7 @@ class MessageColumn (TextColumn):
         return values
 
 
-class ColumnManager (Common.GUI.Manager):
+class ColumnManager(Common.GUI.Manager):
 
     column_classes = ()
 
@@ -403,13 +423,15 @@ class ColumnManager (Common.GUI.Manager):
         self.action_group = Gtk.ActionGroup("ColumnActions")
 
         def make_entry(col_class):
-            return ("show-%s-column" % (col_class.name,),
-                    None,
-                    col_class.label_header,
-                    None,
-                    None,
-                    None,
-                    True,)
+            return (
+                "show-%s-column" % (col_class.name,),
+                None,
+                col_class.label_header,
+                None,
+                None,
+                None,
+                True,
+            )
 
         entries = [make_entry(cls) for cls in self.column_classes]
         self.action_group.add_toggle_actions(entries)
@@ -424,12 +446,13 @@ class ColumnManager (Common.GUI.Manager):
             action = self.get_toggle_action(col_class)
             if action.props.active:
                 self._add_column(col_class())
-            action.connect("toggled",
-                           self.__handle_show_column_action_toggled,
-                           col_class.name)
+            action.connect(
+                "toggled", self.__handle_show_column_action_toggled, col_class.name
+            )
 
-        self.__columns_changed_id = self.view.connect("columns-changed",
-                                                      self.__handle_view_columns_changed)
+        self.__columns_changed_id = self.view.connect(
+            "columns-changed", self.__handle_view_columns_changed
+        )
 
     def detach(self):
 
@@ -466,8 +489,9 @@ class ColumnManager (Common.GUI.Manager):
 
         self.default_sort = tree_sortable_get_sort_column_id(sort_model)
 
-        sort_model.set_sort_column_id(TREE_SORTABLE_UNSORTED_COLUMN_ID,
-                                      Gtk.SortType.ASCENDING)
+        sort_model.set_sort_column_id(
+            TREE_SORTABLE_UNSORTED_COLUMN_ID, Gtk.SortType.ASCENDING
+        )
 
     def set_zoom(self, scale):
 
@@ -530,7 +554,7 @@ class ColumnManager (Common.GUI.Manager):
     def __iter_next_hidden(self, column_class):
 
         pos = self.column_order.index(column_class)
-        rest = self.column_order[pos + 1:]
+        rest = self.column_order[pos + 1 :]
         for next_class in rest:
             try:
                 self.find_item(name=next_class.name)
@@ -564,8 +588,7 @@ class ColumnManager (Common.GUI.Manager):
     def __handle_view_columns_changed(self, element_view):
 
         view_columns = element_view.get_columns()
-        new_visible = [self.find_item(view_column=column)
-                       for column in view_columns]
+        new_visible = [self.find_item(view_column=column) for column in view_columns]
 
         # We only care about reordering here.
         if len(new_visible) != len(self.columns):
@@ -580,22 +603,35 @@ class ColumnManager (Common.GUI.Manager):
                 new_order.extend(self.__iter_next_hidden(col_class))
 
             names = (column.name for column in new_visible)
-            self.logger.debug("visible columns reordered: %s",
-                              ", ".join(names))
+            self.logger.debug("visible columns reordered: %s", ", ".join(names))
 
             self.columns[:] = new_visible
             self.column_order[:] = new_order
 
 
-class ViewColumnManager (ColumnManager):
+class ViewColumnManager(ColumnManager):
 
     column_classes = (
-        TimeColumn, LevelColumn, PidColumn, ThreadColumn, CategoryColumn,
-        CodeColumn, FunctionColumn, ObjectColumn, MessageColumn,)
+        TimeColumn,
+        LevelColumn,
+        PidColumn,
+        ThreadColumn,
+        CategoryColumn,
+        CodeColumn,
+        FunctionColumn,
+        ObjectColumn,
+        MessageColumn,
+    )
 
     default_column_classes = (
-        TimeColumn, LevelColumn, CategoryColumn, CodeColumn,
-        FunctionColumn, ObjectColumn, MessageColumn,)
+        TimeColumn,
+        LevelColumn,
+        CategoryColumn,
+        CodeColumn,
+        FunctionColumn,
+        ObjectColumn,
+        MessageColumn,
+    )
 
     def __init__(self, state):
 
@@ -619,7 +655,7 @@ class ViewColumnManager (ColumnManager):
             visible = self.default_column_classes
         for col_class in self.column_classes:
             action = self.get_toggle_action(col_class)
-            action.props.active = (col_class in visible)
+            action.props.active = col_class in visible
 
         ColumnManager.attach(self)
 
@@ -641,10 +677,7 @@ class ViewColumnManager (ColumnManager):
 
         # Timestamp and log level columns are pretty much fixed size, so resize
         # them back to default on zoom change:
-        names = (TimeColumn.name,
-                 LevelColumn.name,
-                 PidColumn.name,
-                 ThreadColumn.name)
+        names = (TimeColumn.name, LevelColumn.name, PidColumn.name, ThreadColumn.name)
         for column in self.columns:
             if column.name in names:
                 self.size_column(column)
@@ -660,7 +693,8 @@ class ViewColumnManager (ColumnManager):
             # Dummy fallback:
             column.view_column.props.fixed_width = 50
             self.logger.warning(
-                "%s column does not implement default size", column.name)
+                "%s column does not implement default size", column.name
+            )
         else:
             column.view_column.props.fixed_width = default_size
 
@@ -689,8 +723,7 @@ class ViewColumnManager (ColumnManager):
         self.columns_sized = True
 
 
-class WrappingMessageColumn (MessageColumn):
-
+class WrappingMessageColumn(MessageColumn):
     def wrap_to_width(self, width):
 
         col = self.view_column
@@ -699,9 +732,12 @@ class WrappingMessageColumn (MessageColumn):
         col.queue_resize()
 
 
-class LineViewColumnManager (ColumnManager):
+class LineViewColumnManager(ColumnManager):
 
-    column_classes = (TimeColumn, WrappingMessageColumn,)
+    column_classes = (
+        TimeColumn,
+        WrappingMessageColumn,
+    )
 
     def __init__(self):
 

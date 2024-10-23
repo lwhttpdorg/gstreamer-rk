@@ -24,8 +24,7 @@ import gi
 from gi.repository import GObject
 
 
-class Dispatcher (object):
-
+class Dispatcher(object):
     def __call__(self, iterator):
 
         raise NotImplementedError("derived classes must override this method")
@@ -35,16 +34,14 @@ class Dispatcher (object):
         pass
 
 
-class DefaultDispatcher (Dispatcher):
-
+class DefaultDispatcher(Dispatcher):
     def __call__(self, iterator):
 
         for x in iterator:
             pass
 
 
-class GSourceDispatcher (Dispatcher):
-
+class GSourceDispatcher(Dispatcher):
     def __init__(self):
 
         Dispatcher.__init__(self)
@@ -62,8 +59,7 @@ class GSourceDispatcher (Dispatcher):
                 self.source_id = None
             return r
 
-        self.source_id = GObject.idle_add(
-            iteration, priority=GObject.PRIORITY_LOW)
+        self.source_id = GObject.idle_add(iteration, priority=GObject.PRIORITY_LOW)
 
     def cancel(self):
 

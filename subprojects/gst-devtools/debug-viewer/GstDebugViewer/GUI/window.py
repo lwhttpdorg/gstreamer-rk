@@ -33,16 +33,20 @@ from gi.repository import GLib
 
 from GstDebugViewer import Common, Data, Main
 from GstDebugViewer.GUI.columns import LineViewColumnManager, ViewColumnManager
-from GstDebugViewer.GUI.filters import (CategoryFilter,
-                                        DebugLevelFilter,
-                                        FilenameFilter,
-                                        FunctionFilter,
-                                        ThreadFilter,
-                                        ObjectFilter)
-from GstDebugViewer.GUI.models import (FilteredLogModel,
-                                       LazyLogModel,
-                                       LineViewLogModel,
-                                       LogModelBase)
+from GstDebugViewer.GUI.filters import (
+    CategoryFilter,
+    DebugLevelFilter,
+    FilenameFilter,
+    FunctionFilter,
+    ThreadFilter,
+    ObjectFilter,
+)
+from GstDebugViewer.GUI.models import (
+    FilteredLogModel,
+    LazyLogModel,
+    LineViewLogModel,
+    LogModelBase,
+)
 
 
 ZOOM_FACTOR = 1.15
@@ -73,14 +77,16 @@ def iter_actions(manager):
 
         assert name.startswith("handle_")
         assert name.endswith("_action_activate")
-        action_name = name[len("handle_"):-len("_action_activate")]
+        action_name = name[len("handle_") : -len("_action_activate")]
         action_name = action_name.replace("_", "-")
 
-        yield (action_name, bound_method,)
+        yield (
+            action_name,
+            bound_method,
+        )
 
 
-class LineView (object):
-
+class LineView(object):
     def __init__(self):
 
         self.column_manager = LineViewColumnManager()
@@ -94,12 +100,10 @@ class LineView (object):
         self.clear_action = window.actions.clear_line_view
 
         self.line_view = window.widgets.line_view
-        self.line_view.connect(
-            "row-activated", self.handle_line_view_row_activated)
+        self.line_view.connect("row-activated", self.handle_line_view_row_activated)
 
         ui = window.ui_manager
-        self.popup = ui.get_widget(
-            "/ui/context/LineViewContextMenu").get_submenu()
+        self.popup = ui.get_widget("/ui/context/LineViewContextMenu").get_submenu()
         Common.GUI.widget_add_popup_menu(self.line_view, self.popup)
 
         self.log_view = log_view = window.log_view
@@ -134,7 +138,7 @@ class LineView (object):
         super_index = line_model.line_index_to_super(line_index)
         log_index = log_model.line_index_from_super(super_index)
         path = (log_index,)
-        self.log_view.scroll_to_cell(path, use_align=True, row_align=.5)
+        self.log_view.scroll_to_cell(path, use_align=True, row_align=0.5)
         sel = self.log_view.get_selection()
         sel.select_path(path)
 
@@ -190,8 +194,7 @@ class LineView (object):
         self.clear()
 
 
-class ProgressDialog (object):
-
+class ProgressDialog(object):
     def __init__(self, window, title=""):
 
         bar = Gtk.InfoBar()
@@ -227,8 +230,7 @@ class ProgressDialog (object):
         self.__progress_bar.props.fraction = progress
 
 
-class Window (object):
-
+class Window(object):
     def __init__(self, app):
 
         self.logger = logging.getLogger("ui.window")
@@ -246,67 +248,69 @@ class Window (object):
         self.actions = Common.GUI.Actions()
 
         group = Gtk.ActionGroup("MenuActions")
-        group.add_actions([("AppMenuAction", None, _("_Application")),
-                           ("ViewMenuAction", None, _("_View")),
-                           ("ViewColumnsMenuAction", None, _("_Columns")),
-                           ("HelpMenuAction", None, _("_Help")),
-                           ("LineViewContextMenuAction", None, "")])
+        group.add_actions(
+            [
+                ("AppMenuAction", None, _("_Application")),
+                ("ViewMenuAction", None, _("_View")),
+                ("ViewColumnsMenuAction", None, _("_Columns")),
+                ("HelpMenuAction", None, _("_Help")),
+                ("LineViewContextMenuAction", None, ""),
+            ]
+        )
         self.actions.add_group(group)
 
         group = Gtk.ActionGroup("WindowActions")
         group.add_actions(
-            [("new-window", Gtk.STOCK_NEW, _("_New Window"), "<Ctrl>N"),
-             ("open-file", Gtk.STOCK_OPEN, _(
-              "_Open File"), "<Ctrl>O"),
-             ("reload-file", Gtk.STOCK_REFRESH, _(
-              "_Reload File"), "<Ctrl>R"),
-             ("close-window", Gtk.STOCK_CLOSE, _(
-              "Close _Window"), "<Ctrl>W"),
-             ("cancel-load", Gtk.STOCK_CANCEL, None,),
-             ("clear-line-view", Gtk.STOCK_CLEAR, None),
-             ("show-about", None, _(
-              "About GStreamer Debug Viewer",)),
-             ("enlarge-text", Gtk.STOCK_ZOOM_IN, _(
-              "Enlarge Text"), "<Ctrl>plus"),
-             ("shrink-text", Gtk.STOCK_ZOOM_OUT, _(
-              "Shrink Text"), "<Ctrl>minus"),
-             ("reset-text", Gtk.STOCK_ZOOM_100, _("Normal Text Size"), "<Ctrl>0")])
+            [
+                ("new-window", Gtk.STOCK_NEW, _("_New Window"), "<Ctrl>N"),
+                ("open-file", Gtk.STOCK_OPEN, _("_Open File"), "<Ctrl>O"),
+                ("reload-file", Gtk.STOCK_REFRESH, _("_Reload File"), "<Ctrl>R"),
+                ("close-window", Gtk.STOCK_CLOSE, _("Close _Window"), "<Ctrl>W"),
+                (
+                    "cancel-load",
+                    Gtk.STOCK_CANCEL,
+                    None,
+                ),
+                ("clear-line-view", Gtk.STOCK_CLEAR, None),
+                (
+                    "show-about",
+                    None,
+                    _(
+                        "About GStreamer Debug Viewer",
+                    ),
+                ),
+                ("enlarge-text", Gtk.STOCK_ZOOM_IN, _("Enlarge Text"), "<Ctrl>plus"),
+                ("shrink-text", Gtk.STOCK_ZOOM_OUT, _("Shrink Text"), "<Ctrl>minus"),
+                ("reset-text", Gtk.STOCK_ZOOM_100, _("Normal Text Size"), "<Ctrl>0"),
+            ]
+        )
         self.actions.add_group(group)
         self.actions.reload_file.props.sensitive = False
 
         group = Gtk.ActionGroup("RowActions")
         group.add_actions(
-            [("hide-before-line", None, _("Hide lines before this point")),
-             ("hide-after-line", None, _(
-              "Hide lines after this point")),
-             ("show-hidden-lines", None, _(
-              "Show hidden lines")),
-             ("edit-copy-line", Gtk.STOCK_COPY, _(
-              "Copy line"), "<Ctrl>C"),
-             ("edit-copy-message", Gtk.STOCK_COPY, _(
-              "Copy message"), ""),
-             ("set-base-time", None, _("Set base time")),
-             ("hide-log-level", None, _("Hide log level")),
-             ("hide-log-level-and-above", None, _(
-              "Hide this log level and above")),
-             ("show-only-log-level", None, _(
-              "Show only log level")),
-             ("hide-log-category", None, _(
-              "Hide log category")),
-             ("show-only-log-category", None, _(
-              "Show only log category")),
-             ("hide-thread", None, _(
-              "Hide thread")),
-             ("show-only-thread", None, _(
-              "Show only thread")),
-             ("hide-object", None, _("Hide object")),
-             ("show-only-object", None, _(
-              "Show only object")),
-             ("hide-function", None, _("Hide function")),
-             ("show-only-function", None, _(
-              "Show only function")),
-             ("hide-filename", None, _("Hide filename")),
-             ("show-only-filename", None, _("Show only filename"))])
+            [
+                ("hide-before-line", None, _("Hide lines before this point")),
+                ("hide-after-line", None, _("Hide lines after this point")),
+                ("show-hidden-lines", None, _("Show hidden lines")),
+                ("edit-copy-line", Gtk.STOCK_COPY, _("Copy line"), "<Ctrl>C"),
+                ("edit-copy-message", Gtk.STOCK_COPY, _("Copy message"), ""),
+                ("set-base-time", None, _("Set base time")),
+                ("hide-log-level", None, _("Hide log level")),
+                ("hide-log-level-and-above", None, _("Hide this log level and above")),
+                ("show-only-log-level", None, _("Show only log level")),
+                ("hide-log-category", None, _("Hide log category")),
+                ("show-only-log-category", None, _("Show only log category")),
+                ("hide-thread", None, _("Hide thread")),
+                ("show-only-thread", None, _("Show only thread")),
+                ("hide-object", None, _("Hide object")),
+                ("show-only-object", None, _("Show only object")),
+                ("hide-function", None, _("Hide function")),
+                ("show-only-function", None, _("Show only function")),
+                ("hide-filename", None, _("Hide filename")),
+                ("show-only-filename", None, _("Show only filename")),
+            ]
+        )
         group.props.sensitive = False
         self.actions.add_group(group)
 
@@ -334,8 +338,7 @@ class Window (object):
         sel = self.log_view.get_selection()
         sel.connect("changed", self.handle_log_view_selection_changed)
 
-        self.view_popup = ui.get_widget(
-            "/ui/context/LogViewContextMenu").get_submenu()
+        self.view_popup = ui.get_widget("/ui/context/LogViewContextMenu").get_submenu()
         Common.GUI.widget_add_popup_menu(self.log_view, self.view_popup)
 
         # Widgets to set insensitive when the window is considered as
@@ -354,7 +357,9 @@ class Window (object):
 
         self.log_model = model
         self.log_filter = FilteredLogModel(self.log_model)
-        self.log_filter.handle_process_finished = self.handle_log_filter_process_finished
+        self.log_filter.handle_process_finished = (
+            self.handle_log_filter_process_finished
+        )
 
     def get_top_attach_point(self):
 
@@ -369,21 +374,19 @@ class Window (object):
         self.zoom_level = 0
         zoom_percent = self.app.state_section.zoom_level
         if zoom_percent:
-            self.restore_zoom(float(zoom_percent) / 100.)
+            self.restore_zoom(float(zoom_percent) / 100.0)
 
-        self.window_state.attach(window=self.gtk_window,
-                                 state=self.app.state_section)
+        self.window_state.attach(window=self.gtk_window, state=self.app.state_section)
 
         self.clipboard = Gtk.Clipboard.get_for_display(
-            self.gtk_window.get_display(),
-            Gdk.SELECTION_CLIPBOARD)
+            self.gtk_window.get_display(), Gdk.SELECTION_CLIPBOARD
+        )
 
         for action_name, handler in iter_actions(self):
             action = getattr(self.actions, action_name)
             action.connect("activate", handler)
 
-        self.gtk_window.connect(
-            "delete-event", self.handle_window_delete_event)
+        self.gtk_window.connect("delete-event", self.handle_window_delete_event)
 
         self.features = []
 
@@ -403,8 +406,7 @@ class Window (object):
 
         # Do not translate; fallback application name for e.g. gnome-shell if
         # the desktop file is not installed:
-        self.gtk_window.set_wmclass(
-            "gst-debug-viewer", "GStreamer Debug Viewer")
+        self.gtk_window.set_wmclass("gst-debug-viewer", "GStreamer Debug Viewer")
 
         self.gtk_window.show()
 
@@ -459,8 +461,9 @@ class Window (object):
             self.logger.debug("no line selected")
         else:
             super_index = model.line_index_to_super(line_index)
-            self.logger.debug("pushing selected line %i (abs %i)",
-                              line_index, super_index)
+            self.logger.debug(
+                "pushing selected line %i (abs %i)", line_index, super_index
+            )
 
         self.default_index = super_index
 
@@ -497,8 +500,8 @@ class Window (object):
                 select_index = model.line_index_from_super(selected_index)
             except IndexError as exc:
                 self.logger.debug(
-                    "abs line index %i filtered out, not reselecting",
-                    selected_index)
+                    "abs line index %i filtered out, not reselecting", selected_index
+                )
             else:
                 assert select_index >= 0
                 sel = self.log_view.get_selection()
@@ -506,8 +509,7 @@ class Window (object):
                 sel.select_path(path)
 
                 if start_index is None or scroll_to_selection:
-                    self.log_view.scroll_to_cell(
-                        path, use_align=True, row_align=.5)
+                    self.log_view.scroll_to_cell(path, use_align=True, row_align=0.5)
 
         if start_index is not None and not scroll_to_selection:
 
@@ -516,6 +518,7 @@ class Window (object):
                     yield i
                 for i in range(start_index - 1, 0, -1):
                     yield i
+
             for current_index in traverse():
                 try:
                     target_index = model.line_index_from_super(current_index)
@@ -523,8 +526,7 @@ class Window (object):
                     continue
                 else:
                     path = (target_index,)
-                    self.log_view.scroll_to_cell(
-                        path, use_align=True, row_align=0.)
+                    self.log_view.scroll_to_cell(path, use_align=True, row_align=0.0)
                     break
 
     def update_view(self):
@@ -551,9 +553,8 @@ class Window (object):
             first_selected = True
             last_selected = True
         else:
-            first_selected = (line_index == 0)
-            last_selected = (
-                line_index == len(self.log_view.get_model()) - 1)
+            first_selected = line_index == 0
+            last_selected = line_index == len(self.log_view.get_model()) - 1
 
         self.actions.hide_before_line.props.sensitive = not first_selected
         self.actions.hide_after_line.props.sensitive = not last_selected
@@ -572,8 +573,9 @@ class Window (object):
     @action
     def handle_open_file_action_activate(self, action):
 
-        dialog = Gtk.FileChooserNative.new(None, self.gtk_window,
-                                       Gtk.FileChooserAction.OPEN, None, None)
+        dialog = Gtk.FileChooserNative.new(
+            None, self.gtk_window, Gtk.FileChooserAction.OPEN, None, None
+        )
         response = dialog.run()
         dialog.hide()
         if response == Gtk.ResponseType.ACCEPT:
@@ -635,7 +637,8 @@ class Window (object):
                 "hiding lines after %i (abs %i), first line is abs %i",
                 filtered_line_index,
                 last_index,
-                first_index)
+                first_index,
+            )
         else:
             first_index = model.line_index_to_super(filtered_line_index)
             last_index = model.line_index_to_super(len(model) - 1)
@@ -644,7 +647,8 @@ class Window (object):
                 "hiding lines before %i (abs %i), last line is abs %i",
                 filtered_line_index,
                 first_index,
-                last_index)
+                last_index,
+            )
 
         self.push_view_state()
         start_index = first_index
@@ -664,10 +668,8 @@ class Window (object):
         start_path, end_path = visible_range
         if not start_path or not end_path:
             return None
-        ts1 = model.get_value(model.get_iter(start_path),
-                              model.COL_TIME)
-        ts2 = model.get_value(model.get_iter(end_path),
-                              model.COL_TIME)
+        ts1 = model.get_value(model.get_iter(start_path), model.COL_TIME)
+        ts2 = model.get_value(model.get_iter(end_path), model.COL_TIME)
         return (ts1, ts2)
 
     @action
@@ -691,14 +693,13 @@ class Window (object):
         line_text = model.access_offset(line_offset).strip()
         line_text = Data.strip_escape(line_text)
 
-        self.clipboard.set_text(line_text.decode('utf8', errors='replace'), -1)
+        self.clipboard.set_text(line_text.decode("utf8", errors="replace"), -1)
 
     @action
     def handle_edit_copy_message_action_activate(self, action):
 
         col_id = LogModelBase.COL_MESSAGE
-        self.clipboard.set_text(self.get_active_line()[
-                                col_id].decode('utf8'), -1)
+        self.clipboard.set_text(self.get_active_line()[col_id].decode("utf8"), -1)
 
     @action
     def handle_enlarge_text_action_activate(self, action):
@@ -729,11 +730,11 @@ class Window (object):
             return
 
         self.zoom_level += delta_step
-        scale = ZOOM_FACTOR ** self.zoom_level
+        scale = ZOOM_FACTOR**self.zoom_level
 
         self.column_manager.set_zoom(scale)
 
-        self.app.state_section.zoom_level = int(round(scale * 100.))
+        self.app.state_section.zoom_level = int(round(scale * 100.0))
 
     def set_sensitive(self, sensitive):
 
@@ -869,7 +870,8 @@ class Window (object):
         row = self.get_active_line()
         debug_level = row[LogModelBase.COL_LEVEL]
         self.add_model_filter(
-            DebugLevelFilter(debug_level, DebugLevelFilter.this_and_above))
+            DebugLevelFilter(debug_level, DebugLevelFilter.this_and_above)
+        )
 
     @action
     def handle_show_only_log_level_action_activate(self, action):
@@ -877,7 +879,8 @@ class Window (object):
         row = self.get_active_line()
         debug_level = row[LogModelBase.COL_LEVEL]
         self.add_model_filter(
-            DebugLevelFilter(debug_level, DebugLevelFilter.all_but_this))
+            DebugLevelFilter(debug_level, DebugLevelFilter.all_but_this)
+        )
 
     @action
     def handle_show_only_log_category_action_activate(self, action):
@@ -919,8 +922,7 @@ class Window (object):
 
         from GstDebugViewer import version
 
-        dialog = self.widget_factory.make_one(
-            "about-dialog.ui", "about_dialog")
+        dialog = self.widget_factory.make_one("about-dialog.ui", "about_dialog")
         dialog.props.version = version
         dialog.run()
         dialog.destroy()
@@ -971,15 +973,15 @@ class Window (object):
                     if file_size == 0:
                         # Trying to mmap an empty file results in an invalid
                         # argument error.
-                        self.show_error(_("Could not open file"),
-                                        _("The selected file is empty"))
+                        self.show_error(
+                            _("Could not open file"), _("The selected file is empty")
+                        )
                         return
                 self.handle_environment_error(exc, filename)
                 return
 
             basename = os.path.basename(filename)
-            self.gtk_window.props.title = _(
-                "%s - GStreamer Debug Viewer") % (basename,)
+            self.gtk_window.props.title = _("%s - GStreamer Debug Viewer") % (basename,)
 
             self.log_file.consumers.append(self)
             self.log_file.start_loading()
@@ -994,8 +996,10 @@ class Window (object):
         bar.props.message_type = Gtk.MessageType.ERROR
         box = bar.get_content_area()
 
-        markup = "<b>%s</b> %s" % (GLib.markup_escape_text(message1),
-                                   GLib.markup_escape_text(message2),)
+        markup = "<b>%s</b> %s" % (
+            GLib.markup_escape_text(message1),
+            GLib.markup_escape_text(message2),
+        )
         label = Gtk.Label()
         label.props.use_markup = True
         label.props.label = markup
@@ -1011,8 +1015,7 @@ class Window (object):
         self.progress_dialog = ProgressDialog(self, _("Loading log file"))
         self.show_info(self.progress_dialog.widget)
         self.progress_dialog.handle_cancel = self.handle_load_progress_dialog_cancel
-        self.update_progress_id = GObject.timeout_add(
-            250, self.update_load_progress)
+        self.update_progress_id = GObject.timeout_add(250, self.update_load_progress)
 
         self.set_sensitive(False)
 
@@ -1024,7 +1027,8 @@ class Window (object):
 
         if self.progress_dialog is None:
             self.logger.debug(
-                "progress dialog is gone, removing progress update timeout")
+                "progress dialog is gone, removing progress update timeout"
+            )
             self.update_progress_id = None
             return False
 
@@ -1052,7 +1056,8 @@ class Window (object):
         if len(self.log_model) == 0:
             self.show_error(
                 _("The file does not contain any parsable lines."),
-                _("It is not a GStreamer log file."))
+                _("It is not a GStreamer log file."),
+            )
 
         def idle_set():
             self.logger.debug("idle trigger after load finished")

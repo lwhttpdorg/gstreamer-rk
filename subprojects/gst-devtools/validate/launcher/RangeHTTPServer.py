@@ -150,7 +150,7 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         self.send_header("Accept-Ranges", "bytes")
         if "Range" in self.headers:
-            s, e = self.headers['range'][6:].split('-', 1)  # bytes:%d-%d
+            s, e = self.headers["range"][6:].split("-", 1)  # bytes:%d-%d
             sl = len(s)
             el = len(e)
 
@@ -161,7 +161,9 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             elif el:
                 start_range = file_size - min(file_size, int(e))
 
-        self.send_header("Content-Range", "bytes {}-{}/{}".format(start_range, end_range, file_size))
+        self.send_header(
+            "Content-Range", "bytes {}-{}/{}".format(start_range, end_range, file_size)
+        )
         self.send_header("Content-Length", end_range - start_range)
         self.end_headers()
 
@@ -171,11 +173,11 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
     def list_directory(self, path):
         """Helper to produce a directory listing (absent index.html).
 
-                Return value is either a file object, or None (indicating an
-                error).  In either case, the headers are sent, making the
-                interface the same as for send_head().
+        Return value is either a file object, or None (indicating an
+        error).  In either case, the headers are sent, making the
+        interface the same as for send_head().
 
-                """
+        """
         try:
             lst = os.listdir(path)
         except OSError:
@@ -187,8 +189,12 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         displaypath = html.escape(urllib.parse.unquote(self.path))
         html_text.append('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
-        html_text.append("<html>\n<title>Directory listing for {}</title>\n".format(displaypath))
-        html_text.append("<body>\n<h2>Directory listing for {}</h2>\n".format(displaypath))
+        html_text.append(
+            "<html>\n<title>Directory listing for {}</title>\n".format(displaypath)
+        )
+        html_text.append(
+            "<body>\n<h2>Directory listing for {}</h2>\n".format(displaypath)
+        )
         html_text.append("<hr>\n<ul>\n")
 
         for name in lst:
@@ -202,9 +208,13 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             if os.path.islink(fullname):
                 displayname = name + "@"
 
-            html_text.append('<li><a href = "{}">{}</a>\n'.format(urllib.parse.quote(linkname), html.escape(displayname)))
+            html_text.append(
+                '<li><a href = "{}">{}</a>\n'.format(
+                    urllib.parse.quote(linkname), html.escape(displayname)
+                )
+            )
 
-        html_text.append('</ul>\n</hr>\n</body>\n</html>\n')
+        html_text.append("</ul>\n</hr>\n</body>\n</html>\n")
 
         byte_encoded_string = "\n".join(html_text).encode("utf-8", "surrogateescape")
         f = io.BytesIO()
@@ -266,20 +276,22 @@ class RangeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         if ext in self.extension_map:
             return self.extension_map[ext]
         else:
-            return self.extension_map['']
+            return self.extension_map[""]
 
     if not mimetypes.inited:
         mimetypes.init()
     extension_map = mimetypes.types_map.copy()
-    extension_map.update({
-        '': 'application/octet-stream',  # Default
-            '.py': 'text/plain',
-            '.c': 'text/plain',
-            '.h': 'text/plain',
-            '.mp4': 'video/mp4',
-            '.ogg': 'video/ogg',
-            '.java': 'text/plain',
-    })
+    extension_map.update(
+        {
+            "": "application/octet-stream",  # Default
+            ".py": "text/plain",
+            ".c": "text/plain",
+            ".h": "text/plain",
+            ".mp4": "video/mp4",
+            ".ogg": "video/ogg",
+            ".java": "text/plain",
+        }
+    )
 
 
 def test(handler_class=RangeHTTPRequestHandler, server_class=http.server.HTTPServer):
@@ -287,5 +299,7 @@ def test(handler_class=RangeHTTPRequestHandler, server_class=http.server.HTTPSer
 
 
 if __name__ == "__main__":
-    httpd = ThreadingSimpleServer(("0.0.0.0", int(sys.argv[1])), RangeHTTPRequestHandler)
+    httpd = ThreadingSimpleServer(
+        ("0.0.0.0", int(sys.argv[1])), RangeHTTPRequestHandler
+    )
     httpd.serve_forever()

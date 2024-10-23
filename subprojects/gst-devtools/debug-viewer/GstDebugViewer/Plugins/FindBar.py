@@ -29,13 +29,12 @@ from gi.repository import GObject, GLib
 from gi.repository import Gtk
 
 
-class SearchOperation (object):
-
+class SearchOperation(object):
     def __init__(self, model, search_text, search_forward=True, start_position=None):
 
         self.model = model
         if isinstance(search_text, str):
-            self.search_text = search_text.encode('utf8')
+            self.search_text = search_text.encode("utf8")
         else:
             self.search_text = search_text
         self.search_forward = search_forward
@@ -54,7 +53,12 @@ class SearchOperation (object):
                     pos = message.find(self.search_text, start)
                     if pos == -1:
                         break
-                    ranges.append((pos, pos + len_search_text,))
+                    ranges.append(
+                        (
+                            pos,
+                            pos + len_search_text,
+                        )
+                    )
                     start = pos + len_search_text
                 return ranges
             else:
@@ -63,8 +67,7 @@ class SearchOperation (object):
         self.match_func = match_func
 
 
-class SearchSentinel (object):
-
+class SearchSentinel(object):
     def __init__(self):
 
         self.dispatcher = Common.Data.GSourceDispatcher()
@@ -105,6 +108,7 @@ class SearchSentinel (object):
                 for i in range(start_pos, -1, -1):
                     yield nth_child(None, i)
                 yield None
+
             it_ = iter_next_()
 
             def iter_next(it):
@@ -136,10 +140,9 @@ class SearchSentinel (object):
         pass
 
 
-class FindBarWidget (Gtk.HBox):
+class FindBarWidget(Gtk.HBox):
 
-    __status = {"no-match-found": _N("No match found"),
-                "searching": _N("Searching...")}
+    __status = {"no-match-found": _N("No match found"), "searching": _N("Searching...")}
 
     def __init__(self, action_group):
 
@@ -162,7 +165,7 @@ class FindBarWidget (Gtk.HBox):
         self.pack_start(next_button, False, False, 0)
 
         self.status_label = Gtk.Label()
-        self.status_label.props.xalign = 0.
+        self.status_label.props.xalign = 0.0
         self.status_label.props.use_markup = True
         self.pack_start(self.status_label, False, False, 6)
         self.__compute_status_size()
@@ -208,8 +211,7 @@ class FindBarWidget (Gtk.HBox):
         self.__set_status("")
 
 
-class FindBarFeature (FeatureBase):
-
+class FindBarFeature(FeatureBase):
     def __init__(self, app):
 
         FeatureBase.__init__(self, app)
@@ -217,16 +219,20 @@ class FindBarFeature (FeatureBase):
         self.logger = logging.getLogger("ui.findbar")
 
         self.action_group = Gtk.ActionGroup("FindBarActions")
-        self.action_group.add_toggle_actions([("show-find-bar",
-                                               None,
-                                               _("Find Bar"),
-                                               "<Ctrl>F")])
-        self.action_group.add_actions([("goto-next-search-result",
-                                        None, _("Goto Next Match"),
-                                        "<Ctrl>G"),
-                                       ("goto-previous-search-result",
-                                        None, _("Goto Previous Match"),
-                                        "<Ctrl><Shift>G")])
+        self.action_group.add_toggle_actions(
+            [("show-find-bar", None, _("Find Bar"), "<Ctrl>F")]
+        )
+        self.action_group.add_actions(
+            [
+                ("goto-next-search-result", None, _("Goto Next Match"), "<Ctrl>G"),
+                (
+                    "goto-previous-search-result",
+                    None,
+                    _("Goto Previous Match"),
+                    "<Ctrl><Shift>G",
+                ),
+            ]
+        )
 
         self.bar = None
         self.operation = None
@@ -252,11 +258,12 @@ class FindBarFeature (FeatureBase):
 
         if path >= start_path and path <= end_path:
             self.logger.debug(
-                "line index %i already visible, not scrolling", line_index)
+                "line index %i already visible, not scrolling", line_index
+            )
             return
 
         self.logger.debug("scrolling to line_index %i", line_index)
-        view.scroll_to_cell(path, use_align=True, row_align=.5)
+        view.scroll_to_cell(path, use_align=True, row_align=0.5)
 
     def handle_attach_window(self, window):
 
@@ -269,12 +276,28 @@ class FindBarFeature (FeatureBase):
         self.log_view = window.log_view
 
         self.merge_id = ui.new_merge_id()
-        for name, action_name in [("ViewFindBar", "show-find-bar",),
-                                  ("ViewNextResult",
-                                   "goto-next-search-result",),
-                                  ("ViewPrevResult", "goto-previous-search-result",)]:
-            ui.add_ui(self.merge_id, "/menubar/ViewMenu/ViewMenuAdditions",
-                      name, action_name, Gtk.UIManagerItemType.MENUITEM, False)
+        for name, action_name in [
+            (
+                "ViewFindBar",
+                "show-find-bar",
+            ),
+            (
+                "ViewNextResult",
+                "goto-next-search-result",
+            ),
+            (
+                "ViewPrevResult",
+                "goto-previous-search-result",
+            ),
+        ]:
+            ui.add_ui(
+                self.merge_id,
+                "/menubar/ViewMenu/ViewMenuAdditions",
+                name,
+                action_name,
+                Gtk.UIManagerItemType.MENUITEM,
+                False,
+            )
 
         box = window.widgets.vbox_view
         self.bar = FindBarWidget(self.action_group)
@@ -312,17 +335,17 @@ class FindBarFeature (FeatureBase):
             self.update_search()
         else:
             try:
-                column = self.window.column_manager.find_item(
-                    name="message")
+                column = self.window.column_manager.find_item(name="message")
                 del column.highlighters[self]
             except KeyError:
                 pass
             self.bar.clear_status()
             self.bar.hide()
-            for action_name in ["goto-next-search-result",
-                                "goto-previous-search-result"]:
-                self.action_group.get_action(
-                    action_name).props.sensitive = False
+            for action_name in [
+                "goto-next-search-result",
+                "goto-previous-search-result",
+            ]:
+                self.action_group.get_action(action_name).props.sensitive = False
 
     def handle_goto_previous_search_result_action_activate(self, action):
 
@@ -338,8 +361,7 @@ class FindBarFeature (FeatureBase):
             return
         start_path = visible_range[0]
         new_position = start_path[0] - 1
-        self.start_search_operation(start_position=new_position,
-                                    forward=False)
+        self.start_search_operation(start_position=new_position, forward=False)
 
         # FIXME
 
@@ -357,8 +379,7 @@ class FindBarFeature (FeatureBase):
             return
         end_path = visible_range[1]
         new_position = end_path[0] + 1
-        self.start_search_operation(start_position=new_position,
-                                    forward=True)
+        self.start_search_operation(start_position=new_position, forward=True)
         # FIXME: Finish.
 
         # model = self.log_view.get_model ()
@@ -408,8 +429,7 @@ class FindBarFeature (FeatureBase):
             if visible_range is None:
                 return
             start_path = visible_range[0]
-            self.start_search_operation(
-                search_text, start_position=start_path[0])
+            self.start_search_operation(search_text, start_position=start_path[0])
             self.bar.status_searching()
             column.highlighters[self] = self.operation.match_func
 
@@ -417,12 +437,22 @@ class FindBarFeature (FeatureBase):
 
     def update_sensitivity(self):
 
-        for name, value in (("goto-next-search-result", self.next_match,),
-                            ("goto-previous-search-result", self.prev_match,),):
+        for name, value in (
+            (
+                "goto-next-search-result",
+                self.next_match,
+            ),
+            (
+                "goto-previous-search-result",
+                self.prev_match,
+            ),
+        ):
             action = self.action_group.get_action(name)
-            action.props.sensitive = (value is not None)
+            action.props.sensitive = value is not None
 
-    def start_search_operation(self, search_text=None, forward=True, start_position=None):
+    def start_search_operation(
+        self, search_text=None, forward=True, start_position=None
+    ):
 
         model = self.log_view.get_model()
 
@@ -439,30 +469,39 @@ class FindBarFeature (FeatureBase):
             operation = self.operation
             if operation is None:
                 raise ValueError(
-                    "search_text not given but have no previous search operation")
+                    "search_text not given but have no previous search operation"
+                )
             search_text = operation.search_text
 
-        self.operation = SearchOperation(model, search_text,
-                                         start_position=start_position,
-                                         search_forward=forward)
+        self.operation = SearchOperation(
+            model, search_text, start_position=start_position, search_forward=forward
+        )
         self.sentinel.run_for(self.operation)
 
     def handle_match_found(self, model, tree_iter):
 
-        if self.search_state not in ("search-forward", "search-backward",):
-            self.logger.warning(
-                "inconsistent search state %r", self.search_state)
+        if self.search_state not in (
+            "search-forward",
+            "search-backward",
+        ):
+            self.logger.warning("inconsistent search state %r", self.search_state)
             return
 
         line_index = model.get_path(tree_iter)[0]
-        forward_search = (self.search_state == "search-forward")
+        forward_search = self.search_state == "search-forward"
 
         if forward_search:
-            self.logger.debug("forward search for %r matches line %i",
-                              self.operation.search_text, line_index)
+            self.logger.debug(
+                "forward search for %r matches line %i",
+                self.operation.search_text,
+                line_index,
+            )
         else:
-            self.logger.debug("backward search for %r matches line %i",
-                              self.operation.search_text, line_index)
+            self.logger.debug(
+                "backward search for %r matches line %i",
+                self.operation.search_text,
+                line_index,
+            )
 
         self.sentinel.abort()
 
@@ -473,15 +512,17 @@ class FindBarFeature (FeatureBase):
             self.scroll_match = False
             # FIXME: Start with first line that is outside of the visible
             # range.
-            self.start_search_operation(start_position=line_index + 1,
-                                        forward=forward_search)
+            self.start_search_operation(
+                start_position=line_index + 1, forward=forward_search
+            )
         else:
             if forward_search:
                 self.next_match = line_index
 
                 self.search_state = "search-backward"
-                self.start_search_operation(forward=False,
-                                            start_position=line_index - 1)
+                self.start_search_operation(
+                    forward=False, start_position=line_index - 1
+                )
             else:
                 self.prev_match = line_index
                 self.update_sensitivity()
@@ -490,16 +531,17 @@ class FindBarFeature (FeatureBase):
     def handle_search_complete(self):
 
         if self.search_state == "search-forward":
-            self.logger.debug("forward search for %r reached last line",
-                              self.operation.search_text)
+            self.logger.debug(
+                "forward search for %r reached last line", self.operation.search_text
+            )
             self.next_match = None
         elif self.search_state == "search-backward":
-            self.logger.debug("backward search for %r reached first line",
-                              self.operation.search_text)
+            self.logger.debug(
+                "backward search for %r reached first line", self.operation.search_text
+            )
             self.prev_match = None
         else:
-            self.logger.warning("inconsistent search state %r",
-                                self.search_state)
+            self.logger.warning("inconsistent search state %r", self.search_state)
             return
 
         self.update_sensitivity()
@@ -507,6 +549,6 @@ class FindBarFeature (FeatureBase):
             self.bar.status_no_match_found()
 
 
-class Plugin (PluginBase):
+class Plugin(PluginBase):
 
     features = (FindBarFeature,)

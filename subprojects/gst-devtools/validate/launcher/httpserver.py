@@ -33,7 +33,7 @@ logcat = "httpserver"
 
 class HTTPServer(loggable.Loggable):
 
-    """ Class to run a SimpleHttpServer in a process."""
+    """Class to run a SimpleHttpServer in a process."""
 
     def __init__(self, options):
         loggable.Loggable.__init__(self)
@@ -42,12 +42,13 @@ class HTTPServer(loggable.Loggable):
         self._logsfile = None
 
     def _check_is_up(self, timeout=60):
-        """ Check if the server is up, running a simple test based on wget. """
+        """Check if the server is up, running a simple test based on wget."""
         start = time.time()
         while True:
             try:
-                response = urllib.request.urlopen('http://127.0.0.1:%s' % (
-                    self.options.http_server_port))
+                response = urllib.request.urlopen(
+                    "http://127.0.0.1:%s" % (self.options.http_server_port)
+                )
                 return True
             except urllib.error.URLError as e:
                 pass
@@ -58,30 +59,31 @@ class HTTPServer(loggable.Loggable):
             time.sleep(1)
 
     def start(self):
-        """ Start the server in a subprocess """
-        self._logsfile = open(os.path.join(self.options.logsdir,
-                                           "httpserver.logs"), 'w+')
+        """Start the server in a subprocess"""
+        self._logsfile = open(
+            os.path.join(self.options.logsdir, "httpserver.logs"), "w+"
+        )
         if self.options.http_server_dir is not None:
             if self._check_is_up(timeout=2):
                 return True
 
-            printc("-> Starting HTTP server... ", end='')
+            printc("-> Starting HTTP server... ", end="")
             try:
                 self.debug("Launching http server")
-                cmd = "%s %s %d %s" % (sys.executable, os.path.join(os.path.dirname(__file__),
-                                                                    "RangeHTTPServer.py"),
-                                       self.options.http_server_port,
-                                       self.options.http_bandwith,
-                                       )
+                cmd = "%s %s %d %s" % (
+                    sys.executable,
+                    os.path.join(os.path.dirname(__file__), "RangeHTTPServer.py"),
+                    self.options.http_server_port,
+                    self.options.http_bandwith,
+                )
                 curdir = os.path.abspath(os.curdir)
                 os.chdir(self.options.http_server_dir)
                 # cmd = "twistd -no web --path=%s -p %d" % (
                 # self.options.http_server_dir, self.options.http_server_port)
-                self.debug(
-                    "Launching server: %s (logs in %s)", cmd, self._logsfile)
-                self._process = subprocess.Popen(cmd.split(" "),
-                                                 stderr=self._logsfile,
-                                                 stdout=self._logsfile)
+                self.debug("Launching server: %s (logs in %s)", cmd, self._logsfile)
+                self._process = subprocess.Popen(
+                    cmd.split(" "), stderr=self._logsfile, stdout=self._logsfile
+                )
                 os.chdir(curdir)
                 self.debug("Launched http server")
                 # Dirty way to avoid eating to much CPU...
@@ -102,7 +104,7 @@ class HTTPServer(loggable.Loggable):
         return False
 
     def stop(self):
-        """ Stop the server subprocess if running. """
+        """Stop the server subprocess if running."""
         if self._process:
             self._process.terminate()
             self._process = None

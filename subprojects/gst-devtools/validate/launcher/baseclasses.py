@@ -50,6 +50,7 @@ from . import loggable
 from .loggable import Loggable
 
 from collections import defaultdict
+
 try:
     from lxml import etree as ET
 except ImportError:
@@ -58,9 +59,20 @@ except ImportError:
 
 from .vfb_server import get_virual_frame_buffer_server
 from .httpserver import HTTPServer
-from .utils import mkdir, Result, Colors, printc, DEFAULT_TIMEOUT, GST_SECOND, \
-    Protocols, look_for_file_in_source_dir, get_data_file, BackTraceGenerator, \
-    check_bugs_resolution, is_tty
+from .utils import (
+    mkdir,
+    Result,
+    Colors,
+    printc,
+    DEFAULT_TIMEOUT,
+    GST_SECOND,
+    Protocols,
+    look_for_file_in_source_dir,
+    get_data_file,
+    BackTraceGenerator,
+    check_bugs_resolution,
+    is_tty,
+)
 
 # The factor by which we increase the hard timeout when running inside
 # Valgrind
@@ -71,14 +83,30 @@ TIMEOUT_FACTOR = float(os.environ.get("TIMEOUT_FACTOR", 1))
 VALGRIND_ERROR_CODE = 20
 
 VALIDATE_OVERRIDE_EXTENSION = ".override"
-EXITING_SIGNALS = dict([(-getattr(signal, s), s) for s in [
-    'SIGQUIT', 'SIGILL', 'SIGABRT', 'SIGFPE', 'SIGSEGV', 'SIGBUS', 'SIGSYS',
-    'SIGTRAP', 'SIGXCPU', 'SIGXFSZ', 'SIGIOT'] if hasattr(signal, s)])
+EXITING_SIGNALS = dict(
+    [
+        (-getattr(signal, s), s)
+        for s in [
+            "SIGQUIT",
+            "SIGILL",
+            "SIGABRT",
+            "SIGFPE",
+            "SIGSEGV",
+            "SIGBUS",
+            "SIGSYS",
+            "SIGTRAP",
+            "SIGXCPU",
+            "SIGXFSZ",
+            "SIGIOT",
+        ]
+        if hasattr(signal, s)
+    ]
+)
 EXITING_SIGNALS.update({139: "SIGSEGV"})
 EXITING_SIGNALS.update({(v, k) for k, v in EXITING_SIGNALS.items()})
 
 
-CI_ARTIFACTS_URL = os.environ.get('CI_ARTIFACTS_URL')
+CI_ARTIFACTS_URL = os.environ.get("CI_ARTIFACTS_URL")
 DEBUGGER = None
 
 
@@ -87,11 +115,11 @@ def get_debugger():
     if DEBUGGER is not None:
         return DEBUGGER
 
-    gdb = shutil.which('gdb')
+    gdb = shutil.which("gdb")
     if gdb:
         DEBUGGER = GDBDebugger(gdb)
     else:
-        lldb = shutil.which('lldb')
+        lldb = shutil.which("lldb")
         DEBUGGER = LLDBDebugger(lldb)
 
     return DEBUGGER
@@ -139,14 +167,22 @@ class LLDBDebugger(Debugger):
 
 
 class Test(Loggable):
+    """A class representing a particular test."""
 
-    """ A class representing a particular test. """
-
-    def __init__(self, application_name, classname, options,
-                 reporter, duration=0, timeout=DEFAULT_TIMEOUT,
-                 hard_timeout=None, extra_env_variables=None,
-                 expected_issues=None, is_parallel=True,
-                 workdir=None):
+    def __init__(
+        self,
+        application_name,
+        classname,
+        options,
+        reporter,
+        duration=0,
+        timeout=DEFAULT_TIMEOUT,
+        hard_timeout=None,
+        extra_env_variables=None,
+        expected_issues=None,
+        is_parallel=True,
+        workdir=None,
+    ):
         """
         @timeout: The timeout during which the value return by get_current_value
                   keeps being exactly equal
@@ -192,17 +228,21 @@ class Test(Loggable):
         self.clean()
 
     def _generate_expected_issues(self):
-        return ''
+        return ""
 
     def generate_expected_issues(self):
-        res = '%s"FIXME \'%s\' issues [REPORT A BUG ' % (" " * 4, self.classname) \
-            + 'in https://gitlab.freedesktop.org/gstreamer/ '\
+        res = (
+            "%s\"FIXME '%s' issues [REPORT A BUG " % (" " * 4, self.classname)
+            + "in https://gitlab.freedesktop.org/gstreamer/ "
             + 'or use a proper bug description]": {'
+        )
         res += """
         "tests": [
             "%s"
         ],
-        "issues": [""" % (self.classname)
+        "issues": [""" % (
+            self.classname
+        )
 
         retcode = self.process.returncode if self.process else 0
         if retcode != 0:
@@ -211,7 +251,10 @@ class Test(Loggable):
             res += """\n            {
                 '%s': %s,
                 'sometimes': True,
-            },""" % ("signame" if signame else "returncode", val)
+            },""" % (
+                "signame" if signame else "returncode",
+                val,
+            )
 
         res += self._generate_expected_issues()
         res += "\n%s],\n%s},\n" % (" " * 8, " " * 4)
@@ -221,10 +264,12 @@ class Test(Loggable):
     def copy(self, nth=None):
         copied_test = copy.copy(self)
         if nth:
-            copied_test.classname += '_it' + str(nth)
+            copied_test.classname += "_it" + str(nth)
             copied_test._uuid = None
             copied_test.options = copy.copy(self.options)
-            copied_test.options.logsdir = os.path.join(copied_test.options.logsdir, str(nth))
+            copied_test.options.logsdir = os.path.join(
+                copied_test.options.logsdir, str(nth)
+            )
             os.makedirs(copied_test.options.logsdir, exist_ok=True)
 
         return copied_test
@@ -289,17 +334,18 @@ class Test(Loggable):
         if self.out:
             return
 
-        path = os.path.join(self.options.logsdir,
-                            self.classname.replace(".", os.sep) + '.md')
+        path = os.path.join(
+            self.options.logsdir, self.classname.replace(".", os.sep) + ".md"
+        )
         mkdir(os.path.dirname(path))
         self.logfile = path
 
-        if self.options.redirect_logs == 'stdout':
+        if self.options.redirect_logs == "stdout":
             self.out = sys.stdout
-        elif self.options.redirect_logs == 'stderr':
+        elif self.options.redirect_logs == "stderr":
             self.out = sys.stderr
         else:
-            self.out = open(path, 'w+')
+            self.out = open(path, "w+")
 
     def finalize_logfiles(self):
         self.out.write("\n**Duration**: %s" % self.time_taken)
@@ -309,37 +355,45 @@ class Test(Loggable):
                 # Only copy over extra logfile content if it's below a certain threshold
                 # Avoid copying gigabytes of data if a lot of debugging is activated
                 if os.path.getsize(logfile) < 500 * 1024:
-                    self.out.write('\n\n## %s:\n\n```\n%s\n```\n' % (
-                        os.path.basename(logfile), self.get_extra_log_content(logfile))
+                    self.out.write(
+                        "\n\n## %s:\n\n```\n%s\n```\n"
+                        % (
+                            os.path.basename(logfile),
+                            self.get_extra_log_content(logfile),
+                        )
                     )
                 else:
-                    self.out.write('\n\n## %s:\n\n**Log file too big.**\n  %s\n\n Check file content directly\n\n' % (
-                        os.path.basename(logfile), logfile)
+                    self.out.write(
+                        "\n\n## %s:\n\n**Log file too big.**\n  %s\n\n Check file content directly\n\n"
+                        % (os.path.basename(logfile), logfile)
                     )
 
             if self.rr_logdir:
-                self.out.write('\n\n## rr trace:\n\n```\nrr replay %s/latest-trace\n```\n' % (
-                    self.rr_logdir))
+                self.out.write(
+                    "\n\n## rr trace:\n\n```\nrr replay %s/latest-trace\n```\n"
+                    % (self.rr_logdir)
+                )
 
             self.out.flush()
             self.out.close()
 
         if self.options.html:
-            self.html_log = os.path.splitext(self.logfile)[0] + '.html'
+            self.html_log = os.path.splitext(self.logfile)[0] + ".html"
             import commonmark
+
             parser = commonmark.Parser()
             with open(self.logfile) as f:
                 ast = parser.parse(f.read())
 
             renderer = commonmark.HtmlRenderer()
             html = renderer.render(ast)
-            with open(self.html_log, 'w') as f:
+            with open(self.html_log, "w") as f:
                 f.write(html)
 
         self.out = None
 
     def _get_file_content(self, file_name):
-        with open(file_name, 'r', encoding='utf-8', errors='replace') as f:
+        with open(file_name, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
 
     def get_log_content(self):
@@ -352,13 +406,13 @@ class Test(Loggable):
         return self._get_file_content(extralog)
 
     def get_classname(self):
-        name = self.classname.split('.')[-1]
-        classname = self.classname.replace('.%s' % name, '')
+        name = self.classname.split(".")[-1]
+        classname = self.classname.replace(".%s" % name, "")
 
         return classname
 
     def get_name(self):
-        return self.classname.split('.')[-1]
+        return self.classname.split(".")[-1]
 
     def get_uuid(self):
         if self._uuid is None:
@@ -402,9 +456,11 @@ class Test(Loggable):
         else:
             info = ""
 
-        info += "\n\n**You can mark the issues as 'known' by adding the " \
-            + f" following lines to the list of known issues of the testsuite called \"{self.classname.split('.')[0]}\"**\n" \
+        info += (
+            "\n\n**You can mark the issues as 'known' by adding the "
+            + f" following lines to the list of known issues of the testsuite called \"{self.classname.split('.')[0]}\"**\n"
             + "\n\n``` python\n%s\n```" % (self.generate_expected_issues())
+        )
 
         if self.options.redirect_logs:
             print(info)
@@ -418,15 +474,18 @@ class Test(Loggable):
             self.out.write("\n```\n")
             self.out.flush()
 
-        self.debug("Setting result: %s (message: %s, error: %s)" % (result,
-                                                                    message, error))
+        self.debug(
+            "Setting result: %s (message: %s, error: %s)" % (result, message, error)
+        )
 
         if result is Result.TIMEOUT:
             self.add_stack_trace_to_logfile()
             if self.options.debug is True:
                 if self.options.gdb:
-                    printc("Timeout, you should process <ctrl>c to get into gdb",
-                           Colors.FAIL)
+                    printc(
+                        "Timeout, you should process <ctrl>c to get into gdb",
+                        Colors.FAIL,
+                    )
                     # and wait here until gdb exits
                     self.process.communicate()
                 else:
@@ -434,16 +493,20 @@ class Test(Loggable):
                     while True:
                         debugger = get_debugger()
                         if not debugger:
-                            res = input(f"{Colors.FAIL}Timeout happened on {self.classname} no known debugger found but the process PID is {self.process.pid}\n"
+                            res = input(
+                                f"{Colors.FAIL}Timeout happened on {self.classname} no known debugger found but the process PID is {self.process.pid}\n"
                                 f"You can find log file at {self.logfile}\n"
-                                f"Press 'ok(o)' enter to continue\n\n")
+                                f"Press 'ok(o)' enter to continue\n\n"
+                            )
                         else:
-                            res = input(f"{Colors.FAIL}Timeout happened on {self.classname} you can attach the debugger doing:\n"
-                                    f"   $ {' '.join([shlex.quote(a) for a in debugger.get_attach_args(self.process.pid)])}\n"
-                                    f"You can find log file at {self.logfile}\n"
-                                    f"**Press ok(o) to continue**{Colors.ENDC}\n\n")
+                            res = input(
+                                f"{Colors.FAIL}Timeout happened on {self.classname} you can attach the debugger doing:\n"
+                                f"   $ {' '.join([shlex.quote(a) for a in debugger.get_attach_args(self.process.pid)])}\n"
+                                f"You can find log file at {self.logfile}\n"
+                                f"**Press ok(o) to continue**{Colors.ENDC}\n\n"
+                            )
 
-                        if res.lower() in ['o', 'ok']:
+                        if res.lower() in ["o", "ok"]:
                             print("Continuing...\n")
                             break
 
@@ -457,8 +520,8 @@ class Test(Loggable):
     def expected_return_codes(self):
         res = []
         for issue in self.expected_issues:
-            if 'returncode' in issue:
-                res.append(issue['returncode'])
+            if "returncode" in issue:
+                res.append(issue["returncode"])
         return res
 
     def check_results(self):
@@ -470,22 +533,27 @@ class Test(Loggable):
             self.set_result(Result.SKIPPED, "SIGPIPE received under `rr`, known issue.")
         elif self.process.returncode == 0:
             for issue in self.expected_issues:
-                if issue['returncode'] != 0 and not issue.get("sometimes", False):
-                    self.set_result(Result.ERROR, "Expected return code %d" % issue['returncode'])
+                if issue["returncode"] != 0 and not issue.get("sometimes", False):
+                    self.set_result(
+                        Result.ERROR, "Expected return code %d" % issue["returncode"]
+                    )
                     return
             self.set_result(Result.PASSED)
         elif self.process.returncode in EXITING_SIGNALS:
             self.add_stack_trace_to_logfile()
-            self.set_result(Result.FAILED,
-                            "Application exited with signal %s" % (
-                                EXITING_SIGNALS[self.process.returncode]))
+            self.set_result(
+                Result.FAILED,
+                "Application exited with signal %s"
+                % (EXITING_SIGNALS[self.process.returncode]),
+            )
         elif self.process.returncode == VALGRIND_ERROR_CODE:
             self.set_result(Result.FAILED, "Valgrind reported errors")
         elif self.process.returncode in self.expected_return_codes():
             self.set_result(Result.KNOWN_ERROR)
         else:
-            self.set_result(Result.FAILED,
-                            "Application returned %d" % (self.process.returncode))
+            self.set_result(
+                Result.FAILED, "Application returned %d" % (self.process.returncode)
+            )
 
     def get_current_value(self):
         """
@@ -516,10 +584,11 @@ class Test(Loggable):
             # The get_current_value logic is not implemented... dumb
             # timeout
             if time.time() - self.last_change_ts > self.timeout:
-                self.set_result(Result.TIMEOUT,
-                                "Application timed out: %s secs" %
-                                self.timeout,
-                                "timeout")
+                self.set_result(
+                    Result.TIMEOUT,
+                    "Application timed out: %s secs" % self.timeout,
+                    "timeout",
+                )
                 return True
             return False
         elif val is Result.FAILED:
@@ -531,17 +600,18 @@ class Test(Loggable):
 
         if val == self.last_val:
             delta = time.time() - self.last_change_ts
-            self.debug("%s: Same value for %d/%d seconds" %
-                       (self, delta, self.timeout))
+            self.debug("%s: Same value for %d/%d seconds" % (self, delta, self.timeout))
             if delta > self.timeout:
-                self.set_result(Result.TIMEOUT,
-                                "Application timed out: %s secs" %
-                                self.timeout,
-                                "timeout")
+                self.set_result(
+                    Result.TIMEOUT,
+                    "Application timed out: %s secs" % self.timeout,
+                    "timeout",
+                )
                 return True
         elif self.hard_timeout and time.time() - self.start_ts > self.hard_timeout:
             self.set_result(
-                Result.TIMEOUT, "Hard timeout reached: %d secs" % self.hard_timeout)
+                Result.TIMEOUT, "Hard timeout reached: %d secs" % self.hard_timeout
+            )
             return True
         else:
             self.last_change_ts = time.time()
@@ -557,11 +627,16 @@ class Test(Loggable):
         if self.options.rr and self.process and self.process.returncode is None:
             cmd = ["ps", "-o", "pid", "--ppid", str(self.process.pid), "--noheaders"]
             try:
-                subprocs_id = [int(pid.strip('\n')) for
-                    pid in subprocess.check_output(cmd).decode().split(' ') if pid]
+                subprocs_id = [
+                    int(pid.strip("\n"))
+                    for pid in subprocess.check_output(cmd).decode().split(" ")
+                    if pid
+                ]
             except FileNotFoundError:
-                self.error("Ps not found, will probably not be able to get rr "
-                    "working properly after we kill the process")
+                self.error(
+                    "Ps not found, will probably not be able to get rr "
+                    "working properly after we kill the process"
+                )
             except subprocess.CalledProcessError as e:
                 self.error("Couldn't get rr subprocess pid: %s" % (e))
 
@@ -581,12 +656,14 @@ class Test(Loggable):
         else:
             preexec_fn = None
 
-        self.process = subprocess.Popen(self.command,
-                                        stderr=self.out,
-                                        stdout=self.out,
-                                        env=self.proc_env,
-                                        cwd=self.workdir,
-                                        preexec_fn=preexec_fn)
+        self.process = subprocess.Popen(
+            self.command,
+            stderr=self.out,
+            stdout=self.out,
+            env=self.proc_env,
+            cwd=self.workdir,
+            preexec_fn=preexec_fn,
+        )
         self.process.wait()
         if self.result is not Result.TIMEOUT:
             if self.process.returncode == 0:
@@ -601,7 +678,7 @@ class Test(Loggable):
         self.error("Could not find any %s file" % name)
 
     def get_valgrind_suppressions(self):
-        return [self.get_valgrind_suppression_file('data', 'gstvalidate.supp')]
+        return [self.get_valgrind_suppression_file("data", "gstvalidate.supp")]
 
     def use_gdb(self, command):
         if self.hard_timeout is not None:
@@ -617,45 +694,49 @@ class Test(Loggable):
         return args
 
     def use_rr(self, command, subenv):
-        command = ["rr", 'record', '-h'] + command
+        command = ["rr", "record", "-h"] + command
 
         self.timeout *= RR_TIMEOUT_FACTOR
-        self.rr_logdir = os.path.join(self.options.logsdir, self.classname.replace(".", os.sep), 'rr-logs')
-        subenv['_RR_TRACE_DIR'] = self.rr_logdir
+        self.rr_logdir = os.path.join(
+            self.options.logsdir, self.classname.replace(".", os.sep), "rr-logs"
+        )
+        subenv["_RR_TRACE_DIR"] = self.rr_logdir
         try:
             shutil.rmtree(self.rr_logdir, ignore_errors=False, onerror=None)
         except FileNotFoundError:
             pass
-        self.add_env_variable('_RR_TRACE_DIR', self.rr_logdir)
+        self.add_env_variable("_RR_TRACE_DIR", self.rr_logdir)
 
         return command
 
     def use_valgrind(self, command, subenv):
-        vglogsfile = os.path.splitext(self.logfile)[0] + '.valgrind'
+        vglogsfile = os.path.splitext(self.logfile)[0] + ".valgrind"
         self.extra_logfiles.add(vglogsfile)
 
         vg_args = []
 
-        for o, v in [('trace-children', 'yes'),
-                     ('tool', 'memcheck'),
-                     ('fair-sched', 'try'),
-                     ('leak-check', 'full'),
-                     ('leak-resolution', 'high'),
-                     # TODO: errors-for-leak-kinds should be set to all instead of definite
-                     # and all false positives should be added to suppression
-                     # files.
-                     ('errors-for-leak-kinds', 'definite,indirect'),
-                     ('show-leak-kinds', 'definite,indirect'),
-                     ('show-possibly-lost', 'no'),
-                     ('num-callers', '20'),
-                     ('error-exitcode', str(VALGRIND_ERROR_CODE)),
-                     ('gen-suppressions', 'all')]:
+        for o, v in [
+            ("trace-children", "yes"),
+            ("tool", "memcheck"),
+            ("fair-sched", "try"),
+            ("leak-check", "full"),
+            ("leak-resolution", "high"),
+            # TODO: errors-for-leak-kinds should be set to all instead of definite
+            # and all false positives should be added to suppression
+            # files.
+            ("errors-for-leak-kinds", "definite,indirect"),
+            ("show-leak-kinds", "definite,indirect"),
+            ("show-possibly-lost", "no"),
+            ("num-callers", "20"),
+            ("error-exitcode", str(VALGRIND_ERROR_CODE)),
+            ("gen-suppressions", "all"),
+        ]:
             vg_args.append("--%s=%s" % (o, v))
 
         if not self.options.redirect_logs:
-            vglogsfile = os.path.splitext(self.logfile)[0] + '.valgrind'
+            vglogsfile = os.path.splitext(self.logfile)[0] + ".valgrind"
             self.extra_logfiles.add(vglogsfile)
-            vg_args.append("--%s=%s" % ('log-file', vglogsfile))
+            vg_args.append("--%s=%s" % ("log-file", vglogsfile))
 
         for supp in self.get_valgrind_suppressions():
             vg_args.append("--suppressions=%s" % supp)
@@ -663,21 +744,21 @@ class Test(Loggable):
         command = ["valgrind"] + vg_args + command
 
         # Tune GLib's memory allocator to be more valgrind friendly
-        subenv['G_DEBUG'] = 'gc-friendly'
-        subenv['G_SLICE'] = 'always-malloc'
+        subenv["G_DEBUG"] = "gc-friendly"
+        subenv["G_SLICE"] = "always-malloc"
 
         if self.hard_timeout is not None:
             self.hard_timeout *= VALGRIND_TIMEOUT_FACTOR
         self.timeout *= VALGRIND_TIMEOUT_FACTOR
 
         # Enable 'valgrind.config'
-        self.add_validate_config(get_data_file(
-            'data', 'valgrind.config'), subenv)
+        self.add_validate_config(get_data_file("data", "valgrind.config"), subenv)
         if subenv == self.proc_env:
-            self.add_env_variable('G_DEBUG', 'gc-friendly')
-            self.add_env_variable('G_SLICE', 'always-malloc')
-            self.add_env_variable('GST_VALIDATE_CONFIG',
-                                  self.proc_env['GST_VALIDATE_CONFIG'])
+            self.add_env_variable("G_DEBUG", "gc-friendly")
+            self.add_env_variable("G_SLICE", "always-malloc")
+            self.add_env_variable(
+                "GST_VALIDATE_CONFIG", self.proc_env["GST_VALIDATE_CONFIG"]
+            )
 
         return command
 
@@ -685,9 +766,9 @@ class Test(Loggable):
         if not subenv:
             subenv = self.extra_env_variables
 
-        cconf = subenv.get('GST_VALIDATE_CONFIG', "")
+        cconf = subenv.get("GST_VALIDATE_CONFIG", "")
         paths = [c for c in cconf.split(os.pathsep) if c] + [config]
-        subenv['GST_VALIDATE_CONFIG'] = os.pathsep.join(paths)
+        subenv["GST_VALIDATE_CONFIG"] = os.pathsep.join(paths)
 
     def launch_server(self):
         return None
@@ -707,8 +788,10 @@ class Test(Loggable):
         return ""
 
     def get_command_repr(self):
-        message = "%s %s" % (self._env_variable, ' '.join(
-            shlex.quote(arg) for arg in self.command))
+        message = "%s %s" % (
+            self._env_variable,
+            " ".join(shlex.quote(arg) for arg in self.command),
+        )
         if self.server_command:
             message = "%s & %s" % (self.server_command, message)
 
@@ -725,7 +808,7 @@ class Test(Loggable):
         self.proc_env = self.get_subproc_env()
 
         for var, value in list(self.extra_env_variables.items()):
-            value = self.proc_env.get(var, '') + os.pathsep + value
+            value = self.proc_env.get(var, "") + os.pathsep + value
             self.proc_env[var] = value.strip(os.pathsep)
             self.add_env_variable(var, self.proc_env[var])
 
@@ -744,15 +827,21 @@ class Test(Loggable):
             self.command = self.use_rr(self.command, self.proc_env)
 
         if not self.options.redirect_logs:
-            self.out.write("# `%s`\n\n"
-                           "## Command\n\n``` bash\n%s\n```\n\n" % (
-                               self.classname, self.get_command_repr()))
-            self.out.write("## %s output\n\n``` log \n\n" % os.path.basename(self.application))
+            self.out.write(
+                "# `%s`\n\n"
+                "## Command\n\n``` bash\n%s\n```\n\n"
+                % (self.classname, self.get_command_repr())
+            )
+            self.out.write(
+                "## %s output\n\n``` log \n\n" % os.path.basename(self.application)
+            )
             self.out.flush()
         else:
-            message = "Launching: %s%s\n" \
-                "    Command: %s\n" % (Colors.ENDC, self.classname,
-                                       self.get_command_repr())
+            message = "Launching: %s%s\n" "    Command: %s\n" % (
+                Colors.ENDC,
+                self.classname,
+                self.get_command_repr(),
+            )
             printc(message, Colors.OKBLUE)
 
         self.thread = threading.Thread(target=self.thread_wrapper)
@@ -763,23 +852,26 @@ class Test(Loggable):
         self.start_ts = time.time()
 
     def _dump_log_file(self, logfile):
-        if which('bat'):
+        if which("bat"):
             try:
-                subprocess.check_call(['bat', '-H', '1', '--paging=never', logfile])
+                subprocess.check_call(["bat", "-H", "1", "--paging=never", logfile])
                 return
             except (subprocess.CalledProcessError, FileNotFoundError):
                 pass
 
-        with open(logfile, 'r') as fin:
+        with open(logfile, "r") as fin:
             for line in fin.readlines():
-                print('> ' + line, end='')
+                print("> " + line, end="")
 
     def _dump_log_files(self):
         self._dump_log_file(self.logfile)
 
     def copy_logfiles(self, extra_folder="flaky_tests"):
-        path = os.path.dirname(os.path.join(self.options.logsdir, extra_folder,
-                            self.classname.replace(".", os.sep)))
+        path = os.path.dirname(
+            os.path.join(
+                self.options.logsdir, extra_folder, self.classname.replace(".", os.sep)
+            )
+        )
         mkdir(path)
         self.logfile = shutil.copy(self.logfile, path)
         extra_logs = []
@@ -796,7 +888,11 @@ class Test(Loggable):
             signal.signal(signal.SIGINT, self.previous_sigint_handler)
 
         self.finalize_logfiles()
-        if self.options.dump_on_failure and not retry_on_failures and not self.max_retries:
+        if (
+            self.options.dump_on_failure
+            and not retry_on_failures
+            and not self.max_retries
+        ):
             if self.result not in [Result.PASSED, Result.KNOWN_ERROR, Result.NOT_RUN]:
                 self._dump_log_files()
 
@@ -814,7 +910,6 @@ class GstValidateTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 class GstValidateListener(socketserver.BaseRequestHandler, Loggable):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         Loggable.__init__(self, "GstValidateListener")
@@ -825,9 +920,9 @@ class GstValidateListener(socketserver.BaseRequestHandler, Loggable):
         self.logCategory = "GstValidateListener"
         while True:
             raw_len = self.request.recv(4)
-            if raw_len == b'':
+            if raw_len == b"":
                 return
-            msglen = struct.unpack('>I', raw_len)[0]
+            msglen = struct.unpack(">I", raw_len)[0]
             e = None
             raw_msg = bytes()
             while msglen != len(raw_msg):
@@ -835,18 +930,24 @@ class GstValidateListener(socketserver.BaseRequestHandler, Loggable):
             if e is not None:
                 continue
             try:
-                msg = raw_msg.decode('utf-8', 'ignore')
+                msg = raw_msg.decode("utf-8", "ignore")
             except UnicodeDecodeError as e:
-                self.error("%s Could not decode message: %s - %s" % (test.classname if test else "unknown", msg, e))
+                self.error(
+                    "%s Could not decode message: %s - %s"
+                    % (test.classname if test else "unknown", msg, e)
+                )
                 continue
 
-            if msg == '':
+            if msg == "":
                 return
 
             try:
                 obj = json.loads(msg)
             except json.decoder.JSONDecodeError as e:
-                self.error("%s Could not decode message: %s - %s" % (test.classname if test else "unknown", msg, e))
+                self.error(
+                    "%s Could not decode message: %s - %s"
+                    % (test.classname if test else "unknown", msg, e)
+                )
                 continue
 
             if test is None:
@@ -860,45 +961,56 @@ class GstValidateListener(socketserver.BaseRequestHandler, Loggable):
                         test = t
                         break
                 if test is None:
-                    self.server.launcher.error(
-                        "Could not find test for UUID %s" % uuid)
+                    self.server.launcher.error("Could not find test for UUID %s" % uuid)
                     return
 
-            obj_type = obj.get("type", '')
-            if obj_type == 'position':
-                test.set_position(obj['position'], obj['duration'],
-                                  obj['speed'])
-            elif obj_type == 'buffering':
-                test.set_position(obj['position'], 100)
-            elif obj_type == 'action':
+            obj_type = obj.get("type", "")
+            if obj_type == "position":
+                test.set_position(obj["position"], obj["duration"], obj["speed"])
+            elif obj_type == "buffering":
+                test.set_position(obj["position"], 100)
+            elif obj_type == "action":
                 test.add_action_execution(obj)
                 # Make sure that action is taken into account when checking if process
                 # is updating
                 test.position += 1
-            elif obj_type == 'action-done':
+            elif obj_type == "action-done":
                 # Make sure that action end is taken into account when checking if process
                 # is updating
                 test.position += 1
                 if test.actions_infos:
-                    test.actions_infos[-1]['execution-duration'] = obj['execution-duration']
-            elif obj_type == 'report':
+                    test.actions_infos[-1]["execution-duration"] = obj[
+                        "execution-duration"
+                    ]
+            elif obj_type == "report":
                 test.add_report(obj)
-            elif obj_type == 'skip-test':
+            elif obj_type == "skip-test":
                 test.set_result(Result.SKIPPED)
 
 
 class GstValidateTest(Test):
+    """A class representing a particular test."""
 
-    """ A class representing a particular test. """
     HARD_TIMEOUT_FACTOR = 5
     fault_sig_regex = re.compile("<Caught SIGNAL: .*>")
     needs_gst_inspect = set()
 
-    def __init__(self, application_name, classname,
-                 options, reporter, duration=0,
-                 timeout=DEFAULT_TIMEOUT, scenario=None, hard_timeout=None,
-                 media_descriptor=None, extra_env_variables=None,
-                 expected_issues=None, workdir=None, **kwargs):
+    def __init__(
+        self,
+        application_name,
+        classname,
+        options,
+        reporter,
+        duration=0,
+        timeout=DEFAULT_TIMEOUT,
+        scenario=None,
+        hard_timeout=None,
+        media_descriptor=None,
+        extra_env_variables=None,
+        expected_issues=None,
+        workdir=None,
+        **kwargs,
+    ):
 
         extra_env_variables = extra_env_variables or {}
 
@@ -913,8 +1025,8 @@ class GstValidateTest(Test):
         # If we are running from source, use the -debug version of the
         # application which is using rpath instead of libtool's wrappers. It's
         # slightly faster to start and will not confuse valgrind.
-        debug = '%s-debug' % application_name
-        p = look_for_file_in_source_dir('tools', debug)
+        debug = "%s-debug" % application_name
+        p = look_for_file_in_source_dir("tools", debug)
         if p:
             application_name = p
 
@@ -931,23 +1043,27 @@ class GstValidateTest(Test):
         if override_path:
             if extra_env_variables:
                 if extra_env_variables.get("GST_VALIDATE_OVERRIDE", ""):
-                    extra_env_variables[
-                        "GST_VALIDATE_OVERRIDE"] += os.path.pathsep
+                    extra_env_variables["GST_VALIDATE_OVERRIDE"] += os.path.pathsep
 
             extra_env_variables["GST_VALIDATE_OVERRIDE"] = override_path
 
-        super().__init__(application_name,
-                         classname,
-                         options, reporter,
-                         duration=duration,
-                         timeout=timeout,
-                         hard_timeout=hard_timeout,
-                         extra_env_variables=extra_env_variables,
-                         expected_issues=expected_issues,
-                         workdir=workdir,
-                         **kwargs)
+        super().__init__(
+            application_name,
+            classname,
+            options,
+            reporter,
+            duration=duration,
+            timeout=timeout,
+            hard_timeout=hard_timeout,
+            extra_env_variables=extra_env_variables,
+            expected_issues=expected_issues,
+            workdir=workdir,
+            **kwargs,
+        )
         if media_descriptor and media_descriptor.get_media_filepath():
-            config_file = os.path.join(media_descriptor.get_media_filepath() + '.config')
+            config_file = os.path.join(
+                media_descriptor.get_media_filepath() + ".config"
+            )
             if os.path.isfile(config_file):
                 self.add_validate_config(config_file, extra_env_variables)
 
@@ -964,12 +1080,16 @@ class GstValidateTest(Test):
         uri = self.media_descriptor.get_uri()
         uri_requires_http_server = False
         if uri:
-            if 'http-server-port' in uri:
-                expanded_uri = uri % {
-                    'http-server-port': self.options.http_server_port}
-                uri_requires_http_server = expanded_uri.find(
-                    "127.0.0.1:%s" % self.options.http_server_port) != -1
-        if protocol in [Protocols.HTTP, Protocols.HLS, Protocols.DASH] or uri_requires_http_server:
+            if "http-server-port" in uri:
+                expanded_uri = uri % {"http-server-port": self.options.http_server_port}
+                uri_requires_http_server = (
+                    expanded_uri.find("127.0.0.1:%s" % self.options.http_server_port)
+                    != -1
+                )
+        if (
+            protocol in [Protocols.HTTP, Protocols.HLS, Protocols.DASH]
+            or uri_requires_http_server
+        ):
             return True
 
         return False
@@ -992,8 +1112,10 @@ class GstValidateTest(Test):
     def get_override_file(self, media_descriptor):
         if media_descriptor:
             if media_descriptor.get_path():
-                override_path = os.path.splitext(media_descriptor.get_path())[
-                    0] + VALIDATE_OVERRIDE_EXTENSION
+                override_path = (
+                    os.path.splitext(media_descriptor.get_path())[0]
+                    + VALIDATE_OVERRIDE_EXTENSION
+                )
                 if os.path.exists(override_path):
                     return override_path
 
@@ -1009,48 +1131,58 @@ class GstValidateTest(Test):
         subproc_env = os.environ.copy()
 
         if self.options.validate_default_config:
-            self.add_validate_config(self.options.validate_default_config,
-                subproc_env, )
+            self.add_validate_config(
+                self.options.validate_default_config,
+                subproc_env,
+            )
 
         subproc_env["GST_VALIDATE_UUID"] = self.get_uuid()
         subproc_env["GST_VALIDATE_LOGSDIR"] = self.options.logsdir
 
         no_color = True
-        if 'GST_DEBUG' in os.environ and not self.options.redirect_logs and not self.options.debug:
-            gstlogsfile = os.path.splitext(self.logfile)[0] + '.gstdebug'
+        if (
+            "GST_DEBUG" in os.environ
+            and not self.options.redirect_logs
+            and not self.options.debug
+        ):
+            gstlogsfile = os.path.splitext(self.logfile)[0] + ".gstdebug"
             self.extra_logfiles.add(gstlogsfile)
             subproc_env["GST_DEBUG_FILE"] = gstlogsfile
             no_color = self.options.no_color
 
         if no_color:
-            subproc_env["GST_DEBUG_NO_COLOR"] = '1'
+            subproc_env["GST_DEBUG_NO_COLOR"] = "1"
 
         # Ensure XInitThreads is called, see bgo#731525
-        subproc_env['GST_GL_XINITTHREADS'] = '1'
-        self.add_env_variable('GST_GL_XINITTHREADS', '1')
-        subproc_env['GST_XINITTHREADS'] = '1'
-        self.add_env_variable('GST_XINITTHREADS', '1')
+        subproc_env["GST_GL_XINITTHREADS"] = "1"
+        self.add_env_variable("GST_GL_XINITTHREADS", "1")
+        subproc_env["GST_XINITTHREADS"] = "1"
+        self.add_env_variable("GST_XINITTHREADS", "1")
 
         if self.scenario is not None:
             scenario = self.scenario.get_execution_name()
             subproc_env["GST_VALIDATE_SCENARIO"] = scenario
-            self.add_env_variable("GST_VALIDATE_SCENARIO",
-                                  subproc_env["GST_VALIDATE_SCENARIO"])
+            self.add_env_variable(
+                "GST_VALIDATE_SCENARIO", subproc_env["GST_VALIDATE_SCENARIO"]
+            )
         else:
             try:
                 del subproc_env["GST_VALIDATE_SCENARIO"]
             except KeyError:
                 pass
 
-        if not subproc_env.get('GST_DEBUG_DUMP_DOT_DIR'):
-            dotfilesdir = os.path.join(self.options.logsdir,
-                                self.classname.replace(".", os.sep) + '.pipelines_dot_files')
+        if not subproc_env.get("GST_DEBUG_DUMP_DOT_DIR"):
+            dotfilesdir = os.path.join(
+                self.options.logsdir,
+                self.classname.replace(".", os.sep) + ".pipelines_dot_files",
+            )
             mkdir(dotfilesdir)
-            subproc_env['GST_DEBUG_DUMP_DOT_DIR'] = dotfilesdir
+            subproc_env["GST_DEBUG_DUMP_DOT_DIR"] = dotfilesdir
             if CI_ARTIFACTS_URL:
-                dotfilesurl = CI_ARTIFACTS_URL + os.path.relpath(dotfilesdir,
-                                                                 self.options.logsdir)
-                subproc_env['GST_VALIDATE_DEBUG_DUMP_DOT_URL'] = dotfilesurl
+                dotfilesurl = CI_ARTIFACTS_URL + os.path.relpath(
+                    dotfilesdir, self.options.logsdir
+                )
+                subproc_env["GST_VALIDATE_DEBUG_DUMP_DOT_URL"] = dotfilesurl
 
         return subproc_env
 
@@ -1073,8 +1205,9 @@ class GstValidateTest(Test):
             self.add_env_variable("GST_VALIDATE", os.environ["GST_VALIDATE"])
 
         if "GST_VALIDATE_SCENARIOS_PATH" in os.environ:
-            self.add_env_variable("GST_VALIDATE_SCENARIOS_PATH",
-                                  os.environ["GST_VALIDATE_SCENARIOS_PATH"])
+            self.add_env_variable(
+                "GST_VALIDATE_SCENARIOS_PATH", os.environ["GST_VALIDATE_SCENARIOS_PATH"]
+            )
 
         self.add_env_variable("GST_VALIDATE_CONFIG")
         self.add_env_variable("GST_VALIDATE_OVERRIDE")
@@ -1085,7 +1218,7 @@ class GstValidateTest(Test):
         return value
 
     def report_matches_expected_issues(self, report, expected_issue):
-        for key in ['bug', 'bugs', 'sometimes']:
+        for key in ["bug", "bugs", "sometimes"]:
             if key in expected_issue:
                 del expected_issue[key]
         for key, value in list(report.items()):
@@ -1104,20 +1237,21 @@ class GstValidateTest(Test):
         for report in self.reports:
             found = None
             for expected_issue in expected_issues:
-                if self.report_matches_expected_issues(report,
-                                                       expected_issue.copy()):
+                if self.report_matches_expected_issues(report, expected_issue.copy()):
                     found = expected_issue
                     break
 
             if found is not None:
-                if not found.get('can-happen-several-times', False):
+                if not found.get("can-happen-several-times", False):
                     expected_issues.remove(found)
-                if report['level'] == 'critical':
-                    if found.get('sometimes', True) and isinstance(expected_retcode, list):
+                if report["level"] == "critical":
+                    if found.get("sometimes", True) and isinstance(
+                        expected_retcode, list
+                    ):
                         expected_retcode.append(18)
                     else:
                         expected_retcode = [18]
-            elif report['level'] == 'critical':
+            elif report["level"] == "critical":
                 ret.append(report)
 
         if not ret:
@@ -1127,8 +1261,8 @@ class GstValidateTest(Test):
 
     def check_expected_issue(self, expected_issue):
         res = True
-        msg = ''
-        expected_symbols = expected_issue.get('stacktrace_symbols')
+        msg = ""
+        expected_symbols = expected_issue.get("stacktrace_symbols")
         if expected_symbols:
             trace_gatherer = BackTraceGenerator.get_default()
             stack_trace = trace_gatherer.get_trace(self)
@@ -1137,19 +1271,24 @@ class GstValidateTest(Test):
                 if not isinstance(expected_symbols, list):
                     expected_symbols = [expected_symbols]
 
-                not_found_symbols = [s for s in expected_symbols
-                                     if s not in stack_trace]
+                not_found_symbols = [
+                    s for s in expected_symbols if s not in stack_trace
+                ]
                 if not_found_symbols:
                     msg = " Expected symbols '%s' not found in stack trace " % (
-                        not_found_symbols)
+                        not_found_symbols
+                    )
                     res = False
             else:
                 msg += " No stack trace available, could not verify symbols "
 
-        _, not_found_expected_issues, _ = self.check_reported_issues(expected_issue.get('issues', []))
+        _, not_found_expected_issues, _ = self.check_reported_issues(
+            expected_issue.get("issues", [])
+        )
         if not_found_expected_issues:
-            mandatory_failures = [f for f in not_found_expected_issues
-                                  if not f.get('sometimes', True)]
+            mandatory_failures = [
+                f for f in not_found_expected_issues if not f.get("sometimes", True)
+            ]
             if mandatory_failures:
                 msg = " (Expected issues not found: %s) " % mandatory_failures
                 res = False
@@ -1159,12 +1298,11 @@ class GstValidateTest(Test):
     def check_expected_timeout(self, expected_timeout):
         msg = "Expected timeout happened. "
         result = Result.PASSED
-        message = expected_timeout.get('message')
+        message = expected_timeout.get("message")
         if message:
             if not re.findall(message, self.message):
                 result = Result.FAILED
-                msg = "Expected timeout message: %s got %s " % (
-                    message, self.message)
+                msg = "Expected timeout message: %s got %s " % (message, self.message)
 
         stack_msg, stack_res = self.check_expected_issue(expected_timeout)
         if not stack_res:
@@ -1182,31 +1320,38 @@ class GstValidateTest(Test):
         if self.options.rr:
             # signal.SIGPPIPE is 13 but it sometimes isn't present in python for some reason.
             expected_issues.append({"returncode": -13, "sometimes": True})
-        self.criticals, not_found_expected_issues, expected_returncode = self.check_reported_issues(expected_issues)
+        (
+            self.criticals,
+            not_found_expected_issues,
+            expected_returncode,
+        ) = self.check_reported_issues(expected_issues)
         expected_timeout = None
         expected_signal = None
         for i, f in enumerate(not_found_expected_issues):
-            returncode = f.get('returncode', [])
+            returncode = f.get("returncode", [])
             if not isinstance(returncode, list):
                 returncode = [returncode]
 
-            if f.get('signame'):
-                signames = f['signame']
+            if f.get("signame"):
+                signames = f["signame"]
                 if not isinstance(signames, list):
                     signames = [signames]
 
                 returncode = [EXITING_SIGNALS[signame] for signame in signames]
 
             if returncode:
-                if 'sometimes' in f:
+                if "sometimes" in f:
                     returncode.append(0)
                 expected_returncode = returncode
                 expected_signal = f
             elif f.get("timeout"):
                 expected_timeout = f
 
-        not_found_expected_issues = [f for f in not_found_expected_issues
-                                     if not f.get('returncode') and not f.get('signame')]
+        not_found_expected_issues = [
+            f
+            for f in not_found_expected_issues
+            if not f.get("returncode") and not f.get("signame")
+        ]
 
         msg = ""
         result = Result.PASSED
@@ -1223,13 +1368,13 @@ class GstValidateTest(Test):
                     return
         elif self.process.returncode in EXITING_SIGNALS:
             msg = "Application exited with signal %s" % (
-                EXITING_SIGNALS[self.process.returncode])
+                EXITING_SIGNALS[self.process.returncode]
+            )
             if self.process.returncode not in expected_returncode:
                 result = Result.FAILED
             else:
                 if expected_signal:
-                    stack_msg, stack_res = self.check_expected_issue(
-                        expected_signal)
+                    stack_msg, stack_res = self.check_expected_issue(expected_signal)
                     if not stack_res:
                         msg += stack_msg
                         result = Result.FAILED
@@ -1244,21 +1389,25 @@ class GstValidateTest(Test):
             result = Result.FAILED
 
         if self.criticals:
-            msg += "(critical errors: [%s]) " % ', '.join(set([c['summary']
-                                                           for c in self.criticals]))
+            msg += "(critical errors: [%s]) " % ", ".join(
+                set([c["summary"] for c in self.criticals])
+            )
             result = Result.FAILED
 
         if not_found_expected_issues:
-            mandatory_failures = [f for f in not_found_expected_issues
-                                  if not f.get('sometimes', True)]
+            mandatory_failures = [
+                f for f in not_found_expected_issues if not f.get("sometimes", True)
+            ]
 
             if mandatory_failures:
                 msg += " (Expected errors not found: %s) " % mandatory_failures
                 result = Result.FAILED
         elif self.expected_issues:
-            msg += ' %s(Expected errors occurred: %s)%s' % (Colors.OKBLUE,
-                                                            self.expected_issues,
-                                                            Colors.ENDC)
+            msg += " %s(Expected errors occurred: %s)%s" % (
+                Colors.OKBLUE,
+                self.expected_issues,
+                Colors.ENDC,
+            )
             result = Result.KNOWN_ERROR
 
         if result == Result.PASSED:
@@ -1287,8 +1436,11 @@ class GstValidateTest(Test):
                 if value is None:
                     continue
                 res += '\n%s%s"%s": "%s",' % (
-                    " " * 16, "# " if key == "details" else "",
-                    key, value.replace('\n', '\\n'))
+                    " " * 16,
+                    "# " if key == "details" else "",
+                    key,
+                    value.replace("\n", "\\n"),
+                )
 
             res += "\n%s}," % (" " * 12)
 
@@ -1338,10 +1490,17 @@ class GstValidateEncodingTestInterface(object):
         self.debug("Size: %s" % size)
         return size
 
-    def _get_profile_full(self, muxer, venc, aenc, video_restriction=None,
-                          audio_restriction=None, audio_presence=0,
-                          video_presence=0,
-                          variable_framerate=VariableFramerateMode.DISABLED):
+    def _get_profile_full(
+        self,
+        muxer,
+        venc,
+        aenc,
+        video_restriction=None,
+        audio_restriction=None,
+        audio_presence=0,
+        video_presence=0,
+        variable_framerate=VariableFramerateMode.DISABLED,
+    ):
 
         ret = ""
         if muxer:
@@ -1349,32 +1508,36 @@ class GstValidateEncodingTestInterface(object):
         ret += ":"
         if venc:
             if video_restriction is not None:
-                ret = ret + video_restriction + '->'
+                ret = ret + video_restriction + "->"
             ret += venc
             props = ""
             if video_presence:
-                props += 'presence=%s|' % str(video_presence)
+                props += "presence=%s|" % str(video_presence)
             if variable_framerate == VariableFramerateMode.AUTO:
                 if video_restriction and "framerate" in video_restriction:
                     variable_framerate = VariableFramerateMode.DISABLED
                 else:
                     variable_framerate = VariableFramerateMode.ENABLED
             if variable_framerate == VariableFramerateMode.ENABLED:
-                props += 'variable-framerate=true|'
+                props += "variable-framerate=true|"
             if props:
-                ret = ret + '|' + props[:-1]
+                ret = ret + "|" + props[:-1]
         if aenc:
             ret += ":"
             if audio_restriction is not None:
-                ret = ret + audio_restriction + '->'
+                ret = ret + audio_restriction + "->"
             ret += aenc
             if audio_presence:
-                ret = ret + '|' + str(audio_presence)
+                ret = ret + "|" + str(audio_presence)
 
         return ret.replace("::", ":")
 
-    def get_profile(self, video_restriction=None, audio_restriction=None,
-            variable_framerate=VariableFramerateMode.DISABLED):
+    def get_profile(
+        self,
+        video_restriction=None,
+        audio_restriction=None,
+        variable_framerate=VariableFramerateMode.DISABLED,
+    ):
         vcaps = self.combination.get_video_caps()
         acaps = self.combination.get_audio_caps()
         if video_restriction is None:
@@ -1387,7 +1550,9 @@ class GstValidateEncodingTestInterface(object):
                 framerate = self.media_descriptor.get_framerate()
                 if framerate == Fraction(0, 1):
                     framerate = Fraction(30, 1)
-                    restriction = utils.GstCaps.new_from_str(video_restriction or "video/x-raw")
+                    restriction = utils.GstCaps.new_from_str(
+                        video_restriction or "video/x-raw"
+                    )
                     for struct, _ in restriction:
                         if struct.get("framerate") is None:
                             struct.set("framerate", struct.FRACTION_TYPE, framerate)
@@ -1401,19 +1566,22 @@ class GstValidateEncodingTestInterface(object):
             if audio_presence == 0:
                 acaps = None
 
-        return self._get_profile_full(self.combination.get_muxer_caps(),
-                                      vcaps, acaps,
-                                      audio_presence=audio_presence,
-                                      video_presence=video_presence,
-                                      video_restriction=video_restriction,
-                                      audio_restriction=audio_restriction,
-                                      variable_framerate=variable_framerate)
+        return self._get_profile_full(
+            self.combination.get_muxer_caps(),
+            vcaps,
+            acaps,
+            audio_presence=audio_presence,
+            video_presence=video_presence,
+            video_restriction=video_restriction,
+            audio_restriction=audio_restriction,
+            variable_framerate=variable_framerate,
+        )
 
     def _clean_caps(self, caps):
         """
         Returns a list of key=value or structure name, without "(types)" or ";" or ","
         """
-        return re.sub(r"\(.+?\)\s*| |;", '', caps).split(',')
+        return re.sub(r"\(.+?\)\s*| |;", "", caps).split(",")
 
     # pylint: disable=E1101
     def _has_caps_type_variant(self, c, ccaps):
@@ -1424,14 +1592,13 @@ class GstValidateEncodingTestInterface(object):
         has_variant = False
         media_type = re.findall("application/|video/|audio/", c)
         if media_type:
-            media_type = media_type[0].replace('/', '')
+            media_type = media_type[0].replace("/", "")
             possible_mtypes = ["application", "video", "audio"]
             possible_mtypes.remove(media_type)
             for tmptype in possible_mtypes:
                 possible_c_variant = c.replace(media_type, tmptype)
                 if possible_c_variant in ccaps:
-                    self.info(
-                        "Found %s in %s, good enough!", possible_c_variant, ccaps)
+                    self.info("Found %s in %s, good enough!", possible_c_variant, ccaps)
                     has_variant = True
 
         return has_variant
@@ -1442,41 +1609,47 @@ class GstValidateEncodingTestInterface(object):
         Runs IQA test if @reference_file_path exists
         @test: The test to run tests on
         """
-        if not GstValidateBaseTestManager.has_feature('iqa'):
-            self.debug('Iqa element not present, not running extra test.')
+        if not GstValidateBaseTestManager.has_feature("iqa"):
+            self.debug("Iqa element not present, not running extra test.")
             return
 
         pipeline_desc = """
             uridecodebin uri=%s !
                 iqa name=iqa do-dssim=true dssim-error-threshold=1.0 ! fakesink
             uridecodebin uri=%s ! iqa.
-        """ % (reference_file_uri, self.dest_file)
+        """ % (
+            reference_file_uri,
+            self.dest_file,
+        )
         pipeline_desc = pipeline_desc.replace("\n", "")
 
-        command = [GstValidateBaseTestManager.COMMAND] + \
-            shlex.split(pipeline_desc)
-        msg = "## Running IQA tests on results of: " \
-            + "%s\n### Command: \n```\n%s\n```\n" % (
-                self.classname, ' '.join(command))
+        command = [GstValidateBaseTestManager.COMMAND] + shlex.split(pipeline_desc)
+        msg = (
+            "## Running IQA tests on results of: "
+            + "%s\n### Command: \n```\n%s\n```\n" % (self.classname, " ".join(command))
+        )
         if not self.options.redirect_logs:
             self.out.write(msg)
             self.out.flush()
         else:
             printc(msg, Colors.OKBLUE)
 
-        self.process = subprocess.Popen(command,
-                                        stderr=self.out,
-                                        stdout=self.out,
-                                        env=self.proc_env,
-                                        cwd=self.workdir)
+        self.process = subprocess.Popen(
+            command,
+            stderr=self.out,
+            stdout=self.out,
+            env=self.proc_env,
+            cwd=self.workdir,
+        )
         self.process.wait()
 
     def check_encoded_file(self):
-        result_descriptor = GstValidateMediaDescriptor.new_from_uri(
-            self.dest_file)
+        result_descriptor = GstValidateMediaDescriptor.new_from_uri(self.dest_file)
         if result_descriptor is None:
-            return (Result.FAILED, "Could not discover encoded file %s"
-                    % self.dest_file)
+            return (
+                Result.FAILED,
+                "Could not discover encoded file %s" % self.dest_file,
+            )
 
         duration = result_descriptor.get_duration()
         orig_duration = self.media_descriptor.get_duration()
@@ -1486,13 +1659,14 @@ class GstValidateEncodingTestInterface(object):
             os.remove(result_descriptor.get_path())
             self.add_report(
                 {
-                    'type': 'report',
-                    'issue-id': 'transcoded-file-wrong-duration',
-                    'summary': 'The duration of a transcoded file doesn\'t match the duration of the original file',
-                    'level': 'critical',
-                    'detected-on': 'pipeline',
-                    'details': "Duration of encoded file is " " wrong (%s instead of %s)" % (
-                        utils.TIME_ARGS(duration), utils.TIME_ARGS(orig_duration))
+                    "type": "report",
+                    "issue-id": "transcoded-file-wrong-duration",
+                    "summary": "The duration of a transcoded file doesn't match the duration of the original file",
+                    "level": "critical",
+                    "detected-on": "pipeline",
+                    "details": "Duration of encoded file is "
+                    " wrong (%s instead of %s)"
+                    % (utils.TIME_ARGS(duration), utils.TIME_ARGS(orig_duration)),
                 }
             )
         else:
@@ -1510,14 +1684,14 @@ class GstValidateEncodingTestInterface(object):
                     os.remove(result_descriptor.get_path())
                     self.add_report(
                         {
-                            'type': 'report',
-                            'issue-id': 'transcoded-file-wrong-stream-type',
-                            'summary': 'Expected stream types during transcoding do not match expectations',
-                            'level': 'critical',
-                            'detected-on': 'pipeline',
-                            'details': "Found a track of type %s in the encoded files"
-                                    " but none where wanted in the encoded profile: %s" % (
-                                        track_type, self.combination)
+                            "type": "report",
+                            "issue-id": "transcoded-file-wrong-stream-type",
+                            "summary": "Expected stream types during transcoding do not match expectations",
+                            "level": "critical",
+                            "detected-on": "pipeline",
+                            "details": "Found a track of type %s in the encoded files"
+                            " but none where wanted in the encoded profile: %s"
+                            % (track_type, self.combination),
                         }
                     )
                     return
@@ -1528,13 +1702,13 @@ class GstValidateEncodingTestInterface(object):
                             os.remove(result_descriptor.get_path())
                             self.add_report(
                                 {
-                                    'type': 'report',
-                                    'issue-id': 'transcoded-file-wrong-caps',
-                                    'summary': 'Expected stream caps during transcoding do not match expectations',
-                                    'level': 'critical',
-                                    'detected-on': 'pipeline',
-                                    'details': "Field: %s  (from %s) not in caps of the outputted file %s" % (
-                                        wanted_caps, c, ccaps)
+                                    "type": "report",
+                                    "issue-id": "transcoded-file-wrong-caps",
+                                    "summary": "Expected stream caps during transcoding do not match expectations",
+                                    "level": "critical",
+                                    "detected-on": "pipeline",
+                                    "details": "Field: %s  (from %s) not in caps of the outputted file %s"
+                                    % (wanted_caps, c, ccaps),
                                 }
                             )
                             return
@@ -1543,8 +1717,7 @@ class GstValidateEncodingTestInterface(object):
 
 
 class TestsManager(Loggable):
-
-    """ A class responsible for managing tests. """
+    """A class responsible for managing tests."""
 
     name = "base"
     loading_testsuite = None
@@ -1579,43 +1752,52 @@ class TestsManager(Loggable):
     def add_expected_issues(self, expected_issues):
         for bugid, failure_def in list(expected_issues.items()):
             tests_regexes = []
-            for test_name_regex in failure_def['tests']:
+            for test_name_regex in failure_def["tests"]:
                 regex = re.compile(test_name_regex)
                 tests_regexes.append(regex)
                 for test in self.tests:
                     if regex.findall(test.classname):
-                        max_retries = failure_def.get('allow_flakiness', failure_def.get('max_retries'))
+                        max_retries = failure_def.get(
+                            "allow_flakiness", failure_def.get("max_retries")
+                        )
                         if max_retries:
                             test.max_retries = int(max_retries)
                             self.debug(f"{test.classname} allow {test.max_retries}")
                         else:
-                            for issue in failure_def['issues']:
-                                issue['bug'] = bugid
-                            test.expected_issues.extend(failure_def['issues'])
-                            self.debug("%s added expected issues from %s" % (
-                                test.classname, bugid))
-            failure_def['tests'] = tests_regexes
+                            for issue in failure_def["issues"]:
+                                issue["bug"] = bugid
+                            test.expected_issues.extend(failure_def["issues"])
+                            self.debug(
+                                "%s added expected issues from %s"
+                                % (test.classname, bugid)
+                            )
+            failure_def["tests"] = tests_regexes
 
         self.expected_issues.update(expected_issues)
 
     def add_test(self, test):
         if test.generator is None:
-            test.classname = self.loading_testsuite + '.' + test.classname
+            test.classname = self.loading_testsuite + "." + test.classname
 
         for bugid, failure_def in list(self.expected_issues.items()):
-            failure_def['bug'] = bugid
-            for regex in failure_def['tests']:
+            failure_def["bug"] = bugid
+            for regex in failure_def["tests"]:
                 if regex.findall(test.classname):
-                    max_retries = failure_def.get('allow_flakiness', failure_def.get('max_retries'))
+                    max_retries = failure_def.get(
+                        "allow_flakiness", failure_def.get("max_retries")
+                    )
                     if max_retries:
                         test.max_retries = int(max_retries)
-                        self.debug(f"{test.classname} allow {test.max_retries} retries.")
+                        self.debug(
+                            f"{test.classname} allow {test.max_retries} retries."
+                        )
                     else:
-                        for issue in failure_def['issues']:
-                            issue['bug'] = bugid
-                        test.expected_issues.extend(failure_def['issues'])
-                        self.debug("%s added expected issues from %s" % (
-                            test.classname, bugid))
+                        for issue in failure_def["issues"]:
+                            issue["bug"] = bugid
+                        test.expected_issues.extend(failure_def["issues"])
+                        self.debug(
+                            "%s added expected issues from %s" % (test.classname, bugid)
+                        )
 
         if self._is_test_wanted(test):
             if test not in self.tests:
@@ -1657,19 +1839,19 @@ class TestsManager(Loggable):
         for test_regex, reason, *re_flags in default_blacklist:
             re_flags = re_flags[0] if re_flags else None
 
-            if not test_regex.startswith(self.loading_testsuite + '.'):
-                test_regex = self.loading_testsuite + '.' + test_regex
+            if not test_regex.startswith(self.loading_testsuite + "."):
+                test_regex = self.loading_testsuite + "." + test_regex
             if re_flags is not None:
                 test_regex = re_flags + test_regex
             self.blacklisted_tests.append((test_regex, reason))
             self._add_blacklist(test_regex)
 
     def add_options(self, parser):
-        """ Add more arguments. """
+        """Add more arguments."""
         pass
 
     def set_settings(self, options, args, reporter):
-        """ Set properties after options parsing. """
+        """Set properties after options parsing."""
         self.options = options
         self.args = args
         self.reporter = reporter
@@ -1701,8 +1883,7 @@ class TestsManager(Loggable):
 
     def log_blacklists(self):
         if self.blacklisted_tests:
-            self.info("Currently 'hardcoded' %s blacklisted tests:" %
-                      self.name)
+            self.info("Currently 'hardcoded' %s blacklisted tests:" % self.name)
 
         for name, bug in self.blacklisted_tests:
             if not self.options.check_bugs_status:
@@ -1714,8 +1895,7 @@ class TestsManager(Loggable):
 
         bugs_definitions = defaultdict(list)
         for bug, failure_def in list(self.expected_issues.items()):
-            tests_names = '|'.join(
-                [regex.pattern for regex in failure_def['tests']])
+            tests_names = "|".join([regex.pattern for regex in failure_def["tests"]])
             bugs_definitions[tests_names].extend([bug])
 
         return check_bugs_resolution(bugs_definitions.items())
@@ -1741,9 +1921,11 @@ class TestsManager(Loggable):
 
     def _check_duration(self, test):
         if test.duration > 0 and int(self.options.long_limit) < int(test.duration):
-            self.info("Not activating %s as its duration (%d) is superior"
-                      " than the long limit (%d)" % (test, test.duration,
-                                                     int(self.options.long_limit)))
+            self.info(
+                "Not activating %s as its duration (%d) is superior"
+                " than the long limit (%d)"
+                % (test, test.duration, int(self.options.long_limit))
+            )
             return False
 
         return True
@@ -1773,7 +1955,6 @@ class TestsManager(Loggable):
 
 
 class TestsGenerator(Loggable):
-
     def __init__(self, name, test_manager, tests=[]):
         Loggable.__init__(self)
         self.name = name
@@ -1791,12 +1972,11 @@ class TestsGenerator(Loggable):
 
     def add_test(self, test):
         test.generator = self
-        test.classname = self.testsuite + '.' + test.classname
+        test.classname = self.testsuite + "." + test.classname
         self._tests[test.classname] = test
 
 
 class GstValidateTestsGenerator(TestsGenerator):
-
     def populate_tests(self, uri_minfo_special_scenarios, scenarios):
         pass
 
@@ -1806,7 +1986,6 @@ class GstValidateTestsGenerator(TestsGenerator):
 
 
 class _TestsLauncher(Loggable):
-
     def __init__(self):
 
         Loggable.__init__(self)
@@ -1844,8 +2023,14 @@ class _TestsLauncher(Loggable):
             files = []
         for f in files:
             if f.endswith(".py"):
-                exec(compile(open(os.path.join(app_dir, f)).read(),
-                             os.path.join(app_dir, f), 'exec'), env)
+                exec(
+                    compile(
+                        open(os.path.join(app_dir, f)).read(),
+                        os.path.join(app_dir, f),
+                        "exec",
+                    ),
+                    env,
+                )
 
     def _exec_apps(self, env):
         app_dirs = self._list_app_dirs()
@@ -1861,8 +2046,10 @@ class _TestsLauncher(Loggable):
             if tester.init() is True:
                 self.testers.append(tester)
             else:
-                self.warning("Can not init tester: %s -- PATH is %s"
-                             % (tester.name, os.environ["PATH"]))
+                self.warning(
+                    "Can not init tester: %s -- PATH is %s"
+                    % (tester.name, os.environ["PATH"])
+                )
 
     def add_options(self, parser):
         for tester in self.testers:
@@ -1873,7 +2060,9 @@ class _TestsLauncher(Loggable):
         for testsuite in testsuites:
             try:
                 sys.path.insert(0, os.path.dirname(testsuite))
-                spec = importlib.util.spec_from_file_location(os.path.basename(testsuite).replace(".py", ""), testsuite)
+                spec = importlib.util.spec_from_file_location(
+                    os.path.basename(testsuite).replace(".py", ""), testsuite
+                )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 return (module, None)
@@ -1888,31 +2077,37 @@ class _TestsLauncher(Loggable):
     def _load_testsuites(self):
         testsuites = {}
         for testsuite in self.options.testsuites:
-            if testsuite.endswith('.py') and os.path.exists(testsuite):
+            if testsuite.endswith(".py") and os.path.exists(testsuite):
                 testsuite = os.path.abspath(os.path.expanduser(testsuite))
                 loaded_module = self._load_testsuite([testsuite])
             else:
-                possible_testsuites_paths = [os.path.join(d, testsuite + ".py")
-                                             for d in self.options.testsuites_dirs]
+                possible_testsuites_paths = [
+                    os.path.join(d, testsuite + ".py")
+                    for d in self.options.testsuites_dirs
+                ]
                 loaded_module = self._load_testsuite(possible_testsuites_paths)
 
             module = loaded_module[0]
             if not loaded_module[0]:
                 if "." in testsuite:
-                    self.options.testsuites.append(testsuite.split('.')[0])
-                    self.info("%s looks like a test name, trying that" %
-                              testsuite)
+                    self.options.testsuites.append(testsuite.split(".")[0])
+                    self.info("%s looks like a test name, trying that" % testsuite)
                     self.options.wanted_tests.append(testsuite)
                 else:
                     if testsuite in testsuites:
-                        self.info('Testuite %s was loaded previously', testsuite)
+                        self.info("Testuite %s was loaded previously", testsuite)
                         continue
-                    printc("Could not load testsuite: %s, reasons: %s" % (
-                        testsuite, loaded_module[1]), Colors.FAIL)
+                    printc(
+                        "Could not load testsuite: %s, reasons: %s"
+                        % (testsuite, loaded_module[1]),
+                        Colors.FAIL,
+                    )
                 continue
 
             if module.__name__ in testsuites:
-                self.info("Trying to load testsuite '%s' a second time?", module.__name__)
+                self.info(
+                    "Trying to load testsuite '%s' a second time?", module.__name__
+                )
                 continue
 
             testsuites[module.__name__] = module
@@ -1934,8 +2129,10 @@ class _TestsLauncher(Loggable):
                 wanted_test_manager = [wanted_test_manager]
 
             for tester in self.testers:
-                if wanted_test_manager is not None and \
-                        tester.name not in wanted_test_manager:
+                if (
+                    wanted_test_manager is not None
+                    and tester.name not in wanted_test_manager
+                ):
                     continue
 
                 prev_testsuite_name = TestsManager.loading_testsuite
@@ -1951,14 +2148,18 @@ class _TestsLauncher(Loggable):
                     TestsManager.loading_testsuite = prev_testsuite_name
 
             if not loaded:
-                printc("Could not load testsuite: %s"
-                       " maybe because of missing TestManager"
-                       % (testsuite), Colors.FAIL)
+                printc(
+                    "Could not load testsuite: %s"
+                    " maybe because of missing TestManager" % (testsuite),
+                    Colors.FAIL,
+                )
                 return False
 
     def _load_config(self, options):
-        printc("Loading config files is DEPRECATED"
-               " you should use the new testsuite format now",)
+        printc(
+            "Loading config files is DEPRECATED"
+            " you should use the new testsuite format now",
+        )
 
         for tester in self.testers:
             tester.options = options
@@ -1966,8 +2167,10 @@ class _TestsLauncher(Loggable):
         globals()["options"] = options
         c__file__ = __file__
         globals()["__file__"] = self.options.config
-        exec(compile(open(self.options.config).read(),
-                     self.options.config, 'exec'), globals())
+        exec(
+            compile(open(self.options.config).read(), self.options.config, "exec"),
+            globals(),
+        )
         globals()["__file__"] = c__file__
 
     def set_settings(self, options, args):
@@ -2006,7 +2209,7 @@ class _TestsLauncher(Loggable):
                 return False
 
         if self.options.check_bugs_status:
-            printc("-> Checking bugs resolution... ", end='')
+            printc("-> Checking bugs resolution... ", end="")
 
         for tester in self.testers:
             if not tester.check_blacklists():
@@ -2028,8 +2231,7 @@ class _TestsLauncher(Loggable):
             self.vfb_server = get_virual_frame_buffer_server(options)
             res = self.vfb_server.start()
             if res[0] is False:
-                printc("Could not start virtual frame server: %s" % res[1],
-                       Colors.FAIL)
+                printc("Could not start virtual frame server: %s" % res[1], Colors.FAIL)
                 return False
             os.environ["DISPLAY"] = self.vfb_server.display_id
 
@@ -2054,41 +2256,56 @@ class _TestsLauncher(Loggable):
         tests_names = [test.classname for test in tests]
         testlist_changed = False
         for testsuite in self.options.testsuites:
-            if not self._check_tester_has_other_testsuite(testsuite, tester) \
-                    and tester.check_testslist:
+            if (
+                not self._check_tester_has_other_testsuite(testsuite, tester)
+                and tester.check_testslist
+            ):
                 try:
-                    testlist_file = open(os.path.splitext(testsuite.__file__)[0] + ".testslist",
-                                         'r+')
+                    testlist_file = open(
+                        os.path.splitext(testsuite.__file__)[0] + ".testslist", "r+"
+                    )
 
                     know_tests = testlist_file.read().split("\n")
                     testlist_file.close()
 
-                    testlist_file = open(os.path.splitext(testsuite.__file__)[0] + ".testslist",
-                                         'w')
+                    testlist_file = open(
+                        os.path.splitext(testsuite.__file__)[0] + ".testslist", "w"
+                    )
                 except IOError:
                     continue
 
                 optional_out = []
                 for test in know_tests:
-                    if test and test.strip('~') not in tests_names:
-                        if not test.startswith('~'):
+                    if test and test.strip("~") not in tests_names:
+                        if not test.startswith("~"):
                             testlist_changed = True
-                            printc("Test %s Not in testsuite %s anymore"
-                                   % (test, testsuite.__file__), Colors.FAIL)
+                            printc(
+                                "Test %s Not in testsuite %s anymore"
+                                % (test, testsuite.__file__),
+                                Colors.FAIL,
+                            )
                         else:
                             optional_out.append((test, None))
 
-                tests_names = sorted([(test.classname, test) for test in tests] + optional_out,
-                                     key=lambda x: x[0].strip('~'))
+                tests_names = sorted(
+                    [(test.classname, test) for test in tests] + optional_out,
+                    key=lambda x: x[0].strip("~"),
+                )
 
                 for tname, test in tests_names:
                     if test and test.optional:
-                        tname = '~' + tname
+                        tname = "~" + tname
                     testlist_file.write("%s\n" % (tname))
                     if tname and tname not in know_tests:
-                        printc("Test %s is NEW in testsuite %s"
-                               % (tname, testsuite.__file__),
-                               Colors.FAIL if self.options.fail_on_testlist_change else Colors.OKGREEN)
+                        printc(
+                            "Test %s is NEW in testsuite %s"
+                            % (tname, testsuite.__file__),
+                            (
+                                Colors.FAIL
+                                if self.options.fail_on_testlist_change
+                                else Colors.OKGREEN
+                            ),
+                        )
                         testlist_changed = True
 
                 testlist_file.close()
@@ -2109,8 +2326,10 @@ class _TestsLauncher(Loggable):
                 continue
 
             tests = tester.list_tests()
-            if self._check_defined_tests(tester, tests) and \
-                    self.options.fail_on_testlist_change:
+            if (
+                self._check_defined_tests(tester, tests)
+                and self.options.fail_on_testlist_change
+            ):
                 raise RuntimeError("Unexpected new test in testsuite.")
 
             self.tests.extend(tests)
@@ -2120,10 +2339,15 @@ class _TestsLauncher(Loggable):
             raise RuntimeError("Tests must be split in positive number of parts.")
         if self.options.num_parts > len(self.tests):
             raise RuntimeError("Cannot have more parts then there exist tests.")
-        if self.options.part_index < 1 or self.options.part_index > self.options.num_parts:
+        if (
+            self.options.part_index < 1
+            or self.options.part_index > self.options.num_parts
+        ):
             raise RuntimeError("Part index is out of range")
 
-        self.tests = self._split_tests(self.options.num_parts)[self.options.part_index - 1]
+        self.tests = self._split_tests(self.options.num_parts)[
+            self.options.part_index - 1
+        ]
         return self.tests
 
     def _tester_needed(self, tester):
@@ -2133,8 +2357,7 @@ class _TestsLauncher(Loggable):
         return False
 
     def server_wrapper(self, ready):
-        self.server = GstValidateTCPServer(
-            ('localhost', 0), GstValidateListener)
+        self.server = GstValidateTCPServer(("localhost", 0), GstValidateListener)
         self.server.socket.settimeout(None)
         self.server.launcher = self
         self.serverport = self.server.socket.getsockname()[1]
@@ -2146,8 +2369,9 @@ class _TestsLauncher(Loggable):
     def _start_server(self):
         self.info("Starting TCP Server")
         ready = threading.Event()
-        self.server_thread = threading.Thread(target=self.server_wrapper,
-                                              kwargs={'ready': ready})
+        self.server_thread = threading.Thread(
+            target=self.server_wrapper, kwargs={"ready": ready}
+        )
         self.server_thread.start()
         ready.wait()
         os.environ["GST_VALIDATE_SERVER"] = "tcp://localhost:%s" % self.serverport
@@ -2195,21 +2419,33 @@ class _TestsLauncher(Loggable):
 
         return True
 
-    def print_result(self, current_test_num, test, total_num_tests, retry_on_failures=False):
-        if test.result not in [Result.PASSED, Result.KNOWN_ERROR] and (not retry_on_failures or test.max_retries):
+    def print_result(
+        self, current_test_num, test, total_num_tests, retry_on_failures=False
+    ):
+        if test.result not in [Result.PASSED, Result.KNOWN_ERROR] and (
+            not retry_on_failures or test.max_retries
+        ):
             printc(str(test), color=utils.get_color_for_result(test.result))
 
         length = 80
         progress = int(length * current_test_num // total_num_tests)
-        bar = '█' * progress + '-' * (length - progress)
+        bar = "█" * progress + "-" * (length - progress)
         if is_tty():
-            printc('\r|%s| [%s/%s]' % (bar, current_test_num, total_num_tests), end='\r')
+            printc(
+                "\r|%s| [%s/%s]" % (bar, current_test_num, total_num_tests), end="\r"
+            )
         else:
             if progress > self.current_progress:
                 self.current_progress = progress
-                printc('|%s| [%s/%s]' % (bar, current_test_num, total_num_tests))
+                printc("|%s| [%s/%s]" % (bar, current_test_num, total_num_tests))
 
-    def _run_tests(self, running_tests=None, all_alone=False, retry_on_failures=False, total_num_tests=None):
+    def _run_tests(
+        self,
+        running_tests=None,
+        all_alone=False,
+        retry_on_failures=False,
+        total_num_tests=None,
+    ):
         if not self.all_tests:
             self.all_tests = self.list_tests()
 
@@ -2269,12 +2505,20 @@ class _TestsLauncher(Loggable):
                 to_report = True
                 if res not in [Result.PASSED, Result.SKIPPED, Result.KNOWN_ERROR]:
                     if self.options.forever or self.options.fatal_error:
-                        self.print_result(current_test_num - 1, test, retry_on_failures=retry_on_failures,
-                            total_num_tests=total_num_tests)
+                        self.print_result(
+                            current_test_num - 1,
+                            test,
+                            retry_on_failures=retry_on_failures,
+                            total_num_tests=total_num_tests,
+                        )
                         self.reporter.after_test(test)
                         return False
 
-                    if retry_on_failures or test.max_retries and not self.options.no_retry_on_failures:
+                    if (
+                        retry_on_failures
+                        or test.max_retries
+                        and not self.options.no_retry_on_failures
+                    ):
                         if not self.options.redirect_logs:
                             test.copy_logfiles()
                         to_retry.append(test)
@@ -2283,20 +2527,26 @@ class _TestsLauncher(Loggable):
                         if test.max_retries:
                             test.max_retries -= 1
                             to_report = False
-                self.print_result(current_test_num - 1, test,
+                self.print_result(
+                    current_test_num - 1,
+                    test,
                     retry_on_failures=retry_on_failures,
-                    total_num_tests=total_num_tests)
+                    total_num_tests=total_num_tests,
+                )
                 if to_report:
                     self.reporter.after_test(test)
                 if self.start_new_job(tests_left):
                     jobs_running += 1
 
         if to_retry:
-            printc("--> Rerunning the following tests to see if they are flaky:", Colors.WARNING)
+            printc(
+                "--> Rerunning the following tests to see if they are flaky:",
+                Colors.WARNING,
+            )
             for test in to_retry:
                 test.clean()
-                printc(f'  * {test.classname}')
-            printc('')
+                printc(f"  * {test.classname}")
+            printc("")
             self.current_progress = -1
             res = self._run_tests(
                 to_retry,
@@ -2323,7 +2573,7 @@ class _TestsLauncher(Loggable):
                 r = 1
                 while True:
                     self.current_progress = -1
-                    printc("-> Iteration %d" % r, end='\r')
+                    printc("-> Iteration %d" % r, end="\r")
 
                     if not self._run_tests():
                         break
@@ -2337,8 +2587,10 @@ class _TestsLauncher(Loggable):
                 res = True
                 for r in range(self.options.n_runs):
                     self.current_progress = -1
-                    printc("-> Iteration %d" % r, end='\r')
-                    if not self._run_tests(retry_on_failures=self.options.retry_on_failures):
+                    printc("-> Iteration %d" % r, end="\r")
+                    if not self._run_tests(
+                        retry_on_failures=self.options.retry_on_failures
+                    ):
                         res = False
                         printc("ERROR", Colors.FAIL, end="\r")
                     else:
@@ -2367,7 +2619,6 @@ class _TestsLauncher(Loggable):
 
 
 class NamedDic(object):
-
     def __init__(self, props):
         if props:
             for name, value in props.items():
@@ -2375,7 +2626,6 @@ class NamedDic(object):
 
 
 class Scenario(object):
-
     def __init__(self, name, props, path=None):
         self.name = name
         self.path = path
@@ -2453,8 +2703,7 @@ class ScenarioManager(Loggable):
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(ScenarioManager, cls).__new__(
-                cls, *args, **kwargs)
+            cls._instance = super(ScenarioManager, cls).__new__(cls, *args, **kwargs)
             cls._instance.config = None
             cls._instance.discovered = False
             Loggable.__init__(cls._instance)
@@ -2466,7 +2715,9 @@ class ScenarioManager(Loggable):
         mfile_bname = os.path.basename(mfile)
 
         for f in os.listdir(os.path.dirname(mfile)):
-            if re.findall(r'%s\..*\.%s$' % (re.escape(mfile_bname), self.FILE_EXTENSION), f):
+            if re.findall(
+                r"%s\..*\.%s$" % (re.escape(mfile_bname), self.FILE_EXTENSION), f
+            ):
                 scenarios.append(os.path.join(os.path.dirname(mfile), f))
 
         if scenarios:
@@ -2482,16 +2733,19 @@ class ScenarioManager(Loggable):
         scenarios = []
         scenario_defs = os.path.join(self.config.main_dir, "scenarios.def")
         log_path = os.path.join(self.config.logsdir, "scenarios_discovery.log")
-        logs = open(log_path, 'w')
+        logs = open(log_path, "w")
 
         try:
-            command = [GstValidateBaseTestManager.COMMAND,
-                       "--scenarios-defs-output-file", scenario_defs]
+            command = [
+                GstValidateBaseTestManager.COMMAND,
+                "--scenarios-defs-output-file",
+                scenario_defs,
+            ]
             command.extend(scenario_paths)
             subprocess.check_call(command, stdout=logs, stderr=logs)
         except subprocess.CalledProcessError as e:
             self.error(e)
-            self.error('See %s' % log_path)
+            self.error("See %s" % log_path)
             pass
 
         config = configparser.RawConfigParser()
@@ -2504,13 +2758,16 @@ class ScenarioManager(Loggable):
                 for scenario_path in scenario_paths:
                     if section == scenario_path:
                         if mfile is None:
-                            name = os.path.basename(section).replace("." + self.FILE_EXTENSION, "")
+                            name = os.path.basename(section).replace(
+                                "." + self.FILE_EXTENSION, ""
+                            )
                             path = scenario_path
                         else:
                             # The real name of the scenario is:
                             # filename.REALNAME.scenario
                             name = scenario_path.replace(mfile + ".", "").replace(
-                                "." + self.FILE_EXTENSION, "")
+                                "." + self.FILE_EXTENSION, ""
+                            )
                             path = scenario_path
                         break
             else:
@@ -2532,7 +2789,11 @@ class ScenarioManager(Loggable):
         return scenarios
 
     def get_scenario(self, name):
-        if name is not None and os.path.isabs(name) and name.endswith(self.FILE_EXTENSION):
+        if (
+            name is not None
+            and os.path.isabs(name)
+            and name.endswith(self.FILE_EXTENSION)
+        ):
             scenario = self.special_scenarios.get(name)
             if scenario:
                 return scenario
@@ -2550,7 +2811,9 @@ class ScenarioManager(Loggable):
             return self.system_scenarios
 
         try:
-            return [scenario for scenario in self.system_scenarios if scenario.name == name][0]
+            return [
+                scenario for scenario in self.system_scenarios if scenario.name == name
+            ][0]
         except IndexError:
             self.warning("Scenario: %s not found" % name)
             return None
@@ -2567,12 +2830,14 @@ class GstValidateBaseTestManager(TestsManager):
 
     @classmethod
     def update_commands(cls, extra_paths=None):
-        for varname, cmd in {'': 'gst-validate',
-                             'TRANSCODING_': 'gst-validate-transcoding',
-                             'MEDIA_CHECK_': 'gst-validate-media-check',
-                             'RTSP_SERVER_': 'gst-validate-rtsp-server',
-                             'INSPECT_': 'gst-inspect'}.items():
-            setattr(cls, varname + 'COMMAND', which(cmd + '-1.0', extra_paths))
+        for varname, cmd in {
+            "": "gst-validate",
+            "TRANSCODING_": "gst-validate-transcoding",
+            "MEDIA_CHECK_": "gst-validate-media-check",
+            "RTSP_SERVER_": "gst-validate-rtsp-server",
+            "INSPECT_": "gst-inspect",
+        }.items():
+            setattr(cls, varname + "COMMAND", which(cmd + "-1.0", extra_paths))
 
     @classmethod
     def has_feature(cls, featurename):
@@ -2637,7 +2902,6 @@ GstValidateBaseTestManager.update_commands()
 
 
 class MediaDescriptor(Loggable):
-
     def __init__(self):
         Loggable.__init__(self)
 
@@ -2707,49 +2971,64 @@ class MediaDescriptor(Loggable):
             return True
 
         if scenario.seeks() and (not self.is_seekable() or self.is_image()):
-            self.debug("Do not run %s as %s does not support seeking",
-                       scenario, self.get_uri())
+            self.debug(
+                "Do not run %s as %s does not support seeking", scenario, self.get_uri()
+            )
             return False
 
         if self.is_image() and scenario.needs_clock_sync():
-            self.debug("Do not run %s as %s is an image",
-                       scenario, self.get_uri())
+            self.debug("Do not run %s as %s is an image", scenario, self.get_uri())
             return False
 
         if not self.can_play_reverse() and scenario.does_reverse_playback():
-            self.debug("Do not run %s as %s can not play reverse ",
-                       scenario, self.get_uri())
+            self.debug(
+                "Do not run %s as %s can not play reverse ", scenario, self.get_uri()
+            )
             return False
 
         if not self.is_live() and scenario.needs_live_content():
-            self.debug("Do not run %s as %s is not a live content",
-                       scenario, self.get_uri())
+            self.debug(
+                "Do not run %s as %s is not a live content", scenario, self.get_uri()
+            )
             return False
 
         if self.is_live() and not scenario.compatible_with_live_content():
-            self.debug("Do not run %s as %s is a live content",
-                       scenario, self.get_uri())
+            self.debug(
+                "Do not run %s as %s is a live content", scenario, self.get_uri()
+            )
             return False
 
-        if not self.prerolls() and getattr(scenario, 'needs_preroll', False):
-            self.debug("Do not run %s as %s does not support preroll",
-                       scenario, self.get_uri())
+        if not self.prerolls() and getattr(scenario, "needs_preroll", False):
+            self.debug(
+                "Do not run %s as %s does not support preroll", scenario, self.get_uri()
+            )
             return False
 
-        if self.get_duration() and self.get_duration() / GST_SECOND < scenario.get_min_media_duration():
+        if (
+            self.get_duration()
+            and self.get_duration() / GST_SECOND < scenario.get_min_media_duration()
+        ):
             self.debug(
                 "Do not run %s as %s is too short (%i < min media duation : %i",
-                scenario, self.get_uri(),
+                scenario,
+                self.get_uri(),
                 self.get_duration() / GST_SECOND,
-                scenario.get_min_media_duration())
+                scenario.get_min_media_duration(),
+            )
             return False
 
-        for track_type in ['audio', 'subtitle', 'video']:
+        for track_type in ["audio", "subtitle", "video"]:
             if self.get_num_tracks(track_type) < scenario.get_min_tracks(track_type):
-                self.debug("Do not run %s -- %s | At least %s %s track needed  < %s"
-                           % (scenario, self.get_uri(), track_type,
-                              scenario.get_min_tracks(track_type),
-                              self.get_num_tracks(track_type)))
+                self.debug(
+                    "Do not run %s -- %s | At least %s %s track needed  < %s"
+                    % (
+                        scenario,
+                        self.get_uri(),
+                        track_type,
+                        scenario.get_min_tracks(track_type),
+                        self.get_num_tracks(track_type),
+                    )
+                )
                 return False
 
         return True
@@ -2784,8 +3063,7 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             try:
                 media_xml = ET.parse(xml_path).getroot()
             except xml.etree.ElementTree.ParseError:
-                printc("Could not parse %s" % xml_path,
-                    Colors.FAIL)
+                printc("Could not parse %s" % xml_path, Colors.FAIL)
                 raise
             self._extract_data(media_xml)
 
@@ -2811,21 +3089,30 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             pass
         else:
             for stream in streams:
-                self._track_caps.append(
-                    (stream.attrib["type"], stream.attrib["caps"]))
+                self._track_caps.append((stream.attrib["type"], stream.attrib["caps"]))
 
-        self._skip_parsers = bool(int(media_xml.attrib.get('skip-parsers', 0)))
+        self._skip_parsers = bool(int(media_xml.attrib.get("skip-parsers", 0)))
         self._has_frames = bool(int(media_xml.attrib["frame-detection"]))
         self._duration = int(media_xml.attrib["duration"])
         self._uri = media_xml.attrib["uri"]
         parsed_uri = urllib.parse.urlparse(self.get_uri())
         self._protocol = media_xml.get("protocol", parsed_uri.scheme)
         if parsed_uri.scheme == "file":
-            if not os.path.exists(parsed_uri.path) and os.path.exists(self.get_media_filepath()):
+            if not os.path.exists(parsed_uri.path) and os.path.exists(
+                self.get_media_filepath()
+            ):
                 self._uri = "file://" + self.get_media_filepath()
         elif parsed_uri.scheme == Protocols.IMAGESEQUENCE:
-            self._media_file_path = os.path.join(os.path.dirname(self.__cleanup_media_info_ext()), os.path.basename(parsed_uri.path))
-            self._uri = parsed_uri._replace(path=os.path.join(os.path.dirname(self.__cleanup_media_info_ext()), os.path.basename(self._media_file_path))).geturl()
+            self._media_file_path = os.path.join(
+                os.path.dirname(self.__cleanup_media_info_ext()),
+                os.path.basename(parsed_uri.path),
+            )
+            self._uri = parsed_uri._replace(
+                path=os.path.join(
+                    os.path.dirname(self.__cleanup_media_info_ext()),
+                    os.path.basename(self._media_file_path),
+                )
+            ).geturl()
         self._is_seekable = media_xml.attrib["seekable"].lower() == "true"
         self._is_live = media_xml.get("live", "false").lower() == "true"
         self._is_image = False
@@ -2837,19 +3124,25 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             self._track_types.append(stream.attrib["type"])
 
     def __cleanup_media_info_ext(self):
-        for ext in [self.MEDIA_INFO_EXT, self.PUSH_MEDIA_INFO_EXT, self.STREAM_INFO_EXT,
-                self.SKIPPED_MEDIA_INFO_EXT, ]:
+        for ext in [
+            self.MEDIA_INFO_EXT,
+            self.PUSH_MEDIA_INFO_EXT,
+            self.STREAM_INFO_EXT,
+            self.SKIPPED_MEDIA_INFO_EXT,
+        ]:
             if self._xml_path.endswith(ext):
-                return self._xml_path[:len(self._xml_path) - (len(ext) + 1)]
+                return self._xml_path[: len(self._xml_path) - (len(ext) + 1)]
 
         assert "Not reached" == None  # noqa
 
     @staticmethod
-    def new_from_uri(uri, verbose=False, include_frames=False, is_push=False, is_skipped=False):
+    def new_from_uri(
+        uri, verbose=False, include_frames=False, is_push=False, is_skipped=False
+    ):
         """
-            include_frames = 0 # Never
-            include_frames = 1 # always
-            include_frames = 2 # if previous file included them
+        include_frames = 0 # Never
+        include_frames = 1 # always
+        include_frames = 2 # if previous file included them
 
         """
         media_path = utils.url2path(uri)
@@ -2864,10 +3157,15 @@ class GstValidateMediaDescriptor(MediaDescriptor):
         if include_frames == 2:
             try:
                 media_xml = ET.parse(descriptor_path).getroot()
-                prev_uri = urllib.parse.urlparse(media_xml.attrib['uri'])
+                prev_uri = urllib.parse.urlparse(media_xml.attrib["uri"])
                 if prev_uri.scheme == Protocols.IMAGESEQUENCE:
                     parsed_uri = urllib.parse.urlparse(uri)
-                    uri = prev_uri._replace(path=os.path.join(os.path.dirname(parsed_uri.path), os.path.basename(prev_uri.path))).geturl()
+                    uri = prev_uri._replace(
+                        path=os.path.join(
+                            os.path.dirname(parsed_uri.path),
+                            os.path.basename(prev_uri.path),
+                        )
+                    ).geturl()
                 include_frames = bool(int(media_xml.attrib["frame-detection"]))
                 if bool(int(media_xml.attrib.get("skip-parsers", 0))):
                     args.append("--skip-parsers")
@@ -2882,9 +3180,11 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             args.extend(["--full"])
 
         if verbose:
-            printc("Generating media info for %s\n"
-                   "    Command: '%s'" % (media_path, ' '.join(args)),
-                   Colors.OKBLUE)
+            printc(
+                "Generating media info for %s\n"
+                "    Command: '%s'" % (media_path, " ".join(args)),
+                Colors.OKBLUE,
+            )
 
         try:
             subprocess.check_output(args, stderr=open(os.devnull))
@@ -2892,8 +3192,7 @@ class GstValidateMediaDescriptor(MediaDescriptor):
             if verbose:
                 printc("Result: Failed", Colors.FAIL)
             else:
-                loggable.warning("GstValidateMediaDescriptor",
-                                 "Exception: %s" % e)
+                loggable.warning("GstValidateMediaDescriptor", "Exception: %s" % e)
             return None
 
         if verbose:
@@ -2958,41 +3257,58 @@ class GstValidateMediaDescriptor(MediaDescriptor):
 
     def get_clean_name(self):
         name = os.path.basename(self.get_path())
-        regex = '|'.join(['\\.%s$' % ext for ext in [self.SKIPPED_MEDIA_INFO_EXT, self.MEDIA_INFO_EXT, self.PUSH_MEDIA_INFO_EXT, self.STREAM_INFO_EXT]])
+        regex = "|".join(
+            [
+                "\\.%s$" % ext
+                for ext in [
+                    self.SKIPPED_MEDIA_INFO_EXT,
+                    self.MEDIA_INFO_EXT,
+                    self.PUSH_MEDIA_INFO_EXT,
+                    self.STREAM_INFO_EXT,
+                ]
+            ]
+        )
         name = re.sub(regex, "", name)
 
-        return name.replace('.', "_")
+        return name.replace(".", "_")
 
 
 class MediaFormatCombination(object):
-    FORMATS = {"aac": "audio/mpeg,mpegversion=4",  # Audio
-               "ac3": "audio/x-ac3",
-               "vorbis": "audio/x-vorbis",
-               "mp3": "audio/mpeg,mpegversion=1,layer=3",
-               "opus": "audio/x-opus",
-               "rawaudio": "audio/x-raw",
-
-               # Video
-               "h264": "video/x-h264",
-               "h265": "video/x-h265",
-               "vp8": "video/x-vp8",
-               "vp9": "video/x-vp9",
-               "theora": "video/x-theora",
-               "prores": "video/x-prores",
-               "jpeg": "image/jpeg",
-
-               # Containers
-               "webm": "video/webm",
-               "ogg": "application/ogg",
-               "mkv": "video/x-matroska",
-               "mp4": "video/quicktime,variant=iso;",
-               "quicktime": "video/quicktime;"}
+    FORMATS = {
+        "aac": "audio/mpeg,mpegversion=4",  # Audio
+        "ac3": "audio/x-ac3",
+        "vorbis": "audio/x-vorbis",
+        "mp3": "audio/mpeg,mpegversion=1,layer=3",
+        "opus": "audio/x-opus",
+        "rawaudio": "audio/x-raw",
+        # Video
+        "h264": "video/x-h264",
+        "h265": "video/x-h265",
+        "vp8": "video/x-vp8",
+        "vp9": "video/x-vp9",
+        "theora": "video/x-theora",
+        "prores": "video/x-prores",
+        "jpeg": "image/jpeg",
+        # Containers
+        "webm": "video/webm",
+        "ogg": "application/ogg",
+        "mkv": "video/x-matroska",
+        "mp4": "video/quicktime,variant=iso;",
+        "quicktime": "video/quicktime;",
+    }
 
     def __str__(self):
         return "%s and %s in %s" % (self.audio, self.video, self.container)
 
-    def __init__(self, container, audio, video, duration_factor=1,
-            video_restriction=None, audio_restriction=None):
+    def __init__(
+        self,
+        container,
+        audio,
+        video,
+        duration_factor=1,
+        video_restriction=None,
+        audio_restriction=None,
+    ):
         """
         Describes a media format to be used for transcoding tests.
 

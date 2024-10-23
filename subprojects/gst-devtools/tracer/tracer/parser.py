@@ -26,8 +26,24 @@ def _log_line_regex():
 
     ANSI = "(?:\x1b\\[[0-9;]*m\\s*)*\\s*"
 
-    return [TIME, ANSI, PID, ANSI, THREAD, ANSI, LEVEL, ANSI, CATEGORY,
-            FILENAME, LINE, FUNCTION, ANSI, OBJECT, ANSI, MESSAGE]
+    return [
+        TIME,
+        ANSI,
+        PID,
+        ANSI,
+        THREAD,
+        ANSI,
+        LEVEL,
+        ANSI,
+        CATEGORY,
+        FILENAME,
+        LINE,
+        FUNCTION,
+        ANSI,
+        OBJECT,
+        ANSI,
+        MESSAGE,
+    ]
 
 
 class Parser(object):
@@ -51,18 +67,18 @@ class Parser(object):
 
     def __init__(self, filename):
         self.filename = filename
-        self.log_regex = re.compile(''.join(_log_line_regex()))
+        self.log_regex = re.compile("".join(_log_line_regex()))
         self.file = None
 
     def __enter__(self):
-        if self.filename != '-':
-            self.file = open(self.filename, 'rt')
+        if self.filename != "-":
+            self.file = open(self.filename, "rt")
         else:
             self.file = sys.stdin
         return self
 
     def __exit__(self, *args):
-        if self.filename != '-':
+        if self.filename != "-":
             self.file.close()
             self.file = None
 
