@@ -29,7 +29,7 @@ from gi.repository import GES  # noqa
 from gi.repository import GLib  # noqa
 from gi.repository import GObject  # noqa
 import contextlib  # noqa
-import os  #noqa
+import os  # noqa
 import unittest  # noqa
 import tempfile  # noqa
 
@@ -76,11 +76,11 @@ def create_project(with_group=False, saved=False):
     if with_group:
         clip1 = GES.TitleClip()
         clip1.set_start(0)
-        clip1.set_duration(10*Gst.SECOND)
+        clip1.set_duration(10 * Gst.SECOND)
         layer.add_clip(clip1)
         clip2 = GES.TitleClip()
         clip2.set_start(100 * Gst.SECOND)
-        clip2.set_duration(10*Gst.SECOND)
+        clip2.set_duration(10 * Gst.SECOND)
         layer.add_clip(clip2)
         group = GES.Container.group([clip1, clip2])
 
@@ -124,9 +124,13 @@ def created_video_asset(uri=None, num_bufs=30, framerate="30/1"):
             name = f.name
         else:
             name = urlparse(uri).path
-        pipe = Gst.parse_launch(f"videotestsrc num-buffers={num_bufs} ! video/x-raw,framerate={framerate} ! theoraenc ! oggmux ! filesink location={name}")
+        pipe = Gst.parse_launch(
+            f"videotestsrc num-buffers={num_bufs} ! video/x-raw,framerate={framerate} ! theoraenc ! oggmux ! filesink location={name}"
+        )
         pipe.set_state(Gst.State.PLAYING)
-        assert pipe.get_bus().timed_pop_filtered(Gst.CLOCK_TIME_NONE, Gst.MessageType.EOS)
+        assert pipe.get_bus().timed_pop_filtered(
+            Gst.CLOCK_TIME_NONE, Gst.MessageType.EOS
+        )
         pipe.set_state(Gst.State.NULL)
 
         yield uri
@@ -178,25 +182,33 @@ class GESTest(unittest.TestCase):
         self.assertEqual(set(clip.get_top_effects()), set(effects))
 
         # Make sure their order is correct.
-        indexes = [clip.get_top_effect_index(effect)
-                   for effect in effects]
+        indexes = [clip.get_top_effect_index(effect) for effect in effects]
         self.assertEqual(indexes, list(range(len(effects))))
 
     def assertGESError(self, error, code, message=""):
         if error is None:
             raise AssertionError(
-                "{}{}Received no error".format(message, message and ": "))
+                "{}{}Received no error".format(message, message and ": ")
+            )
         if error.domain != "GES_ERROR":
             raise AssertionError(
                 "{}{}Received error ({}) in domain {} rather than "
                 "GES_ERROR".format(
-                    message, message and ": ", error.message, error.domain))
+                    message, message and ": ", error.message, error.domain
+                )
+            )
         err_code = GES.Error(error.code)
         if err_code != code:
             raise AssertionError(
                 "{}{}Received {} error ({}) rather than {}".format(
-                    message, message and ": ", err_code.value_name,
-                    error.message, code.value_name))
+                    message,
+                    message and ": ",
+                    err_code.value_name,
+                    error.message,
+                    code.value_name,
+                )
+            )
+
 
 class GESSimpleTimelineTest(GESTest):
 
@@ -210,13 +222,13 @@ class GESSimpleTimelineTest(GESTest):
             res += "Layer %04d: " % layer.get_priority()
             for clip in layer.get_clips():
                 res += "{ %s }" % clip
-            res += '\n------------------------\n'
+            res += "\n------------------------\n"
 
         for group in self.timeline.get_groups():
             res += "GROUP %s :" % group
             for clip in group.get_children(False):
                 res += " { %s }" % clip.props.name
-            res += '\n'
+            res += "\n"
         res += "================================\n"
         return res
 
@@ -226,15 +238,13 @@ class GESSimpleTimelineTest(GESTest):
     def setUp(self):
         self.timeline = GES.Timeline.new()
         for track_type in self.track_types:
-            self.assertIn(
-                track_type, [GES.TrackType.AUDIO, GES.TrackType.VIDEO])
+            self.assertIn(track_type, [GES.TrackType.AUDIO, GES.TrackType.VIDEO])
             if track_type == GES.TrackType.AUDIO:
                 self.assertTrue(self.timeline.add_track(GES.AudioTrack.new()))
             else:
                 self.assertTrue(self.timeline.add_track(GES.VideoTrack.new()))
 
-        self.assertEqual(len(self.timeline.get_tracks()),
-                         len(self.track_types))
+        self.assertEqual(len(self.timeline.get_tracks()), len(self.track_types))
         self.layer = self.timeline.append_layer()
 
     def add_clip(self, start, in_point, duration, asset_type=GES.TestClip):
@@ -262,10 +272,17 @@ class GESSimpleTimelineTest(GESTest):
         return clip
 
     def assertElementAreEqual(self, ref, element):
-        self.assertTrue(isinstance(element, type(ref)), "%s and %s do not have the same type!" % (ref, element))
+        self.assertTrue(
+            isinstance(element, type(ref)),
+            "%s and %s do not have the same type!" % (ref, element),
+        )
 
-        props = [p for p in ref.list_properties() if p.name not in ['name']
-            and not GObject.type_is_a(p.value_type, GObject.Object)]
+        props = [
+            p
+            for p in ref.list_properties()
+            if p.name not in ["name"]
+            and not GObject.type_is_a(p.value_type, GObject.Object)
+        ]
         for p in props:
             pname = p.name
             refval = GObject.Value()
@@ -276,8 +293,11 @@ class GESSimpleTimelineTest(GESTest):
             value.init(p.value_type)
             value.set_value(element.get_property(pname))
 
-            self.assertTrue(Gst.value_compare(refval, value) == Gst.VALUE_EQUAL,
-                "%s are not equal: %s != %s\n    %s != %s" % (pname, value, refval, element, ref))
+            self.assertTrue(
+                Gst.value_compare(refval, value) == Gst.VALUE_EQUAL,
+                "%s are not equal: %s != %s\n    %s != %s"
+                % (pname, value, refval, element, ref),
+            )
 
         if isinstance(ref, GES.TrackElement):
             self.assertElementAreEqual(ref.get_nleobject(), element.get_nleobject())
@@ -289,9 +309,11 @@ class GESSimpleTimelineTest(GESTest):
         ttypes = [track.type for track in self.timeline.get_tracks()]
         for ttype in ttypes:
             if ttypes.count(ttype) > 1:
-                self.warning("Can't deeply check %s and %s "
-                    "(only one track per type supported %s %s found)" % (ref,
-                    element, ttypes.count(ttype), ttype))
+                self.warning(
+                    "Can't deeply check %s and %s "
+                    "(only one track per type supported %s %s found)"
+                    % (ref, element, ttypes.count(ttype), ttype)
+                )
                 return
 
         children = element.get_children(False)
@@ -316,17 +338,21 @@ class GESSimpleTimelineTest(GESTest):
                     child = tmpchild
                     break
 
-            self.assertIsNotNone(child, "Could not find equivalent child %s in %s(%s)" % (ref_child,
-                element, children))
+            self.assertIsNotNone(
+                child,
+                "Could not find equivalent child %s in %s(%s)"
+                % (ref_child, element, children),
+            )
 
             self.assertElementAreEqual(ref_child, child)
 
     def check_reload_timeline(self):
-        tmpf = tempfile.NamedTemporaryFile(suffix='.xges')
+        tmpf = tempfile.NamedTemporaryFile(suffix=".xges")
         uri = Gst.filename_to_uri(tmpf.name)
         self.assertTrue(self.timeline.save_to_uri(uri, None, True))
         project = GES.Project.new(uri)
         mainloop = create_main_loop()
+
         def loaded_cb(unused_project, unused_timeline):
             mainloop.quit()
 
@@ -354,7 +380,8 @@ class GESSimpleTimelineTest(GESTest):
             layer_timings = []
             for clip in layer.get_clips():
                 layer_timings.append(
-                    (type(clip), clip.props.start, clip.props.duration))
+                    (type(clip), clip.props.start, clip.props.duration)
+                )
                 for child in clip.get_children(True):
                     self.assertEqual(child.props.start, clip.props.start)
                     self.assertEqual(child.props.duration, clip.props.duration)
@@ -367,7 +394,9 @@ class GESSimpleTimelineTest(GESTest):
         timeline_groups = self.timeline.get_groups()
         if groups and timeline_groups:
             for i, group in enumerate(groups):
-                self.assertEqual(set(group), set(timeline_groups[i].get_children(False)))
+                self.assertEqual(
+                    set(group), set(timeline_groups[i].get_children(False))
+                )
             self.assertEqual(len(timeline_groups), i + 1)
 
         return res
@@ -390,16 +419,15 @@ class GESTimelineConfigTest(GESTest):
         def snap_started(tl, el1, el2, pos):
             if self.snap_occured:
                 raise AssertionError(
-                    "Previous snap {} not accounted for".format(self.snap))
+                    "Previous snap {} not accounted for".format(self.snap)
+                )
             self.snap_occured = True
             if self.snap is not None:
-                raise AssertionError(
-                    "Previous snap {} not ended".format(self.snap))
+                raise AssertionError("Previous snap {} not ended".format(self.snap))
             self.snap = (el1.get_parent(), el2.get_parent(), pos)
 
         def snap_ended(tl, el1, el2, pos):
-            self.assertEqual(
-                self.snap, (el1.get_parent(), el2.get_parent(), pos))
+            self.assertEqual(self.snap, (el1.get_parent(), el2.get_parent(), pos))
             self.snap = None
 
         timeline.connect("snapping-started", snap_started)
@@ -426,12 +454,27 @@ class GESTimelineConfigTest(GESTest):
 
     @staticmethod
     def new_config(start, duration, inpoint, maxduration, layer):
-        return {"start": start, "duration": duration, "in-point": inpoint,
-                "max-duration": maxduration, "layer": layer}
+        return {
+            "start": start,
+            "duration": duration,
+            "in-point": inpoint,
+            "max-duration": maxduration,
+            "layer": layer,
+        }
 
-    def add_clip(self, name, layer, tracks, start, duration, inpoint=0,
-                 maxduration=Gst.CLOCK_TIME_NONE, clip_type=GES.TestClip,
-                 asset_id=None, effects=None):
+    def add_clip(
+        self,
+        name,
+        layer,
+        tracks,
+        start,
+        duration,
+        inpoint=0,
+        maxduration=Gst.CLOCK_TIME_NONE,
+        clip_type=GES.TestClip,
+        asset_id=None,
+        effects=None,
+    ):
         """
         Create a clip with the given @name and properties and add it to the
         layer of priority @layer to the tracks in @tracks. Also registers
@@ -461,7 +504,8 @@ class GESTimelineConfigTest(GESTest):
 
         if lay.add_clip(clip) != True:
             raise AssertionError(
-                "Failed to add clip {} to layer {}".format(name, layer))
+                "Failed to add clip {} to layer {}".format(name, layer)
+            )
 
         # then remove the children not in the selected tracks, which may
         # now allow some clips to fully/triple overlap because they do
@@ -479,7 +523,8 @@ class GESTimelineConfigTest(GESTest):
         self.assertTrue(clip.set_max_duration(maxduration))
 
         self.config[clip] = self.new_config(
-            start, duration, inpoint, maxduration, layer)
+            start, duration, inpoint, maxduration, layer
+        )
         self.clips.append(clip)
 
         return clip
@@ -506,7 +551,8 @@ class GESTimelineConfigTest(GESTest):
             self.assertTrue(group.add(element))
 
         self.config[group] = self.new_config(
-            start, end - start, 0, Gst.CLOCK_TIME_NONE, layer)
+            start, end - start, 0, Gst.CLOCK_TIME_NONE, layer
+        )
         return group
 
     def register_auto_transition(self, clip1, clip2, track):
@@ -518,15 +564,19 @@ class GESTimelineConfigTest(GESTest):
         if transition is None:
             raise AssertionError(
                 "{} and {} have no auto-transition in track {}".format(
-                    clip1, clip2, track))
+                    clip1, clip2, track
+                )
+            )
         if transition in self.auto_transitions.values():
             raise AssertionError(
                 "Auto-transition between {} and {} in track {} already "
-                "registered".format(clip1, clip2, track))
+                "registered".format(clip1, clip2, track)
+            )
         key = (clip1, clip2, track)
         if key in self.auto_transitions:
             raise AssertionError(
-                "Auto-transition already registered for {}".format(key))
+                "Auto-transition already registered for {}".format(key)
+            )
 
         self.auto_transitions[key] = transition
 
@@ -548,8 +598,9 @@ class GESTimelineConfigTest(GESTest):
                 val = element.get_property(prop)
 
             if val != config[prop]:
-                raise AssertionError("{} property {}: {} != {}".format(
-                    element, prop, val, config[prop]))
+                raise AssertionError(
+                    "{} property {}: {} != {}".format(element, prop, val, config[prop])
+                )
 
     @staticmethod
     def _source_in_track(clip, track):
@@ -559,8 +610,9 @@ class GESTimelineConfigTest(GESTest):
 
     def _find_transition(self, clip1, clip2, track):
         """find transition from earlier clip1 to later clip2"""
-        if not self._source_in_track(clip1, track) or \
-                not self._source_in_track(clip2, track):
+        if not self._source_in_track(clip1, track) or not self._source_in_track(
+            clip2, track
+        ):
             return None
 
         layer_prio = clip1.get_layer_priority()
@@ -585,13 +637,19 @@ class GESTimelineConfigTest(GESTest):
                 child = children[0]
             else:
                 continue
-            if isinstance(clip, GES.TransitionClip) and clip.start == start \
-                    and clip.duration == duration and child.get_track() == track:
+            if (
+                isinstance(clip, GES.TransitionClip)
+                and clip.start == start
+                and clip.duration == duration
+                and child.get_track() == track
+            ):
                 return clip
 
         raise AssertionError(
             "No auto-transition between {} and {} in track {}".format(
-                clip1, clip2, track))
+                clip1, clip2, track
+            )
+        )
 
     def _transition_between(self, new, existing, clip1, clip2, track):
         if clip1.start < clip2.start:
@@ -612,16 +670,23 @@ class GESTimelineConfigTest(GESTest):
             if trans != expect:
                 raise AssertionError(
                     "Auto-transition between {} and {} in track {} changed "
-                    "from {} to {}".format(
-                        clip1, clip2, track, expect, trans))
+                    "from {} to {}".format(clip1, clip2, track, expect, trans)
+                )
         else:
             raise AssertionError(
                 "Unexpected transition found between {} and {} in track {}"
-                "".format(clip1, clip2, track))
+                "".format(clip1, clip2, track)
+            )
 
     def assertTimelineConfig(
-            self, new_props=None, snap_position=None, snap_froms=None,
-            snap_tos=None, new_transitions=None, lost_transitions=None):
+        self,
+        new_props=None,
+        snap_position=None,
+        snap_froms=None,
+        snap_tos=None,
+        new_transitions=None,
+        lost_transitions=None,
+    ):
         """
         Check that the timeline configuration has only changed by the
         differences present in @new_props.
@@ -662,15 +727,17 @@ class GESTimelineConfigTest(GESTest):
         if self.snap is None:
             if snaps:
                 raise AssertionError(
-                    "No snap occurred, but expected a snap in {}".format(snaps))
+                    "No snap occurred, but expected a snap in {}".format(snaps)
+                )
         elif not snaps:
             if self.snap_occured:
                 raise AssertionError(
-                    "Snap {} occurred, but expected no snap".format(self.snap))
+                    "Snap {} occurred, but expected no snap".format(self.snap)
+                )
         elif self.snap not in snaps:
             raise AssertionError(
-                "Snap {} occurred, but expected a snap in {}".format(
-                    self.snap, snaps))
+                "Snap {} occurred, but expected a snap in {}".format(self.snap, snaps)
+            )
         self.snap_occured = False
 
         # check that lost transitions are not part of the layer
@@ -679,48 +746,49 @@ class GESTimelineConfigTest(GESTest):
             if key not in self.auto_transitions:
                 raise AssertionError(
                     "No such auto-transition between {} and {} in track {} "
-                    "is registered".format(clip1, clip2, track))
+                    "is registered".format(clip1, clip2, track)
+                )
             # make sure original transition was removed from the layer
             trans = self.auto_transitions[key]
             if trans not in self.lost_clips:
                 raise AssertionError(
                     "The auto-transition {} between {} and {} track {} was "
                     "not removed from the layers, but expect it to be lost"
-                    "".format(trans, clip1, clip2, track))
+                    "".format(trans, clip1, clip2, track)
+                )
             self.lost_clips.remove(trans)
             # make sure a new one wasn't created
             trans = self._find_transition(clip1, clip2, track)
             if trans is not None:
                 raise AssertionError(
                     "Found auto-transition between {} and {} in track {} "
-                    "is present, but expected it to be lost".format(
-                        clip1, clip2, track))
+                    "is present, but expected it to be lost".format(clip1, clip2, track)
+                )
             # since it was lost, remove it
             del self.auto_transitions[key]
 
         # check that all lost clips are accounted for
         if self.lost_clips:
             raise AssertionError(
-                "Clips were lost that are not accounted for: {}".format(
-                    self.lost_clips))
+                "Clips were lost that are not accounted for: {}".format(self.lost_clips)
+            )
 
         # check that all other transitions are either existing ones or
         # new ones
         new = set(new_transitions)
         existing = set(self.auto_transitions.keys())
         for i, clip1 in enumerate(self.clips):
-            for clip2 in self.clips[i+1:]:
+            for clip2 in self.clips[i + 1 :]:
                 for track in self.timeline.get_tracks():
-                    self._transition_between(
-                        new, existing, clip1, clip2, track)
+                    self._transition_between(new, existing, clip1, clip2, track)
 
         # make sure we are not missing any expected transitions
         if new:
-            raise AssertionError(
-                "Did not find new transitions for {}".format(new))
+            raise AssertionError("Did not find new transitions for {}".format(new))
         if existing:
             raise AssertionError(
-                "Did not find existing transitions for {}".format(existing))
+                "Did not find existing transitions for {}".format(existing)
+            )
 
         # make sure there aren't any clips we are unaware of
         transitions = self.auto_transitions.values()
@@ -729,18 +797,35 @@ class GESTimelineConfigTest(GESTest):
                 if clip not in self.clips and clip not in transitions:
                     raise AssertionError("Unknown clip {}".format(clip))
 
-    def assertEdit(self, element, layer, mode, edge, position, snap,
-                   snap_froms, snap_tos, new_props, new_transitions,
-                   lost_transitions):
+    def assertEdit(
+        self,
+        element,
+        layer,
+        mode,
+        edge,
+        position,
+        snap,
+        snap_froms,
+        snap_tos,
+        new_props,
+        new_transitions,
+        lost_transitions,
+    ):
         if not element.edit_full(layer, mode, edge, position):
             raise AssertionError(
                 "Edit of {} to layer {}, mode {}, edge {}, at position {} "
                 "failed when a success was expected".format(
-                    element, layer, mode, edge, position))
+                    element, layer, mode, edge, position
+                )
+            )
         self.assertTimelineConfig(
-            new_props=new_props, snap_position=snap, snap_froms=snap_froms,
-            snap_tos=snap_tos, new_transitions=new_transitions,
-            lost_transitions=lost_transitions)
+            new_props=new_props,
+            snap_position=snap,
+            snap_froms=snap_froms,
+            snap_tos=snap_tos,
+            new_transitions=new_transitions,
+            lost_transitions=lost_transitions,
+        )
 
     def assertFailEdit(self, element, layer, mode, edge, position, err_code):
         res = None
@@ -755,18 +840,20 @@ class GESTimelineConfigTest(GESTest):
                 raise AssertionError(
                     "Edit of {} to layer {}, mode {}, edge {}, at "
                     "position {} succeeded when a failure was expected"
-                    "".format(
-                        element, layer, mode, edge, position))
+                    "".format(element, layer, mode, edge, position)
+                )
             if error is not None:
                 raise AssertionError(
                     "Edit of {} to layer {}, mode {}, edge {}, at "
                     "position {} did produced an error when none was "
-                    "expected".format(
-                        element, layer, mode, edge, position))
+                    "expected".format(element, layer, mode, edge, position)
+                )
         else:
             self.assertGESError(
-                error, err_code,
+                error,
+                err_code,
                 "Edit of {} to layer {}, mode {}, edge {}, at "
-                "position {}".format(element, layer, mode, edge, position))
+                "position {}".format(element, layer, mode, edge, position),
+            )
         # should be no change or snapping if edit fails
         self.assertTimelineConfig()

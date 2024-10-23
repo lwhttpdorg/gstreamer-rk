@@ -48,13 +48,19 @@ class TestTimeline(GESSimpleTimelineTest):
         with self.assertRaises(GLib.Error):
             GES.UriClipAsset.request_sync(Gst.filename_to_uri(path))
 
-        GES.add_missing_uri_relocation_uri(Gst.filename_to_uri(os.path.join(__file__, "../../assets")), False)
+        GES.add_missing_uri_relocation_uri(
+            Gst.filename_to_uri(os.path.join(__file__, "../../assets")), False
+        )
         path = os.path.join(__file__, "../../", "png.png")
-        self.assertEqual(GES.UriClipAsset.request_sync(Gst.filename_to_uri(path)).props.id,
-            Gst.filename_to_uri(os.path.join(__file__, "../../assets/png.png")))
+        self.assertEqual(
+            GES.UriClipAsset.request_sync(Gst.filename_to_uri(path)).props.id,
+            Gst.filename_to_uri(os.path.join(__file__, "../../assets/png.png")),
+        )
 
     def test_request_relocated_twice(self):
-        GES.add_missing_uri_relocation_uri(Gst.filename_to_uri(os.path.join(__file__, "../../")), True)
+        GES.add_missing_uri_relocation_uri(
+            Gst.filename_to_uri(os.path.join(__file__, "../../")), True
+        )
         proj = GES.Project.new()
 
         asset = proj.create_asset_sync("file:///png.png", GES.UriClip)
@@ -84,7 +90,9 @@ class TestTimeline(GESSimpleTimelineTest):
                         mainloop.quit()
 
                     GES.Asset.needs_reload(GES.UriClip, uri)
-                    GES.Asset.request_async(GES.UriClip, uri, None, asset_loaded_cb, mainloop)
+                    GES.Asset.request_async(
+                        GES.UriClip, uri, None, asset_loaded_cb, mainloop
+                    )
                     mainloop.run()
 
     def test_asset_metadata_on_reload(self):
@@ -93,7 +101,9 @@ class TestTimeline(GESSimpleTimelineTest):
         unused, xges_path = tempfile.mkstemp(suffix=".xges")
         project_uri = Gst.filename_to_uri(os.path.abspath(xges_path))
 
-        asset_uri = Gst.filename_to_uri(os.path.join(__file__, "../../assets/audio_video.ogg"))
+        asset_uri = Gst.filename_to_uri(
+            os.path.join(__file__, "../../assets/audio_video.ogg")
+        )
         xges = """<ges version='0.3'>
             <project properties='properties;' metadatas='metadatas;'>
                 <ressources>
@@ -101,7 +111,9 @@ class TestTimeline(GESSimpleTimelineTest):
                     </asset>
                 </ressources>
             </project>
-            </ges>""" % {"uri": asset_uri}
+            </ges>""" % {
+            "uri": asset_uri
+        }
         with open(xges_path, "w") as xges_file:
             xges_file.write(xges)
 
@@ -131,11 +143,14 @@ class TestTimeline(GESSimpleTimelineTest):
                 n_cache_hits += 1
             return res
 
-        GES.DiscovererManager.get_default().connect("load-serialized-info",
-                                                    load_serialized_info_cb)
+        GES.DiscovererManager.get_default().connect(
+            "load-serialized-info", load_serialized_info_cb
+        )
 
         self.assertEqual(n_calls, 0)
-        asset = GES.UriClipAsset.request_sync(Gst.filename_to_uri(os.path.join(__file__, "../../assets/audio_video.ogg")))
+        asset = GES.UriClipAsset.request_sync(
+            Gst.filename_to_uri(os.path.join(__file__, "../../assets/audio_video.ogg"))
+        )
         self.assertEqual(n_calls, 1)
         self.assertEqual(n_cache_hits, 0)
 
@@ -146,8 +161,11 @@ class TestTimeline(GESSimpleTimelineTest):
         GES.init()
 
         # Connect to the new manager, previous one was destroyed on deinit
-        GES.DiscovererManager.get_default().connect("load-serialized-info",
-                                                    load_serialized_info_cb)
-        asset = GES.UriClipAsset.request_sync(Gst.filename_to_uri(os.path.join(__file__, "../../assets/audio_video.ogg")))
+        GES.DiscovererManager.get_default().connect(
+            "load-serialized-info", load_serialized_info_cb
+        )
+        asset = GES.UriClipAsset.request_sync(
+            Gst.filename_to_uri(os.path.join(__file__, "../../assets/audio_video.ogg"))
+        )
         self.assertEqual(n_calls, 2)
         self.assertEqual(n_cache_hits, 1)
