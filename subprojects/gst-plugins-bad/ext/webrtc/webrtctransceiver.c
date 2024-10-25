@@ -185,6 +185,21 @@ webrtc_transceiver_class_init (WebRTCTransceiverClass * klass)
           GST_TYPE_WEBRTC_BIN,
           G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstWebRTCRTPTransceiver:fec-type:
+   *
+   * The type of Forward Error Correction to use.
+   *
+   * This parameter specifies the type of Forward Error Correction (FEC)
+   * to use in the WebRTC transceiver. FEC is a technique used to recover
+   * lost or corrupted data in real-time communication systems.
+   * Different FEC algorithms may have different trade-offs in terms of
+   * error recovery capability, latency, and bandwidth usage.
+   *
+   * By default, no FEC is used. To enable it, set this parameter to one of the available FEC types.
+   *
+   * Since: 1.14.2
+   **/
   g_object_class_install_property (gobject_class,
       PROP_FEC_TYPE,
       g_param_spec_enum ("fec-type", "FEC type",
@@ -193,6 +208,22 @@ webrtc_transceiver_class_init (WebRTCTransceiverClass * klass)
           DEFAULT_FEC_TYPE,
           G_PARAM_CONSTRUCT | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstWebRTCRTPTransceiver:do-nack:
+   * 
+   * Whether to send negative acknowledgements for feedback.
+   *
+   * This parameter determines whether the WebRTC transceiver should send
+   * negative acknowledgements for feedback. Negative acknowledgements are
+   * used to indicate that a received packet was not successfully processed
+   * or decoded. Enabling this feature can help improve the reliability of the
+   * communication by allowing the sender to retransmit lost or corrupted packets.
+   *
+   * By default, this parameter is set to false, meaning that negative acknowledgements are not sent. 
+   * If you want to enable negative acknowledgements, set this parameter to true.
+   * 
+   * Since: 1.14.2
+   **/
   g_object_class_install_property (gobject_class,
       PROP_DO_NACK,
       g_param_spec_boolean ("do-nack", "Do nack",
@@ -200,6 +231,21 @@ webrtc_transceiver_class_init (WebRTCTransceiverClass * klass)
           DEFAULT_DO_NACK,
           G_PARAM_CONSTRUCT | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstWebRTCRTPTransceiver:fec-percentage:
+   *
+   * Specifies the amount of Forward Error Correction (FEC) to apply.
+   *
+   * Forward Error Correction is a technique used to enhance the reliability of data transmission
+   * by adding redundant information to the transmitted data. This redundant information allows
+   * the receiver to correct errors in the received data without the need for retransmission.
+   *
+   * The amount of FEC to apply determines the level of redundancy added to the transmitted data.
+   * Higher levels of FEC can provide better error correction capabilities but may also increase
+   * the bandwidth requirements.
+   * 
+   * Since: 1.14.2
+   **/
   g_object_class_install_property (gobject_class,
       PROP_FEC_PERCENTAGE,
       g_param_spec_uint ("fec-percentage", "FEC percentage",
