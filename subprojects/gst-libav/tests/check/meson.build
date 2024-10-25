@@ -3,6 +3,7 @@ libav_tests = [
   [ 'elements/avaudenc' ],
   [ 'elements/avdec_adpcm' ],
   [ 'elements/avdemux_ape' ],
+  [ 'elements/avparse_g729' ],
   [ 'elements/avvidenc' ],
   [ 'generic/libavcodec-locking' ],
   [ 'generic/plugin-test' ]
