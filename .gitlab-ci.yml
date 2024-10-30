@@ -691,14 +691,12 @@ build macos:
         # macos doesn't support vaapi
         MESON_ARGS: >-
           ${SIMPLE_BUILD}
+          -Dwrap_mode=forcefallback
           -Dintrospection=disabled
           -Dvaapi=disabled
           -Dsharp=disabled
           -Dpython=disabled
           -Ddoc=disabled
-          -Dgst-plugins-base:pango=enabled
-          -Dgst-plugins-good:cairo=enabled
-          -Dgst-plugins-good:soup=enabled
 
 # ---- Tests ----- #
 
