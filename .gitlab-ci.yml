@@ -1,9 +1,9 @@
 include:
-  - project: 'freedesktop/ci-templates'
-    ref: "3826695f80807d8a4d999f6b6efb3d405d708db9"
+  - project: 'alatiera/ci-templates'
+    ref: "alatiera/pre-merge-force-rebuild"
     file: '/templates/fedora.yml'
-  - project: 'freedesktop/ci-templates'
-    ref: "3826695f80807d8a4d999f6b6efb3d405d708db9"
+  - project: 'alatiera/ci-templates'
+    ref: "alatiera/pre-merge-force-rebuild"
     file: '/templates/debian.yml'
   ###
   # IMPORTANT
@@ -117,6 +117,8 @@ trigger:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     # If the MR is assigned to the Merge bot, trigger the pipeline automatically
     - if: '$CI_MERGE_REQUEST_ASSIGNEES == "gstreamer-merge-bot"'
+      variables:
+        FDO_PRE_MERGE_FORCE_REBUILD: "1"
     # Require explicit action to trigger tests post merge, but we want to
     # automatically trigger the integratation stage
     - if: '$CI_PROJECT_NAMESPACE == "gstreamer" && $CI_COMMIT_BRANCH == $GST_UPSTREAM_BRANCH && $CI_JOB_STAGE != "integrate"'
@@ -154,6 +156,11 @@ fedora amd64 docker:
   # Note: assumption is that placeholder jobs run on a packet runner
   # (which has faster network connectivity to the registry).
   tags: [ 'placeholder-job' ]
+  rules:
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES == "gstreamer-merge-bot"'
+      variables:
+        FDO_PRE_MERGE_FORCE_REBUILD: "1"
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES != "gstreamer-merge-bot"'
 
 fedora amd64 docker fluster:
   extends:
@@ -198,6 +205,11 @@ debian amd64 docker:
   # Note: assumption is that placeholder jobs run on a packet runner
   # (which has faster network connectivity to the registry).
   tags: [ 'placeholder-job' ]
+  rules:
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES == "gstreamer-merge-bot"'
+      variables:
+        FDO_PRE_MERGE_FORCE_REBUILD: "1"
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES != "gstreamer-merge-bot"'
 
 .gst-indent image:
   tags: [ 'placeholder-job' ]
@@ -207,6 +219,11 @@ debian amd64 docker:
     FDO_DISTRIBUTION_TAG: "$INDENT_TAG-$GST_UPSTREAM_BRANCH"
     FDO_DISTRIBUTION_PACKAGES: 'curl indent git findutils ca-certificates'
     FDO_DISTRIBUTION_EXEC: 'ci/docker/indent/prepare.sh'
+  rules:
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES == "gstreamer-merge-bot"'
+      variables:
+        FDO_PRE_MERGE_FORCE_REBUILD: "1"
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES != "gstreamer-merge-bot"'
 
 gst-indent amd64 docker:
   extends:
@@ -233,6 +250,11 @@ commitlint docker:
   stage: 'preparation'
   # Do not depend on the trigger, as we want to run indent always
   needs: []
+  rules:
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES == "gstreamer-merge-bot"'
+      variables:
+        FDO_PRE_MERGE_FORCE_REBUILD: "1"
+    - if: '$CI_MERGE_REQUEST_ASSIGNEES != "gstreamer-merge-bot"'
 
 windows amd64 docker:
   stage: "preparation"
