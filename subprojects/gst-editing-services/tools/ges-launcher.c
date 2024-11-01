@@ -134,7 +134,7 @@ play_do_seek (GESLauncher * self, gint64 pos, gdouble rate,
 
 done:
   self->priv->rate = rate;
-  self->priv->trick_mode = mode & ~GST_PLAY_TRICK_MODE_INSTANT_RATE;
+  self->priv->trick_mode = mode & (mode | ~GST_PLAY_TRICK_MODE_INSTANT_RATE);
   return TRUE;
 }
 
