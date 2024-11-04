@@ -716,6 +716,13 @@ gst_base_ts_mux_create_or_update_stream (GstBaseTsMux * mux,
     st = TSMUX_ST_PS_TELETEXT;
     /* needs a particularly sized layout */
     ts_pad->prepare_func = gst_base_ts_mux_prepare_teletext;
+  } else if (strcmp (mt, "audio/x-true-hd") == 0) {
+    if (mux->packet_size != 192) {
+      GST_ERROR_OBJECT (ts_pad,
+          "audio/x-true-hd is only supported in m2ts mode");
+      goto not_negotiated;
+    }
+    st = TSMUX_ST_PS_AUDIO_TRUEHD;
   } else if (strcmp (mt, "audio/x-opus") == 0) {
     guint8 channels, mapping_family, stream_count, coupled_count;
     guint8 channel_mapping[256];
@@ -1108,6 +1115,10 @@ gst_base_ts_mux_create_pad_stream (GstBaseTsMux * mux, GstPad * pad,
     ts_pad->prog = tsmux_program_new (mux->tsmux, ts_pad->prog_id);
     if (ts_pad->prog == NULL)
       goto no_program;
+    if (mux->packet_size == 192) {
+      /* Add HDMV registration */
+      ts_pad->prog->registration = "HDMV";
+    }
     tsmux_set_pmt_interval (ts_pad->prog, mux->pmt_interval);
     tsmux_program_set_scte35_pid (ts_pad->prog, mux->scte35_pid);
     tsmux_program_set_scte35_interval (ts_pad->prog, mux->scte35_null_interval);

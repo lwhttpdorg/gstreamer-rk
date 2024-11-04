@@ -258,6 +258,7 @@ struct _TSDemuxStream
     "audio/x-ac3; audio/x-eac3;" \
     "audio/x-ac4;" \
     "audio/x-dts;" \
+    "audio/x-true-hd;" \
     "audio/x-opus;" \
     "audio/x-private-ts-lpcm" \
   )
