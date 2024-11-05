@@ -308,6 +308,20 @@ rustfmt:
           - ci/**/*
           - ./scripts/format-rust
 
+pythonfmt:
+  stage: 'preparation'
+  image: pyfound/black:latest_release
+  script:
+    - black --diff --color .
+    - black --check --verbose .
+  rules:
+    - changes:
+        compare_to: "$GST_UPSTREAM_BRANCH"
+        paths:
+          - .gitlab-ci.yml
+          - .gitlab-image-tags.yml
+          - subprojects/gst-devtools/**/*.py
+
 commitlint:
   extends:
     - '.commitlint image'
