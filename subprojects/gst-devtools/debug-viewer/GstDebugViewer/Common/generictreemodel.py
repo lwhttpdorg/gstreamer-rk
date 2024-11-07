@@ -30,10 +30,12 @@ from gi.repository import Gtk
 
 
 class _CTreeIter(ctypes.Structure):
-    _fields_ = [('stamp', ctypes.c_int),
-                ('user_data', ctypes.c_void_p),
-                ('user_data2', ctypes.c_void_p),
-                ('user_data3', ctypes.c_void_p)]
+    _fields_ = [
+        ("stamp", ctypes.c_int),
+        ("user_data", ctypes.c_void_p),
+        ("user_data2", ctypes.c_void_p),
+        ("user_data3", ctypes.c_void_p),
+    ]
 
     @classmethod
     def from_iter(cls, iter):
@@ -54,6 +56,7 @@ def handle_exception(default_return):
     a proper value from the override upon an exception occurring with client code
     implemented by the "on_" methods.
     """
+
     def decorator(func):
         def wrapped_func(*args, **kargs):
             try:
@@ -63,7 +66,9 @@ def handle_exception(default_return):
                 # if someone installed an except hook.
                 sys.excepthook(*sys.exc_info())
             return default_return
+
         return wrapped_func
+
     return decorator
 
 
@@ -93,10 +98,13 @@ class GenericTreeModel(GObject.GObject, Gtk.TreeModel):
     the model of row deletion.
     """
 
-    leak_references = GObject.Property(default=True, type=bool,
-                                       blurb="If True, strong references to user data attached to iters are "
-                                       "stored in a dictionary pool (default). Otherwise the user data is "
-                                       "stored as a raw pointer to a python object without a reference.")
+    leak_references = GObject.Property(
+        default=True,
+        type=bool,
+        blurb="If True, strong references to user data attached to iters are "
+        "stored in a dictionary pool (default). Otherwise the user data is "
+        "stored as a raw pointer to a python object without a reference.",
+    )
 
     #
     # Methods
@@ -119,8 +127,9 @@ class GenericTreeModel(GObject.GObject, Gtk.TreeModel):
             it = stack.popleft()
             if it is not None:
                 yield self.get_user_data(it)
-            children = [self.iter_nth_child(it, i)
-                        for i in range(self.iter_n_children(it))]
+            children = [
+                self.iter_nth_child(it, i) for i in range(self.iter_n_children(it))
+            ]
             stack.extendleft(reversed(children))
 
     def invalidate_iter(self, iter):

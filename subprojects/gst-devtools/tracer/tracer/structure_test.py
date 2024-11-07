@@ -5,17 +5,19 @@ from tracer.structure import Structure
 
 logging.basicConfig(level=logging.INFO)
 
-BAD_NAME = r'foo bar'
-BAD_KEY = r'foo, bar'
-BAD_TYPE1 = r'foo, bar=['
-BAD_TYPE2 = r'foo, bar=(int'
+BAD_NAME = r"foo bar"
+BAD_KEY = r"foo, bar"
+BAD_TYPE1 = r"foo, bar=["
+BAD_TYPE2 = r"foo, bar=(int"
 
-EMPTY_STRUCTURE = r'foo;'
+EMPTY_STRUCTURE = r"foo;"
 
 SINGLE_VALUE_STRUCTURE = r'foo, key=(string)"value";'
 MISC_TYPES_STRUCTURE = r'foo, key1=(string)"value", key2=(int)5, key3=(boolean)1;'
 
-NESTED_STRUCTURE = r'foo, nested=(structure)"bar\,\ key1\=\(int\)0\,\ key2\=\(int\)5\;";'
+NESTED_STRUCTURE = (
+    r'foo, nested=(structure)"bar\,\ key1\=\(int\)0\,\ key2\=\(int\)5\;";'
+)
 
 REGRESSIONS = [
     r'query, thread-id=(guint64)139839438879824, ts=(guint64)220860464, pad-ix=(uint)8, element-ix=(uint)9, peer-pad-ix=(uint)9, peer-element-ix=(uint)8, name=(string)accept-caps, structure=(structure)"GstQueryAcceptCaps\,\ caps\=\(GstCaps\)\"audio/mpeg\\\,\\\ mpegversion\\\=\\\(int\\\)4\\\,\\\ framed\\\=\\\(boolean\\\)true\\\,\\\ stream-format\\\=\\\(string\\\)raw\\\,\\\ level\\\=\\\(string\\\)2\\\,\\\ base-profile\\\=\\\(string\\\)lc\\\,\\\ profile\\\=\\\(string\\\)lc\\\,\\\ codec_data\\\=\\\(buffer\\\)1210\\\,\\\ rate\\\=\\\(int\\\)44100\\\,\\\ channels\\\=\\\(int\\\)2\"\,\ result\=\(boolean\)false\;", have-res=(boolean)0, res=(boolean)0;',
@@ -24,7 +26,6 @@ REGRESSIONS = [
 
 
 class TestStructure(unittest.TestCase):
-
     def test_handles_bad_name(self):
         structure = None
         with self.assertRaises(ValueError):
@@ -51,7 +52,7 @@ class TestStructure(unittest.TestCase):
 
     def test_parses_name_in_empty_structure(self):
         structure = Structure(EMPTY_STRUCTURE)
-        self.assertEqual(structure.name, 'foo')
+        self.assertEqual(structure.name, "foo")
 
     def test_parses_single_value_structure(self):
         structure = Structure(SINGLE_VALUE_STRUCTURE)
@@ -59,28 +60,28 @@ class TestStructure(unittest.TestCase):
 
     def test_parses_name(self):
         structure = Structure(SINGLE_VALUE_STRUCTURE)
-        self.assertEqual(structure.name, 'foo')
+        self.assertEqual(structure.name, "foo")
 
     def test_parses_key(self):
         structure = Structure(SINGLE_VALUE_STRUCTURE)
-        self.assertIn('key', structure.types)
-        self.assertIn('key', structure.values)
+        self.assertIn("key", structure.types)
+        self.assertIn("key", structure.values)
 
     def test_parses_type(self):
         structure = Structure(SINGLE_VALUE_STRUCTURE)
-        self.assertEqual(structure.types['key'], 'string')
+        self.assertEqual(structure.types["key"], "string")
 
     def test_parses_string_value(self):
         structure = Structure(MISC_TYPES_STRUCTURE)
-        self.assertEqual(structure.values['key1'], 'value')
+        self.assertEqual(structure.values["key1"], "value")
 
     def test_parses_int_value(self):
         structure = Structure(MISC_TYPES_STRUCTURE)
-        self.assertEqual(structure.values['key2'], 5)
+        self.assertEqual(structure.values["key2"], 5)
 
     def test_parses_boolean_value(self):
         structure = Structure(MISC_TYPES_STRUCTURE)
-        self.assertEqual(structure.values['key3'], True)
+        self.assertEqual(structure.values["key3"], True)
 
     def test_parses_nested_structure(self):
         structure = Structure(NESTED_STRUCTURE)
@@ -88,8 +89,8 @@ class TestStructure(unittest.TestCase):
 
     def test_nested_structure_has_sub_structure(self):
         structure = Structure(NESTED_STRUCTURE)
-        self.assertEqual(structure.types['nested'], 'structure')
-        self.assertIsInstance(structure.values['nested'], Structure)
+        self.assertEqual(structure.types["nested"], "structure")
+        self.assertIsInstance(structure.values["nested"], Structure)
 
     def test_regressions(self):
         for s in REGRESSIONS:

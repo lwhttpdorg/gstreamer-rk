@@ -35,7 +35,7 @@ from gi.repository import GObject
 from gi.repository import Gtk
 
 
-class ExceptionHandler (object):
+class ExceptionHandler(object):
 
     exc_types = (Exception,)
     priority = 50
@@ -45,11 +45,10 @@ class ExceptionHandler (object):
 
     def __call__(self, exc_type, exc_value, exc_traceback):
 
-        raise NotImplementedError(
-            "derived classes need to override this method")
+        raise NotImplementedError("derived classes need to override this method")
 
 
-class DefaultExceptionHandler (ExceptionHandler):
+class DefaultExceptionHandler(ExceptionHandler):
     exc_types = (BaseException,)
     priority = 0
     inherit_fork = True
@@ -65,7 +64,7 @@ class DefaultExceptionHandler (ExceptionHandler):
         return self.excepthook(*exc_info)
 
 
-class ExitOnInterruptExceptionHandler (ExceptionHandler):
+class ExitOnInterruptExceptionHandler(ExceptionHandler):
 
     exc_types = (KeyboardInterrupt,)
     priority = 100
@@ -80,7 +79,7 @@ class ExitOnInterruptExceptionHandler (ExceptionHandler):
         sys.exit(self.exit_status)
 
 
-class MainLoopWrapper (ExceptionHandler):
+class MainLoopWrapper(ExceptionHandler):
 
     priority = 95
     inherit_fork = False
@@ -112,8 +111,7 @@ class MainLoopWrapper (ExceptionHandler):
             raise exc_value
 
 
-class ExceptHookManagerClass (object):
-
+class ExceptHookManagerClass(object):
     def __init__(self):
 
         self._in_forked_child = False
@@ -195,9 +193,7 @@ class ExceptHookManagerClass (object):
 
     def __excepthook(self, exc_type, exc_value, exc_traceback):
 
-        for handler in sorted(self.handlers,
-                              key=attrgetter("priority"),
-                              reverse=True):
+        for handler in sorted(self.handlers, key=attrgetter("priority"), reverse=True):
 
             if handler._handling_exception:
                 continue
@@ -217,15 +213,18 @@ class ExceptHookManagerClass (object):
 
         else:
             from warnings import warn
-            warn("ExceptHookManager: unhandled %r" % (exc_value,),
-                 RuntimeWarning,
-                 stacklevel=2)
+
+            warn(
+                "ExceptHookManager: unhandled %r" % (exc_value,),
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 
 ExceptHookManager = ExceptHookManagerClass()
 
 
-class PathsBase (object):
+class PathsBase(object):
 
     data_dir = None
     icon_dir = None
@@ -249,17 +248,17 @@ class PathsBase (object):
         """If paths are still not set up, try to set from a fallback."""
 
         if cls.data_dir is None:
-            source_dir = os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__)))
+            source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             cls.setup_devenv(source_dir)
 
     def __new__(cls):
 
-        raise RuntimeError("do not create instances of this class -- "
-                           "use the class object directly")
+        raise RuntimeError(
+            "do not create instances of this class -- " "use the class object directly"
+        )
 
 
-class PathsProgramBase (PathsBase):
+class PathsProgramBase(PathsBase):
 
     program_name = None
 
@@ -268,7 +267,8 @@ class PathsProgramBase (PathsBase):
 
         if cls.program_name is None:
             raise NotImplementedError(
-                "derived classes need to set program_name attribute")
+                "derived classes need to set program_name attribute"
+            )
 
         cls.data_dir = os.path.join(data_prefix, cls.program_name)
         cls.icon_dir = os.path.join(data_prefix, "icons")
@@ -307,9 +307,8 @@ def _init_locale(gettext_domain=None):
             locale.setlocale(locale.LC_ALL, "")
         except locale.Error as exc:
             from warnings import warn
-            warn("locale error: %s" % (exc,),
-                 RuntimeWarning,
-                 stacklevel=2)
+
+            warn("locale error: %s" % (exc,), RuntimeWarning, stacklevel=2)
             Paths.locale_dir = None
         else:
             gettext.bindtextdomain(gettext_domain, Paths.locale_dir)
@@ -320,14 +319,18 @@ def _init_logging(level):
     if level == "none":
         return
 
-    mapping = {"debug": logging.DEBUG,
-               "info": logging.INFO,
-               "warning": logging.WARNING,
-               "error": logging.ERROR,
-               "critical": logging.CRITICAL}
-    logging.basicConfig(level=mapping[level],
-                        format='%(asctime)s.%(msecs)03d %(levelname)8s %(name)20s: %(message)s',
-                        datefmt='%H:%M:%S')
+    mapping = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }
+    logging.basicConfig(
+        level=mapping[level],
+        format="%(asctime)s.%(msecs)03d %(levelname)8s %(name)20s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
     logger = logging.getLogger("main")
     logger.debug("logging at level %s", logging.getLevelName(level))
@@ -336,13 +339,16 @@ def _init_logging(level):
 
 def _init_log_option(parser):
     choices = ["none", "debug", "info", "warning", "error", "critical"]
-    parser.add_option("--log-level", "-l",
-                      type="choice",
-                      choices=choices,
-                      action="store",
-                      dest="log_level",
-                      default="none",
-                      help=_("Enable logging, possible values: ") + ", ".join(choices))
+    parser.add_option(
+        "--log-level",
+        "-l",
+        type="choice",
+        choices=choices,
+        action="store",
+        dest="log_level",
+        default="none",
+        help=_("Enable logging, possible values: ") + ", ".join(choices),
+    )
     return parser
 
 

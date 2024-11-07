@@ -21,8 +21,8 @@
 
 version = "@VERSION@"
 
-if version.startswith('@'):
-    version = 'master'
+if version.startswith("@"):
+    version = "master"
 
 __version__ = version
 

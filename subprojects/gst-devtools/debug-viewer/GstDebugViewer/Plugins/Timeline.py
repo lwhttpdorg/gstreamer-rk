@@ -39,8 +39,7 @@ def iter_model_reversed(model):
         yield model[i]
 
 
-class LineFrequencySentinel (object):
-
+class LineFrequencySentinel(object):
     def __init__(self, model):
 
         self.model = model
@@ -140,11 +139,13 @@ class LineFrequencySentinel (object):
         self.step = step
         self.data = result
         self.partitions = partitions
-        self.ts_range = (first_ts, last_ts,)
+        self.ts_range = (
+            first_ts,
+            last_ts,
+        )
 
 
-class LevelDistributionSentinel (object):
-
+class LevelDistributionSentinel(object):
     def __init__(self, freq_sentinel, model):
 
         self.freq_sentinel = freq_sentinel
@@ -187,8 +188,7 @@ class LevelDistributionSentinel (object):
                 yield True
             if level_iter is None:
                 stop_index = level_index + 512
-                levels = self.model.get_value_range(id_level,
-                                                    level_index, stop_index)
+                levels = self.model.get_value_range(id_level, level_index, stop_index)
                 level_index = stop_index
                 level_iter = iter(levels)
             try:
@@ -214,8 +214,7 @@ class LevelDistributionSentinel (object):
         yield False
 
 
-class UpdateProcess (object):
-
+class UpdateProcess(object):
     def __init__(self, freq_sentinel, dist_sentinel):
 
         self.freq_sentinel = freq_sentinel
@@ -274,7 +273,7 @@ class UpdateProcess (object):
         pass
 
 
-class VerticalTimelineWidget (Gtk.DrawingArea):
+class VerticalTimelineWidget(Gtk.DrawingArea):
 
     __gtype_name__ = "GstDebugViewerVerticalTimelineWidget"
 
@@ -291,8 +290,9 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         self.next_thread_color = 0
 
         try:
-            self.set_tooltip_text(_("Vertical timeline\n"
-                                    "Different colors represent different threads"))
+            self.set_tooltip_text(
+                _("Vertical timeline\n" "Different colors represent different threads")
+            )
         except AttributeError:
             # Compatibility.
             pass
@@ -306,9 +306,9 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         h = alloc.height
 
         # White background rectangle.
-        ctx.set_line_width(0.)
+        ctx.set_line_width(0.0)
         ctx.rectangle(0, 0, w, h)
-        ctx.set_source_rgb(1., 1., 1.)
+        ctx.set_source_rgb(1.0, 1.0, 1.0)
         ctx.fill()
         ctx.new_path()
 
@@ -326,11 +326,11 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         if ts_range == 0:
             return
 
-        ctx.set_line_width(1.)
-        ctx.set_source_rgb(0., 0., 0.)
+        ctx.set_line_width(1.0)
+        ctx.set_source_rgb(0.0, 0.0, 0.0)
 
-        half_height = cell_height // 2 - .5
-        quarter_height = cell_height // 4 - .5
+        half_height = cell_height // 2 - 0.5
+        quarter_height = cell_height // 4 - 0.5
         first_y += half_height
         for i, i_data in enumerate(data):
             ts, thread = i_data
@@ -340,20 +340,19 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
                 self.next_thread_color += 1
                 if self.next_thread_color == len(self.theme.colors):
                     self.next_thread_color = 0
-                color = self.theme.colors[
-                    self.next_thread_color][0].float_tuple()
+                color = self.theme.colors[self.next_thread_color][0].float_tuple()
                 self.thread_colors[thread] = color
                 ctx.set_source_rgb(*color)
             ts_fraction = float(ts - first_ts) / ts_range
             ts_offset = ts_fraction * h
             row_offset = first_y + i * cell_height
-            ctx.move_to(-.5, ts_offset)
+            ctx.move_to(-0.5, ts_offset)
             ctx.line_to(half_height, ts_offset)
             ctx.line_to(w - quarter_height, row_offset)
             ctx.stroke()
             ctx.line_to(w - quarter_height, row_offset)
-            ctx.line_to(w + .5, row_offset - half_height)
-            ctx.line_to(w + .5, row_offset + half_height)
+            ctx.line_to(w + 0.5, row_offset - half_height)
+            ctx.line_to(w + 0.5, row_offset + half_height)
             ctx.fill()
         return True
 
@@ -396,8 +395,12 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         cell_rect = view.get_cell_area(start_path, column)
         try:
             first_y = view.convert_bin_window_to_widget_coords(
-                cell_rect.x, cell_rect.y)[1]
-        except (AttributeError, SystemError,):
+                cell_rect.x, cell_rect.y
+            )[1]
+        except (
+            AttributeError,
+            SystemError,
+        ):
             # AttributeError is with PyGTK before 2.12.  SystemError is raised
             # with PyGTK 2.12.0, pygtk bug #479012.
             first_y = cell_rect.y % cell_height
@@ -406,8 +409,10 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
             try:
                 _warn_tree_view_coords
             except NameError:
-                self.logger.warning("tree view coordinate conversion method "
-                                    "not available, using aproximate offset")
+                self.logger.warning(
+                    "tree view coordinate conversion method "
+                    "not available, using aproximate offset"
+                )
                 # Only warn once:
                 _warn_tree_view_coords = True
 
@@ -416,11 +421,14 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         if tree_iter is None:
             return
         while model.get_path(tree_iter) != end_path:
-            data.append(
-                model.get(tree_iter, model.COL_TIME, model.COL_THREAD))
+            data.append(model.get(tree_iter, model.COL_TIME, model.COL_THREAD))
             tree_iter = model.iter_next(tree_iter)
 
-        self.params = (first_y, cell_height, data,)
+        self.params = (
+            first_y,
+            cell_height,
+            data,
+        )
 
     def update(self):
 
@@ -428,13 +436,17 @@ class VerticalTimelineWidget (Gtk.DrawingArea):
         self.queue_draw()
 
 
-class TimelineWidget (Gtk.DrawingArea):
+class TimelineWidget(Gtk.DrawingArea):
 
     __gtype_name__ = "GstDebugViewerTimelineWidget"
 
-    __gsignals__ = {"change-position": (GObject.SignalFlags.RUN_LAST,
-                                        None,
-                                        (GObject.TYPE_INT,),)}
+    __gsignals__ = {
+        "change-position": (
+            GObject.SignalFlags.RUN_LAST,
+            None,
+            (GObject.TYPE_INT,),
+        )
+    }
 
     def __init__(self):
 
@@ -442,9 +454,11 @@ class TimelineWidget (Gtk.DrawingArea):
 
         self.logger = logging.getLogger("ui.timeline")
 
-        self.add_events(Gdk.EventMask.BUTTON1_MOTION_MASK |
-                        Gdk.EventMask.BUTTON_PRESS_MASK |
-                        Gdk.EventMask.BUTTON_RELEASE_MASK)
+        self.add_events(
+            Gdk.EventMask.BUTTON1_MOTION_MASK
+            | Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+        )
 
         self.process = UpdateProcess(None, None)
         self.process.handle_sentinel_progress = self.__handle_sentinel_progress
@@ -458,8 +472,12 @@ class TimelineWidget (Gtk.DrawingArea):
         self.__position_ts_range = None
 
         try:
-            self.set_tooltip_text(_("Log event histogram\n"
-                                    "Different colors represent different log-levels"))
+            self.set_tooltip_text(
+                _(
+                    "Log event histogram\n"
+                    "Different colors represent different log-levels"
+                )
+            )
         except AttributeError:
             # Compatibility.
             pass
@@ -487,7 +505,8 @@ class TimelineWidget (Gtk.DrawingArea):
             return
 
         self.__offscreen = cairo.ImageSurface(
-            cairo.FORMAT_ARGB32, alloc.width, alloc.height)
+            cairo.FORMAT_ARGB32, alloc.width, alloc.height
+        )
         self.__offscreen_size = (alloc.width, alloc.height)
         self.__offscreen_dirty = (0, alloc.width)
         if not self.__offscreen:
@@ -532,14 +551,13 @@ class TimelineWidget (Gtk.DrawingArea):
             ctx.clip()
 
             if offscreen_width < alloc.width:
-                ctx.rectangle(
-                    offscreen_width, 0, alloc.width, offscreen_height)
+                ctx.rectangle(offscreen_width, 0, alloc.width, offscreen_height)
             if offscreen_height < alloc.height:
                 ctx.new_path()
                 ctx.rectangle(0, offscreen_height, alloc.width, alloc.height)
 
-            ctx.set_line_width(0.)
-            ctx.set_source_rgb(1., 1., 1.)
+            ctx.set_line_width(0.0)
+            ctx.set_source_rgb(1.0, 1.0, 1.0)
             ctx.fill()
 
         ctx.set_source_surface(self.__offscreen)
@@ -557,7 +575,8 @@ class TimelineWidget (Gtk.DrawingArea):
             self.__dist_sentinel_progress = 0
             self.process.freq_sentinel = LineFrequencySentinel(model)
             self.process.dist_sentinel = LevelDistributionSentinel(
-                self.process.freq_sentinel, model)
+                self.process.freq_sentinel, model
+            )
             width = self.get_allocation().width
             self.process.freq_sentinel.run_for(width)
             self.process.run()
@@ -588,7 +607,10 @@ class TimelineWidget (Gtk.DrawingArea):
         start, stop = self.ts_range_to_position(start_ts, end_ts)
         self.queue_draw_area(start - 1, 0, stop - start + 2, alloc.height)
 
-        self.__position_ts_range = (start_ts, end_ts,)
+        self.__position_ts_range = (
+            start_ts,
+            end_ts,
+        )
 
     def find_indicative_time_step(self):
 
@@ -614,21 +636,21 @@ class TimelineWidget (Gtk.DrawingArea):
         dirty_start = max(dirty_start, 0)
         dirty_stop = min(dirty_stop, width)
 
-        ctx.rectangle(dirty_start, 0., dirty_stop, height)
+        ctx.rectangle(dirty_start, 0.0, dirty_stop, height)
         ctx.clip()
 
         # White background rectangle.
-        ctx.set_line_width(0.)
+        ctx.set_line_width(0.0)
         ctx.rectangle(0, 0, width, height)
-        ctx.set_source_rgb(1., 1., 1.)
+        ctx.set_source_rgb(1.0, 1.0, 1.0)
         ctx.fill()
         ctx.new_path()
 
         # Horizontal reference lines.
-        ctx.set_line_width(1.)
-        ctx.set_source_rgb(.95, .95, .95)
+        ctx.set_line_width(1.0)
+        ctx.set_source_rgb(0.95, 0.95, 0.95)
         for i in range(height // 16):
-            y = i * 16 - .5
+            y = i * 16 - 0.5
             ctx.move_to(0, y)
             ctx.line_to(width, y)
             ctx.stroke()
@@ -638,22 +660,22 @@ class TimelineWidget (Gtk.DrawingArea):
 
         # Vertical reference lines.
         pixel_step = self.find_indicative_time_step()
-        ctx.set_source_rgb(.9, .9, .9)
+        ctx.set_source_rgb(0.9, 0.9, 0.9)
         start = dirty_start - dirty_start % pixel_step
         for x in range(start + pixel_step, dirty_stop, pixel_step):
-            ctx.move_to(x - .5, 0)
-            ctx.line_to(x - .5, height)
+            ctx.move_to(x - 0.5, 0)
+            ctx.line_to(x - 0.5, height)
             ctx.stroke()
 
         if not self.process.freq_sentinel.data:
             self.logger.debug("frequency sentinel has no data yet")
             return
 
-        ctx.translate(dirty_start, 0.)
+        ctx.translate(dirty_start, 0.0)
 
         maximum = max(self.process.freq_sentinel.data)
 
-        ctx.set_source_rgb(0., 0., 0.)
+        ctx.set_source_rgb(0.0, 0.0, 0.0)
         data = self.process.freq_sentinel.data[dirty_start:dirty_stop]
         self.__draw_graph(ctx, height, maximum, data)
 
@@ -669,38 +691,48 @@ class TimelineWidget (Gtk.DrawingArea):
                 yield sum((level_counts[level] for level in levels))
 
         level = Data.debug_level_info
-        levels_prev = (Data.debug_level_trace,
-                       Data.debug_level_fixme,
-                       Data.debug_level_log,
-                       Data.debug_level_debug,)
+        levels_prev = (
+            Data.debug_level_trace,
+            Data.debug_level_fixme,
+            Data.debug_level_log,
+            Data.debug_level_debug,
+        )
         ctx.set_source_rgb(*(colors[level][1].float_tuple()))
-        self.__draw_graph(ctx, height, maximum,
-                          list(cumulative_level_counts(level, *levels_prev)))
+        self.__draw_graph(
+            ctx, height, maximum, list(cumulative_level_counts(level, *levels_prev))
+        )
 
         level = Data.debug_level_debug
-        levels_prev = (Data.debug_level_trace,
-                       Data.debug_level_fixme,
-                       Data.debug_level_log,)
+        levels_prev = (
+            Data.debug_level_trace,
+            Data.debug_level_fixme,
+            Data.debug_level_log,
+        )
         ctx.set_source_rgb(*(colors[level][1].float_tuple()))
-        self.__draw_graph(ctx, height, maximum,
-                          list(cumulative_level_counts(level, *levels_prev)))
+        self.__draw_graph(
+            ctx, height, maximum, list(cumulative_level_counts(level, *levels_prev))
+        )
 
         level = Data.debug_level_log
-        levels_prev = (Data.debug_level_trace, Data.debug_level_fixme,)
+        levels_prev = (
+            Data.debug_level_trace,
+            Data.debug_level_fixme,
+        )
         ctx.set_source_rgb(*(colors[level][1].float_tuple()))
-        self.__draw_graph(ctx, height, maximum,
-                          list(cumulative_level_counts(level, *levels_prev)))
+        self.__draw_graph(
+            ctx, height, maximum, list(cumulative_level_counts(level, *levels_prev))
+        )
 
         level = Data.debug_level_fixme
         levels_prev = (Data.debug_level_trace,)
         ctx.set_source_rgb(*(colors[level][1].float_tuple()))
-        self.__draw_graph(ctx, height, maximum,
-                          list(cumulative_level_counts(level, *levels_prev)))
+        self.__draw_graph(
+            ctx, height, maximum, list(cumulative_level_counts(level, *levels_prev))
+        )
 
         level = Data.debug_level_trace
         ctx.set_source_rgb(*(colors[level][1].float_tuple()))
-        self.__draw_graph(ctx, height, maximum, [
-                          counts[level] for counts in dist_data])
+        self.__draw_graph(ctx, height, maximum, [counts[level] for counts in dist_data])
 
         # Draw error and warning triangle indicators:
 
@@ -710,15 +742,18 @@ class TimelineWidget (Gtk.DrawingArea):
             ctx.line_to(0, size / 1.41)
             ctx.close_path()
 
-        for level in (Data.debug_level_warning, Data.debug_level_error,):
+        for level in (
+            Data.debug_level_warning,
+            Data.debug_level_error,
+        ):
             ctx.set_source_rgb(*(colors[level][1].float_tuple()))
             for i, counts in enumerate(dist_data):
                 if counts[level] == 0:
                     continue
-                ctx.translate(i, 0.)
+                ctx.translate(i, 0.0)
                 triangle(ctx)
                 ctx.fill()
-                ctx.translate(-i, 0.)
+                ctx.translate(-i, 0.0)
 
     def __draw_graph(self, ctx, height, maximum, data):
 
@@ -728,11 +763,11 @@ class TimelineWidget (Gtk.DrawingArea):
         if maximum:
             heights = [height * float(d) / maximum for d in data]
         else:
-            heights = [0. for d in data]
+            heights = [0.0 for d in data]
 
         ctx.move_to(0, height)
         for i in range(len(heights)):
-            ctx.line_to(i - .5, height - heights[i] + .5)
+            ctx.line_to(i - 0.5, height - heights[i] + 0.5)
 
         ctx.line_to(i, height)
         ctx.close_path()
@@ -741,9 +776,11 @@ class TimelineWidget (Gtk.DrawingArea):
 
     def __have_position(self):
 
-        if ((self.process is not None) and
-            (self.process.freq_sentinel is not None) and
-                (self.process.freq_sentinel.ts_range is not None)):
+        if (
+            (self.process is not None)
+            and (self.process.freq_sentinel is not None)
+            and (self.process.freq_sentinel.ts_range is not None)
+        ):
             return True
         else:
             return False
@@ -778,7 +815,12 @@ class TimelineWidget (Gtk.DrawingArea):
         if clip:
             if clip.x + clip.width < position1 - 1 or clip.x > position2 + 1:
                 self.logger.debug(
-                    "outside of clip range: %d + %d, pos: %d, %d", clip.x, clip.width, position1, position2)
+                    "outside of clip range: %d + %d, pos: %d, %d",
+                    clip.x,
+                    clip.width,
+                    position1,
+                    position2,
+                )
                 return
             ctx.rectangle(clip.x, clip.y, clip.width, clip.height)
             ctx.clip()
@@ -787,13 +829,13 @@ class TimelineWidget (Gtk.DrawingArea):
 
         line_width = position2 - position1
         if line_width <= 1:
-            ctx.set_source_rgb(1., 0., 0.)
-            ctx.set_line_width(1.)
-            ctx.move_to(position1 + .5, 0)
-            ctx.line_to(position1 + .5, height)
+            ctx.set_source_rgb(1.0, 0.0, 0.0)
+            ctx.set_line_width(1.0)
+            ctx.move_to(position1 + 0.5, 0)
+            ctx.line_to(position1 + 0.5, height)
             ctx.stroke()
         else:
-            ctx.set_source_rgba(1., 0., 0., .5)
+            ctx.set_source_rgba(1.0, 0.0, 0.0, 0.5)
             ctx.rectangle(position1, 0, line_width, height)
             ctx.fill()
 
@@ -807,8 +849,7 @@ class TimelineWidget (Gtk.DrawingArea):
 
     def do_configure_event(self, event):
 
-        self.logger.debug("widget size configured to %ix%i",
-                          event.width, event.height)
+        self.logger.debug("widget size configured to %ix%i", event.width, event.height)
 
         if event.width < 16:
             return False
@@ -866,8 +907,7 @@ class TimelineWidget (Gtk.DrawingArea):
         pass
 
 
-class AttachedWindow (object):
-
+class AttachedWindow(object):
     def __init__(self, feature, window):
 
         self.window = window
@@ -877,12 +917,23 @@ class AttachedWindow (object):
         ui.insert_action_group(feature.action_group, 0)
 
         self.merge_id = ui.new_merge_id()
-        ui.add_ui(self.merge_id, "/menubar/ViewMenu/ViewMenuAdditions",
-                  "ViewTimeline", "show-timeline",
-                  Gtk.UIManagerItemType.MENUITEM, False)
+        ui.add_ui(
+            self.merge_id,
+            "/menubar/ViewMenu/ViewMenuAdditions",
+            "ViewTimeline",
+            "show-timeline",
+            Gtk.UIManagerItemType.MENUITEM,
+            False,
+        )
 
-        ui.add_ui(self.merge_id, "/", "TimelineContextMenu", None,
-                  Gtk.UIManagerItemType.POPUP, False)
+        ui.add_ui(
+            self.merge_id,
+            "/",
+            "TimelineContextMenu",
+            None,
+            Gtk.UIManagerItemType.POPUP,
+            False,
+        )
         # TODO: Make hide before/after operate on the partition that the mouse
         # is pointed at instead of the currently selected line.
         # ui.add_ui (self.merge_id, "/TimelineContextMenu", "TimelineHideLinesBefore",
@@ -890,14 +941,18 @@ class AttachedWindow (object):
         # ui.add_ui (self.merge_id, "/TimelineContextMenu", "TimelineHideLinesAfter",
         #            "hide-after-line", Gtk.UIManagerItemType.MENUITEM, False)
         ui.add_ui(
-            self.merge_id, "/TimelineContextMenu", "TimelineShowHiddenLines",
-            "show-hidden-lines", Gtk.UIManagerItemType.MENUITEM, False)
+            self.merge_id,
+            "/TimelineContextMenu",
+            "TimelineShowHiddenLines",
+            "show-hidden-lines",
+            Gtk.UIManagerItemType.MENUITEM,
+            False,
+        )
 
         box = window.get_top_attach_point()
 
         self.timeline = TimelineWidget()
-        self.timeline.connect("change-position",
-                              self.handle_timeline_change_position)
+        self.timeline.connect("change-position", self.handle_timeline_change_position)
         box.pack_start(self.timeline, False, False, 0)
         self.timeline.hide()
 
@@ -920,8 +975,7 @@ class AttachedWindow (object):
         handler(action)
 
         handler = self.handle_log_view_notify_model
-        self.notify_model_id = window.log_view.connect(
-            "notify::model", handler)
+        self.notify_model_id = window.log_view.connect("notify::model", handler)
 
         self.idle_scroll_path = None
         self.idle_scroll_id = None
@@ -966,6 +1020,7 @@ class AttachedWindow (object):
             self.update_timeline_position()
             self.vtimeline.update()
             return False
+
         GObject.idle_add(idle_update, priority=GObject.PRIORITY_LOW)
 
     def handle_log_view_adjustment_value_changed(self, adj):
@@ -1014,7 +1069,7 @@ class AttachedWindow (object):
         elif pos >= len(data):
             pos = len(data) - 1
 
-        count = sum(data[:pos + 1])
+        count = sum(data[: pos + 1])
 
         path = (count,)
         self.idle_scroll_path = path
@@ -1035,21 +1090,20 @@ class AttachedWindow (object):
         self.idle_scroll_path = None
 
         view = self.window.log_view
-        view.scroll_to_cell(path, use_align=True, row_align=.5)
+        view.scroll_to_cell(path, use_align=True, row_align=0.5)
 
         return False
 
 
-class TimelineFeature (FeatureBase):
-
+class TimelineFeature(FeatureBase):
     def __init__(self, app):
 
         self.logger = logging.getLogger("ui.timeline")
 
         self.action_group = Gtk.ActionGroup("TimelineActions")
-        self.action_group.add_toggle_actions([("show-timeline",
-                                               None, _("_Timeline"),
-                                               "<Ctrl>t")])
+        self.action_group.add_toggle_actions(
+            [("show-timeline", None, _("_Timeline"), "<Ctrl>t")]
+        )
 
         self.state = app.state.sections[TimelineState._name]
 
@@ -1082,14 +1136,14 @@ class TimelineFeature (FeatureBase):
         attached_window.handle_detach_log_file(log_file)
 
 
-class TimelineState (Common.GUI.StateSection):
+class TimelineState(Common.GUI.StateSection):
 
     _name = "timeline"
 
     shown = Common.GUI.StateBool("shown", default=True)
 
 
-class Plugin (PluginBase):
+class Plugin(PluginBase):
 
     features = (TimelineFeature,)
 

@@ -27,21 +27,39 @@ TEST_MANAGER = "validate"
 
 
 def get_pipelines(test_manager):
-    return [("not_negotiated.accept_caps_failure",
-             "audiotestsrc ! audio/x-raw,channels=2,channel-mask='(bitmask)0x67' "
-             "! audioconvert ! capsfilter caps=audio/x-raw,channels=6,channel-mask='(bitmask)0x32' "
-             " name=capsfilter ! fakesink",
-             {"expected-issues": [
-                 {'returncode': 18},
-                 {'level': 'critical', 'summary': 'a NOT NEGOTIATED message has been posted on the bus.',
-                  'details': r'.*Caps negotiation failed at pad.*capsfilter:sink.*as it refused caps:.*'}]}),
-            ("not_negotiated.caps_query_failure",
-             "\( \( audiotestsrc \) ! input-selector name=i \) ! capsfilter name=capsfilter caps=video/x-raw ! fakesink",
-             {"expected-issues": [
-                 {'returncode': 18},
-                 {'level': 'critical', 'summary': 'a NOT NEGOTIATED message has been posted on the bus.',
-                  'details': 'Caps negotiation failed starting from pad \'capsfilter:sink\' as the '
-                             'QUERY_CAPS returned EMPTY caps for the following possible reasons:'}]})]
+    return [
+        (
+            "not_negotiated.accept_caps_failure",
+            "audiotestsrc ! audio/x-raw,channels=2,channel-mask='(bitmask)0x67' "
+            "! audioconvert ! capsfilter caps=audio/x-raw,channels=6,channel-mask='(bitmask)0x32' "
+            " name=capsfilter ! fakesink",
+            {
+                "expected-issues": [
+                    {"returncode": 18},
+                    {
+                        "level": "critical",
+                        "summary": "a NOT NEGOTIATED message has been posted on the bus.",
+                        "details": r".*Caps negotiation failed at pad.*capsfilter:sink.*as it refused caps:.*",
+                    },
+                ]
+            },
+        ),
+        (
+            "not_negotiated.caps_query_failure",
+            "\( \( audiotestsrc \) ! input-selector name=i \) ! capsfilter name=capsfilter caps=video/x-raw ! fakesink",
+            {
+                "expected-issues": [
+                    {"returncode": 18},
+                    {
+                        "level": "critical",
+                        "summary": "a NOT NEGOTIATED message has been posted on the bus.",
+                        "details": "Caps negotiation failed starting from pad 'capsfilter:sink' as the "
+                        "QUERY_CAPS returned EMPTY caps for the following possible reasons:",
+                    },
+                ]
+            },
+        ),
+    ]
 
 
 def setup_tests(test_manager, options):
@@ -51,14 +69,19 @@ def setup_tests(test_manager, options):
     # No restriction about scenarios that are potentially used
     valid_scenarios = ["play_15s"]
     test_manager.add_scenarios(valid_scenarios)
-    test_manager.add_generators(test_manager.GstValidatePipelineTestsGenerator
-                                ("test_validate", test_manager,
-                                 pipelines_descriptions=get_pipelines(test_manager),
-                                 valid_scenarios=valid_scenarios))
+    test_manager.add_generators(
+        test_manager.GstValidatePipelineTestsGenerator(
+            "test_validate",
+            test_manager,
+            pipelines_descriptions=get_pipelines(test_manager),
+            valid_scenarios=valid_scenarios,
+        )
+    )
 
     test_manager.add_generators(
-        GstValidateSimpleTestsGenerator("simple", test_manager,
-            os.path.join(testsuite_dir))
+        GstValidateSimpleTestsGenerator(
+            "simple", test_manager, os.path.join(testsuite_dir)
+        )
     )
 
     return True

@@ -28,14 +28,15 @@ from glob import glob
 from unittest import TestCase, main as test_main
 
 from .. import Common, Data
-from .. GUI.filters import CategoryFilter, Filter
-from .. GUI.models import (FilteredLogModel,
-                           LogModelBase,
-                           SubRange,)
+from ..GUI.filters import CategoryFilter, Filter
+from ..GUI.models import (
+    FilteredLogModel,
+    LogModelBase,
+    SubRange,
+)
 
 
-class TestSubRange (TestCase):
-
+class TestSubRange(TestCase):
     def test_len(self):
 
         values = list(range(20))
@@ -69,8 +70,7 @@ class TestSubRange (TestCase):
         self.assertEqual(list(sr), list(range(5, 15)))
 
 
-class Model (LogModelBase):
-
+class Model(LogModelBase):
     def __init__(self):
 
         LogModelBase.__init__(self)
@@ -87,9 +87,13 @@ class Model (LogModelBase):
         else:
             category = b"ODD"
 
-        line_fmt = (b"0:00:00.000000000 %5i 0x0000000 DEBUG "
-                    b"%20s dummy.c:1:dummy: dummy")
-        line_str = line_fmt % (pid, category,)
+        line_fmt = (
+            b"0:00:00.000000000 %5i 0x0000000 DEBUG " b"%20s dummy.c:1:dummy: dummy"
+        )
+        line_str = line_fmt % (
+            pid,
+            category,
+        )
         log_line = Data.LogLine.parse_full(line_str)
         self.line_cache[line_offset] = log_line
 
@@ -98,30 +102,34 @@ class Model (LogModelBase):
         return ""
 
 
-class IdentityFilter (Filter):
-
+class IdentityFilter(Filter):
     def __init__(self):
-
         def filter_func(row):
             return True
+
         self.filter_func = filter_func
 
 
-class RandomFilter (Filter):
-
+class RandomFilter(Filter):
     def __init__(self, seed):
 
         import random
+
         rand = random.Random()
         rand.seed(seed)
 
         def filter_func(row):
-            return rand.choice((True, False,))
+            return rand.choice(
+                (
+                    True,
+                    False,
+                )
+            )
+
         self.filter_func = filter_func
 
 
-class TestDynamicFilter (TestCase):
-
+class TestDynamicFilter(TestCase):
     def test_unset_filter_rerange(self):
 
         full_model = Model()
@@ -144,8 +152,7 @@ class TestDynamicFilter (TestCase):
         self.assertEqual(row_list(full_model), list(range(20)))
         self.assertEqual(row_list(filtered_model), list(range(20)))
 
-        filtered_model.add_filter(IdentityFilter(),
-                                  Common.Data.DefaultDispatcher())
+        filtered_model.add_filter(IdentityFilter(), Common.Data.DefaultDispatcher())
         filtered_model.set_range(5, 16)
 
         self.assertEqual(row_list(filtered_model), list(range(5, 16)))
@@ -157,28 +164,33 @@ class TestDynamicFilter (TestCase):
 
         row_list = self.__row_list
 
-        filtered_model.add_filter(CategoryFilter("EVEN"),
-                                  Common.Data.DefaultDispatcher())
+        filtered_model.add_filter(
+            CategoryFilter("EVEN"), Common.Data.DefaultDispatcher()
+        )
         self.__dump_model(filtered_model, "filtered")
 
         self.assertEqual(row_list(filtered_model), list(range(1, 20, 2)))
-        self.assertEqual([filtered_model.line_index_from_super(i)
-                          for i in range(1, 20, 2)],
-                         list(range(10)))
-        self.assertEqual([filtered_model.line_index_to_super(i)
-                          for i in range(10)],
-                         list(range(1, 20, 2)))
+        self.assertEqual(
+            [filtered_model.line_index_from_super(i) for i in range(1, 20, 2)],
+            list(range(10)),
+        )
+        self.assertEqual(
+            [filtered_model.line_index_to_super(i) for i in range(10)],
+            list(range(1, 20, 2)),
+        )
 
         filtered_model.set_range(1, 20)
         self.__dump_model(filtered_model, "ranged (1, 20)")
         self.__dump_model(filtered_model, "filtered range")
 
-        self.assertEqual([filtered_model.line_index_from_super(i)
-                          for i in range(0, 19, 2)],
-                         list(range(10)))
-        self.assertEqual([filtered_model.line_index_to_super(i)
-                          for i in range(10)],
-                         list(range(1, 20, 2)))
+        self.assertEqual(
+            [filtered_model.line_index_from_super(i) for i in range(0, 19, 2)],
+            list(range(10)),
+        )
+        self.assertEqual(
+            [filtered_model.line_index_to_super(i) for i in range(10)],
+            list(range(1, 20, 2)),
+        )
 
         filtered_model.set_range(2, 20)
         self.__dump_model(filtered_model, "ranged (2, 20)")
@@ -198,12 +210,13 @@ class TestDynamicFilter (TestCase):
 
         self.assertEqual(rows, rows_filtered)
 
-        self.assertEqual([filtered_model.line_index_from_super(i)
-                          for i in range(20)],
-                         list(range(20)))
-        self.assertEqual([filtered_model.line_index_to_super(i)
-                          for i in range(20)],
-                         list(range(20)))
+        self.assertEqual(
+            [filtered_model.line_index_from_super(i) for i in range(20)],
+            list(range(20)),
+        )
+        self.assertEqual(
+            [filtered_model.line_index_to_super(i) for i in range(20)], list(range(20))
+        )
 
         filtered_model.set_range(5, 16)
         self.__dump_model(filtered_model, "ranged model (5, 16)")
@@ -213,8 +226,9 @@ class TestDynamicFilter (TestCase):
 
         self.__dump_model(filtered_model, "filtered model (nofilter, 5, 15)")
 
-        filtered_model.add_filter(CategoryFilter("EVEN"),
-                                  Common.Data.DefaultDispatcher())
+        filtered_model.add_filter(
+            CategoryFilter("EVEN"), Common.Data.DefaultDispatcher()
+        )
         rows_filtered = row_list(filtered_model)
         self.assertEqual(rows_filtered, list(range(5, 16, 2)))
 
@@ -229,22 +243,25 @@ class TestDynamicFilter (TestCase):
         self.assertEqual(row_list(full_model), list(range(20)))
         self.assertEqual(row_list(filtered_model), list(range(20)))
 
-        filtered_model.add_filter(RandomFilter(538295943),
-                                  Common.Data.DefaultDispatcher())
+        filtered_model.add_filter(
+            RandomFilter(538295943), Common.Data.DefaultDispatcher()
+        )
         random_rows = row_list(filtered_model)
 
         self.__dump_model(filtered_model)
 
         filtered_model = FilteredLogModel(full_model)
-        filtered_model.add_filter(RandomFilter(538295943),
-                                  Common.Data.DefaultDispatcher())
+        filtered_model.add_filter(
+            RandomFilter(538295943), Common.Data.DefaultDispatcher()
+        )
         self.__dump_model(filtered_model, "filtered model")
         self.assertEqual(row_list(filtered_model), random_rows)
 
         filtered_model.set_range(1, 10)
         self.__dump_model(filtered_model)
-        self.assertEqual(row_list(filtered_model), [
-                         x for x in range(0, 10) if x in random_rows])
+        self.assertEqual(
+            row_list(filtered_model), [x for x in range(0, 10) if x in random_rows]
+        )
 
     def __row_list(self, model):
 
@@ -258,8 +275,11 @@ class TestDynamicFilter (TestCase):
 
         if not hasattr(model, "super_model"):
             # Top model.
-            print("\t(%s)" % ("|".join([str(i).rjust(2)
-                                        for i in self.__row_list(model)]),), end=' ')
+            print(
+                "\t(%s)"
+                % ("|".join([str(i).rjust(2) for i in self.__row_list(model)]),),
+                end=" ",
+            )
         else:
             top_model = model.super_model
             if hasattr(top_model, "super_model"):
@@ -269,7 +289,7 @@ class TestDynamicFilter (TestCase):
             output = ["  "] * len(top_indices)
             for i, position in enumerate(positions):
                 output[position] = str(i).rjust(2)
-            print("\t(%s)" % ("|".join(output),), end=' ')
+            print("\t(%s)" % ("|".join(output),), end=" ")
 
         if comment is None:
             print()

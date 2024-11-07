@@ -38,7 +38,7 @@ class VirtualFrameBufferServer(loggable.Loggable):
 
 class Xvfb(VirtualFrameBufferServer):
 
-    """ Class to run xvfb in a process."""
+    """Class to run xvfb in a process."""
 
     def __init__(self, options):
         VirtualFrameBufferServer.__init__(self, options)
@@ -48,21 +48,22 @@ class Xvfb(VirtualFrameBufferServer):
         self._command = "Xvfb %s -screen 0 1920x1080x24" % self.display_id
 
     def _check_is_up(self, timeout=3, assume_true=True):
-        """ Check if the xvfb is up, running a simple test based on xset. """
+        """Check if the xvfb is up, running a simple test based on xset."""
         start = time.time()
         while True:
             try:
                 os.environ["DISPLAY"] = self.display_id
-                subprocess.check_output(["xset", "q"],
-                                        stderr=self._logsfile)
+                subprocess.check_output(["xset", "q"], stderr=self._logsfile)
                 return True
             except subprocess.CalledProcessError:
                 pass
             except FileNotFoundError:
                 if assume_true:
-                    print('WARNING: xset not preset on the system,'
-                        ' just wait for %s seconds and hope for the best.'
-                        ' (this is what xvfb-run itself does anyway.)' % timeout)
+                    print(
+                        "WARNING: xset not preset on the system,"
+                        " just wait for %s seconds and hope for the best."
+                        " (this is what xvfb-run itself does anyway.)" % timeout
+                    )
                     time.sleep(timeout)
                 return assume_true
 
@@ -72,9 +73,8 @@ class Xvfb(VirtualFrameBufferServer):
             time.sleep(1)
 
     def start(self):
-        """ Start xvfb in a subprocess """
-        self._logsfile = open(os.path.join(self.options.logsdir,
-                                           "xvfb.logs"), 'w+')
+        """Start xvfb in a subprocess"""
+        self._logsfile = open(os.path.join(self.options.logsdir, "xvfb.logs"), "w+")
         if self._check_is_up(assume_true=False):
             self.info("xvfb already running")
             return (True, None)
@@ -82,9 +82,9 @@ class Xvfb(VirtualFrameBufferServer):
         printc("-> Starting xvfb... ", end="")
         try:
             self.debug("Launching xvfb: %s (logs in %s)", self._command, self._logsfile)
-            self._process = subprocess.Popen(self._command.split(" "),
-                                             stderr=self._logsfile,
-                                             stdout=self._logsfile)
+            self._process = subprocess.Popen(
+                self._command.split(" "), stderr=self._logsfile, stdout=self._logsfile
+            )
             self.debug("Launched xvfb")
 
             # Dirty way to avoid eating to much CPU...
@@ -99,11 +99,14 @@ class Xvfb(VirtualFrameBufferServer):
                 self._process.terminate()
                 self._process = None
         except Exception as ex:
-            return (False, "Could not launch %s %s\n"
-                    "Make sure Xvfb is installed" % (self._command, ex))
+            return (
+                False,
+                "Could not launch %s %s\n"
+                "Make sure Xvfb is installed" % (self._command, ex),
+            )
 
     def stop(self):
-        """ Stop the xvfb subprocess if running. """
+        """Stop the xvfb subprocess if running."""
         if self._process:
             self._process.terminate()
             self._process = None

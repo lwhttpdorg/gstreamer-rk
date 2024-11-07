@@ -27,6 +27,7 @@ from gi.repository import GLib
 
 from GstDebugViewer import GUI
 import GstDebugViewer.Common.Main
+
 Common = GstDebugViewer.Common
 
 GETTEXT_DOMAIN = "gst-debug-viewer"
@@ -40,7 +41,7 @@ def main_version(opt, value, parser, *args, **kwargs):
     sys.exit(0)
 
 
-class Paths (Common.Main.PathsProgramBase):
+class Paths(Common.Main.PathsProgramBase):
 
     program_name = "gst-debug-viewer"
 
@@ -48,14 +49,20 @@ class Paths (Common.Main.PathsProgramBase):
 def main():
     parser = optparse.OptionParser(
         _("%prog [OPTION...] [FILENAME]"),
-        description=_("Display and analyze GStreamer debug log files"))
-    parser.add_option("--version", "-v",
-                      action="callback",
-                      dest="version",
-                      callback=main_version,
-                      help=_("Display version and exit"))
+        description=_("Display and analyze GStreamer debug log files"),
+    )
+    parser.add_option(
+        "--version",
+        "-v",
+        action="callback",
+        dest="version",
+        callback=main_version,
+        help=_("Display version and exit"),
+    )
 
-    Common.Main.main(main_function=GUI.main,
-                     option_parser=parser,
-                     gettext_domain=GETTEXT_DOMAIN,
-                     paths=Paths)
+    Common.Main.main(
+        main_function=GUI.main,
+        option_parser=parser,
+        gettext_domain=GETTEXT_DOMAIN,
+        paths=Paths,
+    )

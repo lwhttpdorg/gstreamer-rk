@@ -25,14 +25,13 @@ from launcher.baseclasses import TestsManager
 
 
 class PythonTest(Test):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._testname = self.classname
 
     def build_arguments(self):
         """Builds subprocess arguments."""
-        self.add_arguments('-m', 'unittest', self._testname)
+        self.add_arguments("-m", "unittest", self._testname)
 
 
 class PythonTestsManager(TestsManager):
@@ -47,11 +46,14 @@ class PythonTestsManager(TestsManager):
             return
 
         arggroup = PythonTestsManager.arggroup = parser.add_argument_group(
-            "Python tests specific options and behaviours")
-        arggroup.add_argument("--pyunittest-dir",
-                              action="append",
-                              default=[],
-                              help="Paths to look for Python tests.")
+            "Python tests specific options and behaviours"
+        )
+        arggroup.add_argument(
+            "--pyunittest-dir",
+            action="append",
+            default=[],
+            help="Paths to look for Python tests.",
+        )
 
     def list_tests(self):
         if self.tests:
@@ -63,11 +65,16 @@ class PythonTestsManager(TestsManager):
             for testsuite in testsuites:
                 for _tests in testsuite:
                     if isinstance(_tests, unittest.loader._FailedTest):
-                        raise(_tests._exception)
+                        raise _tests
                     for test in _tests:
-                        self.add_test(PythonTest(
-                            sys.executable, test.id(),
-                            self.options, self.reporter,
-                            extra_env_variables={'PYTHONPATH': _dir}))
+                        self.add_test(
+                            PythonTest(
+                                sys.executable,
+                                test.id(),
+                                self.options,
+                                self.reporter,
+                                extra_env_variables={"PYTHONPATH": _dir},
+                            )
+                        )
 
         return self.tests

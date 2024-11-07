@@ -54,22 +54,19 @@ _outfile = None
 
 
 # public log levels
-(ERROR,
- WARN,
- FIXME,
- INFO,
- DEBUG,
- LOG) = list(range(1, 7))
+(ERROR, WARN, FIXME, INFO, DEBUG, LOG) = list(range(1, 7))
 
-COLORS = {ERROR: 'RED',
-          WARN: 'YELLOW',
-          FIXME: 'MAGENTA',
-          INFO: 'GREEN',
-          DEBUG: 'BLUE',
-          LOG: 'CYAN'}
+COLORS = {
+    ERROR: "RED",
+    WARN: "YELLOW",
+    FIXME: "MAGENTA",
+    INFO: "GREEN",
+    DEBUG: "BLUE",
+    LOG: "CYAN",
+}
 
 _FORMATTED_LEVELS = []
-_LEVEL_NAMES = ['ERROR', 'WARN', 'FIXME', 'INFO', 'DEBUG', 'LOG']
+_LEVEL_NAMES = ["ERROR", "WARN", "FIXME", "INFO", "DEBUG", "LOG"]
 
 
 class TerminalController:
@@ -109,40 +106,41 @@ class TerminalController:
             output; if this stream is not a tty, then the terminal is
             assumed to be a dumb terminal (i.e., have no capabilities).
     """
+
     # Cursor movement:
-    BOL = ''             # : Move the cursor to the beginning of the line
-    UP = ''              # : Move the cursor up one line
-    DOWN = ''            # : Move the cursor down one line
-    LEFT = ''            # : Move the cursor left one char
-    RIGHT = ''           # : Move the cursor right one char
+    BOL = ""  # : Move the cursor to the beginning of the line
+    UP = ""  # : Move the cursor up one line
+    DOWN = ""  # : Move the cursor down one line
+    LEFT = ""  # : Move the cursor left one char
+    RIGHT = ""  # : Move the cursor right one char
 
     # Deletion:
-    CLEAR_SCREEN = ''    # : Clear the screen and move to home position
-    CLEAR_EOL = ''       # : Clear to the end of the line.
-    CLEAR_BOL = ''       # : Clear to the beginning of the line.
-    CLEAR_EOS = ''       # : Clear to the end of the screen
+    CLEAR_SCREEN = ""  # : Clear the screen and move to home position
+    CLEAR_EOL = ""  # : Clear to the end of the line.
+    CLEAR_BOL = ""  # : Clear to the beginning of the line.
+    CLEAR_EOS = ""  # : Clear to the end of the screen
 
     # Output modes:
-    BOLD = ''            # : Turn on bold mode
-    BLINK = ''           # : Turn on blink mode
-    DIM = ''             # : Turn on half-bright mode
-    REVERSE = ''         # : Turn on reverse-video mode
-    NORMAL = ''          # : Turn off all modes
+    BOLD = ""  # : Turn on bold mode
+    BLINK = ""  # : Turn on blink mode
+    DIM = ""  # : Turn on half-bright mode
+    REVERSE = ""  # : Turn on reverse-video mode
+    NORMAL = ""  # : Turn off all modes
 
     # Cursor display:
-    HIDE_CURSOR = ''     # : Make the cursor invisible
-    SHOW_CURSOR = ''     # : Make the cursor visible
+    HIDE_CURSOR = ""  # : Make the cursor invisible
+    SHOW_CURSOR = ""  # : Make the cursor visible
 
     # Terminal size:
-    COLS = None          # : Width of the terminal (None for unknown)
-    LINES = None         # : Height of the terminal (None for unknown)
+    COLS = None  # : Width of the terminal (None for unknown)
+    LINES = None  # : Height of the terminal (None for unknown)
 
     # Foreground colors:
-    BLACK = BLUE = GREEN = CYAN = RED = MAGENTA = YELLOW = WHITE = ''
+    BLACK = BLUE = GREEN = CYAN = RED = MAGENTA = YELLOW = WHITE = ""
 
     # Background colors:
-    BG_BLACK = BG_BLUE = BG_GREEN = BG_CYAN = ''
-    BG_RED = BG_MAGENTA = BG_YELLOW = BG_WHITE = ''
+    BG_BLACK = BG_BLUE = BG_GREEN = BG_CYAN = ""
+    BG_RED = BG_MAGENTA = BG_YELLOW = BG_WHITE = ""
 
     _STRING_CAPABILITIES = """
     BOL=cr UP=cuu1 DOWN=cud1 LEFT=cub1 RIGHT=cuf1
@@ -171,42 +169,40 @@ class TerminalController:
             return
 
         # Look up numeric capabilities.
-        self.COLS = curses.tigetnum('cols')
-        self.LINES = curses.tigetnum('lines')
+        self.COLS = curses.tigetnum("cols")
+        self.LINES = curses.tigetnum("lines")
 
         # Look up string capabilities.
         for capability in self._STRING_CAPABILITIES:
-            (attrib, cap_name) = capability.split('=')
-            setattr(self, attrib, self._tigetstr(cap_name) or b'')
+            (attrib, cap_name) = capability.split("=")
+            setattr(self, attrib, self._tigetstr(cap_name) or b"")
 
         # Colors
-        set_fg = self._tigetstr('setf')
+        set_fg = self._tigetstr("setf")
         if set_fg:
             for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
-                setattr(self, color, curses.tparm(set_fg, i) or b'')
-        set_fg_ansi = self._tigetstr('setaf')
+                setattr(self, color, curses.tparm(set_fg, i) or b"")
+        set_fg_ansi = self._tigetstr("setaf")
         if set_fg_ansi:
-            for i, color in zip(list(range(len(self._ANSICOLORS))),
-                                self._ANSICOLORS):
-                setattr(self, color, curses.tparm(set_fg_ansi, i) or b'')
-        set_bg = self._tigetstr('setb')
+            for i, color in zip(list(range(len(self._ANSICOLORS))), self._ANSICOLORS):
+                setattr(self, color, curses.tparm(set_fg_ansi, i) or b"")
+        set_bg = self._tigetstr("setb")
         if set_bg:
             for i, color in zip(list(range(len(self._COLORS))), self._COLORS):
-                setattr(self, 'BG_' + color, curses.tparm(set_bg, i) or b'')
-        set_bg_ansi = self._tigetstr('setab')
+                setattr(self, "BG_" + color, curses.tparm(set_bg, i) or b"")
+        set_bg_ansi = self._tigetstr("setab")
         if set_bg_ansi:
-            for i, color in zip(list(range(len(self._ANSICOLORS))),
-                                self._ANSICOLORS):
-                setattr(
-                    self, 'BG_' + color, curses.tparm(set_bg_ansi, i) or b'')
+            for i, color in zip(list(range(len(self._ANSICOLORS))), self._ANSICOLORS):
+                setattr(self, "BG_" + color, curses.tparm(set_bg_ansi, i) or b"")
 
     def _tigetstr(self, cap_name):
         # String capabilities can include "delays" of the form "$<2>".
         # For any modern terminal, we should be able to just ignore
         # these, so strip them out.
         import curses
-        cap = curses.tigetstr(cap_name) or b''
-        return re.sub(r'\$<\d+>[/*]?', '', cap.decode()).encode()
+
+        cap = curses.tigetstr(cap_name) or b""
+        return re.sub(r"\$<\d+>[/*]?", "", cap.decode()).encode()
 
     def render(self, template):
         """Replaces each $-substitutions in the specified template string.
@@ -214,14 +210,15 @@ class TerminalController:
         The placeholders are replaced with the corresponding terminal control
         string (if it's defined) or '' (if it's not).
         """
-        return re.sub(r'\$\$|\${\w+}', self._render_sub, template)
+        return re.sub(r"\$\$|\${\w+}", self._render_sub, template)
 
     def _render_sub(self, match):
         s = match.group()
-        if s == '$$':
+        if s == "$$":
             return s
         else:
             return getattr(self, s[2:-1])
+
 
 #
 # Example use case: progress bar
@@ -241,19 +238,21 @@ class ProgressBar:
     output; and adjusts to the width of the terminal.
     """
 
-    BAR = '%3d%% ${GREEN}[${BOLD}%s%s${NORMAL}${GREEN}]${NORMAL}\n'
-    HEADER = '${BOLD}${CYAN}%s${NORMAL}\n\n'
+    BAR = "%3d%% ${GREEN}[${BOLD}%s%s${NORMAL}${GREEN}]${NORMAL}\n"
+    HEADER = "${BOLD}${CYAN}%s${NORMAL}\n\n"
 
     def __init__(self, term, header):
         self.term = term
         if not (self.term.CLEAR_EOL and self.term.UP and self.term.BOL):
-            raise ValueError("Terminal isn't capable enough -- you "
-                             "should use a simpler progress dispaly.")
+            raise ValueError(
+                "Terminal isn't capable enough -- you "
+                "should use a simpler progress dispaly."
+            )
         self.width = self.term.COLS or 75
         self.bar = term.render(self.BAR)
         self.header = self.term.render(self.HEADER % header.center(self.width))
         self.cleared = 1  # : true if we haven't drawn the bar yet.
-        self.update(0, '')
+        self.update(0, "")
 
     def update(self, percent, message):
         if self.cleared:
@@ -261,15 +260,24 @@ class ProgressBar:
             self.cleared = 0
         n = int((self.width - 10) * percent)
         sys.stdout.write(
-            self.term.BOL + self.term.UP + self.term.CLEAR_EOL
-            + (self.bar % (100 * percent, '=' * n, '-' * (self.width - 10 - n)))
-            + self.term.CLEAR_EOL + message.center(self.width))
+            self.term.BOL
+            + self.term.UP
+            + self.term.CLEAR_EOL
+            + (self.bar % (100 * percent, "=" * n, "-" * (self.width - 10 - n)))
+            + self.term.CLEAR_EOL
+            + message.center(self.width)
+        )
 
     def clear(self):
         if not self.cleared:
-            sys.stdout.write(self.term.BOL + self.term.CLEAR_EOL
-                             + self.term.UP + self.term.CLEAR_EOL
-                             + self.term.UP + self.term.CLEAR_EOL)
+            sys.stdout.write(
+                self.term.BOL
+                + self.term.CLEAR_EOL
+                + self.term.UP
+                + self.term.CLEAR_EOL
+                + self.term.UP
+                + self.term.CLEAR_EOL
+            )
             self.cleared = 1
 
 
@@ -282,8 +290,9 @@ def getLevelName(level):
     Returns:
         str: The name of the level.
     """
-    assert isinstance(level, int) and level > 0 and level < 7, \
-        TypeError("Bad debug level")
+    assert isinstance(level, int) and level > 0 and level < 7, TypeError(
+        "Bad debug level"
+    )
     return getLevelNames()[level - 1]
 
 
@@ -305,14 +314,16 @@ def getLevelInt(levelName):
     Returns:
         int: The value of the level name we are interested in.
     """
-    assert isinstance(levelName, str) and levelName in getLevelNames(), \
-        "Bad debug level name"
+    assert (
+        isinstance(levelName, str) and levelName in getLevelNames()
+    ), "Bad debug level name"
     return getLevelNames().index(levelName) + 1
 
 
 def getFormattedLevelName(level):
-    assert isinstance(level, int) and level > 0 and level < len(_LEVEL_NAMES) + 1, \
-        TypeError("Bad debug level")
+    assert (
+        isinstance(level, int) and level > 0 and level < len(_LEVEL_NAMES) + 1
+    ), TypeError("Bad debug level")
     return _FORMATTED_LEVELS[level - 1]
 
 
@@ -328,19 +339,19 @@ def registerCategory(category):
     global _categories
 
     level = 0
-    chunks = _DEBUG.split(',')
+    chunks = _DEBUG.split(",")
     for chunk in chunks:
         if not chunk:
             continue
-        if ':' in chunk:
-            spec, value = chunk.split(':')
+        if ":" in chunk:
+            spec, value = chunk.split(":")
         else:
-            spec = '*'
+            spec = "*"
             value = chunk
 
         # our glob is unix filename style globbing, so cheat with fnmatch
         # fnmatch.fnmatch didn't work for this, so don't use it
-        if category in fnmatch.filter((category, ), spec):
+        if category in fnmatch.filter((category,), spec):
             # we have a match, so set level based on string or int
             if not value:
                 continue
@@ -381,10 +392,7 @@ def setLogSettings(state):
     global _log_handlers
     global _log_handlers_limited
 
-    (_DEBUG,
-     _categories,
-     _log_handlers,
-     _log_handlers_limited) = state
+    (_DEBUG, _categories, _log_handlers, _log_handlers_limited) = state
 
     for category in _categories:
         registerCategory(category)
@@ -399,10 +407,7 @@ def getLogSettings():
     Returns:
         The current settings.
     """
-    return (_DEBUG,
-            _categories,
-            _log_handlers,
-            _log_handlers_limited)
+    return (_DEBUG, _categories, _log_handlers, _log_handlers_limited)
 
 
 def _canShortcutLogging(category, level):
@@ -415,9 +420,9 @@ def _canShortcutLogging(category, level):
 
 
 def scrubFilename(filename):
-    '''
+    """
     Scrub the filename to a relative path for all packages in our scrub list.
-    '''
+    """
     global _PACKAGE_SCRUB_LIST
     for package in _PACKAGE_SCRUB_LIST:
         i = filename.rfind(package)
@@ -455,7 +460,7 @@ def getFileLine(where=-1):
         stackFrame = sys._getframe()
         while stackFrame:
             co = stackFrame.f_code
-            if not co.co_filename.endswith('loggable.py'):
+            if not co.co_filename.endswith("loggable.py"):
                 co = stackFrame.f_code
                 lineno = stackFrame.f_lineno
                 name = co.co_name
@@ -474,7 +479,7 @@ def ellipsize(o):
     if len(r) < 800:
         return r
 
-    r = r[:60] + ' ... ' + r[-15:]
+    r = r[:60] + " ... " + r[-15:]
     return r
 
 
@@ -490,11 +495,13 @@ def getFormatArgs(startFormat, startArgs, endFormat, endArgs, args, kwargs):
     for items in list(kwargs.items()):
         debugArgs.extend(items)
     debugArgs.extend(endArgs)
-    format = startFormat \
-        + ', '.join(('%s', ) * len(args)) \
-        + (kwargs and ', ' or '') \
-        + ', '.join(('%s=%r', ) * len(kwargs)) \
+    format = (
+        startFormat
+        + ", ".join(("%s",) * len(args))
+        + (kwargs and ", " or "")
+        + ", ".join(("%s=%r",) * len(kwargs))
         + endFormat
+    )
     return format, debugArgs
 
 
@@ -532,16 +539,18 @@ def doLog(level, object, category, format, args, where=-1, filePath=None, line=N
     if handlers:
         if filePath is None and line is None:
             (filePath, line, funcname) = getFileLine(where=where)
-        ret['filePath'] = filePath
-        ret['line'] = line
+        ret["filePath"] = filePath
+        ret["line"] = line
         if funcname:
             message = "\033[00m\033[32;01m%s:\033[00m %s" % (funcname, message)
         for handler in handlers:
             try:
                 handler(level, object, category, filePath, line, message)
             except TypeError as e:
-                raise SystemError("handler %r raised a TypeError: %s" % (
-                    handler, getExceptionMessage(e)))
+                raise SystemError(
+                    "handler %r raised a TypeError: %s"
+                    % (handler, getExceptionMessage(e))
+                )
 
     return ret
 
@@ -624,9 +633,16 @@ def printHandler(level, object, category, file, line, message):
     # If GST_DEBUG is not set, we can assume only PITIVI_DEBUG is set, so don't
     # show a bazillion of debug details that are not relevant to Pitivi.
     if not _enableCrackOutput:
-        safeprintf(_outfile, '%s %-8s %-17s %-2s %s %s\n',
-                   getFormattedLevelName(level), time.strftime("%H:%M:%S"),
-                   category, object, message, where)
+        safeprintf(
+            _outfile,
+            "%s %-8s %-17s %-2s %s %s\n",
+            getFormattedLevelName(level),
+            time.strftime("%H:%M:%S"),
+            category,
+            object,
+            message,
+            where,
+        )
     else:
         o = ""
         if object:
@@ -634,35 +650,50 @@ def printHandler(level, object, category, file, line, message):
         # level   pid     object   cat      time
         # 5 + 1 + 7 + 1 + 32 + 1 + 17 + 1 + 15 == 80
         safeprintf(
-            _outfile, '%s [%5d] [0x%12x] %-32s %-17s %-15s %-4s %s %s\n',
-            getFormattedLevelName(level), os.getpid(),
+            _outfile,
+            "%s [%5d] [0x%12x] %-32s %-17s %-15s %-4s %s %s\n",
+            getFormattedLevelName(level),
+            os.getpid(),
             threading.current_thread().ident,
-            o[:32], category, time.strftime("%b %d %H:%M:%S"), "",
-            message, where)
+            o[:32],
+            category,
+            time.strftime("%b %d %H:%M:%S"),
+            "",
+            message,
+            where,
+        )
     _outfile.flush()
 
 
 def logLevelName(level):
-    format = '%-5s'
-    return format % (_LEVEL_NAMES[level - 1], )
+    format = "%-5s"
+    return format % (_LEVEL_NAMES[level - 1],)
 
 
 def _as_string(string_or_bytes):
-    return string_or_bytes.decode() if isinstance(string_or_bytes, bytes) else string_or_bytes
+    return (
+        string_or_bytes.decode()
+        if isinstance(string_or_bytes, bytes)
+        else string_or_bytes
+    )
 
 
 def _preformatLevels(enableColorOutput):
     terminal_controller = TerminalController()
     for level in ERROR, WARN, FIXME, INFO, DEBUG, LOG:
         if enableColorOutput:
-            formatter = ''.join(
-                (_as_string(terminal_controller.BOLD),
-                 _as_string(getattr(terminal_controller, COLORS[level])),
-                 logLevelName(level),
-                 _as_string(terminal_controller.NORMAL)))
+            formatter = "".join(
+                (
+                    _as_string(terminal_controller.BOLD),
+                    _as_string(getattr(terminal_controller, COLORS[level])),
+                    logLevelName(level),
+                    _as_string(terminal_controller.NORMAL),
+                )
+            )
         else:
             formatter = logLevelName(level)
         _FORMATTED_LEVELS.append(formatter)
+
 
 # "public" useful API
 
@@ -717,7 +748,7 @@ def setDebug(string):
     global _categories
 
     _DEBUG = string
-    debug('log', "%s set to %s" % (_ENV_VAR_NAME, _DEBUG))
+    debug("log", "%s set to %s" % (_ENV_VAR_NAME, _DEBUG))
 
     # reparse all already registered category levels
     for category in _categories:
@@ -814,6 +845,7 @@ def removeLimitedLogHandler(func):
     """
     _log_handlers_limited.remove(func)
 
+
 # public log functions
 
 
@@ -840,6 +872,7 @@ def debug(cat, format, *args):
 def log(cat, format, *args):
     logObject(None, cat, format, *args)
 
+
 # public utility functions
 
 
@@ -861,20 +894,19 @@ def getExceptionMessage(exception, frame=-1, filename=None):
     # for now
     if str(exception):
         msg = ": %s" % str(exception)
-    return "exception %(exc)s at %(filename)s:%(line)s: %(func)s()%(msg)s" \
-        % locals()
+    return "exception %(exc)s at %(filename)s:%(line)s: %(func)s()%(msg)s" % locals()
 
 
 def reopenOutputFiles():
     """Reopens the stdout and stderr output files, as set by `outputToFiles`."""
     if not _stdout and not _stderr:
-        debug('log', 'told to reopen log files, but log files not set')
+        debug("log", "told to reopen log files, but log files not set")
         return
 
     def reopen(name, fileno, *args):
         oldmask = os.umask(0o026)
         try:
-            f = open(name, 'a+', *args)
+            f = open(name, "a+", *args)
         finally:
             os.umask(oldmask)
 
@@ -885,7 +917,7 @@ def reopenOutputFiles():
 
     if _stderr:
         reopen(_stderr, sys.stderr.fileno(), 0)
-        debug('log', 'opened log %r', _stderr)
+        debug("log", "opened log %r", _stderr)
 
 
 def outputToFiles(stdout=None, stderr=None):
@@ -904,14 +936,15 @@ def outputToFiles(stdout=None, stderr=None):
     reopenOutputFiles()
 
     def sighup(signum, frame):
-        info('log', "Received SIGHUP, reopening logs")
+        info("log", "Received SIGHUP, reopening logs")
         reopenOutputFiles()
         if _old_hup_handler:
-            info('log', "Calling old SIGHUP hander")
+            info("log", "Calling old SIGHUP hander")
             _old_hup_handler(signum, frame)
 
-    debug('log', 'installing SIGHUP handler')
+    debug("log", "installing SIGHUP handler")
     from . import signal
+
     handler = signal.signal(signal.SIGHUP, sighup)
     if handler == signal.SIG_DFL or handler == signal.SIG_IGN:
         _old_hup_handler = None
@@ -940,8 +973,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, ERROR):
             return
-        errorObject(self.logObjectName(),
-                    self.logCategory, *self.logFunction(*args))
+        errorObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def warning(self, *args):
         """Logs a warning.
@@ -950,8 +982,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, WARN):
             return
-        warningObject(
-            self.logObjectName(), self.logCategory, *self.logFunction(*args))
+        warningObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def fixme(self, *args):
         """Logs a fixme.
@@ -960,8 +991,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, FIXME):
             return
-        fixmeObject(self.logObjectName(),
-                    self.logCategory, *self.logFunction(*args))
+        fixmeObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def info(self, *args):
         """Logs an informational message.
@@ -970,8 +1000,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, INFO):
             return
-        infoObject(self.logObjectName(),
-                   self.logCategory, *self.logFunction(*args))
+        infoObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def debug(self, *args):
         """Logs a debug message.
@@ -980,8 +1009,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, DEBUG):
             return
-        debugObject(self.logObjectName(),
-                    self.logCategory, *self.logFunction(*args))
+        debugObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def log(self, *args):
         """Logs a log message.
@@ -990,8 +1018,7 @@ class BaseLoggable(object):
         """
         if _canShortcutLogging(self.logCategory, LOG):
             return
-        logObject(self.logObjectName(),
-                  self.logCategory, *self.logFunction(*args))
+        logObject(self.logObjectName(), self.logCategory, *self.logFunction(*args))
 
     def doLog(self, level, where, format, *args, **kwargs):
         """Logs a message at the specified level, with the possibility of going
@@ -1014,8 +1041,15 @@ class BaseLoggable(object):
         if _canShortcutLogging(self.logCategory, level):
             return {}
         args = self.logFunction(*args)
-        return doLog(level, self.logObjectName(), self.logCategory,
-                     format, args, where=where, **kwargs)
+        return doLog(
+            level,
+            self.logObjectName(),
+            self.logCategory,
+            format,
+            args,
+            where=where,
+            **kwargs
+        )
 
     def logFunction(self, *args):
         """Processes the arguments applied to the message template.
@@ -1027,7 +1061,7 @@ class BaseLoggable(object):
     def logObjectName(self):
         """Gets the name of this object."""
         # cheat pychecker
-        for name in ['logName', 'name']:
+        for name in ["logName", "name"]:
             if hasattr(self, name):
                 return getattr(self, name)
 
@@ -1038,11 +1072,10 @@ class BaseLoggable(object):
 
 
 class Loggable(BaseLoggable):
-
     def __init__(self, logCategory=None):
         if logCategory:
             self.logCategory = logCategory
-        elif not hasattr(self, 'logCategory'):
+        elif not hasattr(self, "logCategory"):
             self.logCategory = self.__class__.__name__.lower()
 
     def logObjectName(self):
@@ -1054,5 +1087,11 @@ class Loggable(BaseLoggable):
     def error(self, format, *args):
         if _canShortcutLogging(self.logCategory, ERROR):
             return
-        doLog(ERROR, self.logObjectName(), self.logCategory,
-              format, self.logFunction(*args), where=-2)
+        doLog(
+            ERROR,
+            self.logObjectName(),
+            self.logCategory,
+            format,
+            self.logFunction(*args),
+            where=-2,
+        )

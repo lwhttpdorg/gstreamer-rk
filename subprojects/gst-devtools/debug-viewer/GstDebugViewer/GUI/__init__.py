@@ -19,7 +19,7 @@
 
 """GStreamer Debug Viewer GUI module."""
 
-__author__ = u"René Stadler <mail@renestadler.de>"
+__author__ = "René Stadler <mail@renestadler.de>"
 __version__ = "0.1"
 
 import gi

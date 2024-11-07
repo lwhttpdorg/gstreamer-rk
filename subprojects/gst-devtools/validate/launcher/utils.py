@@ -49,14 +49,22 @@ from fractions import Fraction
 GST_SECOND = int(1000000000)
 DEFAULT_TIMEOUT = 30
 
-DEFAULT_MAIN_DIR = os.path.join(config.BUILDDIR, "subprojects", "gst-integration-testsuites")
-DEFAULT_GST_QA_ASSETS = os.path.join(config.SRCDIR, "subprojects", "gst-integration-testsuites")
-USING_SUBPROJECT = os.path.exists(os.path.join(config.BUILDDIR, "subprojects", "gst-integration-testsuites"))
+DEFAULT_MAIN_DIR = os.path.join(
+    config.BUILDDIR, "subprojects", "gst-integration-testsuites"
+)
+DEFAULT_GST_QA_ASSETS = os.path.join(
+    config.SRCDIR, "subprojects", "gst-integration-testsuites"
+)
+USING_SUBPROJECT = os.path.exists(
+    os.path.join(config.BUILDDIR, "subprojects", "gst-integration-testsuites")
+)
 if not USING_SUBPROJECT:
     DEFAULT_MAIN_DIR = os.path.join(os.path.expanduser("~"), "gst-validate")
-    DEFAULT_GST_QA_ASSETS = os.path.join(DEFAULT_MAIN_DIR, "gstreamer", "subprojects", "gst-integration-testsuites")
+    DEFAULT_GST_QA_ASSETS = os.path.join(
+        DEFAULT_MAIN_DIR, "gstreamer", "subprojects", "gst-integration-testsuites"
+    )
 
-DEFAULT_MAIN_DIR = os.environ.get('GST_VALIDATE_LAUNCHER_MAIN_DIR', DEFAULT_MAIN_DIR)
+DEFAULT_MAIN_DIR = os.environ.get("GST_VALIDATE_LAUNCHER_MAIN_DIR", DEFAULT_MAIN_DIR)
 DEFAULT_TESTSUITES_DIRS = [os.path.join(DEFAULT_GST_QA_ASSETS, "testsuites")]
 
 
@@ -92,36 +100,36 @@ class Protocols(object):
 
 
 def is_tty():
-    return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
 def supports_ansi_colors():
-    if 'GST_VALIDATE_LAUNCHER_FORCE_COLORS' in os.environ:
+    if "GST_VALIDATE_LAUNCHER_FORCE_COLORS" in os.environ:
         return True
 
     platform = sys.platform
-    supported_platform = platform != 'win32' or 'ANSICON' in os.environ
+    supported_platform = platform != "win32" or "ANSICON" in os.environ
     if not supported_platform or not is_tty():
         return False
     return True
 
 
 class Colors(object):
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
 
 
 def desactivate_colors():
-    Colors.HEADER = ''
-    Colors.OKBLUE = ''
-    Colors.OKGREEN = ''
-    Colors.WARNING = ''
-    Colors.FAIL = ''
-    Colors.ENDC = ''
+    Colors.HEADER = ""
+    Colors.OKBLUE = ""
+    Colors.OKGREEN = ""
+    Colors.WARNING = ""
+    Colors.FAIL = ""
+    Colors.ENDC = ""
 
 
 if not supports_ansi_colors():
@@ -136,8 +144,8 @@ def mkdir(directory):
 
 
 def which(name, extra_path=None):
-    exts = [_f for _f in os.environ.get('PATHEXT', '').split(os.pathsep) if _f]
-    path = os.environ.get('PATH', '')
+    exts = [_f for _f in os.environ.get("PATHEXT", "").split(os.pathsep) if _f]
+    path = os.environ.get("PATH", "")
     if extra_path:
         path = extra_path + os.pathsep + path
     if not path:
@@ -170,7 +178,7 @@ def get_color_for_result(result):
 last_carriage_return_len = 0
 
 
-def printc(message, color="", title=False, title_char='', end="\n"):
+def printc(message, color="", title=False, title_char="", end="\n"):
     global last_carriage_return_len
     if title or title_char:
         length = 0
@@ -180,26 +188,26 @@ def printc(message, color="", title=False, title_char='', end="\n"):
         if length == 0:
             length = len(message)
 
-        needed_spaces = ' ' * max(0, last_carriage_return_len - length)
+        needed_spaces = " " * max(0, last_carriage_return_len - length)
         if title is True:
-            message = length * "=" + needed_spaces + "\n" \
-                + str(message) + "\n" + length * '='
+            message = (
+                length * "=" + needed_spaces + "\n" + str(message) + "\n" + length * "="
+            )
         else:
-            message = str(message) + needed_spaces + "\n" + \
-                length * title_char
+            message = str(message) + needed_spaces + "\n" + length * title_char
 
-    if hasattr(message, "result") and color == '':
+    if hasattr(message, "result") and color == "":
         color = get_color_for_result(message.result)
 
     if not is_tty():
         end = "\n"
 
     message = str(message)
-    message += ' ' * max(0, last_carriage_return_len - len(message))
-    if end == '\r':
+    message += " " * max(0, last_carriage_return_len - len(message))
+    if end == "\r":
         term_width = shutil.get_terminal_size((80, 20))[0]
         if len(message) > term_width:
-            message = message[0:term_width - 2] + '…'
+            message = message[0 : term_width - 2] + "…"
         last_carriage_return_len = len(message)
     else:
         last_carriage_return_len = 0
@@ -215,18 +223,18 @@ def launch_command(command, color=None, fails=False):
 
 
 def path2url(path):
-    return urllib.parse.urljoin('file:', urllib.request.pathname2url(path))
+    return urllib.parse.urljoin("file:", urllib.request.pathname2url(path))
 
 
 def is_windows():
     platname = platform.system().lower()
-    return platname == 'windows' or 'mingw' in platname
+    return platname == "windows" or "mingw" in platname
 
 
 def url2path(url):
     path = urllib.parse.urlparse(url).path
     if "win32" in sys.platform:
-        if path[0] == '/':
+        if path[0] == "/":
             return path[1:]  # We need to remove the first '/' on windows
     path = urllib.parse.unquote(path)
     return path
@@ -241,7 +249,7 @@ def isuri(string):
 
 
 def touch(fname, times=None):
-    with open(fname, 'a'):
+    with open(fname, "a"):
         os.utime(fname, times)
 
 
@@ -258,15 +266,18 @@ def get_subclasses(klass, env):
 
 
 def TIME_ARGS(time):
-    return "%u:%02u:%02u.%09u" % (time / (GST_SECOND * 60 * 60),
-                                  (time / (GST_SECOND * 60)) % 60,
-                                  (time / GST_SECOND) % 60,
-                                  time % GST_SECOND)
+    return "%u:%02u:%02u.%09u" % (
+        time / (GST_SECOND * 60 * 60),
+        (time / (GST_SECOND * 60)) % 60,
+        (time / GST_SECOND) % 60,
+        time % GST_SECOND,
+    )
 
 
 def look_for_file_in_source_dir(subdir, name):
-    root_dir = os.path.abspath(os.path.dirname(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)))))
+    root_dir = os.path.abspath(
+        os.path.dirname(os.path.join(os.path.dirname(os.path.abspath(__file__))))
+    )
     p = os.path.join(root_dir, subdir, name)
     if os.path.exists(p):
         return p
@@ -283,11 +294,12 @@ def get_data_file(subdir, name):
         return p
 
     # Look in system data dirs
-    p = os.path.join(config.DATADIR, 'gstreamer-1.0', 'validate', name)
+    p = os.path.join(config.DATADIR, "gstreamer-1.0", "validate", name)
     if os.path.exists(p):
         return p
 
     return None
+
 
 #
 # Some utilities to parse gst-validate output   #
@@ -295,31 +307,35 @@ def get_data_file(subdir, name):
 
 
 def gsttime_from_tuple(stime):
-    return int((int(stime[0]) * 3600 + int(stime[1]) * 60 + int(stime[2])) * GST_SECOND + int(stime[3]))
+    return int(
+        (int(stime[0]) * 3600 + int(stime[1]) * 60 + int(stime[2])) * GST_SECOND
+        + int(stime[3])
+    )
 
 
-timeregex = re.compile(r'(?P<_0>.+):(?P<_1>.+):(?P<_2>.+)\.(?P<_3>.+)')
+timeregex = re.compile(r"(?P<_0>.+):(?P<_1>.+):(?P<_2>.+)\.(?P<_3>.+)")
 
 
 def parse_gsttimeargs(time):
-    stime = list(map(itemgetter(1), sorted(
-        timeregex.match(time).groupdict().items())))
-    return int((int(stime[0]) * 3600 + int(stime[1]) * 60 + int(stime[2])) * GST_SECOND + int(stime[3]))
+    stime = list(map(itemgetter(1), sorted(timeregex.match(time).groupdict().items())))
+    return int(
+        (int(stime[0]) * 3600 + int(stime[1]) * 60 + int(stime[2])) * GST_SECOND
+        + int(stime[3])
+    )
 
 
 def get_duration(media_file):
 
     duration = 0
-    res = ''
+    res = ""
     try:
-        res = subprocess.check_output(
-            [DISCOVERER_COMMAND, media_file]).decode()
+        res = subprocess.check_output([DISCOVERER_COMMAND, media_file]).decode()
     except subprocess.CalledProcessError:
         # gst-media-check returns !0 if seeking is not possible, we do not care
         # in that case.
         pass
 
-    for line in res.split('\n'):
+    for line in res.split("\n"):
         if "Duration: " in line:
             duration = parse_gsttimeargs(line.replace("Duration: ", ""))
             break
@@ -329,8 +345,7 @@ def get_duration(media_file):
 
 def get_scenarios():
     GST_VALIDATE_COMMAND = "gst-validate-1.0"
-    os.system("%s --scenarios-defs-output-file %s" % (GST_VALIDATE_COMMAND,
-                                                      ))
+    os.system("%s --scenarios-defs-output-file %s" % (GST_VALIDATE_COMMAND,))
 
 
 def get_gst_build_valgrind_suppressions():
@@ -341,19 +356,20 @@ def get_gst_build_valgrind_suppressions():
     if not os.path.exists(os.path.join(config.SRCDIR, "subprojects")):
         return get_gst_build_valgrind_suppressions.data
 
-    for suppression_path in ["gstreamer/tests/check/gstreamer.supp",
-                             "gst-plugins-base/tests/check/gst-plugins-base.supp",
-                             "gst-plugins-good/tests/check/gst-plugins-good.supp",
-                             "gst-plugins-bad/tests/check/gst-plugins-bad.supp",
-                             "gst-plugins-ugly/tests/check/gst-plugins-ugly.supp",
-                             "gst-libav/tests/check/gst-libav.supp",
-                             "gst-devtools/validate/data/gstvalidate.supp",
-                             "libnice/tests/libnice.supp",
-                             "libsoup/tests/libsoup.supp",
-                             "glib/glib.supp",
-                             "gst-python/testsuite/gstpython.supp",
-                             "gst-python/testsuite/python.supp",
-                             ]:
+    for suppression_path in [
+        "gstreamer/tests/check/gstreamer.supp",
+        "gst-plugins-base/tests/check/gst-plugins-base.supp",
+        "gst-plugins-good/tests/check/gst-plugins-good.supp",
+        "gst-plugins-bad/tests/check/gst-plugins-bad.supp",
+        "gst-plugins-ugly/tests/check/gst-plugins-ugly.supp",
+        "gst-libav/tests/check/gst-libav.supp",
+        "gst-devtools/validate/data/gstvalidate.supp",
+        "libnice/tests/libnice.supp",
+        "libsoup/tests/libsoup.supp",
+        "glib/glib.supp",
+        "gst-python/testsuite/gstpython.supp",
+        "gst-python/testsuite/python.supp",
+    ]:
         suppression = os.path.join(config.SRCDIR, "subprojects", suppression_path)
         if os.path.exists(suppression):
             get_gst_build_valgrind_suppressions.data.append(suppression)
@@ -363,20 +379,20 @@ def get_gst_build_valgrind_suppressions():
 
 class BackTraceGenerator(Loggable):
     __instance = None
-    _command_line_regex = re.compile(r'Command Line: (.*)\n')
-    _timestamp_regex = re.compile(r'Timestamp: .*\((\d*)s ago\)')
-    _pid_regex = re.compile(r'PID: (\d+) \(.*\)')
+    _command_line_regex = re.compile(r"Command Line: (.*)\n")
+    _timestamp_regex = re.compile(r"Timestamp: .*\((\d*)s ago\)")
+    _pid_regex = re.compile(r"PID: (\d+) \(.*\)")
 
     def __init__(self):
         Loggable.__init__(self)
 
         self.in_flatpak = os.path.exists("/usr/manifest.json")
         if self.in_flatpak:
-            coredumpctl = ['flatpak-spawn', '--host', 'coredumpctl']
+            coredumpctl = ["flatpak-spawn", "--host", "coredumpctl"]
         else:
-            coredumpctl = ['coredumpctl']
+            coredumpctl = ["coredumpctl"]
 
-        coredumpctl.append('-q')
+        coredumpctl.append("-q")
 
         try:
             subprocess.check_output(coredumpctl)
@@ -384,8 +400,8 @@ class BackTraceGenerator(Loggable):
         except Exception as e:
             self.warning(e)
             self.coredumpctl = None
-        self.gdb = shutil.which('gdb')
-        self.lldb = shutil.which('lldb')
+        self.gdb = shutil.which("gdb")
+        self.lldb = shutil.which("lldb")
 
     @classmethod
     def get_default(cls):
@@ -401,37 +417,43 @@ class BackTraceGenerator(Loggable):
         if self.coredumpctl:
             return self.get_trace_from_systemd(test)
 
-        self.debug("coredumpctl not present, and it is the only"
-                   " supported way to get backtraces for now.")
+        self.debug(
+            "coredumpctl not present, and it is the only"
+            " supported way to get backtraces for now."
+        )
         return None
 
     def get_trace_on_running_process_with_lldb(self, test):
-        lldb = ['lldb', '-o', 'bt all', '-o', 'quit', '-p', str(test.process.pid)]
+        lldb = ["lldb", "-o", "bt all", "-o", "quit", "-p", str(test.process.pid)]
 
         try:
             return subprocess.check_output(
-                lldb, stderr=subprocess.STDOUT, timeout=30).decode()
+                lldb, stderr=subprocess.STDOUT, timeout=30
+            ).decode()
         except Exception as e:
             return "Could not run `lldb` on process (pid: %d):\n%s" % (
-                test.process.pid, e)
+                test.process.pid,
+                e,
+            )
 
     def get_trace_on_running_process(self, test):
         if not self.gdb:
             if self.lldb:
                 return self.get_trace_on_running_process_with_lldb(test)
 
-            return "Can not generate stack trace as `gdb` is not" \
-                "installed."
+            return "Can not generate stack trace as `gdb` is not" "installed."
 
-        gdb = ['gdb', '-ex', 't a a bt', '-batch',
-               '-p', str(test.process.pid)]
+        gdb = ["gdb", "-ex", "t a a bt", "-batch", "-p", str(test.process.pid)]
 
         try:
             return subprocess.check_output(
-                gdb, stderr=subprocess.STDOUT, timeout=30).decode()
+                gdb, stderr=subprocess.STDOUT, timeout=30
+            ).decode()
         except Exception as e:
             return "Could not run `gdb` on process (pid: %d):\n%s" % (
-                test.process.pid, e)
+                test.process.pid,
+                e,
+            )
 
     def get_trace_from_systemd(self, test):
         for ntry in range(10):
@@ -441,11 +463,17 @@ class BackTraceGenerator(Loggable):
                 time.sleep(1)
 
             if not self.in_flatpak:
-                coredumpctl = self.coredumpctl + ['info', str(test.process.pid)]
+                coredumpctl = self.coredumpctl + ["info", str(test.process.pid)]
             else:
-                newer_than = time.strftime("%a %Y-%m-%d %H:%M:%S %Z", time.localtime(test._starting_time))
-                coredumpctl = self.coredumpctl + ['info', os.path.basename(test.command[0]),
-                                                  '--since', newer_than]
+                newer_than = time.strftime(
+                    "%a %Y-%m-%d %H:%M:%S %Z", time.localtime(test._starting_time)
+                )
+                coredumpctl = self.coredumpctl + [
+                    "info",
+                    os.path.basename(test.command[0]),
+                    "--since",
+                    newer_than,
+                ]
 
             try:
                 info = subprocess.check_output(coredumpctl, stderr=subprocess.STDOUT)
@@ -464,14 +492,18 @@ class BackTraceGenerator(Loggable):
             application = test.process.args[0]
             command_line = BackTraceGenerator._command_line_regex.findall(info)[0]
             if shlex.split(command_line)[0] != application:
-                self.debug("PID: %s -- executable %s != test application: %s" % (
-                    pid, command_line[0], test.application))
+                self.debug(
+                    "PID: %s -- executable %s != test application: %s"
+                    % (pid, command_line[0], test.application)
+                )
                 # The trace might not be ready yet
                 continue
 
             if not BackTraceGenerator._timestamp_regex.findall(info):
-                self.debug("Timestamp %s is more than 1min old",
-                           re.findall(r'Timestamp: .*', info))
+                self.debug(
+                    "Timestamp %s is more than 1min old",
+                    re.findall(r"Timestamp: .*", info),
+                )
                 # The trace might not be ready yet
                 continue
 
@@ -479,18 +511,29 @@ class BackTraceGenerator(Loggable):
             if self.gdb:
                 try:
                     with tempfile.NamedTemporaryFile() as stderr:
-                        coredump = subprocess.check_output(self.coredumpctl + ['dump', pid],
-                                                           stderr=stderr)
+                        coredump = subprocess.check_output(
+                            self.coredumpctl + ["dump", pid], stderr=stderr
+                        )
 
                     with tempfile.NamedTemporaryFile() as tf:
                         tf.write(coredump)
                         tf.flush()
-                        gdb = ['gdb', '-ex', 't a a bt', '-ex', 'quit', application, tf.name]
+                        gdb = [
+                            "gdb",
+                            "-ex",
+                            "t a a bt",
+                            "-ex",
+                            "quit",
+                            application,
+                            tf.name,
+                        ]
                         bt_all = subprocess.check_output(
-                            gdb, stderr=subprocess.STDOUT).decode()
+                            gdb, stderr=subprocess.STDOUT
+                        ).decode()
 
                         info += "\nThread apply all bt:\n\n%s" % (
-                            bt_all.replace('\n', '\n' + 15 * ' '))
+                            bt_all.replace("\n", "\n" + 15 * " ")
+                        )
                 except Exception as e:
                     self.error("Could not get backtrace from gdb: %s" % e)
 
@@ -507,7 +550,7 @@ def check_bugs_resolution(bugs_definitions):
     gitlab_issues = defaultdict(list)
 
     regexes = {}
-    mr_id = os.environ.get('CI_MERGE_REQUEST_IID')
+    mr_id = os.environ.get("CI_MERGE_REQUEST_IID")
     mr_closes_issues = []
     if mr_id:
         gitlab_url = f"{os.environ['CI_API_V4_URL']}/projects/{os.environ['CI_MERGE_REQUEST_PROJECT_ID']}/merge_requests/{mr_id}/closes_issues"
@@ -523,22 +566,34 @@ def check_bugs_resolution(bugs_definitions):
             url = urllib.parse.urlparse(bug)
 
             if "gitlab" in url.netloc:
-                components = [c for c in url.path.split('/') if c]
+                components = [c for c in url.path.split("/") if c]
                 if len(components) not in [4, 5]:
-                    printc("\n  + %s \n   --> bug: %s\n   --> Status: Not a proper gitlab report" % (regex, bug),
-                           Colors.WARNING)
+                    printc(
+                        "\n  + %s \n   --> bug: %s\n   --> Status: Not a proper gitlab report"
+                        % (regex, bug),
+                        Colors.WARNING,
+                    )
                     continue
-                project_id = components[0] + '%2F' + components[1]
+                project_id = components[0] + "%2F" + components[1]
                 issue_id = int(components[-1])
                 for issue in mr_closes_issues:
-                    url = urllib.parse.urlparse(issue['web_url'])
-                    closing_issue_project = '%2F'.join([c for c in url.path.split('/') if c][0:2])
-                    if project_id == closing_issue_project and issue['iid'] == issue_id:
+                    url = urllib.parse.urlparse(issue["web_url"])
+                    closing_issue_project = "%2F".join(
+                        [c for c in url.path.split("/") if c][0:2]
+                    )
+                    if project_id == closing_issue_project and issue["iid"] == issue_id:
                         res = False
-                        printc("\n  + %s \n   --> %s: '%s'\n   ==> Will be closed by current MR %s\n\n===> Remove blacklisting before merging." % (
-                            regex, issue['web_url'], issue['title'], issue['state']), Colors.FAIL)
+                        printc(
+                            "\n  + %s \n   --> %s: '%s'\n   ==> Will be closed by current MR %s\n\n===> Remove blacklisting before merging."
+                            % (regex, issue["web_url"], issue["title"], issue["state"]),
+                            Colors.FAIL,
+                        )
 
-                gitlab_url = "https://%s/api/v4/projects/%s/issues/%s" % (url.hostname, project_id, issue_id)
+                gitlab_url = "https://%s/api/v4/projects/%s/issues/%s" % (
+                    url.hostname,
+                    project_id,
+                    issue_id,
+                )
                 if gitlab_url in ALL_GITLAB_ISSUES:
                     continue
                 gitlab_issues[gitlab_url].append(regex)
@@ -549,17 +604,18 @@ def check_bugs_resolution(bugs_definitions):
                 continue
 
             query = urllib.parse.parse_qs(url.query)
-            _id = query.get('id')
+            _id = query.get("id")
             if not _id:
-                printc("\n  + '%s' -- Can't check bug '%s'" %
-                       (regex, bug), Colors.WARNING)
+                printc(
+                    "\n  + '%s' -- Can't check bug '%s'" % (regex, bug), Colors.WARNING
+                )
                 continue
 
             if isinstance(_id, list):
                 _id = _id[0]
 
             regexes[_id] = (regex, bug)
-            url_parts = tuple(list(url)[:3] + ['', '', ''])
+            url_parts = tuple(list(url)[:3] + ["", "", ""])
             ids = bugz.get(url_parts, [])
             ids.append(_id)
             bugz[url_parts] = ids
@@ -568,58 +624,81 @@ def check_bugs_resolution(bugs_definitions):
         try:
             issue = json.load(urllib.request.urlopen(gitlab_url))
         except Exception as e:
-            printc("\n  + Could not properly check bugs status for: %s (%s)"
-                   % (gitlab_url, e), Colors.FAIL)
+            printc(
+                "\n  + Could not properly check bugs status for: %s (%s)"
+                % (gitlab_url, e),
+                Colors.FAIL,
+            )
             continue
 
-        if issue['state'] in ['closed']:
-            printc("\n  + %s \n   --> %s: '%s'\n   ==> Bug CLOSED already (status: %s)" % (
-                regexe, issue['web_url'], issue['title'], issue['state']), Colors.FAIL)
+        if issue["state"] in ["closed"]:
+            printc(
+                "\n  + %s \n   --> %s: '%s'\n   ==> Bug CLOSED already (status: %s)"
+                % (regexe, issue["web_url"], issue["title"], issue["state"]),
+                Colors.FAIL,
+            )
 
             res = False
 
     for url_parts, ids in bugz.items():
         url_parts = list(url_parts)
-        query = {'id': ','.join(ids)}
-        query['ctype'] = 'xml'
+        query = {"id": ",".join(ids)}
+        query["ctype"] = "xml"
         url_parts[4] = urllib.parse.urlencode(query)
         try:
             res = urllib.request.urlopen(urllib.parse.urlunparse(url_parts))
         except Exception as e:
-            printc("\n  + Could not properly check bugs status for: %s (%s)"
-                   % (urllib.parse.urlunparse(url_parts), e), Colors.FAIL)
+            printc(
+                "\n  + Could not properly check bugs status for: %s (%s)"
+                % (urllib.parse.urlunparse(url_parts), e),
+                Colors.FAIL,
+            )
             continue
 
         root = ElementTree.fromstring(res.read())
-        bugs = root.findall('./bug')
+        bugs = root.findall("./bug")
 
         if len(bugs) != len(ids):
-            printc("\n  + Could not properly check bugs status on server %s" %
-                   urllib.parse.urlunparse(url_parts), Colors.FAIL)
+            printc(
+                "\n  + Could not properly check bugs status on server %s"
+                % urllib.parse.urlunparse(url_parts),
+                Colors.FAIL,
+            )
             continue
 
         for bugelem in bugs:
-            status = bugelem.findtext('./bug_status')
-            bugid = bugelem.findtext('./bug_id')
+            status = bugelem.findtext("./bug_status")
+            bugid = bugelem.findtext("./bug_id")
             regex, bug = regexes[bugid]
-            desc = bugelem.findtext('./short_desc')
+            desc = bugelem.findtext("./short_desc")
 
             if not status:
-                printc("\n  + %s \n   --> bug: %s\n   --> Status: UNKNOWN" % (regex, bug),
-                       Colors.WARNING)
+                printc(
+                    "\n  + %s \n   --> bug: %s\n   --> Status: UNKNOWN" % (regex, bug),
+                    Colors.WARNING,
+                )
                 continue
 
-            if not status.lower() in ['new', 'verified']:
-                printc("\n  + %s \n   --> bug: #%s: '%s'\n   ==> Bug CLOSED already (status: %s)" % (
-                       regex, bugid, desc, status), Colors.WARNING)
+            if not status.lower() in ["new", "verified"]:
+                printc(
+                    "\n  + %s \n   --> bug: #%s: '%s'\n   ==> Bug CLOSED already (status: %s)"
+                    % (regex, bugid, desc, status),
+                    Colors.WARNING,
+                )
 
                 res = False
 
-            printc("\n  + %s \n   --> bug: #%s: '%s'\n   --> Status: %s" % (
-                   regex, bugid, desc, status), Colors.OKGREEN)
+            printc(
+                "\n  + %s \n   --> bug: #%s: '%s'\n   --> Status: %s"
+                % (regex, bugid, desc, status),
+                Colors.OKGREEN,
+            )
 
     if not res:
-        printc("\n==> Some bugs marked as known issues have been (or will be) closed!", Colors.FAIL)
+        printc(
+            "\n==> Some bugs marked as known issues have been (or will be) closed!",
+            Colors.FAIL,
+        )
 
     return res
 
@@ -638,8 +717,7 @@ def kill_subprocess(owner, process, timeout, subprocess_ids=None):
         try:
             owner.debug("Subprocess is still alive, sending KILL signal")
             if is_windows():
-                subprocess.call(
-                    ['taskkill', '/F', '/T', '/PID', str(process.pid)])
+                subprocess.call(["taskkill", "/F", "/T", "/PID", str(process.pid)])
             else:
                 if subprocess_ids:
                     for subprocess_id in subprocess_ids:
@@ -654,9 +732,11 @@ def kill_subprocess(owner, process, timeout, subprocess_ids=None):
         if not is_windows() and time.time() - stime > timeout / 4:
             killsig = signal.SIGKILL
         if time.time() - stime > timeout:
-            printc("Could not kill %s subprocess after %s second"
-                   " Something is really wrong, => EXITING"
-                   % (owner, timeout), Colors.FAIL)
+            printc(
+                "Could not kill %s subprocess after %s second"
+                " Something is really wrong, => EXITING" % (owner, timeout),
+                Colors.FAIL,
+            )
 
             return
         res = process.poll()
@@ -669,20 +749,29 @@ def format_config_template(extra_data, config_text, test_name):
 
     extra_vars = extra_data.copy()
 
-    if 'validate-flow-expectations-dir' in extra_vars and \
-            'validate-flow-actual-results-dir' in extra_vars:
-        expectations_dir = os.path.join(extra_vars['validate-flow-expectations-dir'],
-                                        test_name.replace('.', os.sep))
-        actual_results_dir = os.path.join(extra_vars['validate-flow-actual-results-dir'],
-                                          test_name.replace('.', os.sep))
-        extra_vars['validateflow'] = "validateflow, expectations-dir=\"%s\", actual-results-dir=\"%s\"" % (
-            expectations_dir, actual_results_dir)
+    if (
+        "validate-flow-expectations-dir" in extra_vars
+        and "validate-flow-actual-results-dir" in extra_vars
+    ):
+        expectations_dir = os.path.join(
+            extra_vars["validate-flow-expectations-dir"], test_name.replace(".", os.sep)
+        )
+        actual_results_dir = os.path.join(
+            extra_vars["validate-flow-actual-results-dir"],
+            test_name.replace(".", os.sep),
+        )
+        extra_vars[
+            "validateflow"
+        ] = 'validateflow, expectations-dir="%s", actual-results-dir="%s"' % (
+            expectations_dir,
+            actual_results_dir,
+        )
 
-    if 'ssim-results-dir' in extra_vars:
-        ssim_results = extra_vars['ssim-results-dir']
-        extra_vars['ssim'] = "validatessim, result-output-dir=\"%s\", output-dir=\"%s\"" % (
-            os.path.join(ssim_results, test_name.replace('.', os.sep), 'diff-images'),
-            os.path.join(ssim_results, test_name.replace('.', os.sep), 'images'),
+    if "ssim-results-dir" in extra_vars:
+        ssim_results = extra_vars["ssim-results-dir"]
+        extra_vars["ssim"] = 'validatessim, result-output-dir="%s", output-dir="%s"' % (
+            os.path.join(ssim_results, test_name.replace(".", os.sep), "diff-images"),
+            os.path.join(ssim_results, test_name.replace(".", os.sep), "images"),
         )
 
     return config_text % extra_vars
@@ -691,7 +780,7 @@ def format_config_template(extra_data, config_text, test_name):
 def get_fakesink_for_media_type(media_type, needs_clock=False):
     extra = ""
     if media_type == "video" and needs_clock:
-        extra = 'max-lateness=20000000'
+        extra = "max-lateness=20000000"
 
     return f"fake{media_type}sink sync={needs_clock} {extra}"
 
@@ -701,27 +790,31 @@ class InvalidValueError(ValueError):
 
     def __init__(self, name, value, expect):
         ValueError.__init__(
-            self, "Invalid value {!r} for {}. Expect {}.".format(
-                value, name, expect))
+            self, "Invalid value {!r} for {}. Expect {}.".format(value, name, expect)
+        )
 
 
 def wrong_type_for_arg(val, expect_type_name, arg_name):
     """Raise exception in response to a wrong argument type"""
     raise TypeError(
         "Expect a {} type for the '{}' argument. Received a {} type."
-        "".format(expect_type_name, arg_name, type(val).__name__))
+        "".format(expect_type_name, arg_name, type(val).__name__)
+    )
 
 
 class DeserializeError(Exception):
     """Receive an incorrectly serialized value"""
+
     MAX_LEN = 20
 
     def __init__(self, read, reason):
         if len(read) > self.MAX_LEN:
-            read = read[:self.MAX_LEN] + "..."
+            read = read[: self.MAX_LEN] + "..."
         Exception.__init__(
-            self, "Could not deserialize the string ({}) because it {}."
-            "".format(read, reason))
+            self,
+            "Could not deserialize the string ({}) because it {}."
+            "".format(read, reason),
+        )
 
 
 class GstStructure(Loggable):
@@ -766,9 +859,12 @@ class GstStructure(Loggable):
     STRING_TYPE = "string"
     STRUCTURE_TYPE = "structure"
     CAPS_TYPE = "GstCaps"
-    KNOWN_TYPES = INT_TYPES + UINT_TYPES + FLOAT_TYPES + (
-        BOOLEAN_TYPE, FRACTION_TYPE, STRING_TYPE, STRUCTURE_TYPE,
-        CAPS_TYPE)
+    KNOWN_TYPES = (
+        INT_TYPES
+        + UINT_TYPES
+        + FLOAT_TYPES
+        + (BOOLEAN_TYPE, FRACTION_TYPE, STRING_TYPE, STRUCTURE_TYPE, CAPS_TYPE)
+    )
 
     TYPE_ALIAS = {
         "i": "int",
@@ -785,7 +881,7 @@ class GstStructure(Loggable):
         "GstFraction": FRACTION_TYPE,
         "str": STRING_TYPE,
         "s": STRING_TYPE,
-        "GstStructure": STRUCTURE_TYPE
+        "GstStructure": STRUCTURE_TYPE,
     }
 
     def __init__(self, name=None, fields=None):
@@ -809,11 +905,10 @@ class GstStructure(Loggable):
                     entry = tuple(entry)
                 except (TypeError, ValueError):
                     raise TypeError(
-                        "Expect dict to be filled with tuple-like "
-                        "entries")
+                        "Expect dict to be filled with tuple-like " "entries"
+                    )
             if len(entry) != 2:
-                raise TypeError(
-                    "Expect dict to be filled with 2-entry tuples")
+                raise TypeError("Expect dict to be filled with 2-entry tuples")
             self.set(key, *entry)
 
     def __repr__(self):
@@ -828,11 +923,11 @@ class GstStructure(Loggable):
 
     @classmethod
     def _is_unknown_type(cls, _type):
-        return _type[:len(cls.UNKNOWN_PREFIX)] == cls.UNKNOWN_PREFIX
+        return _type[: len(cls.UNKNOWN_PREFIX)] == cls.UNKNOWN_PREFIX
 
     @classmethod
     def _get_unknown_type(cls, _type):
-        return _type[len(cls.UNKNOWN_PREFIX):]
+        return _type[len(cls.UNKNOWN_PREFIX) :]
 
     def _field_to_str(self, key):
         """Return field in a serialized form"""
@@ -840,8 +935,7 @@ class GstStructure(Loggable):
         if type(key) is not str:
             raise TypeError("Found a key that is not a str type")
         if type(_type) is not str:
-            raise TypeError(
-                "Found a type name that is not a str type")
+            raise TypeError("Found a type name that is not a str type")
         self._check_key(key)
         _type = self.TYPE_ALIAS.get(_type, _type)
         if self._is_unknown_type(_type):
@@ -888,8 +982,8 @@ class GstStructure(Loggable):
     def _val_type_err(typ, val, expect):
         raise TypeError(
             "Received value ({!s}) is a {} rather than a {}, even "
-            "though the {} type was given".format(
-                val, type(val).__name__, expect, typ))
+            "though the {} type was given".format(val, type(val).__name__, expect, typ)
+        )
 
     def set(self, key, _type, value):
         """Set a field to the given typed value"""
@@ -920,8 +1014,10 @@ class GstStructure(Loggable):
                     self._val_type_err(_type, value, "int")
                 if value < 0:
                     raise InvalidValueError(
-                        "value", value, "a positive integer for {} "
-                        "types".format(_type))
+                        "value",
+                        value,
+                        "a positive integer for {} " "types".format(_type),
+                    )
             elif _type in self.FLOAT_TYPES:
                 type_is_unknown = False
                 if type(value) is not float:
@@ -939,8 +1035,10 @@ class GstStructure(Loggable):
                         Fraction(value)
                     except ValueError:
                         raise InvalidValueError(
-                            "value", value, "a fraction for the {} "
-                            "types".format(_type))
+                            "value",
+                            value,
+                            "a fraction for the {} " "types".format(_type),
+                        )
                 else:
                     self._val_type_err(_type, value, "Fraction or str")
             elif _type == self.STRING_TYPE:
@@ -957,10 +1055,12 @@ class GstStructure(Loggable):
                     self._val_type_err(_type, value, "GstCaps")
         if type_is_unknown:
             self._check_unknown_typed_value(value)
-            warning('GstStructure',
-                    "The GstStructure type {} with the value ({}) is "
-                    "unknown. The value will be stored and serialized as "
-                    "given.".format(_type, value))
+            warning(
+                "GstStructure",
+                "The GstStructure type {} with the value ({}) is "
+                "unknown. The value will be stored and serialized as "
+                "given.".format(_type, value),
+            )
             _type = self._make_type_unknown(_type)
         self.fields[key] = (_type, value)
 
@@ -985,10 +1085,13 @@ class GstStructure(Loggable):
             if expect_type == type_name:
                 value = self.get_value(key)
                 return value
-            warning('GstStructure',
-                    "The structure {} contains a value under {}, but is "
-                    "a {}, rather than the expected {} type".format(
-                        self.name, key, type_name, expect_type))
+            warning(
+                "GstStructure",
+                "The structure {} contains a value under {}, but is "
+                "a {}, rather than the expected {} type".format(
+                    self.name, key, type_name, expect_type
+                ),
+            )
         return default
 
     def values(self):
@@ -1003,8 +1106,11 @@ class GstStructure(Loggable):
         if type(_type) is not str:
             wrong_type_for_arg(_type, "str", "_type")
         _type = self.TYPE_ALIAS.get(_type, _type)
-        return [self.get_value(key) for key in self.fields
-                if self.get_type_name(key) == _type]
+        return [
+            self.get_value(key)
+            for key in self.fields
+            if self.get_type_name(key) == _type
+        ]
 
     ASCII_SPACES = r"(\\?[ \t\n\r\f\v])*"
     END_FORMAT = r"(?P<end>" + ASCII_SPACES + r")"
@@ -1016,8 +1122,7 @@ class GstStructure(Loggable):
     # NOTE: GstStructure technically allows more general keys, but
     # these can break the parsing.
     TYPE_FORMAT = r"(?P<type>" + SIMPLE_STRING + r")"
-    BASIC_VALUE_FORMAT = \
-        r'(?P<value>("(\\.|[^"])*")|(' + SIMPLE_STRING + r'))'
+    BASIC_VALUE_FORMAT = r'(?P<value>("(\\.|[^"])*")|(' + SIMPLE_STRING + r"))"
     # consume simple string or a string between quotes. Second will
     # consume anything that is escaped, including a '"'
     # NOTE: \\. is used rather than \\" since:
@@ -1032,8 +1137,10 @@ class GstStructure(Loggable):
     def _check_against_regex(check, regex, name):
         if not regex.fullmatch(check):
             raise InvalidValueError(
-                name, check, "to match the regular expression {}"
-                "".format(regex.pattern))
+                name,
+                check,
+                "to match the regular expression {}" "".format(regex.pattern),
+            )
         return check
 
     NAME_REGEX = re.compile(NAME_FORMAT)
@@ -1061,47 +1168,54 @@ class GstStructure(Loggable):
             ret_type, ret_val, _ = cls._parse_value(value, False)
         except DeserializeError as err:
             raise InvalidValueError(
-                "value", value, "unknown-typed values to be in a "
-                "serialized format ({!s})".format(err))
+                "value",
+                value,
+                "unknown-typed values to be in a "
+                "serialized format ({!s})".format(err),
+            )
         else:
             if ret_type is not None:
                 raise InvalidValueError(
-                    "value", value, "unknown-typed values to *not* "
+                    "value",
+                    value,
+                    "unknown-typed values to *not* "
                     "start with a type specification, only the "
-                    "serialized value should be given")
+                    "serialized value should be given",
+                )
             if ret_val != value:
                 raise InvalidValueError(
-                    "value", value, "unknown-typed values to be the "
-                    "same as its parsed value {}".format(ret_val))
+                    "value",
+                    value,
+                    "unknown-typed values to be the "
+                    "same as its parsed value {}".format(ret_val),
+                )
 
-    PARSE_NAME_REGEX = re.compile(
-        ASCII_SPACES + NAME_FORMAT + END_FORMAT)
+    PARSE_NAME_REGEX = re.compile(ASCII_SPACES + NAME_FORMAT + END_FORMAT)
 
     @classmethod
     def _parse_name(cls, read):
         match = cls.PARSE_NAME_REGEX.match(read)
         if match is None:
-            raise DeserializeError(
-                read, "does not start with a correct name")
+            raise DeserializeError(read, "does not start with a correct name")
         name = match.group("name")
-        read = read[match.end("end"):]
+        read = read[match.end("end") :]
         return name, read
 
     @classmethod
     def _parse_range_list_array(cls, read):
         start = read[0]
-        end = {'[': ']', '{': '}', '<': '>'}.get(start)
+        end = {"[": "]", "{": "}", "<": ">"}.get(start)
         read = read[1:]
-        values = [start, ' ']
+        values = [start, " "]
         first = True
         while read and read[0] != end:
             if first:
                 first = False
             else:
-                if read and read[0] != ',':
+                if read and read[0] != ",":
                     DeserializeError(
-                        read, "does not contain a comma between listed "
-                        "items")
+                        read, "does not contain a comma between listed " "items"
+                    )
                 values.append(", ")
                 read = read[1:]
             _type, value, read = cls._parse_value(read, False)
@@ -1109,26 +1223,31 @@ class GstStructure(Loggable):
                 if cls._is_unknown_type(_type):
                     # remove unknown marker for serialization
                     _type = cls._get_unknown_type(_type)
-                values.extend(('(', _type, ')'))
+                values.extend(("(", _type, ")"))
             values.append(value)
         if not read:
-            raise DeserializeError(
-                read, "ended before {} could be found".format(end))
+            raise DeserializeError(read, "ended before {} could be found".format(end))
         read = read[1:]  # skip past 'end'
         match = cls.END_REGEX.match(read)  # skip whitespace
-        read = read[match.end("end"):]
+        read = read[match.end("end") :]
         # NOTE: we are ignoring the incorrect cases where a range
         # has 0, 1 or 4+ values! This is the users responsiblity.
-        values.extend((' ', end))
+        values.extend((" ", end))
         return "".join(values), read
 
     FIELD_START_REGEX = re.compile(
-        ASCII_SPACES + KEY_FORMAT + ASCII_SPACES + r"=" + END_FORMAT)
+        ASCII_SPACES + KEY_FORMAT + ASCII_SPACES + r"=" + END_FORMAT
+    )
     FIELD_TYPE_REGEX = re.compile(
-        ASCII_SPACES + r"(\(" + ASCII_SPACES + TYPE_FORMAT
-        + ASCII_SPACES + r"\))?" + END_FORMAT)
-    FIELD_VALUE_REGEX = re.compile(
-        ASCII_SPACES + BASIC_VALUE_FORMAT + END_FORMAT)
+        ASCII_SPACES
+        + r"(\("
+        + ASCII_SPACES
+        + TYPE_FORMAT
+        + ASCII_SPACES
+        + r"\))?"
+        + END_FORMAT
+    )
+    FIELD_VALUE_REGEX = re.compile(ASCII_SPACES + BASIC_VALUE_FORMAT + END_FORMAT)
     END_REGEX = re.compile(END_FORMAT)
 
     @classmethod
@@ -1139,12 +1258,11 @@ class GstStructure(Loggable):
         _type = match.group("type")
         if _type is None and deserialize:
             # if deserialize is False, the (type) is optional
-            raise DeserializeError(
-                read, "does not contain a valid '(type)' format")
+            raise DeserializeError(read, "does not contain a valid '(type)' format")
         _type = cls.TYPE_ALIAS.get(_type, _type)
         type_is_unknown = True
-        read = read[match.end("end"):]
-        if read and read[0] in ('[', '{', '<'):
+        read = read[match.end("end") :]
+        if read and read[0] in ("[", "{", "<"):
             # range/list/array types
             # this is an unknown type, even though _type itself may
             # be known. e.g. a list on integers will have _type as 'int'
@@ -1154,16 +1272,17 @@ class GstStructure(Loggable):
             if deserialize:
                 # prevent printing on subsequent calls if we find a
                 # list within a list, etc.
-                warning('GstStructure',
-                        "GstStructure received a range/list/array of type "
-                        "{}, which can not be deserialized. Storing the "
-                        "value as {}.".format(_type, value))
+                warning(
+                    "GstStructure",
+                    "GstStructure received a range/list/array of type "
+                    "{}, which can not be deserialized. Storing the "
+                    "value as {}.".format(_type, value),
+                )
         else:
             match = cls.FIELD_VALUE_REGEX.match(read)
             if match is None:
-                raise DeserializeError(
-                    read, "does not have a valid value format")
-            read = read[match.end("end"):]
+                raise DeserializeError(read, "does not have a valid value format")
+            read = read[match.end("end") :]
             value = match.group("value")
             if deserialize:
                 if _type in cls.KNOWN_TYPES:
@@ -1172,14 +1291,17 @@ class GstStructure(Loggable):
                         value = cls.deserialize_value(_type, value)
                     except DeserializeError as err:
                         raise DeserializeError(
-                            read, "contains an invalid typed value "
-                            "({!s})".format(err))
+                            read,
+                            "contains an invalid typed value " "({!s})".format(err),
+                        )
                 else:
-                    warning('GstStructure',
-                            "GstStructure found a type {} that is unknown. "
-                            "The corresponding value ({}) will not be "
-                            "deserialized and will be stored as given."
-                            "".format(_type, value))
+                    warning(
+                        "GstStructure",
+                        "GstStructure found a type {} that is unknown. "
+                        "The corresponding value ({}) will not be "
+                        "deserialized and will be stored as given."
+                        "".format(_type, value),
+                    )
         if type_is_unknown and _type is not None:
             _type = cls._make_type_unknown(_type)
         return _type, value, read
@@ -1188,10 +1310,9 @@ class GstStructure(Loggable):
     def _parse_field(cls, read):
         match = cls.FIELD_START_REGEX.match(read)
         if match is None:
-            raise DeserializeError(
-                read, "does not have a valid 'key=...' format")
+            raise DeserializeError(read, "does not have a valid 'key=...' format")
         key = match.group("key")
-        read = read[match.end("end"):]
+        read = read[match.end("end") :]
         _type, value, read = cls._parse_value(read)
         return key, _type, value, read
 
@@ -1200,10 +1321,9 @@ class GstStructure(Loggable):
         if type(read) is not str:
             wrong_type_for_arg(read, "str", "read")
         fields = {}
-        while read and read[0] != ';':
-            if read and read[0] != ',':
-                DeserializeError(
-                    read, "does not separate fields with commas")
+        while read and read[0] != ";":
+            if read and read[0] != ",":
+                DeserializeError(read, "does not separate fields with commas")
             read = read[1:]
             key, _type, value, read = cls._parse_field(read)
             fields[key] = (_type, value)
@@ -1228,8 +1348,7 @@ class GstStructure(Loggable):
 
     @staticmethod
     def _val_read_err(typ, val):
-        raise DeserializeError(
-            val, "does not translated to the {} type".format(typ))
+        raise DeserializeError(val, "does not translated to the {} type".format(typ))
 
     @classmethod
     def deserialize_value(cls, _type, value):
@@ -1266,26 +1385,27 @@ class GstStructure(Loggable):
                 value = cls.deserialize_string(value)
             except DeserializeError as err:
                 raise DeserializeError(
-                    value, "does not translate to a string ({!s})"
-                    "".format(err))
+                    value, "does not translate to a string ({!s})" "".format(err)
+                )
         elif _type == cls.STRUCTURE_TYPE:
             try:
                 value = cls.deserialize_structure(value)
             except DeserializeError as err:
                 raise DeserializeError(
-                    value, "does not translate to a GstStructure ({!s})"
-                    "".format(err))
+                    value, "does not translate to a GstStructure ({!s})" "".format(err)
+                )
         elif _type == cls.CAPS_TYPE:
             try:
                 value = cls.deserialize_caps(value)
             except DeserializeError as err:
                 raise DeserializeError(
-                    value, "does not translate to a GstCaps ({!s})"
-                    "".format(err))
+                    value, "does not translate to a GstCaps ({!s})" "".format(err)
+                )
         else:
             raise ValueError(
                 "The type {} is unknown, so the value ({}) can not "
-                "be deserialized.".format(_type, value))
+                "be deserialized.".format(_type, value)
+            )
         return value
 
     @classmethod
@@ -1294,8 +1414,9 @@ class GstStructure(Loggable):
         if type(_type) is not str:
             wrong_type_for_arg(_type, "str", "_type")
         _type = cls.TYPE_ALIAS.get(_type, _type)
-        if _type in cls.INT_TYPES + cls.UINT_TYPES + cls.FLOAT_TYPES \
-                + (cls.FRACTION_TYPE, ):
+        if _type in cls.INT_TYPES + cls.UINT_TYPES + cls.FLOAT_TYPES + (
+            cls.FRACTION_TYPE,
+        ):
             return str(value)
         if _type == cls.BOOLEAN_TYPE:
             return cls.serialize_boolean(value)
@@ -1307,11 +1428,13 @@ class GstStructure(Loggable):
             return cls.serialize_caps(value)
         raise ValueError(
             "The type {} is unknown, so the value ({}) can not be "
-            "serialized.".format(_type, str(value)))
+            "serialized.".format(_type, str(value))
+        )
 
     # see GST_ASCII_IS_STRING in gst_private.h
     GST_ASCII_CHARS = [
-        ord(line) for line in "abcdefghijklmnopqrstuvwxyz"
+        ord(line)
+        for line in "abcdefghijklmnopqrstuvwxyz"
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         "0123456789"
         "_-+/:."
@@ -1335,7 +1458,7 @@ class GstStructure(Loggable):
         if read is None:
             return "NULL"
         if read == "NULL":
-            return "\"NULL\""
+            return '"NULL"'
         if type(read) is bytes:
             pass
         elif type(read) is str:
@@ -1349,7 +1472,7 @@ class GstStructure(Loggable):
         for byte in read:
             if byte in cls.GST_ASCII_CHARS:
                 ser_string_list.append(chr(byte))
-            elif byte < 0x20 or byte >= 0x7f:
+            elif byte < 0x20 or byte >= 0x7F:
                 ser_string_list.append("\\{:03o}".format(byte))
                 added_wrap = True
             else:
@@ -1393,8 +1516,7 @@ class GstStructure(Loggable):
 
         byte = next_byte()
         if byte != ord('"'):
-            raise DeserializeError(
-                read, "does not start with '\"', but ends with '\"'")
+            raise DeserializeError(read, "does not start with '\"', but ends with '\"'")
         while True:
             byte = next_byte()
             if byte in cls.GST_ASCII_CHARS:
@@ -1406,35 +1528,39 @@ class GstStructure(Loggable):
                     # expect there to be no more bytes
                     break
                 raise DeserializeError(
-                    read, "contains an un-escaped '\"' before the end")
-            elif byte == ord('\\'):
+                    read, "contains an un-escaped '\"' before the end"
+                )
+            elif byte == ord("\\"):
                 byte = next_byte()
                 if byte in cls.LEADING_OCTAL_CHARS:
                     # could be the start of an octal
                     byte2 = next_byte()
                     byte3 = next_byte()
                     if byte2 in cls.OCTAL_CHARS and byte3 in cls.OCTAL_CHARS:
-                        nums = [b - ord('0') for b in (byte, byte2, byte3)]
+                        nums = [b - ord("0") for b in (byte, byte2, byte3)]
                         byte = (nums[0] << 6) + (nums[1] << 3) + nums[2]
                         byte_list.append(byte)
                     else:
                         raise DeserializeError(
-                            read, "contains the start of an octal "
-                            "sequence but not the end")
+                            read,
+                            "contains the start of an octal "
+                            "sequence but not the end",
+                        )
                 else:
                     if byte == 0:
                         raise DeserializeError(
-                            read, "contains a null byte after an escape")
+                            read, "contains a null byte after an escape"
+                        )
                     byte_list.append(byte)
             else:
                 raise DeserializeError(
-                    read, "contains an unexpected un-escaped character")
+                    read, "contains an unexpected un-escaped character"
+                )
         out_str = bytes(bytearray(byte_list))
         try:
             return out_str.decode()
         except (UnicodeError, ValueError):
-            raise DeserializeError(
-                read, "contains invalid utf-8 byte sequences")
+            raise DeserializeError(read, "contains invalid utf-8 byte sequences")
 
     @staticmethod
     def serialize_boolean(value):
@@ -1501,8 +1627,8 @@ class GstStructure(Loggable):
                 # reverse of the serialization method.
             except DeserializeError as err:
                 raise DeserializeError(
-                    read, "could not be unwrapped as a string ({!s})"
-                    "".format(err))
+                    read, "could not be unwrapped as a string ({!s})" "".format(err)
+                )
         return GstStructure.new_from_str(read)
 
     @classmethod
@@ -1532,8 +1658,8 @@ class GstStructure(Loggable):
                 read = cls._unwrap_string(read)
             except DeserializeError as err:
                 raise DeserializeError(
-                    read, "could not be unwrapped as a string ({!s})"
-                    "".format(err))
+                    read, "could not be unwrapped as a string ({!s})" "".format(err)
+                )
         return GstCaps.new_from_str(read)
 
     @staticmethod
@@ -1552,8 +1678,8 @@ class GstStructure(Loggable):
         # and '"'.
         escaped = ['"']
         for character in read:
-            if character in ('"', '\\'):
-                escaped.append('\\')
+            if character in ('"', "\\"):
+                escaped.append("\\")
             escaped.append(character)
         escaped.append('"')
         return "".join(escaped)
@@ -1580,14 +1706,14 @@ class GstStructure(Loggable):
             character = next_char()
             if character == '"':
                 break
-            if character == '\\':
+            if character == "\\":
                 unescaped.append(next_char())
             else:
                 unescaped.append(character)
         return "".join(unescaped)
 
 
-class GstCapsFeatures():
+class GstCapsFeatures:
     """
     Mimicking a GstCapsFeatures.
     """
@@ -1630,11 +1756,13 @@ class GstCapsFeatures():
     def _check_feature(cls, feature):
         if not cls.FEATURE_REGEX.fullmatch(feature):
             raise InvalidValueError(
-                "feature", feature, "to match the regular expression "
-                "{}".format(cls.FEATURE_REGEX.pattern))
+                "feature",
+                feature,
+                "to match the regular expression "
+                "{}".format(cls.FEATURE_REGEX.pattern),
+            )
 
-    PARSE_FEATURE_REGEX = re.compile(
-        r" *" + FEATURE_FORMAT + "(?P<end>)")
+    PARSE_FEATURE_REGEX = re.compile(r" *" + FEATURE_FORMAT + "(?P<end>)")
 
     @classmethod
     def new_from_str(cls, read):
@@ -1654,17 +1782,18 @@ class GstCapsFeatures():
             if first:
                 first = False
             else:
-                if read[0] != ',':
-                    DeserializeError(
-                        read, "does not separate features with commas")
+                if read[0] != ",":
+                    DeserializeError(read, "does not separate features with commas")
                 read = read[1:]
             match = cls.PARSE_FEATURE_REGEX.match(read)
             if match is None:
                 raise DeserializeError(
-                    read, "does not match the regular expression {}"
-                    "".format(cls.PARSE_FEATURE_REGEX.pattern))
+                    read,
+                    "does not match the regular expression {}"
+                    "".format(cls.PARSE_FEATURE_REGEX.pattern),
+                )
             features.append(match.group("feature"))
-            read = read[match.end("end"):]
+            read = read[match.end("end") :]
         return cls(*features)
 
     def __repr__(self):
@@ -1689,8 +1818,7 @@ class GstCapsFeatures():
         first = True
         for feature in self.features:
             if type(feature) is not str:
-                raise TypeError(
-                    "Found a feature that is not a str type")
+                raise TypeError("Found a feature that is not a str type")
             if first:
                 first = False
             else:
@@ -1717,8 +1845,7 @@ class GstCaps:
         GstStructure or GstCapsFeatures.
         """
         if len(structs) % 2:
-            raise InvalidValueError(
-                "*structs", structs, "an even number of arguments")
+            raise InvalidValueError("*structs", structs, "an even number of arguments")
         self.flags = 0
         self.structs = []
         struct = None
@@ -1757,8 +1884,13 @@ class GstCaps:
 
     FEATURES_FORMAT = r"\((?P<features>[^)]*)\)"
     NAME_FEATURES_REGEX = re.compile(
-        GstStructure.ASCII_SPACES + GstStructure.NAME_FORMAT
-        + r"(" + FEATURES_FORMAT + r")?" + GstStructure.END_FORMAT)
+        GstStructure.ASCII_SPACES
+        + GstStructure.NAME_FORMAT
+        + r"("
+        + FEATURES_FORMAT
+        + r")?"
+        + GstStructure.END_FORMAT
+    )
 
     @classmethod
     def new_from_str(cls, read):
@@ -1791,9 +1923,11 @@ class GstCaps:
             match = cls.NAME_FEATURES_REGEX.match(read)
             if match is None:
                 raise DeserializeError(
-                    read, "does not match the regular expression {}"
-                    "".format(cls.NAME_FEATURE_REGEX.pattern))
-            read = read[match.end("end"):]
+                    read,
+                    "does not match the regular expression {}"
+                    "".format(cls.NAME_FEATURE_REGEX.pattern),
+                )
+            read = read[match.end("end") :]
             name = match.group("name")
             features = match.group("features")
             # NOTE: features may be None since the features part of the
@@ -1854,6 +1988,5 @@ class GstCaps:
         if features is None:
             features = GstCapsFeatures()
         if not isinstance(features, GstCapsFeatures):
-            wrong_type_for_arg(
-                features, "GstCapsFeatures or None", "features")
+            wrong_type_for_arg(features, "GstCapsFeatures or None", "features")
         self.structs.append((structure, features))
