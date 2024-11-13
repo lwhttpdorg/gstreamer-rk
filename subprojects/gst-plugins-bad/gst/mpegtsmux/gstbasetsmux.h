@@ -163,13 +163,14 @@ struct GstBaseTsMux {
   guint pcr_interval;
   guint scte35_pid;
   guint scte35_null_interval;
-  guint32 last_scte35_event_seqnum;
 
   /* state */
   gboolean first;
   GstClockTime pending_key_unit_ts;
   GstEvent *force_key_unit_event;
   GstMpegtsSection *pending_scte35_section;
+  guint32 last_scte35_event_seqnum;
+  GstAggregatorPad *prefered_scte35_pad;
 
   /* write callback handling/state */
   GstFlowReturn last_flow_ret;
