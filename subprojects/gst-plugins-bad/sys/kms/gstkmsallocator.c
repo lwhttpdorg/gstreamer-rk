@@ -95,6 +95,21 @@ check_fd (GstKMSAllocator * alloc)
   return alloc->priv->fd > -1;
 }
 
+static void
+gst_kms_allocator_fix_format (GstVideoInfo * info, guint32 drmfmt)
+{
+  guint width = GST_VIDEO_INFO_WIDTH (info);
+  guint height = GST_VIDEO_INFO_HEIGHT (info);
+
+  if (drmfmt == DRM_FORMAT_NV15) {
+    info->stride[0] = GST_ROUND_UP_4 (width * 5 / 4);
+    info->stride[1] = info->stride[0];
+    info->offset[0] = 0;
+    info->offset[1] = info->stride[0] * height;
+    info->size = info->offset[1] + info->stride[0] * height / 2;
+  }
+}
+
 static gboolean
 gst_kms_allocator_memory_create (GstKMSAllocator * allocator,
     GstKMSMemory * kmsmem, GstVideoInfo * vinfo)
@@ -364,6 +379,8 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   w = GST_VIDEO_INFO_WIDTH (vinfo);
   h = GST_VIDEO_INFO_HEIGHT (vinfo);
   fmt = gst_drm_format_from_video (GST_VIDEO_INFO_FORMAT (vinfo));
+
+  gst_kms_allocator_fix_format (vinfo, fmt);
 
   for (i = 0; i < num_planes; i++) {
     pitches[i] = GST_VIDEO_INFO_PLANE_STRIDE (vinfo, i);
