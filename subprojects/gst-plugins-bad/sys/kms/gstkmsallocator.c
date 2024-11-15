@@ -403,6 +403,7 @@ gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
   GstKMSMemory *kmsmem;
   GstMemory *mem;
   guint32 bo_handle[4] = { 0, };
+  guint64 modifier;
   gint i;
 
   kmsmem = g_new0 (GstKMSMemory, 1);
@@ -422,8 +423,10 @@ gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++)
     bo_handle[i] = gst_drm_dumb_memory_get_handle (kmsmem->bo);
 
+  gst_video_dma_drm_format_from_gst_format(GST_VIDEO_INFO_FORMAT (vinfo), &modifier);
+
   if (!gst_kms_allocator_add_fb (alloc, kmsmem, vinfo->offset, vinfo,
-          DRM_FORMAT_MOD_LINEAR, bo_handle))
+          modifier, bo_handle))
     goto fail;
 
   return mem;
