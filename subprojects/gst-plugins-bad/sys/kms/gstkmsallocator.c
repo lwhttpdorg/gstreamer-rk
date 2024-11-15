@@ -356,6 +356,7 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   guint32 w, h, fmt;
   guint32 pitches[4] = { 0, };
   guint32 offsets[4] = { 0, };
+  guint64 modifiers[4] = {DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR};
 
   if (kmsmem->fb_id)
     return TRUE;
@@ -367,25 +368,18 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   for (i = 0; i < num_planes; i++) {
     pitches[i] = GST_VIDEO_INFO_PLANE_STRIDE (vinfo, i);
     offsets[i] = in_offsets[i];
+    modifiers[i] = modifier;
   }
 
   GST_DEBUG_OBJECT (alloc, "bo handles: %d, %d, %d, %d", bo_handles[0],
       bo_handles[1], bo_handles[2], bo_handles[3]);
+  GST_DEBUG_OBJECT (alloc, "bo pitches: %d, %d, %d, %d", pitches[0],
+      pitches[1], pitches[2], pitches[3]);
+  GST_DEBUG_OBJECT (alloc, "bo modifiers: 0x%lx, 0x%lx, 0x%lx, 0x%lx", modifiers[0],
+      modifiers[1], modifiers[2], modifiers[3]);
 
-  if (modifier != DRM_FORMAT_MOD_LINEAR) {
-    guint64 modifiers[4];
-
-    for (i = 0; i < num_planes; i++)
-      modifiers[i] = modifier;
-    for (; i < 4; i++)
-      modifiers[i] = DRM_FORMAT_MOD_LINEAR;
-
-    ret = drmModeAddFB2WithModifiers (alloc->priv->fd, w, h, fmt, bo_handles,
-        pitches, offsets, modifiers, &kmsmem->fb_id, DRM_MODE_FB_MODIFIERS);
-  } else {
-    ret = drmModeAddFB2 (alloc->priv->fd, w, h, fmt, bo_handles, pitches,
-        offsets, &kmsmem->fb_id, 0);
-  }
+  ret = drmModeAddFB2WithModifiers (alloc->priv->fd, w, h, fmt, bo_handles,
+          pitches, offsets, modifiers, &kmsmem->fb_id, DRM_MODE_FB_MODIFIERS);
 
   if (ret) {
     GST_ERROR_OBJECT (alloc, "Failed to bind to framebuffer: %s (%d)",
