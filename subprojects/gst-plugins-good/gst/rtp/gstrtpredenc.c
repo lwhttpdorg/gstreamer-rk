@@ -92,6 +92,12 @@ enum
   PROP_ALLOW_NO_RED_BLOCKS
 };
 
+typedef struct
+{
+  GstRtpRedEnc *red;
+  GstFlowReturn ret;
+} RedEncListData;
+
 static void
 rtp_hist_item_init (RTPHistItem * item, GstRTPBuffer * rtp,
     GstBuffer * rtp_payload)
@@ -307,8 +313,8 @@ _red_history_trim (GstRtpRedEnc * self, guint max_history_length)
     rtp_hist_item_free (g_queue_pop_tail (self->rtp_history));
 }
 
-static GstFlowReturn
-_pad_push (GstRtpRedEnc * self, GstBuffer * buffer, gboolean is_red)
+static void
+_pre_pad_push (GstRtpRedEnc * self, gboolean is_red)
 {
   if (self->send_caps || is_red != self->is_current_caps_red) {
     GstEvent *event;
@@ -323,7 +329,20 @@ _pad_push (GstRtpRedEnc * self, GstBuffer * buffer, gboolean is_red)
     self->send_caps = FALSE;
     self->is_current_caps_red = is_red;
   }
+}
+
+static GstFlowReturn
+_pad_push (GstRtpRedEnc * self, GstBuffer * buffer, gboolean is_red)
+{
+  _pre_pad_push (self, is_red);
   return gst_pad_push (self->srcpad, buffer);
+}
+
+static GstFlowReturn
+_pad_push_list (GstRtpRedEnc * self, GstBufferList * list, gboolean is_red)
+{
+  _pre_pad_push (self, is_red);
+  return gst_pad_push_list (self->srcpad, list);
 }
 
 static GstFlowReturn
@@ -356,18 +375,12 @@ _push_red_packet (GstRtpRedEnc * self,
 }
 
 static GstFlowReturn
-gst_rtp_red_enc_chain (GstPad G_GNUC_UNUSED * pad, GstObject * parent,
-    GstBuffer * buffer)
+rtp_red_enc_process_buffer (GstRtpRedEnc * self, GstBuffer * buffer)
 {
-  GstRtpRedEnc *self = GST_RTP_RED_ENC (parent);
   guint distance = self->distance;
   guint only_with_redundant_data = !self->allow_no_red_blocks;
   RTPHistItem *redundant_block;
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-
-  /* We need to "trim" the history if 'distance' property has changed */
-  _red_history_trim (self, distance);
-
   if (0 == distance && only_with_redundant_data)
     return _pad_push (self, buffer, FALSE);
 
@@ -382,6 +395,47 @@ gst_rtp_red_enc_chain (GstPad G_GNUC_UNUSED * pad, GstObject * parent,
 
   /* About to create RED packet with or without redundant data */
   return _push_red_packet (self, &rtp, buffer, redundant_block, distance);
+}
+
+static gboolean
+rtp_red_enc_process_list_buffer (GstBuffer ** buffer, guint idx,
+    gpointer userdata)
+{
+  RedEncListData *data = (RedEncListData *) userdata;
+  data->ret = rtp_red_enc_process_buffer (data->red, *buffer);
+  return data->ret == GST_FLOW_OK;
+}
+
+static GstFlowReturn
+gst_rtp_red_enc_chain_list (GstPad G_GNUC_UNUSED * pad, GstObject * parent,
+    GstBufferList * list)
+{
+  GstRtpRedEnc *self = GST_RTP_RED_ENC (parent);
+  guint distance = self->distance;
+  guint only_with_redundant_data = !self->allow_no_red_blocks;
+
+  /* We need to "trim" the history if 'distance' property has changed */
+  _red_history_trim (self, distance);
+
+  if (0 == distance && only_with_redundant_data) {
+    return _pad_push_list (self, list, FALSE);
+  }
+  RedEncListData data = { self, GST_FLOW_OK };
+  gst_buffer_list_foreach (list, rtp_red_enc_process_list_buffer, &data);
+  return data.ret;
+}
+
+static GstFlowReturn
+gst_rtp_red_enc_chain (GstPad G_GNUC_UNUSED * pad, GstObject * parent,
+    GstBuffer * buffer)
+{
+  GstRtpRedEnc *self = GST_RTP_RED_ENC (parent);
+  guint distance = self->distance;
+
+  /* We need to "trim" the history if 'distance' property has changed */
+  _red_history_trim (self, distance);
+
+  return rtp_red_enc_process_buffer (self, buffer);
 }
 
 static guint8
@@ -467,6 +521,8 @@ gst_rtp_red_enc_init (GstRtpRedEnc * self)
   self->sinkpad = gst_pad_new_from_template (pad_template, "sink");
   gst_pad_set_chain_function (self->sinkpad,
       GST_DEBUG_FUNCPTR (gst_rtp_red_enc_chain));
+  gst_pad_set_chain_list_function (self->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_rtp_red_enc_chain_list));
   gst_pad_set_event_function (self->sinkpad,
       GST_DEBUG_FUNCPTR (gst_rtp_red_enc_event_sink));
   GST_PAD_SET_PROXY_CAPS (self->sinkpad);
