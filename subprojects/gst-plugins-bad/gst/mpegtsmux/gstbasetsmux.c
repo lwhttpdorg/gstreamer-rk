@@ -257,7 +257,8 @@ enum
   PROP_PCR_INTERVAL,
   PROP_SCTE_35_PID,
   PROP_SCTE_35_NULL_INTERVAL,
-  PROP_ENABLE_CUSTOM_MAPPINGS
+  PROP_ENABLE_CUSTOM_MAPPINGS,
+  PROP_CLOCK_OFFSET,
 };
 
 #define DEFAULT_SCTE_35_PID 0
@@ -265,14 +266,13 @@ enum
 
 #define BASETSMUX_DEFAULT_ALIGNMENT    -1
 
-#define CLOCK_BASE 9LL
-#define CLOCK_FREQ (CLOCK_BASE * 10000) /* 90 kHz PTS clock */
-#define CLOCK_FREQ_SCR (CLOCK_FREQ * 300)       /* 27 MHz SCR clock */
-#define TS_MUX_CLOCK_BASE (TSMUX_CLOCK_FREQ * 10 * 360)
+#define CLOCK_FREQ TSMUX_CLOCK_FREQ     /* 90 kHz PTS clock */
+#define CLOCK_FREQ_SCR TSMUX_SYS_CLOCK_FREQ     /* 27 MHz SCR clock */
+#define DEFAULT_CLOCK_OFFSET (TSMUX_CLOCK_FREQ * 10 * 360)
 
 #define GSTTIME_TO_MPEGTIME(time) \
     (((time) > 0 ? (gint64) 1 : (gint64) -1) * \
-    (gint64) gst_util_uint64_scale (ABS(time), CLOCK_BASE, GST_MSECOND/10))
+    (gint64) gst_util_uint64_scale (ABS(time), 9LL, GST_MSECOND/10))
 /* 27 MHz SCR conversions: */
 #define MPEG_SYS_TIME_TO_GSTTIME(time) (gst_util_uint64_scale ((time), \
                         GST_USECOND, CLOCK_FREQ_SCR / 1000000))
@@ -2046,7 +2046,7 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
           if (sevent->program_splice_time_specified)
             sevent->program_splice_time =
                 GSTTIME_TO_MPEGTIME (sevent->program_splice_time) +
-                TS_MUX_CLOCK_BASE;
+                mux->clock_offset;
 
           if (sevent->duration_flag)
             sevent->break_duration =
@@ -2083,7 +2083,7 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
                   GST_TIME_ARGS (running_time));
               request_keyframe (mux, running_time);
               sevent->program_splice_time =
-                  GSTTIME_TO_MPEGTIME (running_time) + TS_MUX_CLOCK_BASE;
+                  GSTTIME_TO_MPEGTIME (running_time) + mux->clock_offset;
             }
           } else {
             GST_DEBUG_OBJECT (mux,
@@ -2160,7 +2160,7 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
             g_assert (translate);
             running_time = sit->splice_time;
             sit->splice_time =
-                GSTTIME_TO_MPEGTIME (running_time) + TS_MUX_CLOCK_BASE;
+                GSTTIME_TO_MPEGTIME (running_time) + mux->clock_offset;
             if (do_request_keyframes) {
               GST_DEBUG_OBJECT (mux,
                   "Requesting keyframe for time signal at %" GST_TIME_FORMAT,
@@ -2197,7 +2197,7 @@ handle_scte35_section (GstBaseTsMux * mux, GstEvent * event,
      *   and the GStreamer PTS output by tsdemux
      * - Our own 1-hour offset
      */
-    pts_adjust = sit->pts_adjustment + mpeg_pts_offset + TS_MUX_CLOCK_BASE;
+    pts_adjust = sit->pts_adjustment + mpeg_pts_offset + mux->clock_offset;
 
     /* Account for offsets potentially introduced between the demuxer and us */
     pts_adjust +=
@@ -2920,6 +2920,13 @@ gst_base_ts_mux_set_property (GObject * object, guint prop_id,
     case PROP_ENABLE_CUSTOM_MAPPINGS:
       mux->enable_custom_mappings = g_value_get_boolean (value);
       break;
+    case PROP_CLOCK_OFFSET:
+      mux->clock_offset = g_value_get_int64 (value);
+      g_mutex_lock (&mux->lock);
+      if (mux->tsmux)
+        tsmux_set_clock_offset (mux->tsmux, mux->clock_offset);
+      g_mutex_unlock (&mux->lock);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2963,6 +2970,9 @@ gst_base_ts_mux_get_property (GObject * object, guint prop_id,
     case PROP_ENABLE_CUSTOM_MAPPINGS:
       g_value_set_boolean (value, mux->enable_custom_mappings);
       break;
+    case PROP_CLOCK_OFFSET:
+      g_value_set_int64 (value, mux->clock_offset);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2981,6 +2991,7 @@ gst_base_ts_mux_default_create_ts_mux (GstBaseTsMux * mux)
   tsmux_set_si_interval (tsmux, mux->si_interval);
   tsmux_set_bitrate (tsmux, mux->bitrate);
   tsmux_set_pcr_interval (tsmux, mux->pcr_interval);
+  tsmux_set_clock_offset (tsmux, mux->clock_offset);
 
   return tsmux;
 }
@@ -3131,6 +3142,20 @@ gst_base_ts_mux_class_init (GstBaseTsMuxClass * klass)
           DEFAULT_ENABLE_CUSTOM_MAPPINGS,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
+  /**
+   * GstBaseTsMux:clock-offset:
+   *
+   * Offset to use to generate the resulting mpeg-ts PTS/DTS/PCR values (in
+   * 90kHz clock value).
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_CLOCK_OFFSET,
+      g_param_spec_int64 ("clock-offset", "MPEG-TS Clock Offset",
+          "Offset (in 90kHz units) to add to the incoming running time to generate PTS/DTS/PCR",
+          0, G_MAXINT64, DEFAULT_CLOCK_OFFSET,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   gst_element_class_add_static_pad_template_with_gtype (gstelement_class,
       &gst_base_ts_mux_src_factory, GST_TYPE_AGGREGATOR_PAD);
 
@@ -3153,6 +3178,7 @@ gst_base_ts_mux_init (GstBaseTsMux * mux)
   mux->scte35_pid = DEFAULT_SCTE_35_PID;
   mux->scte35_null_interval = TSMUX_DEFAULT_SCTE_35_NULL_INTERVAL;
   mux->enable_custom_mappings = DEFAULT_ENABLE_CUSTOM_MAPPINGS;
+  mux->clock_offset = DEFAULT_CLOCK_OFFSET;
 
   mux->packet_size = GST_BASE_TS_MUX_NORMAL_PACKET_LENGTH;
   mux->automatic_alignment = 0;

@@ -188,6 +188,9 @@ struct TsMux {
   guint8 pid_packet_counts[8192];
 
   gint64 first_pcr_ts;
+
+  /* Global offset for PCR/PTS/DTS (in 90kHz units) */
+  gint64 clock_offset;
 };
 
 /* create/free new muxer session */
@@ -200,6 +203,8 @@ void 		tsmux_set_alloc_func 		(TsMux *mux, TsMuxAllocFunc func, void *user_data)
 void    tsmux_set_new_stream_func (TsMux * mux, TsMuxNewStreamFunc func, void *user_data);
 void 		tsmux_set_pat_interval          (TsMux *mux, guint interval);
 guint 		tsmux_get_pat_interval          (TsMux *mux);
+void 	        tsmux_set_clock_offset          (TsMux *mux, gint64 clock_offset);
+gint64          tsmux_get_clock_offset          (TsMux *mux);
 void 		tsmux_resend_pat                (TsMux *mux);
 guint16		tsmux_get_new_pid 		(TsMux *mux);
 void    tsmux_set_bitrate       (TsMux *mux, guint64 bitrate);

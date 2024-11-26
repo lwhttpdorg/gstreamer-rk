@@ -155,6 +155,8 @@ struct GstBaseTsMux {
 
   /* properties */
   GstStructure *prog_map;
+  /* Clock base (in 90kHz units) */
+  gint64 clock_offset;
   guint pat_interval;
   guint pmt_interval;
   gint alignment;
