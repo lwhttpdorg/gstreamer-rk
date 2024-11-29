@@ -1421,7 +1421,7 @@ gst_base_parse_sink_event_default (GstBaseParse * parse, GstEvent * event)
       /* If we STILL have zero frames processed, fire an error */
       if (parse->priv->framecount == 0 && !parse->priv->saw_gaps &&
           !parse->priv->first_buffer) {
-        GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
+        GST_ELEMENT_WARNING (parse, STREAM, WRONG_TYPE,
             ("No valid frames found before end of stream"), (NULL));
       }
 
@@ -3691,7 +3691,7 @@ pause:
       } else {
         /* If we STILL have zero frames processed, fire an error */
         if (parse->priv->framecount == 0) {
-          GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
+          GST_ELEMENT_WARNING (parse, STREAM, WRONG_TYPE,
               ("No valid frames found before end of stream"), (NULL));
         }
         push_eos = TRUE;
