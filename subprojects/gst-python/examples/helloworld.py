@@ -1,14 +1,17 @@
 #!/usr/bin/env python
-
+from __future__ import annotations
 import sys
 
+# To have autocompletion in editors run:
+# $ pip install pygobject-stubs
+# (It includes pre-made GObject Introspection stubs for GStreamer.)
 import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GLib', '2.0')
-from gi.repository import GLib, Gst
+from gi.repository import GLib, Gst  # type: ignore
 
 
-def bus_call(bus, message, loop):
+def bus_call(bus: Gst.Bus, message: Gst.Message, loop: GLib.MainLoop):
     t = message.type
     if t == Gst.MessageType.EOS:
         sys.stdout.write("End-of-stream\n")
@@ -20,7 +23,7 @@ def bus_call(bus, message, loop):
     return True
 
 
-def main(args):
+def main(args: list[str]):
     if len(args) != 2:
         sys.stderr.write("usage: %s <media file or uri>\n" % args[0])
         sys.exit(1)
@@ -41,16 +44,18 @@ def main(args):
 
     # create and event loop and feed gstreamer bus mesages to it
     loop = GLib.MainLoop()
+    assert loop is not None
 
     bus = playbin.get_bus()
+    assert bus is not None
     bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
 
     # start play back and listed to events
     playbin.set_state(Gst.State.PLAYING)
     try:
-        loop.run()
-    except e:
+        loop.run()  # type: ignore
+    except (KeyboardInterrupt, BrokenPipeError):
         pass
 
     # cleanup
