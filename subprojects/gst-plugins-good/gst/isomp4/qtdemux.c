@@ -233,7 +233,9 @@ struct _QtDemuxCencSampleSetInfo
 {
   GstStructure *default_properties;
 
-  /* sample groups */
+  /* Sample groups. Track and fragment group properties arrays own the
+     structures while sample_to_group_map holds just not owned references (the
+     ownership is in track or fragment group properties array). */
   GPtrArray *track_group_properties;
   GPtrArray *fragment_group_properties;
   GPtrArray *sample_to_group_map;
@@ -2602,7 +2604,7 @@ gst_qtdemux_stream_clear (QtDemuxStream * stream)
       if (info->track_group_properties)
         g_ptr_array_free (info->track_group_properties, TRUE);
       if (info->sample_to_group_map)
-        g_ptr_array_free (info->sample_to_group_map, FALSE);
+        g_ptr_array_free (info->sample_to_group_map, TRUE);
     }
     if (stream->protection_scheme_type == FOURCC_aavd) {
       QtDemuxAavdEncryptionInfo *info =
@@ -3833,7 +3835,7 @@ qtdemux_get_cenc_sample_properties (GstQTDemux * qtdemux,
 static gboolean
 qtdemux_parse_sbgp (GstQTDemux * qtdemux, QtDemuxStream * stream,
     GstByteReader * br, guint32 group, GPtrArray ** sample_to_group_array,
-    GstStructure * default_properties, GPtrArray * tack_properties_array,
+    GstStructure * default_properties, GPtrArray * track_properties_array,
     GPtrArray * group_properties_array)
 {
   guint32 flags = 0;
@@ -3899,8 +3901,8 @@ qtdemux_parse_sbgp (GstQTDemux * qtdemux, QtDemuxStream * stream,
     } else if (index > 0) {
       /* Index is referring to the whole track. */
       index--;
-      if (index < tack_properties_array->len)
-        properties = g_ptr_array_index (tack_properties_array, index);
+      if (index < track_properties_array->len)
+        properties = g_ptr_array_index (track_properties_array, index);
       else
         GST_ERROR_OBJECT (qtdemux, "invalid group index %u", index);
     } else {
@@ -3971,7 +3973,9 @@ qtdemux_parse_sgpd (GstQTDemux * qtdemux, QtDemuxStream * stream,
       "', count: %u", flags, GST_FOURCC_ARGS (grouping_type), count);
 
   if (count)
-    *properties = g_ptr_array_sized_new (count);
+    *properties =
+        g_ptr_array_new_full (count,
+        (GDestroyNotify) qtdemux_gst_structure_free);
 
   for (guint32 index = 0; index < count; index++) {
     GstStructure *props = NULL;
@@ -4457,7 +4461,7 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
       }
 
       if (info->sample_to_group_map) {
-        g_ptr_array_free (info->sample_to_group_map, FALSE);
+        g_ptr_array_free (info->sample_to_group_map, TRUE);
         info->sample_to_group_map = NULL;
       }
 
@@ -14105,8 +14109,8 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak)
     GstByteReader sgpd_data;
 
     if (info->track_group_properties) {
-      g_ptr_array_free (info->fragment_group_properties, TRUE);
-      info->fragment_group_properties = NULL;
+      g_ptr_array_free (info->track_group_properties, TRUE);
+      info->track_group_properties = NULL;
     }
 
     sgpd_node = qtdemux_tree_get_child_by_type_full (stbl, FOURCC_sgpd,
