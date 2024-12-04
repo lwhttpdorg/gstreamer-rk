@@ -44,8 +44,14 @@ typedef enum
   GST_PLAY_TRICK_MODE_DEFAULT_NO_AUDIO,
   GST_PLAY_TRICK_MODE_KEY_UNITS,
   GST_PLAY_TRICK_MODE_KEY_UNITS_NO_AUDIO,
-  GST_PLAY_TRICK_MODE_INSTANT_RATE,
-  GST_PLAY_TRICK_MODE_LAST
+  GST_PLAY_TRICK_MODE_LAST,
+
+  /* The instant-rate setting is a flag,
+   * applied on top of the trick-mode enum value.
+   * It needs to have a 2^n value bigger than
+   * any of the enum values so setting it
+   * won't affect the trickmode value */
+  GST_PLAY_TRICK_MODE_INSTANT_RATE = (1 << 3)
 } GstPlayTrickMode;
 
 struct _GESLauncherPrivate
@@ -78,13 +84,13 @@ static const gchar *HELP_SUMMARY =
     "  By default, ges-launch-1.0 is in \"playback-mode\".";
 
 static gboolean
-play_do_seek (GESLauncher * self, gint64 pos, gdouble rate,
+play_do_seek (GESLauncher *self, gint64 pos, gdouble rate,
     GstPlayTrickMode mode)
 {
   GstSeekFlags seek_flags;
   GstEvent *seek;
 
-  seek_flags = 0;
+  seek_flags = GST_SEEK_FLAG_NONE;
 
   switch (mode) {
     case GST_PLAY_TRICK_MODE_DEFAULT:
@@ -118,14 +124,16 @@ play_do_seek (GESLauncher * self, gint64 pos, gdouble rate,
 
   /* No instant rate change, need to do a flushing seek */
   seek_flags |= GST_SEEK_FLAG_FLUSH;
+
+  /* Doing accurate seeks */
+  seek_flags |= GST_SEEK_FLAG_ACCURATE;
+
   if (rate >= 0)
-    seek = gst_event_new_seek (rate, GST_FORMAT_TIME,
-        seek_flags | GST_SEEK_FLAG_ACCURATE,
+    seek = gst_event_new_seek (rate, GST_FORMAT_TIME, seek_flags,
         /* start */ GST_SEEK_TYPE_SET, pos,
         /* stop */ GST_SEEK_TYPE_SET, GST_CLOCK_TIME_NONE);
   else
-    seek = gst_event_new_seek (rate, GST_FORMAT_TIME,
-        seek_flags | GST_SEEK_FLAG_ACCURATE,
+    seek = gst_event_new_seek (rate, GST_FORMAT_TIME, seek_flags,
         /* start */ GST_SEEK_TYPE_SET, 0,
         /* stop */ GST_SEEK_TYPE_SET, pos);
 
@@ -134,7 +142,7 @@ play_do_seek (GESLauncher * self, gint64 pos, gdouble rate,
 
 done:
   self->priv->rate = rate;
-  self->priv->trick_mode = mode & (mode | ~GST_PLAY_TRICK_MODE_INSTANT_RATE);
+  self->priv->trick_mode = mode & ~GST_PLAY_TRICK_MODE_INSTANT_RATE;
   return TRUE;
 }
 
@@ -145,7 +153,7 @@ restore_terminal (void)
 }
 
 static void
-toggle_paused (GESLauncher * self)
+toggle_paused (GESLauncher *self)
 {
   if (self->priv->desired_state == GST_STATE_PLAYING)
     self->priv->desired_state = GST_STATE_PAUSED;
@@ -157,7 +165,7 @@ toggle_paused (GESLauncher * self)
 }
 
 static void
-relative_seek (GESLauncher * self, gdouble percent)
+relative_seek (GESLauncher *self, gdouble percent)
 {
   gint64 pos = -1, step, dur;
 
@@ -196,7 +204,7 @@ seek_failed:
 }
 
 static gboolean
-play_set_rate_and_trick_mode (GESLauncher * self, gdouble rate,
+play_set_rate_and_trick_mode (GESLauncher *self, gdouble rate,
     GstPlayTrickMode mode)
 {
   gint64 pos = -1;
@@ -211,7 +219,7 @@ play_set_rate_and_trick_mode (GESLauncher * self, gdouble rate,
 }
 
 static void
-play_set_playback_rate (GESLauncher * self, gdouble rate)
+play_set_playback_rate (GESLauncher *self, gdouble rate)
 {
   GstPlayTrickMode mode = self->priv->trick_mode;
 
@@ -226,7 +234,7 @@ play_set_playback_rate (GESLauncher * self, gdouble rate)
 }
 
 static void
-play_set_relative_playback_rate (GESLauncher * self, gdouble rate_step,
+play_set_relative_playback_rate (GESLauncher *self, gdouble rate_step,
     gboolean reverse_direction)
 {
   gdouble new_rate = self->priv->rate + rate_step;
@@ -255,7 +263,7 @@ trick_mode_get_description (GstPlayTrickMode mode)
 }
 
 static void
-play_switch_trick_mode (GESLauncher * self)
+play_switch_trick_mode (GESLauncher *self)
 {
   GstPlayTrickMode new_mode = ++self->priv->trick_mode;
   const gchar *mode_desc;
@@ -313,8 +321,8 @@ print_keyboard_help (void)
 }
 
 static gboolean
-_parse_track_type (const gchar * option_name, const gchar * value,
-    GESLauncherParsedOptions * opts, GError ** error)
+_parse_track_type (const gchar *option_name, const gchar *value,
+    GESLauncherParsedOptions *opts, GError **error)
 {
   guint flags = 0;
 
@@ -328,8 +336,8 @@ _parse_track_type (const gchar * option_name, const gchar * value,
 
 #ifdef HAVE_GST_VALIDATE
 static gboolean
-_parse_test_file (const gchar * option_name, const gchar * value,
-    GESLauncherParsedOptions * opts, GError ** error)
+_parse_test_file (const gchar *option_name, const gchar *value,
+    GESLauncherParsedOptions *opts, GError **error)
 {
   opts->testfile = g_strdup (value);
   gst_validate_init_debug ();
@@ -339,7 +347,7 @@ _parse_test_file (const gchar * option_name, const gchar * value,
 #endif
 
 static gboolean
-_set_track_restriction_caps (GESTrack * track, const gchar * caps_str)
+_set_track_restriction_caps (GESTrack *track, const gchar *caps_str)
 {
   GstCaps *caps;
 
@@ -362,7 +370,7 @@ _set_track_restriction_caps (GESTrack * track, const gchar * caps_str)
 }
 
 static void
-_set_restriction_caps (GESTimeline * timeline, GESLauncherParsedOptions * opts)
+_set_restriction_caps (GESTimeline *timeline, GESLauncherParsedOptions *opts)
 {
   GList *tmp, *tracks = ges_timeline_get_tracks (timeline);
 
@@ -378,7 +386,7 @@ _set_restriction_caps (GESTimeline * timeline, GESLauncherParsedOptions * opts)
 }
 
 static void
-_set_track_forward_tags (const GValue * item, gpointer unused)
+_set_track_forward_tags (const GValue *item, gpointer unused)
 {
   GstElement *comp = g_value_get_object (item);
 
@@ -386,8 +394,7 @@ _set_track_forward_tags (const GValue * item, gpointer unused)
 }
 
 static void
-_set_tracks_forward_tags (GESTimeline * timeline,
-    GESLauncherParsedOptions * opts)
+_set_tracks_forward_tags (GESTimeline *timeline, GESLauncherParsedOptions *opts)
 {
   GList *tmp, *tracks;
 
@@ -411,7 +418,7 @@ _set_tracks_forward_tags (GESTimeline * timeline,
 }
 
 static void
-_check_has_audio_video (GESLauncher * self, gint * n_audio, gint * n_video)
+_check_has_audio_video (GESLauncher *self, gint *n_audio, gint *n_video)
 {
   GList *tmp, *tracks = ges_timeline_get_tracks (self->priv->timeline);
 
@@ -443,7 +450,7 @@ sort_encoding_profiles (gconstpointer a, gconstpointer b)
 }
 
 static GList *
-_timeline_assets (GESLauncher * self)
+_timeline_assets (GESLauncher *self)
 {
   GList *tmp, *assets = NULL;
 
@@ -463,7 +470,7 @@ _timeline_assets (GESLauncher * self)
 }
 
 static GESAsset *
-_asset_for_named_clip (GESLauncher * self, const gchar * name)
+_asset_for_named_clip (GESLauncher *self, const gchar *name)
 {
   GList *tmp;
   GESAsset *ret = NULL;
@@ -489,7 +496,7 @@ _asset_for_named_clip (GESLauncher * self, const gchar * name)
 }
 
 static GstEncodingProfile *
-_get_profile_from (GESLauncher * self)
+_get_profile_from (GESLauncher *self)
 {
   GESAsset *asset =
       _asset_for_named_clip (self, self->priv->parsed_options.profile_from);
@@ -505,7 +512,7 @@ _get_profile_from (GESLauncher * self)
 }
 
 static GstEncodingProfile *
-get_smart_profile (GESLauncher * self)
+get_smart_profile (GESLauncher *self)
 {
   gint n_audio, n_video;
   GList *tmp, *assets, *possible_profiles = NULL;
@@ -575,8 +582,8 @@ get_smart_profile (GESLauncher * self)
 }
 
 static void
-disable_bframe_for_smart_rendering_cb (GstBin * bin, GstBin * sub_bin,
-    GstElement * child)
+disable_bframe_for_smart_rendering_cb (GstBin *bin, GstBin *sub_bin,
+    GstElement *child)
 {
   GstElementFactory *factory = gst_element_get_factory (child);
 
@@ -587,7 +594,7 @@ disable_bframe_for_smart_rendering_cb (GstBin * bin, GstBin * sub_bin,
 }
 
 static gboolean
-_set_rendering_details (GESLauncher * self)
+_set_rendering_details (GESLauncher *self)
 {
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
   gboolean smart_profile = FALSE;
@@ -749,7 +756,7 @@ done:
 }
 
 static void
-_track_set_mixing (GESTrack * track, GESLauncherParsedOptions * opts)
+_track_set_mixing (GESTrack *track, GESLauncherParsedOptions *opts)
 {
   static gboolean printed_mixing_disabled = FALSE;
 
@@ -762,8 +769,8 @@ _track_set_mixing (GESTrack * track, GESLauncherParsedOptions * opts)
 }
 
 static gboolean
-_timeline_set_user_options (GESLauncher * self, GESTimeline * timeline,
-    const gchar * load_path)
+_timeline_set_user_options (GESLauncher *self, GESTimeline *timeline,
+    const gchar *load_path)
 {
   GList *tmp;
   GESTrack *tracka, *trackv;
@@ -863,8 +870,8 @@ retry:
 }
 
 static void
-_project_loading_error_cb (GESProject * project, GESTimeline * timeline,
-    GError * error, GESLauncher * self)
+_project_loading_error_cb (GESProject *project, GESTimeline *timeline,
+    GError *error, GESLauncher *self)
 {
   ges_printerr ("Error loading timeline: '%s'\n", error->message);
   self->priv->seenerrors = TRUE;
@@ -873,8 +880,8 @@ _project_loading_error_cb (GESProject * project, GESTimeline * timeline,
 }
 
 static void
-_project_loaded_cb (GESProject * project, GESTimeline * timeline,
-    GESLauncher * self)
+_project_loaded_cb (GESProject *project, GESTimeline *timeline,
+    GESLauncher *self)
 {
   gchar *project_uri = NULL;
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
@@ -955,8 +962,8 @@ _project_loaded_cb (GESProject * project, GESTimeline * timeline,
 }
 
 static void
-_error_loading_asset_cb (GESProject * project, GError * error,
-    const gchar * failed_id, GType extractable_type, GESLauncher * self)
+_error_loading_asset_cb (GESProject *project, GError *error,
+    const gchar *failed_id, GType extractable_type, GESLauncher *self)
 {
   ges_printerr ("Error loading asset %s: %s\n", failed_id, error->message);
   self->priv->seenerrors = TRUE;
@@ -965,8 +972,8 @@ _error_loading_asset_cb (GESProject * project, GError * error,
 }
 
 static gboolean
-_create_timeline (GESLauncher * self, const gchar * serialized_timeline,
-    const gchar * proj_uri, gboolean validate)
+_create_timeline (GESLauncher *self, const gchar *serialized_timeline,
+    const gchar *proj_uri, gboolean validate)
 {
   GESProject *project;
 
@@ -1003,7 +1010,7 @@ _create_timeline (GESLauncher * self, const gchar * serialized_timeline,
 typedef void (*SetSinkFunc) (GESPipeline * pipeline, GstElement * element);
 
 static gboolean
-_set_sink (GESLauncher * self, const gchar * sink_desc, SetSinkFunc set_func)
+_set_sink (GESLauncher *self, const gchar *sink_desc, SetSinkFunc set_func)
 {
   if (sink_desc != NULL) {
     GError *err = NULL;
@@ -1024,7 +1031,7 @@ _set_sink (GESLauncher * self, const gchar * sink_desc, SetSinkFunc set_func)
 }
 
 static gboolean
-_set_playback_details (GESLauncher * self)
+_set_playback_details (GESLauncher *self)
 {
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
 
@@ -1036,7 +1043,7 @@ _set_playback_details (GESLauncher * self)
 }
 
 static void
-bus_message_cb (GstBus * bus, GstMessage * message, GESLauncher * self)
+bus_message_cb (GstBus *bus, GstMessage *message, GESLauncher *self)
 {
   switch (GST_MESSAGE_TYPE (message)) {
     case GST_MESSAGE_WARNING:{
@@ -1097,7 +1104,7 @@ bus_message_cb (GstBus * bus, GstMessage * message, GESLauncher * self)
 
 #ifdef G_OS_UNIX
 static gboolean
-intr_handler (GESLauncher * self)
+intr_handler (GESLauncher *self)
 {
   gst_print ("interrupt received.\n");
 
@@ -1112,7 +1119,7 @@ intr_handler (GESLauncher * self)
 #endif /* G_OS_UNIX */
 
 static gboolean
-_save_timeline (GESLauncher * self)
+_save_timeline (GESLauncher *self)
 {
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
 
@@ -1166,7 +1173,7 @@ _save_timeline (GESLauncher * self)
 }
 
 static gboolean
-_run_pipeline (GESLauncher * self)
+_run_pipeline (GESLauncher *self)
 {
   GstBus *bus;
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
@@ -1212,7 +1219,7 @@ _run_pipeline (GESLauncher * self)
 }
 
 static gboolean
-_create_pipeline (GESLauncher * self, const gchar * serialized_timeline)
+_create_pipeline (GESLauncher *self, const gchar *serialized_timeline)
 {
   gchar *uri = NULL;
   gboolean res = TRUE;
@@ -1292,7 +1299,7 @@ _print_transition_list (void)
 }
 
 static GOptionGroup *
-ges_launcher_get_project_option_group (GESLauncherParsedOptions * opts)
+ges_launcher_get_project_option_group (GESLauncherParsedOptions *opts)
 {
   GOptionGroup *group;
 
@@ -1320,7 +1327,7 @@ ges_launcher_get_project_option_group (GESLauncherParsedOptions * opts)
 }
 
 static GOptionGroup *
-ges_launcher_get_info_option_group (GESLauncherParsedOptions * opts)
+ges_launcher_get_info_option_group (GESLauncherParsedOptions *opts)
 {
   GOptionGroup *group;
 
@@ -1348,7 +1355,7 @@ ges_launcher_get_info_option_group (GESLauncherParsedOptions * opts)
 }
 
 static GOptionGroup *
-ges_launcher_get_rendering_option_group (GESLauncherParsedOptions * opts)
+ges_launcher_get_rendering_option_group (GESLauncherParsedOptions *opts)
 {
   GOptionGroup *group;
 
@@ -1397,7 +1404,7 @@ ges_launcher_get_rendering_option_group (GESLauncherParsedOptions * opts)
 }
 
 static GOptionGroup *
-ges_launcher_get_playback_option_group (GESLauncherParsedOptions * opts)
+ges_launcher_get_playback_option_group (GESLauncherParsedOptions *opts)
 {
   GOptionGroup *group;
 
@@ -1420,8 +1427,8 @@ ges_launcher_get_playback_option_group (GESLauncherParsedOptions * opts)
 }
 
 gboolean
-ges_launcher_parse_options (GESLauncher * self,
-    gchar ** arguments[], gint * argc, GOptionContext * ctx, GError ** error)
+ges_launcher_parse_options (GESLauncher *self,
+    gchar **arguments[], gint *argc, GOptionContext *ctx, GError **error)
 {
   gboolean res;
   GOptionGroup *main_group;
@@ -1569,8 +1576,8 @@ ges_launcher_parse_options (GESLauncher * self,
 }
 
 static gboolean
-_local_command_line (GApplication * application, gchar ** arguments[],
-    gint * exit_status)
+_local_command_line (GApplication *application, gchar **arguments[],
+    gint *exit_status)
 {
   gboolean res = TRUE;
   gint argc;
@@ -1627,7 +1634,7 @@ done:
 }
 
 static void
-keyboard_cb (const gchar * key_input, gpointer user_data)
+keyboard_cb (const gchar *key_input, gpointer user_data)
 {
   GESLauncher *self = (GESLauncher *) user_data;
   gchar key = '\0';
@@ -1689,7 +1696,7 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
 }
 
 static void
-_startup (GApplication * application)
+_startup (GApplication *application)
 {
   GESLauncher *self = GES_LAUNCHER (application);
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
@@ -1747,7 +1754,7 @@ failure:
 }
 
 static void
-_shutdown (GApplication * application)
+_shutdown (GApplication *application)
 {
   gint validate_res = 0;
   GESLauncher *self = GES_LAUNCHER (application);
@@ -1773,7 +1780,7 @@ _shutdown (GApplication * application)
 }
 
 static void
-_finalize (GObject * object)
+_finalize (GObject *object)
 {
   GESLauncher *self = GES_LAUNCHER (object);
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
@@ -1797,7 +1804,7 @@ _finalize (GObject * object)
 }
 
 static void
-ges_launcher_class_init (GESLauncherClass * klass)
+ges_launcher_class_init (GESLauncherClass *klass)
 {
   G_APPLICATION_CLASS (klass)->local_command_line = _local_command_line;
   G_APPLICATION_CLASS (klass)->startup = _startup;
@@ -1807,7 +1814,7 @@ ges_launcher_class_init (GESLauncherClass * klass)
 }
 
 static void
-ges_launcher_init (GESLauncher * self)
+ges_launcher_init (GESLauncher *self)
 {
   self->priv = ges_launcher_get_instance_private (self);
   self->priv->parsed_options.track_types =
@@ -1819,7 +1826,7 @@ ges_launcher_init (GESLauncher * self)
 }
 
 gint
-ges_launcher_get_exit_status (GESLauncher * self)
+ges_launcher_get_exit_status (GESLauncher *self)
 {
   return self->priv->seenerrors;
 }
