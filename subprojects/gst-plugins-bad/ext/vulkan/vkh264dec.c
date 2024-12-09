@@ -622,6 +622,17 @@ gst_vulkan_h264_decoder_new_sequence (GstH264Decoder * decoder,
 }
 
 static GstFlowReturn
+gst_vulkan_h264_decoder_new_picture_params (GstH264Decoder * decoder,
+    const GstH264PPS * pps)
+{
+  GstVulkanH264Decoder *self = GST_VULKAN_H264_DECODER (decoder);
+
+  self->need_params_update = TRUE;
+
+  return GST_FLOW_OK;
+}
+
+static GstFlowReturn
 gst_vulkan_h264_decoder_new_picture (GstH264Decoder * decoder,
     GstVideoCodecFrame * frame, GstH264Picture * picture)
 {
@@ -1320,4 +1331,6 @@ gst_vulkan_h264_decoder_class_init (GstVulkanH264DecoderClass * klass)
       GST_DEBUG_FUNCPTR (gst_vulkan_h264_decoder_end_picture);
   h264decoder_class->output_picture =
       GST_DEBUG_FUNCPTR (gst_vulkan_h264_decoder_output_picture);
+  h264decoder_class->new_picture_params =
+      GST_DEBUG_FUNCPTR (gst_vulkan_h264_decoder_new_picture_params);
 }
