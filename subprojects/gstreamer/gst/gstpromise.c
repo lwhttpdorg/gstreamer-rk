@@ -242,6 +242,41 @@ gst_promise_get_reply (GstPromise * promise)
 }
 
 /**
+ * gst_promise_take_reply:
+ * @promise: a #GstPromise
+ *
+ * Retrieve the reply set on @promise.  @promise must be in
+ * %GST_PROMISE_RESULT_REPLIED and the returned structure is owned by the caller.
+ *
+ * Returns: (transfer full) (nullable): The reply set on @promise
+ *
+ * Since: 1.26
+ */
+GstStructure *
+gst_promise_take_reply (GstPromise * promise)
+{
+  GstStructure *reply = NULL;
+
+  g_return_val_if_fail (promise != NULL, NULL);
+
+  g_mutex_lock (GST_PROMISE_LOCK (promise));
+  if (GST_PROMISE_RESULT (promise) != GST_PROMISE_RESULT_REPLIED) {
+    g_warning ("Promise result isn't REPLIED");
+    g_mutex_unlock (GST_PROMISE_LOCK (promise));
+    return NULL;
+  }
+
+  if (GST_PROMISE_REPLY (promise) != NULL)
+    gst_structure_set_parent_refcount (GST_PROMISE_REPLY (promise), NULL);
+  reply = GST_PROMISE_REPLY (promise);
+  GST_PROMISE_REPLY (promise) = NULL;
+
+  g_mutex_unlock (GST_PROMISE_LOCK (promise));
+
+  return reply;
+}
+
+/**
  * gst_promise_interrupt:
  * @promise: a #GstPromise
  *
