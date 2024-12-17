@@ -114,6 +114,8 @@ struct _GstX264Enc
   gint frame_packing;
   gboolean insert_vui;
   gint nal_hrd;
+  GString *roi_string;
+  GArray *rois;
 
   /* input description */
   GstVideoCodecState *input_state;

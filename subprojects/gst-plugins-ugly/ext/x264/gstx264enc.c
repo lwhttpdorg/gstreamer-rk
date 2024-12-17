@@ -113,6 +113,20 @@
 GST_DEBUG_CATEGORY_STATIC (x264_enc_debug);
 #define GST_CAT_DEFAULT x264_enc_debug
 
+typedef struct
+{
+  uint32_t self_size;
+  int32_t top;
+  int32_t bottom;
+  int32_t left;
+  int32_t right;
+  struct
+  {
+    int32_t num;
+    int32_t den;
+  } qoffset;
+} GstX264EncROI;
+
 enum AllowedSubsamplingFlags
 {
   ALLOW_400_8 = 1 << 0,
@@ -162,7 +176,7 @@ static GstX264EncVTable *vtable_8bit = NULL, *vtable_10bit = NULL;
 
 #ifdef HAVE_X264_ADDITIONAL_LIBRARIES
 static GstX264EncVTable *
-load_x264 (const gchar * filename)
+load_x264 (const gchar *filename)
 {
   GModule *module;
   GstX264EncVTable *vtable;
@@ -206,7 +220,7 @@ error:
 }
 
 static void
-unload_x264 (GstX264EncVTable * vtable)
+unload_x264 (GstX264EncVTable *vtable)
 {
   if (vtable->module) {
     g_module_close (vtable->module);
@@ -219,7 +233,7 @@ unload_x264 (GstX264EncVTable * vtable)
 #endif
 
 static gboolean
-gst_x264_enc_add_x264_chroma_format (GstStructure * s,
+gst_x264_enc_add_x264_chroma_format (GstStructure *s,
     enum AllowedSubsamplingFlags flags)
 {
   GValue fmts = G_VALUE_INIT;
@@ -423,6 +437,7 @@ enum
   ARG_FRAME_PACKING,
   ARG_INSERT_VUI,
   ARG_NAL_HRD,
+  ARG_ROI
 };
 
 #define ARG_THREADS_DEFAULT            0        /* 0 means 'auto' which is 1.5x number of CPU cores */
@@ -466,6 +481,7 @@ static GString *x264enc_defaults;
 #define ARG_FRAME_PACKING_DEFAULT      -1       /* automatic (none, or from input caps) */
 #define ARG_INSERT_VUI_DEFAULT         TRUE
 #define ARG_NAL_HRD_DEFAULT            0
+#define ARG_ROI_DEFAULT                NULL
 
 enum
 {
@@ -661,7 +677,7 @@ gst_x264_enc_psy_tune_get_type (void)
 }
 
 static void
-gst_x264_enc_build_tunings_string (GstX264Enc * x264enc)
+gst_x264_enc_build_tunings_string (GstX264Enc *x264enc)
 {
   int i = 1;
 
@@ -770,6 +786,10 @@ static void gst_x264_enc_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_x264_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
+static gboolean gst_x264_enc_setup_roi (GstX264Enc * encoder,
+    x264_picture_t * pic, const uint8_t * data, size_t size);
+static gboolean gst_x264_enc_parse_roi_string (GstX264Enc * encoder,
+    const gchar * roi_string);
 static gboolean x264_element_init (GstPlugin * plugin);
 
 typedef gboolean (*LoadPresetFunc) (GstPreset * preset, const gchar * name);
@@ -777,7 +797,7 @@ typedef gboolean (*LoadPresetFunc) (GstPreset * preset, const gchar * name);
 LoadPresetFunc parent_load_preset = NULL;
 
 static gboolean
-gst_x264_enc_load_preset (GstPreset * preset, const gchar * name)
+gst_x264_enc_load_preset (GstPreset *preset, const gchar *name)
 {
   GstX264Enc *enc = GST_X264_ENC (preset);
   gboolean res;
@@ -792,7 +812,7 @@ gst_x264_enc_load_preset (GstPreset * preset, const gchar * name)
 }
 
 static void
-gst_x264_enc_preset_interface_init (GstPresetInterface * iface)
+gst_x264_enc_preset_interface_init (GstPresetInterface *iface)
 {
   parent_load_preset = iface->load_preset;
   iface->load_preset = gst_x264_enc_load_preset;
@@ -827,7 +847,7 @@ GST_ELEMENT_REGISTER_DEFINE_CUSTOM (x264enc, x264_element_init)
 }
 
 static void
-check_formats (const gchar * str, enum AllowedSubsamplingFlags *flags)
+check_formats (const gchar *str, enum AllowedSubsamplingFlags *flags)
 {
   if (g_str_has_prefix (str, "high-4:4:4"))
     *flags |= ALLOW_444;
@@ -843,7 +863,7 @@ check_formats (const gchar * str, enum AllowedSubsamplingFlags *flags)
 
 /* allowed input caps depending on whether libx264 was built for 8 or 10 bits */
 static GstCaps *
-gst_x264_enc_sink_getcaps (GstVideoEncoder * enc, GstCaps * filter)
+gst_x264_enc_sink_getcaps (GstVideoEncoder *enc, GstCaps *filter)
 {
   GstCaps *supported_incaps;
   GstCaps *allowed;
@@ -935,7 +955,7 @@ done:
 }
 
 static gboolean
-gst_x264_enc_sink_query (GstVideoEncoder * enc, GstQuery * query)
+gst_x264_enc_sink_query (GstVideoEncoder *enc, GstQuery *query)
 {
   GstPad *pad = GST_VIDEO_ENCODER_SINK_PAD (enc);
   gboolean ret = FALSE;
@@ -966,7 +986,7 @@ gst_x264_enc_sink_query (GstVideoEncoder * enc, GstQuery * query)
 }
 
 static void
-gst_x264_enc_class_init (GstX264EncClass * klass)
+gst_x264_enc_class_init (GstX264EncClass *klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *element_class;
@@ -1229,6 +1249,12 @@ gst_x264_enc_class_init (GstX264EncClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_string_append_printf (x264enc_defaults, ":interlaced=%d",
       ARG_INTERLACED_DEFAULT);
+  g_object_class_install_property (gobject_class, ARG_ROI,
+      g_param_spec_string ("roi", "Region-Of-Interest",
+          "Region of Interest(s) as a semicolon-separated string",
+          NULL,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
+          GST_PARAM_MUTABLE_PLAYING));
 
   /**
    * x264enc:nal-hrd:
@@ -1339,7 +1365,7 @@ gst_x264_enc_log_callback (gpointer private, gint level, const char *format,
  * initialize structure
  */
 static void
-gst_x264_enc_init (GstX264Enc * encoder)
+gst_x264_enc_init (GstX264Enc *encoder)
 {
   /* properties */
   encoder->threads = ARG_THREADS_DEFAULT;
@@ -1382,6 +1408,8 @@ gst_x264_enc_init (GstX264Enc * encoder)
   encoder->frame_packing = ARG_FRAME_PACKING_DEFAULT;
   encoder->insert_vui = ARG_INSERT_VUI_DEFAULT;
   encoder->nal_hrd = ARG_NAL_HRD_DEFAULT;
+  encoder->roi_string = g_string_new (ARG_ROI_DEFAULT);
+  encoder->rois = g_array_new (FALSE, FALSE, sizeof (GstX264EncROI));
 
   encoder->bitrate_manager =
       gst_encoder_bitrate_profile_manager_new (ARG_BITRATE_DEFAULT);
@@ -1394,8 +1422,8 @@ typedef struct
 } FrameData;
 
 static FrameData *
-gst_x264_enc_queue_frame (GstX264Enc * enc, GstVideoCodecFrame * frame,
-    GstVideoInfo * info)
+gst_x264_enc_queue_frame (GstX264Enc *enc, GstVideoCodecFrame *frame,
+    GstVideoInfo *info)
 {
   GstVideoFrame vframe;
   FrameData *fdata;
@@ -1413,7 +1441,7 @@ gst_x264_enc_queue_frame (GstX264Enc * enc, GstVideoCodecFrame * frame,
 }
 
 static void
-gst_x264_enc_dequeue_frame (GstX264Enc * enc, GstVideoCodecFrame * frame)
+gst_x264_enc_dequeue_frame (GstX264Enc *enc, GstVideoCodecFrame *frame)
 {
   GList *l;
 
@@ -1433,7 +1461,7 @@ gst_x264_enc_dequeue_frame (GstX264Enc * enc, GstVideoCodecFrame * frame)
 }
 
 static void
-gst_x264_enc_dequeue_all_frames (GstX264Enc * enc)
+gst_x264_enc_dequeue_all_frames (GstX264Enc *enc)
 {
   GList *l;
 
@@ -1449,7 +1477,7 @@ gst_x264_enc_dequeue_all_frames (GstX264Enc * enc)
 }
 
 static gboolean
-gst_x264_enc_start (GstVideoEncoder * encoder)
+gst_x264_enc_start (GstVideoEncoder *encoder)
 {
   GstX264Enc *x264enc = GST_X264_ENC (encoder);
 
@@ -1463,7 +1491,7 @@ gst_x264_enc_start (GstVideoEncoder * encoder)
 }
 
 static gboolean
-gst_x264_enc_stop (GstVideoEncoder * encoder)
+gst_x264_enc_stop (GstVideoEncoder *encoder)
 {
   GstX264Enc *x264enc = GST_X264_ENC (encoder);
 
@@ -1480,7 +1508,7 @@ gst_x264_enc_stop (GstVideoEncoder * encoder)
 
 
 static gboolean
-gst_x264_enc_flush (GstVideoEncoder * encoder)
+gst_x264_enc_flush (GstVideoEncoder *encoder)
 {
   GstX264Enc *x264enc = GST_X264_ENC (encoder);
 
@@ -1494,7 +1522,7 @@ gst_x264_enc_flush (GstVideoEncoder * encoder)
 }
 
 static void
-gst_x264_enc_finalize (GObject * object)
+gst_x264_enc_finalize (GObject *object)
 {
   GstX264Enc *encoder = GST_X264_ENC (object);
 
@@ -1516,6 +1544,10 @@ gst_x264_enc_finalize (GObject * object)
   g_free (encoder->mp_cache_file);
   encoder->mp_cache_file = NULL;
 
+  if (encoder->rois) {
+    g_array_free (encoder->rois, TRUE);
+  }
+
   gst_x264_enc_close_encoder (encoder);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -1530,7 +1562,7 @@ gst_x264_enc_finalize (GObject * object)
  *
  */
 static gboolean
-gst_x264_enc_parse_options (GstX264Enc * encoder, const gchar * str)
+gst_x264_enc_parse_options (GstX264Enc *encoder, const gchar *str)
 {
   GStrv kvpairs;
   guint npairs, i;
@@ -1571,7 +1603,7 @@ gst_x264_enc_parse_options (GstX264Enc * encoder, const gchar * str)
 }
 
 static gint
-gst_x264_enc_gst_to_x264_video_format (GstVideoFormat format, gint * nplanes)
+gst_x264_enc_gst_to_x264_video_format (GstVideoFormat format, gint *nplanes)
 {
   switch (format) {
     case GST_VIDEO_FORMAT_GRAY8:
@@ -1623,7 +1655,7 @@ gst_x264_enc_gst_to_x264_video_format (GstVideoFormat format, gint * nplanes)
  *
  */
 static gboolean
-gst_x264_enc_init_encoder (GstX264Enc * encoder)
+gst_x264_enc_init_encoder (GstX264Enc *encoder)
 {
   guint pass = 0;
   GstVideoInfo *info;
@@ -1979,7 +2011,7 @@ unlock_and_return:
  * Close x264 encoder.
  */
 static void
-gst_x264_enc_close_encoder (GstX264Enc * encoder)
+gst_x264_enc_close_encoder (GstX264Enc *encoder)
 {
   if (encoder->x264enc != NULL) {
     encoder->vtable->x264_encoder_close (encoder->x264enc);
@@ -1990,8 +2022,8 @@ gst_x264_enc_close_encoder (GstX264Enc * encoder)
 
 #ifndef GST_DISABLE_GST_DEBUG
 static void
-gst_x264_enc_parse_sei_userdata_unregistered (GstX264Enc * encoder,
-    guint8 * sei, guint len, guint8 * uuid)
+gst_x264_enc_parse_sei_userdata_unregistered (GstX264Enc *encoder,
+    guint8 *sei, guint len, guint8 *uuid)
 {
   GstByteReader br;
   guint32 payloadType;
@@ -2055,7 +2087,7 @@ failed:
 #endif /* GST_DISABLE_GST_DEBUG */
 
 static gboolean
-gst_x264_enc_set_profile_and_level (GstX264Enc * encoder, GstCaps * caps)
+gst_x264_enc_set_profile_and_level (GstX264Enc *encoder, GstCaps *caps)
 {
   x264_nal_t *nal;
   int i_nal;
@@ -2167,7 +2199,7 @@ no_peer:
  * Returns: Buffer with the stream headers.
  */
 static GstBuffer *
-gst_x264_enc_header_buf (GstX264Enc * encoder)
+gst_x264_enc_header_buf (GstX264Enc *encoder)
 {
   GstBuffer *buf;
   x264_nal_t *nal;
@@ -2264,7 +2296,7 @@ gst_x264_enc_header_buf (GstX264Enc * encoder)
  * Returns: TRUE on success.
  */
 static gboolean
-gst_x264_enc_set_src_caps (GstX264Enc * encoder, GstCaps * caps)
+gst_x264_enc_set_src_caps (GstX264Enc *encoder, GstCaps *caps)
 {
   GstCaps *outcaps;
   GstStructure *structure;
@@ -2351,7 +2383,7 @@ gst_x264_enc_set_src_caps (GstX264Enc * encoder, GstCaps * caps)
 }
 
 static void
-gst_x264_enc_set_latency (GstX264Enc * encoder)
+gst_x264_enc_set_latency (GstX264Enc *encoder)
 {
   GstVideoInfo *info = &encoder->input_state->info;
   gint max_delayed_frames;
@@ -2379,8 +2411,7 @@ gst_x264_enc_set_latency (GstX264Enc * encoder)
 }
 
 static gboolean
-gst_x264_enc_set_format (GstVideoEncoder * video_enc,
-    GstVideoCodecState * state)
+gst_x264_enc_set_format (GstVideoEncoder *video_enc, GstVideoCodecState *state)
 {
   GstX264Enc *encoder = GST_X264_ENC (video_enc);
   GstVideoInfo *info = &state->info;
@@ -2517,14 +2548,14 @@ gst_x264_enc_set_format (GstVideoEncoder * video_enc,
 }
 
 static GstFlowReturn
-gst_x264_enc_finish (GstVideoEncoder * encoder)
+gst_x264_enc_finish (GstVideoEncoder *encoder)
 {
   gst_x264_enc_flush_frames (GST_X264_ENC (encoder), TRUE);
   return GST_FLOW_OK;
 }
 
 static gboolean
-gst_x264_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
+gst_x264_enc_propose_allocation (GstVideoEncoder *encoder, GstQuery *query)
 {
   GstX264Enc *self = GST_X264_ENC (encoder);
   GstVideoInfo *info;
@@ -2549,7 +2580,7 @@ gst_x264_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
 }
 
 static void
-gst_x264_enc_add_cc (GstBuffer * buffer, x264_picture_t * pic_in)
+gst_x264_enc_add_cc (GstBuffer *buffer, x264_picture_t *pic_in)
 {
   GstVideoCaptionMeta *cc_meta;
   gpointer iter = NULL;
@@ -2604,8 +2635,8 @@ gst_x264_enc_add_cc (GstBuffer * buffer, x264_picture_t * pic_in)
  * this function does the actual processing
  */
 static GstFlowReturn
-gst_x264_enc_handle_frame (GstVideoEncoder * video_enc,
-    GstVideoCodecFrame * frame)
+gst_x264_enc_handle_frame (GstVideoEncoder *video_enc,
+    GstVideoCodecFrame *frame)
 {
   GstX264Enc *encoder = GST_X264_ENC (video_enc);
   GstVideoInfo *info = &encoder->input_state->info;
@@ -2678,8 +2709,8 @@ invalid_frame:
 }
 
 static GstFlowReturn
-gst_x264_enc_encode_frame (GstX264Enc * encoder, x264_picture_t * pic_in,
-    GstVideoCodecFrame * input_frame, int *i_nal, gboolean send)
+gst_x264_enc_encode_frame (GstX264Enc *encoder, x264_picture_t *pic_in,
+    GstVideoCodecFrame *input_frame, int *i_nal, gboolean send)
 {
   GstVideoCodecFrame *frame = NULL;
   GstBuffer *out_buf = NULL;
@@ -2713,6 +2744,14 @@ gst_x264_enc_encode_frame (GstX264Enc * encoder, x264_picture_t * pic_in,
         encoder->vtable->x264_encoder_intra_refresh (encoder->x264enc);
       else
         pic_in->i_type = X264_TYPE_IDR;
+    }
+    for (guint i = 0; i < encoder->rois->len; i++) {
+      GstX264EncROI *roi = &g_array_index (encoder->rois, GstX264EncROI, i);
+
+      if (!gst_x264_enc_setup_roi (encoder, pic_in,
+              (const uint8_t *) roi, sizeof (GstX264EncROI))) {
+        GST_ERROR_OBJECT (encoder, "Failed to setup ROI for region %u", i);
+      }
     }
   }
   GST_OBJECT_UNLOCK (encoder);
@@ -2782,7 +2821,7 @@ out:
 }
 
 static void
-gst_x264_enc_flush_frames (GstX264Enc * encoder, gboolean send)
+gst_x264_enc_flush_frames (GstX264Enc *encoder, gboolean send)
 {
   GstFlowReturn flow_ret;
   gint i_nal;
@@ -2796,7 +2835,7 @@ gst_x264_enc_flush_frames (GstX264Enc * encoder, gboolean send)
 }
 
 static void
-gst_x264_enc_reconfig (GstX264Enc * encoder)
+gst_x264_enc_reconfig (GstX264Enc *encoder)
 {
   guint bitrate;
 
@@ -2831,8 +2870,8 @@ gst_x264_enc_reconfig (GstX264Enc * encoder)
 }
 
 static void
-gst_x264_enc_set_property (GObject * object, guint prop_id,
-    const GValue * value, GParamSpec * pspec)
+gst_x264_enc_set_property (GObject *object, guint prop_id,
+    const GValue *value, GParamSpec *pspec)
 {
   GstX264Enc *encoder;
   GstState state;
@@ -3035,6 +3074,14 @@ gst_x264_enc_set_property (GObject * object, guint prop_id,
     case ARG_NAL_HRD:
       encoder->nal_hrd = g_value_get_enum (value);
       break;
+    case ARG_ROI:
+      // Assign the new ROI string
+      g_string_assign (encoder->roi_string, g_value_get_string (value));
+      // Parse and store the ROI data
+      if (!gst_x264_enc_parse_roi_string (encoder, encoder->roi_string->str)) {
+        GST_ERROR_OBJECT (encoder, "Failed to parse ROI string");
+      }
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -3051,8 +3098,8 @@ wrong_state:
 }
 
 static void
-gst_x264_enc_get_property (GObject * object, guint prop_id,
-    GValue * value, GParamSpec * pspec)
+gst_x264_enc_get_property (GObject *object, guint prop_id,
+    GValue *value, GParamSpec *pspec)
 {
   GstX264Enc *encoder;
 
@@ -3182,6 +3229,9 @@ gst_x264_enc_get_property (GObject * object, guint prop_id,
     case ARG_NAL_HRD:
       g_value_set_enum (value, encoder->nal_hrd);
       break;
+    case ARG_ROI:
+      g_value_set_string (value, encoder->roi_string->str);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -3190,7 +3240,122 @@ gst_x264_enc_get_property (GObject * object, guint prop_id,
 }
 
 static gboolean
-x264_element_init (GstPlugin * plugin)
+gst_x264_enc_setup_roi (GstX264Enc *encoder, x264_picture_t *pic,
+    const uint8_t *data, size_t size)
+{
+  int mbx = (encoder->x264param.i_width + 15) / 16;
+  int mby = (encoder->x264param.i_height + 15) / 16;
+  int qp_range = 51 + 6 * (encoder->x264param.i_bitdepth - 8);
+  int nb_rois;
+  const GstX264EncROI *roi;
+  uint32_t roi_size;
+  float *qoffsets;
+
+  // Check if adaptive quantization is enabled
+  if (encoder->x264param.rc.i_aq_mode == X264_AQ_NONE) {
+    GST_WARNING_OBJECT (encoder,
+        "Adaptive quantization must be enabled to use ROI encoding, skipping ROI.");
+    return TRUE;
+  }
+
+  roi = (const GstX264EncROI *) data;
+  roi_size = roi->self_size;
+  if (!roi_size || size % roi_size != 0) {
+    GST_ERROR_OBJECT (encoder, "Invalid ROI size");
+    return FALSE;
+  }
+  nb_rois = size / roi_size;
+
+  qoffsets = g_malloc0 (mbx * mby * sizeof (*qoffsets));
+  if (!qoffsets)
+    return FALSE;
+
+  // Process ROIs in reverse order like FFmpeg does
+  for (int i = nb_rois - 1; i >= 0; i--) {
+    int startx, endx, starty, endy;
+    float qoffset;
+
+    roi = (const GstX264EncROI *) (data + roi_size * i);
+    starty = MIN (mby, roi->top / 16);
+    endy = MIN (mby, (roi->bottom + 15) / 16);
+    startx = MIN (mbx, roi->left / 16);
+    endx = MIN (mbx, (roi->right + 15) / 16);
+
+    if (roi->qoffset.den == 0) {
+      g_free (qoffsets);
+      GST_ERROR_OBJECT (encoder, "ROI qoffset.den must not be zero");
+      return FALSE;
+    }
+
+    qoffset = roi->qoffset.num * 1.0f / roi->qoffset.den;
+    qoffset = CLAMP (qoffset * qp_range, -qp_range, +qp_range);
+
+    for (int y = starty; y < endy; y++) {
+      for (int x = startx; x < endx; x++) {
+        qoffsets[x + y * mbx] = qoffset;
+      }
+    }
+  }
+
+  pic->prop.quant_offsets = qoffsets;
+  pic->prop.quant_offsets_free = g_free;
+  return TRUE;
+}
+
+static gboolean
+gst_x264_enc_parse_roi_string (GstX264Enc *encoder, const gchar *roi_string)
+{
+  gboolean success = TRUE;
+  gchar **roi_entries = g_strsplit (roi_string, ";", -1);
+
+  // Clear existing ROIs
+  g_array_set_size (encoder->rois, 0);
+  GST_DEBUG_OBJECT (encoder, "Clearing existing ROIs");
+
+  for (gchar ** entry = roi_entries; *entry; entry++) {
+    gchar **values = g_strsplit (*entry, ",", -1);
+    if (g_strv_length (values) != 5) {
+      GST_ERROR_OBJECT (encoder, "Invalid ROI entry: %s", *entry);
+      g_strfreev (values);
+      success = FALSE;
+      break;
+    }
+
+    GstX264EncROI roi;
+    roi.self_size = sizeof (GstX264EncROI);
+    roi.top = atoi (values[0]);
+    roi.bottom = atoi (values[1]);
+    roi.left = atoi (values[2]);
+    roi.right = atoi (values[3]);
+
+    gchar **qoffset = g_strsplit (values[4], "/", 2);
+    if (g_strv_length (qoffset) != 2) {
+      GST_ERROR_OBJECT (encoder, "Invalid qoffset: %s", values[4]);
+      g_strfreev (qoffset);
+      g_strfreev (values);
+      success = FALSE;
+      break;
+    }
+    roi.qoffset.num = atoi (qoffset[0]);
+    roi.qoffset.den = atoi (qoffset[1]);
+    g_strfreev (qoffset);
+
+    // Add the ROI to the array
+    g_array_append_val (encoder->rois, roi);
+    GST_DEBUG_OBJECT (encoder,
+        "Added ROI to encoder.rois: top=%d, bottom=%d, left=%d, right=%d, qoffset=%d/%d",
+        roi.top, roi.bottom, roi.left, roi.right, roi.qoffset.num,
+        roi.qoffset.den);
+
+    g_strfreev (values);
+  }
+
+  g_strfreev (roi_entries);
+  return success;
+}
+
+static gboolean
+x264_element_init (GstPlugin *plugin)
 {
   GST_DEBUG_CATEGORY_INIT (x264_enc_debug, "x264enc", 0,
       "h264 encoding element");
@@ -3229,7 +3394,7 @@ x264_element_init (GstPlugin * plugin)
 }
 
 static gboolean
-plugin_init (GstPlugin * plugin)
+plugin_init (GstPlugin *plugin)
 {
   return GST_ELEMENT_REGISTER (x264enc, plugin);
 }
