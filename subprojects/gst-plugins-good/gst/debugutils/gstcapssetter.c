@@ -87,7 +87,6 @@ GST_STATIC_PAD_TEMPLATE (GST_BASE_TRANSFORM_SINK_NAME,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS_ANY);
 
-
 static gboolean gst_caps_setter_transform_size (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps, gsize size,
     GstCaps * othercaps, gsize * othersize);
@@ -149,7 +148,6 @@ gst_caps_setter_class_init (GstCapsSetterClass * g_class)
       GST_DEBUG_FUNCPTR (gst_caps_setter_transform_size);
   trans_class->transform_caps =
       GST_DEBUG_FUNCPTR (gst_caps_setter_transform_caps);
-  /* dummy seems needed */
   trans_class->transform_ip = GST_DEBUG_FUNCPTR (gst_caps_setter_transform_ip);
 }
 
@@ -245,6 +243,21 @@ gst_caps_setter_transform_caps (GstBaseTransform * trans,
 static GstFlowReturn
 gst_caps_setter_transform_ip (GstBaseTransform * btrans, GstBuffer * in)
 {
+  GstCapsSetter *filter = GST_CAPS_SETTER (btrans);
+
+  // If we haven't set the caps yet but we want to override the caps,
+  // we have to do it with the first buffer
+  if (!gst_pad_has_current_caps (GST_BASE_TRANSFORM_SRC_PAD (btrans))) {
+    if (gst_caps_is_fixed (filter->caps)) {
+      GST_DEBUG_OBJECT (filter,
+          "no src caps set, updating with requested caps");
+      gst_base_transform_update_src_caps (btrans, filter->caps);
+    } else {
+      GST_DEBUG_OBJECT (filter,
+          "no src caps set, not updating with requested caps because they are not fixed");
+    }
+  }
+
   return GST_FLOW_OK;
 }
 
