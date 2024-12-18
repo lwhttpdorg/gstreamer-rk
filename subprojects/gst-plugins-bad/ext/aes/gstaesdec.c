@@ -192,7 +192,7 @@ gst_aes_dec_class_init (GstAesDecClass * klass)
           "the number of bits in the key length : "
           "16 bytes for AES 128 and 32 bytes for AES 256",
           (gchar *) GST_AES_DEFAULT_KEY,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY));
+          G_PARAM_WRITABLE | GST_PARAM_MUTABLE_READY));
   /**
    * GstAesDec:iv
    *
