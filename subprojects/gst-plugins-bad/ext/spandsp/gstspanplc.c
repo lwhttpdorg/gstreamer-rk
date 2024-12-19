@@ -34,6 +34,9 @@
 #endif
 
 #include "gstspanplc.h"
+#ifdef GST_INCLUDE_PRIVATE_PLC
+#include <spandsp/private/plc.h>
+#endif
 
 #include <gst/audio/audio.h>
 
