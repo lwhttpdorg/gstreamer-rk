@@ -1562,10 +1562,15 @@ gst_splitmux_end_of_part (GstSplitMuxSrc * splitmux, SplitMuxSrcPad * splitpad)
             GST_SEGMENT_FORMAT, next_part, &tmp);
         add_to_active_readers (splitmux, splitpad->reader, FALSE);
 
+        /* Drop lock around calling activate, as it might call back
+         * into the splitmuxsrc when exposing pads */
+        SPLITMUX_SRC_UNLOCK (splitmux);
         if (!gst_splitmux_part_reader_activate (splitpad->reader, &tmp,
                 GST_SEEK_FLAG_NONE)) {
+          SPLITMUX_SRC_LOCK (splitmux);
           goto error;
         }
+        SPLITMUX_SRC_LOCK (splitmux);
       }
       splitmux->cur_part = next_part;
       schedule_lookahead_check (splitmux);
