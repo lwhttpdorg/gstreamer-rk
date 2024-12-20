@@ -986,7 +986,7 @@ beach:
 
 cropping_too_much:
   {
-    /* When "croping too much" we try to fill the buffer with transparent pixels so that the image fully disapears */
+    /* When "cropping too much" we try to fill the buffer with transparent pixels so that the image fully disappears */
     if (GST_VIDEO_INFO_HAS_ALPHA (out_info)) {
       GST_INFO_OBJECT (crop,
           "we are cropping too much, filling 1 transparent pixels");
