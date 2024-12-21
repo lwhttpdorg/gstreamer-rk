@@ -41,7 +41,6 @@ import posixpath
 import http.server
 import urllib.parse
 import html
-import shutil
 import mimetypes
 import io
 import time
