@@ -733,6 +733,10 @@ gst_mpdparser_parse_preselection_node (GList ** list, xmlNode * a_node,
   gst_mpdparser_parse_representation_base
       (GST_MPD_REPRESENTATION_BASE_NODE (new_preselection), a_node);
 
+  GST_DEBUG ("Getting caps from mime type for preselection %d gave %"
+      GST_PTR_FORMAT, new_preselection->id,
+      new_preselection->parent_instance.caps);
+
   /* explore children nodes */
   for (cur_node = a_node->children; cur_node; cur_node = cur_node->next) {
     if (cur_node->type == XML_ELEMENT_NODE) {

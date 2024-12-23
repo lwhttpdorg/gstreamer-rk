@@ -2793,16 +2793,20 @@ gst_mpd_client2_get_codec_caps (GstActiveStream * stream)
   }
 
   /* Iterate over the current adaptation set representation */
-  for (iter = stream->cur_adapt_set->Representations; iter; iter = iter->next) {
-    GstMPDRepresentationBaseNode *rep =
-        (GstMPDRepresentationBaseNode *) iter->data;
+  if (stream->cur_preselection) {
+    ret = gst_caps_copy (stream->cur_preselection->parent_instance.caps);
+  } else {
+    for (iter = stream->cur_adapt_set->Representations; iter; iter = iter->next) {
+      GstMPDRepresentationBaseNode *rep =
+          (GstMPDRepresentationBaseNode *) iter->data;
 
-    if (rep->caps) {
-      GST_DEBUG ("Adding representation caps %" GST_PTR_FORMAT, rep->caps);
-      if (ret)
-        ret = gst_caps_merge (ret, gst_caps_ref (rep->caps));
-      else
-        ret = gst_caps_copy (rep->caps);
+      if (rep->caps) {
+        GST_DEBUG ("Adding representation caps %" GST_PTR_FORMAT, rep->caps);
+        if (ret)
+          ret = gst_caps_merge (ret, gst_caps_ref (rep->caps));
+        else
+          ret = gst_caps_copy (rep->caps);
+      }
     }
   }
 
