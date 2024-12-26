@@ -842,10 +842,8 @@ gst_dash_demux_setup_all_streams (GstDashDemux * demux)
             break;
           }
         }
-        /* Empty string if the id attribute is not present on either
-         * element. */
-        if (!track_id)
-          track_id = g_strdup ("");
+        /* The id attribute is not present on either
+         * element, adding no container-specific-track-id tag. */
       }
     }
 
