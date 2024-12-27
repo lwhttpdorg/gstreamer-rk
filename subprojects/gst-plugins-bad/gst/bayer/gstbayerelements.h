@@ -27,6 +27,10 @@
 
 #include <gst/gst.h>
 
+/* cached quark to avoid contention on the global quark table lock */
+#define META_TAG_VIDEO meta_tag_video_quark
+G_GNUC_INTERNAL extern GQuark meta_tag_video_quark;
+
 GST_ELEMENT_REGISTER_DECLARE (bayer2rgb);
 GST_ELEMENT_REGISTER_DECLARE (rgb2bayer);
 
