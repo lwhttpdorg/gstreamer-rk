@@ -50,6 +50,7 @@ variables:
     -Dgst-plugins-good:soup-lookup-dep=true
     -Dgst-plugins-good:vpx=enabled
     -Dgst-devtools:dots_viewer=disabled
+    -Dgst-plugins-bad:gst_play_tests=true
     -Dpygobject:tests=false
     -Dpython=enabled
     -Dlibav=enabled
