@@ -87,6 +87,7 @@
 #define GST_MATROSKA_ID_CODECNAME                  0x258688
 #define GST_MATROSKA_ID_TRACKNAME                  0x536E
 #define GST_MATROSKA_ID_TRACKLANGUAGE              0x22B59C
+#define GST_MATROSKA_ID_TRACKLANGUAGEBCP47         0x22B59D
 #define GST_MATROSKA_ID_TRACKFLAGENABLED           0xB9
 #define GST_MATROSKA_ID_TRACKFLAGDEFAULT           0x88
 #define GST_MATROSKA_ID_TRACKFLAGFORCED            0x55AA
@@ -205,6 +206,8 @@
 /* IDs in the CueTrackPositions master */
 #define GST_MATROSKA_ID_CUETRACK                   0xF7
 #define GST_MATROSKA_ID_CUECLUSTERPOSITION         0xF1
+#define GST_MATROSKA_ID_CUERELATIVEPOSITION        0xF0
+#define GST_MATROSKA_ID_CUEDURATION                0xB2
 #define GST_MATROSKA_ID_CUEBLOCKNUMBER             0x5378
 /* semi-draft */
 #define GST_MATROSKA_ID_CUECODECSTATE              0xEA
@@ -347,6 +350,7 @@
 /* IDs in the ChapterDisplay master */
 #define GST_MATROSKA_ID_CHAPSTRING                 0x85
 #define GST_MATROSKA_ID_CHAPLANGUAGE               0x437C
+#define GST_MATROSKA_ID_CHAPLANGUAGEBCP47          0x437D
 #define GST_MATROSKA_ID_CHAPCOUNTRY                0x437E
 
 /* IDs in the ChapterTrack master */
@@ -674,8 +678,10 @@ typedef struct _GstMatroskaTrackSubtitleContext {
 
 typedef struct _GstMatroskaIndex {
   guint64        pos;      /* of the corresponding *cluster*! */
+  guint64        rel_pos;  /* offset of block relative to cluster */
   GstClockTime   time;     /* in nanoseconds */
   guint32        block;    /* number of the block in the cluster */
+  GstClockTime   duration; /* in nanoseconds */
   guint16        track;    /* reference to 'num' */
 } GstMatroskaIndex;
 
