@@ -62,6 +62,8 @@ enum
   PROP_SATURATION,
   PROP_BRIGHTNESS,
   PROP_CONTRAST,
+  PROP_CLEAR_ON_STOP,
+  PROP_CLEAR_COLOR,
 };
 
 #define DEFAULT_ADAPTER -1
@@ -75,12 +77,15 @@ enum
 #define DEFAULT_SATURATION 1.0
 #define DEFAULT_BRIGHTNESS 0.0
 #define DEFAULT_CONTRAST 1.0
+#define DEFAULT_CLEAR_ON_STOP FALSE
+#define DEFAULT_CLEAR_COLOR (G_GUINT64_CONSTANT(0xffff000000000000))
 
 #define BACK_BUFFER_COUNT 2
 
 enum
 {
   SIGNAL_RESIZE,
+  SIGNAL_CLEAR,
   SIGNAL_LAST
 };
 
@@ -195,6 +200,18 @@ struct GstD3D12SwapChainSinkPrivate
       G_GUINT64_CONSTANT(0xffff000000000000)) >> 48) / (FLOAT) G_MAXUINT16;
   }
 
+  void update_clear_color ()
+  {
+    clear_color_val[0] = ((clear_color &
+      G_GUINT64_CONSTANT(0x0000ffff00000000)) >> 32) / (FLOAT) G_MAXUINT16;
+    clear_color_val[1] = ((clear_color &
+      G_GUINT64_CONSTANT(0x00000000ffff0000)) >> 16) / (FLOAT) G_MAXUINT16;
+    clear_color_val[2] = (clear_color &
+      G_GUINT64_CONSTANT(0x000000000000ffff)) / (FLOAT) G_MAXUINT16;
+    clear_color_val[3] = ((clear_color &
+      G_GUINT64_CONSTANT(0xffff000000000000)) >> 48) / (FLOAT) G_MAXUINT16;
+  }
+
   std::recursive_mutex lock;
   GstVideoInfo info;
   GstVideoInfo display_info;
@@ -221,6 +238,7 @@ struct GstD3D12SwapChainSinkPrivate
   D3D12_BOX crop_rect = { };
   D3D12_BOX prev_crop_rect = { };
   FLOAT border_color_val[4];
+  FLOAT clear_color_val[4];
   GstVideoRectangle viewport = { };
   gboolean auto_resize = FALSE;
 
@@ -236,6 +254,8 @@ struct GstD3D12SwapChainSinkPrivate
   gdouble saturation = DEFAULT_SATURATION;
   gdouble brightness = DEFAULT_BRIGHTNESS;
   gdouble contrast = DEFAULT_CONTRAST;
+  gboolean clear_on_stop = DEFAULT_CLEAR_ON_STOP;
+  guint64 clear_color = DEFAULT_CLEAR_COLOR;
 };
 /* *INDENT-ON* */
 
@@ -272,6 +292,9 @@ static void gst_d3d12_swapchain_sink_resize (GstD3D12SwapChainSink * self,
 static void
 gst_d3d12_swapchain_sink_resize_internal (GstD3D12SwapChainSink * self,
     guint width, guint height);
+static void
+gst_d3d12_swapchain_sink_clear_unlocked (GstD3D12SwapChainSink * self);
+static void gst_d3d12_swapchain_sink_clear (GstD3D12SwapChainSink * self);
 
 static void
 gst_d3d12_swapchain_sink_color_balance_init (GstColorBalanceInterface * iface);
@@ -367,11 +390,29 @@ gst_d3d12_swapchain_sink_class_init (GstD3D12SwapChainSinkClass * klass)
           (GParamFlags) (GST_PARAM_CONTROLLABLE |
               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
+  g_object_class_install_property (object_class, PROP_CLEAR_ON_STOP,
+      g_param_spec_boolean ("clear-on-stop", "Clear On Stop",
+          "Clear swapchain to \"clear-color\" on ready-to-null state change",
+          DEFAULT_CLEAR_ON_STOP,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  g_object_class_install_property (object_class, PROP_CLEAR_COLOR,
+      g_param_spec_uint64 ("clear-color", "Clear Color",
+          "ARGB64 representation of the clear color to use",
+          0, G_MAXUINT64, DEFAULT_CLEAR_COLOR,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   d3d12_swapchain_sink_signals[SIGNAL_RESIZE] =
       g_signal_new_class_handler ("resize", G_TYPE_FROM_CLASS (klass),
       (GSignalFlags) (G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
       G_CALLBACK (gst_d3d12_swapchain_sink_resize), nullptr, nullptr, nullptr,
       G_TYPE_NONE, 2, G_TYPE_UINT, G_TYPE_UINT);
+
+  d3d12_swapchain_sink_signals[SIGNAL_CLEAR] =
+      g_signal_new_class_handler ("clear", G_TYPE_FROM_CLASS (klass),
+      (GSignalFlags) (G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+      G_CALLBACK (gst_d3d12_swapchain_sink_clear), nullptr, nullptr, nullptr,
+      G_TYPE_NONE, 0);
 
   element_class->set_context =
       GST_DEBUG_FUNCPTR (gst_d3d12_swapchain_sink_set_context);
@@ -511,6 +552,13 @@ gst_d3d12_swapchain_sink_set_property (GObject * object, guint prop_id,
     case PROP_CONTRAST:
       gst_d3d12_swapchain_sink_update_color_balance (self,
           "CONTRAST", &priv->contrast, g_value_get_double (value));
+      break;
+    case PROP_CLEAR_ON_STOP:
+      priv->clear_on_stop = g_value_get_boolean (value);
+      break;
+    case PROP_CLEAR_COLOR:
+      priv->clear_color = g_value_get_uint64 (value);
+      priv->update_clear_color ();
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -706,6 +754,12 @@ gst_d3d12_swapchain_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_CONTRAST:
       g_value_set_double (value, priv->contrast);
+      break;
+    case PROP_CLEAR_ON_STOP:
+      g_value_set_boolean (value, priv->clear_on_stop);
+      break;
+    case PROP_CLEAR_COLOR:
+      g_value_set_uint64 (value, priv->clear_color);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1237,6 +1291,12 @@ gst_d3d12_swapchain_sink_stop (GstBaseSink * sink)
 
   GST_DEBUG_OBJECT (self, "Stop");
 
+  {
+    std::lock_guard < std::recursive_mutex > lk (priv->lock);
+    if (priv->clear_on_stop)
+      gst_d3d12_swapchain_sink_clear_unlocked (self);
+  }
+
   priv->stop ();
 
   return TRUE;
@@ -1389,6 +1449,101 @@ gst_d3d12_swapchain_sink_show_frame (GstVideoSink * sink, GstBuffer * buf)
       0, nullptr, &priv->fence_val);
 
   return GST_FLOW_OK;
+}
+
+static void
+gst_d3d12_swapchain_sink_clear_unlocked (GstD3D12SwapChainSink * self)
+{
+  auto priv = self->priv;
+
+  if (!priv->swapchain || !priv->cq)
+    return;
+
+  GstD3D12CmdAlloc *gst_ca;
+  if (!gst_d3d12_cmd_alloc_pool_acquire (priv->ca_pool, &gst_ca)) {
+    GST_ERROR_OBJECT (self, "Couldn't acquire command allocator");
+    return;
+  }
+
+  auto ca = gst_d3d12_cmd_alloc_get_handle (gst_ca);
+  auto hr = ca->Reset ();
+  if (!gst_d3d12_result (hr, self->device)) {
+    GST_ERROR_OBJECT (self, "Couldn't reset command list");
+    gst_d3d12_cmd_alloc_unref (gst_ca);
+    return;
+  }
+
+  ComPtr < ID3D12GraphicsCommandList > cl;
+  if (!priv->cl) {
+    auto device_handle = gst_d3d12_device_get_device_handle (self->device);
+    hr = device_handle->CreateCommandList (0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+        ca, nullptr, IID_PPV_ARGS (&cl));
+    if (!gst_d3d12_result (hr, self->device)) {
+      GST_ERROR_OBJECT (self, "Couldn't create command list");
+      gst_d3d12_cmd_alloc_unref (gst_ca);
+      return;
+    }
+
+    priv->cl = cl;
+  } else {
+    cl = priv->cl;
+    hr = cl->Reset (ca, nullptr);
+    if (!gst_d3d12_result (hr, self->device)) {
+      GST_ERROR_OBJECT (self, "Couldn't reset command list");
+      gst_d3d12_cmd_alloc_unref (gst_ca);
+      return;
+    }
+  }
+
+  auto cur_idx = priv->swapchain->GetCurrentBackBufferIndex ();
+  auto backbuf = priv->backbuf[cur_idx]->backbuf;
+
+  GstD3D12FenceData *fence_data;
+  gst_d3d12_fence_data_pool_acquire (priv->fence_data_pool, &fence_data);
+  gst_d3d12_fence_data_push (fence_data, FENCE_NOTIFY_MINI_OBJECT (gst_ca));
+
+  auto mem = (GstD3D12Memory *) gst_buffer_peek_memory (backbuf, 0);
+  auto backbuf_texture = gst_d3d12_memory_get_resource_handle (mem);
+
+  D3D12_RESOURCE_BARRIER barrier =
+      CD3DX12_RESOURCE_BARRIER::Transition (backbuf_texture,
+      D3D12_RESOURCE_STATE_COMMON,
+      D3D12_RESOURCE_STATE_RENDER_TARGET);
+  cl->ResourceBarrier (1, &barrier);
+  auto rtv_heap = gst_d3d12_memory_get_render_target_view_heap (mem);
+  auto cpu_handle = GetCPUDescriptorHandleForHeapStart (rtv_heap);
+  cl->ClearRenderTargetView (cpu_handle, priv->clear_color_val, 0, nullptr);
+
+  hr = cl->Close ();
+  if (!gst_d3d12_result (hr, self->device)) {
+    GST_ERROR_OBJECT (self, "Couldn't close cl");
+    gst_d3d12_fence_data_unref (fence_data);
+    return;
+  }
+
+  ID3D12CommandList *cmd_list[] = { cl.Get () };
+  hr = gst_d3d12_cmd_queue_execute_command_lists (priv->cq,
+      1, cmd_list, &priv->fence_val);
+  if (!gst_d3d12_result (hr, self->device)) {
+    GST_ERROR_OBJECT (self, "Signal failed");
+    gst_d3d12_fence_data_unref (fence_data);
+    return;
+  }
+
+  gst_d3d12_cmd_queue_set_notify (priv->cq, priv->fence_val,
+      fence_data, (GDestroyNotify) gst_d3d12_fence_data_unref);
+
+  priv->swapchain->Present (0, 0);
+  gst_d3d12_cmd_queue_execute_command_lists (priv->cq,
+      0, nullptr, &priv->fence_val);
+}
+
+static void
+gst_d3d12_swapchain_sink_clear (GstD3D12SwapChainSink * self)
+{
+  auto priv = self->priv;
+  std::lock_guard < std::recursive_mutex > lk (priv->lock);
+  gst_d3d12_swapchain_sink_clear_unlocked (self);
 }
 
 static const GList *
