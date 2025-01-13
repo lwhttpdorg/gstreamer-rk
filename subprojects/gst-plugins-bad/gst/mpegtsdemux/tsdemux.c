@@ -1689,7 +1689,8 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
           sparse = TRUE;
           is_private = TRUE;
           caps = gst_caps_new_simple ("meta/x-klv",
-              "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
+              "parsed", G_TYPE_BOOLEAN, TRUE, "sync", G_TYPE_BOOLEAN, FALSE,
+              NULL);
           break;
         case DRF_ID_AC4:
           is_audio = TRUE;
@@ -1766,7 +1767,9 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
             bstream->registration_id = DRF_ID_KLVA;
 
             caps = gst_caps_new_simple ("meta/x-klv",
-                "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
+                "parsed", G_TYPE_BOOLEAN, TRUE, "sync", G_TYPE_BOOLEAN, TRUE,
+                "service-id", G_TYPE_INT,
+                metadataDescriptor->metadata_service_id, NULL);
           }
           g_free (metadataDescriptor);
         }
@@ -3556,8 +3559,8 @@ parse_pes_metadata_frame (TSDemuxStream * stream)
     meta->metadata_service_id = service_id;
     meta->flags = flags;
     GST_DEBUG_OBJECT (stream->pad,
-        "metadata_service_id: 0x%02x, flags: 0x%02x, cell_data_length: 0x%04x",
-        meta->metadata_service_id, meta->flags, au_size);
+        "metadata_service_id: 0x%02x, flags: 0x%02x, cell_data_length: 0x%04x, sequence_number: 0x%02x",
+        meta->metadata_service_id, meta->flags, au_size, sequence_number);
 
     gst_buffer_list_add (buffer_list, buffer);
   } while (gst_byte_reader_get_remaining (&reader) > 0);

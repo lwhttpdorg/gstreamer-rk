@@ -2386,6 +2386,30 @@ a single language</doc>
           </parameter>
         </parameters>
       </function>
+      <function name="from_metadata_std" c:identifier="gst_mpegts_descriptor_from_metadata_std" version="1.27">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">Inserts the metadata STD descriptor from @descriptor.
+
+See ISO/IEC 13818-1:2018 Section 2.6.62, 2.6.63 and 2.12.10 for details.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h"/>
+        <return-value transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">new %GstMpegtsDescriptor</doc>
+          <type name="Descriptor" c:type="GstMpegtsDescriptor*"/>
+        </return-value>
+        <parameters>
+          <parameter name="metadata_input_leak_rate" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the input leak rate in units of 400bits/sec.</doc>
+            <type name="guint32" c:type="guint32"/>
+          </parameter>
+          <parameter name="metadata_buffer_size" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the buffer size in units of 1024 bytes</doc>
+            <type name="guint32" c:type="guint32"/>
+          </parameter>
+          <parameter name="metadata_output_leak_rate" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the output leak rate in units of 400bits/sec.</doc>
+            <type name="guint32" c:type="guint32"/>
+          </parameter>
+        </parameters>
+      </function>
       <function name="from_registration" c:identifier="gst_mpegts_descriptor_from_registration">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">Creates a %GST_MTS_DESC_REGISTRATION #GstMpegtsDescriptor</doc>
         <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h"/>
@@ -2972,6 +2996,18 @@ metadata_application_format valid values. See ISO/IEC 13818-1:2023(E) Table 2-84
       <member name="isan" value="16" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_ISAN">
       </member>
       <member name="vsan" value="17" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_VSAN">
+      </member>
+      <member name="klv_general" value="256" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GENERAL" version="1.27">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">KLV formats taken from Table 4, MISB ST 1402</doc>
+      </member>
+      <member name="klv_geographic" value="257" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GEOGRAPHIC" version="1.27">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">KLV formats taken from Table 4, MISB ST 1402</doc>
+      </member>
+      <member name="klv_annotation" value="258" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_ANNOTATION" version="1.27">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">KLV formats taken from Table 4, MISB ST 1402</doc>
+      </member>
+      <member name="klv_still_image_on_demand" value="259" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_STILL_IMAGE_ON_DEMAND" version="1.27">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">KLV formats taken from Table 4, MISB ST 1402</doc>
       </member>
       <member name="identifier_field" value="65535" c:identifier="GST_MPEGTS_METADATA_APPLICATION_FORMAT_IDENTIFIER_FIELD">
       </member>
@@ -5126,6 +5162,20 @@ profiles defined in Annex A for service-compatible stereoscopic 3D services</doc
         </parameter>
       </parameters>
     </function>
+    <function name="buffer_get_mpegts_pes_metadata_meta" c:identifier="gst_buffer_get_mpegts_pes_metadata_meta" version="1.27">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">Finds an existing #GstMpegtsPESMetadataMeta on a @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">an existing #GstMpegtsPESMetadataMeta</doc>
+        <type name="PESMetadataMeta" c:type="GstMpegtsPESMetadataMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="descriptor_from_custom" c:identifier="gst_mpegts_descriptor_from_custom" moved-to="Descriptor.from_custom">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">Creates a #GstMpegtsDescriptor with custom @tag and @data</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h"/>
@@ -5295,6 +5345,30 @@ a single language</doc>
         <parameter name="metadata_pointer_descriptor" transfer-ownership="none">
           <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h">a #GstMpegtsMetadataPointerDescriptor</doc>
           <type name="MetadataPointerDescriptor" c:type="const GstMpegtsMetadataPointerDescriptor*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="descriptor_from_metadata_std" c:identifier="gst_mpegts_descriptor_from_metadata_std" moved-to="Descriptor.from_metadata_std" version="1.27">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">Inserts the metadata STD descriptor from @descriptor.
+
+See ISO/IEC 13818-1:2018 Section 2.6.62, 2.6.63 and 2.12.10 for details.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.h"/>
+      <return-value transfer-ownership="full">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">new %GstMpegtsDescriptor</doc>
+        <type name="Descriptor" c:type="GstMpegtsDescriptor*"/>
+      </return-value>
+      <parameters>
+        <parameter name="metadata_input_leak_rate" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the input leak rate in units of 400bits/sec.</doc>
+          <type name="guint32" c:type="guint32"/>
+        </parameter>
+        <parameter name="metadata_buffer_size" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the buffer size in units of 1024 bytes</doc>
+          <type name="guint32" c:type="guint32"/>
+        </parameter>
+        <parameter name="metadata_output_leak_rate" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/mpegts/gstmpegtsdescriptor.c">the output leak rate in units of 400bits/sec.</doc>
+          <type name="guint32" c:type="guint32"/>
         </parameter>
       </parameters>
     </function>

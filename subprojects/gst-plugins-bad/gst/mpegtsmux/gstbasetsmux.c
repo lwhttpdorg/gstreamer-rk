@@ -75,9 +75,11 @@
 #include <gst/tag/tag.h>
 #include <gst/video/video.h>
 #include <gst/mpegts/mpegts.h>
+#include <gst/mpegts/gstmpegtsdescriptor.h>
 #include <gst/pbutils/pbutils.h>
 #include <gst/videoparsers/gstjpeg2000parse.h>
 #include <gst/video/video-color.h>
+
 #include <gst/base/base.h>
 
 #include "gstbasetsmux.h"
@@ -86,6 +88,9 @@
 #include "gstbasetsmuxopus.h"
 #include "gstbasetsmuxjpeg2000.h"
 #include "gstbasetsmuxjpegxs.h"
+#include "gstbasetsmuxklv.h"
+
+
 
 GST_DEBUG_CATEGORY (gst_base_ts_mux_debug);
 #define GST_CAT_DEFAULT gst_base_ts_mux_debug
@@ -838,7 +843,25 @@ gst_base_ts_mux_create_or_update_stream (GstBaseTsMux * mux,
     st = TSMUX_ST_PS_OPUS;
     ts_pad->prepare_func = gst_base_ts_mux_prepare_opus;
   } else if (strcmp (mt, "meta/x-klv") == 0) {
-    st = TSMUX_ST_PS_KLV;
+
+    // Sync parameter provided by CAPS?
+    gboolean syncKlv = 0;
+    if (gst_structure_get_boolean (s, "sync", &syncKlv)) {
+      if (syncKlv) {
+        st = TSMUX_ST_PS_KLV_SYNC;
+        ts_pad->prepare_func = gst_base_ts_mux_prepare_klv;
+        ts_pad->free_func = gst_base_ts_mux_free_klv;
+      } else {
+        st = TSMUX_ST_PS_KLV_ASYNC;
+      }
+      GST_INFO_OBJECT (ts_pad, "KLV mode set by caps to %s",
+          (st == TSMUX_ST_PS_KLV_SYNC) ? "synchronous" : "asynchronous");
+    } else {
+      GST_INFO_OBJECT (ts_pad,
+          "KLV not set via caps - defaulting to async KLV");
+      st = TSMUX_ST_PS_KLV_ASYNC;
+    }
+
   } else if (strcmp (mt, "meta/x-st-2038") == 0) {
     st = TSMUX_ST_PS_ST_2038;
   } else if (strcmp (mt, "meta/x-id3") == 0) {
@@ -1708,8 +1731,9 @@ gst_base_ts_mux_aggregate_buffer (GstBaseTsMux * mux,
     header = GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_HEADER);
   }
 
-  if (best->stream->internal_stream_type == TSMUX_ST_PS_KLV &&
-      gst_buffer_get_size (buf) > (G_MAXUINT16 - 3)) {
+  if ((best->stream->internal_stream_type == TSMUX_ST_PS_KLV_ASYNC
+          || best->stream->internal_stream_type == TSMUX_ST_PS_KLV_SYNC)
+      && gst_buffer_get_size (buf) > (G_MAXUINT16 - 3)) {
     GST_WARNING_OBJECT (mux, "KLV meta unit too big, splitting not supported");
 
     gst_buffer_unref (buf);
@@ -2884,6 +2908,7 @@ gst_base_ts_mux_constructed (GObject * object)
   gst_base_ts_mux_reset (mux, TRUE);
   g_mutex_unlock (&mux->lock);
 }
+
 
 static void
 gst_base_ts_mux_set_property (GObject * object, guint prop_id,

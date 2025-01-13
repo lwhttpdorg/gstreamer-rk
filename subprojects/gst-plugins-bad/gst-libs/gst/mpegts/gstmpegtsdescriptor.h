@@ -473,6 +473,40 @@ typedef enum
 {
   GST_MPEGTS_METADATA_APPLICATION_FORMAT_ISAN = 0x0010,
   GST_MPEGTS_METADATA_APPLICATION_FORMAT_VSAN = 0x0011,
+
+  /** 
+   * GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GENERAL:
+   * 
+   * KLV formats taken from Table 4, MISB ST 1402
+   * 
+   * Since: 1.27
+   */
+  GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GENERAL = 0x0100,
+  /** 
+   * GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GEOGRAPHIC:
+   * 
+   * KLV formats taken from Table 4, MISB ST 1402
+   * 
+   * Since: 1.27
+   */
+  GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GEOGRAPHIC = 0x0101,
+  /** 
+   * GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_ANNOTATION:
+   * 
+   * KLV formats taken from Table 4, MISB ST 1402
+   * 
+   * Since: 1.27
+   */
+  GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_ANNOTATION = 0x0102,
+  /** 
+   * GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_STILL_IMAGE_ON_DEMAND:
+   * 
+   * KLV formats taken from Table 4, MISB ST 1402
+   * 
+   * Since: 1.27
+   */
+  GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_STILL_IMAGE_ON_DEMAND = 0x0103,
+
   GST_MPEGTS_METADATA_APPLICATION_FORMAT_IDENTIFIER_FIELD = 0xffff,
 } GstMpegtsMetadataApplicationFormat;
 
@@ -526,6 +560,11 @@ GType gst_mpegts_metadata_descriptor_get_type(void);
  */
 GST_MPEGTS_API
 GstMpegtsDescriptor *gst_mpegts_descriptor_from_metadata(const GstMpegtsMetadataDescriptor *metadata_descriptor);
+
+GST_MPEGTS_API
+    GstMpegtsDescriptor *
+gst_mpegts_descriptor_from_metadata_std (guint32 metadata_input_leak_rate,
+    guint32 metadata_buffer_size, guint32 metadata_output_leak_rate);
 
 GST_MPEGTS_API
 gboolean gst_mpegts_descriptor_parse_metadata(const GstMpegtsDescriptor *descriptor, GstMpegtsMetadataDescriptor **res);
@@ -614,6 +653,21 @@ struct _GstMpegtsPESMetadataMeta
 GST_MPEGTS_API
 GstMpegtsPESMetadataMeta *
 gst_buffer_add_mpegts_pes_metadata_meta(GstBuffer *buffer);
+
+
+/**
+ * gst_buffer_get_mpegts_pes_metadata_meta:
+ * @buffer: a #GstBuffer
+ *
+ * Finds an existing #GstMpegtsPESMetadataMeta on a @buffer.
+ *
+ * Returns: (transfer none): an existing #GstMpegtsPESMetadataMeta
+ *
+ * Since: 1.27
+ */
+GST_MPEGTS_API
+GstMpegtsPESMetadataMeta *
+gst_buffer_get_mpegts_pes_metadata_meta (GstBuffer * buffer);
 
 /* MPEG-TS Metadata Descriptor (0x25) */
 typedef struct _GstMpegtsMetadataPointerDescriptor
