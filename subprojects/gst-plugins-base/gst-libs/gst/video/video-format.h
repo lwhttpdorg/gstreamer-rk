@@ -174,6 +174,8 @@ G_BEGIN_DECLS
  * @GST_VIDEO_FORMAT_Y416_LE: packed 4:4:4:4 YUV, 16 bits per channel(U-Y-V-A) (Since: 1.26)
  * @GST_VIDEO_FORMAT_Y416_BE: packed 4:4:4:4 YUV, 16 bits per channel(U-Y-V-A) (Since: 1.26)
  * @GST_VIDEO_FORMAT_GRAY10_LE16: 10-bit grayscale, packed into 16bit words (6 bits padding) (Since: 1.26)
+ * @GST_VIDEO_FORMAT_RGB323232F_LE:  RGB packed into 32bit signed (IEEE 754) float per component without padding (`R-G-B-R-G-B`) (Since: 1.28).
+ * @GST_VIDEO_FORMAT_RGB323232F_BE:  RGB packed into 32bit signed (IEEE 754) float per component without padding (`R-G-B-R-G-B`) (Since: 1.28).
  *
  * Enum value describing the most common video formats.
  *
@@ -669,6 +671,24 @@ typedef enum {
    * Since: 1.26
    */
   GST_VIDEO_FORMAT_GRAY10_LE16,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB323232F_LE:
+   *
+   * RGB packed into 32bit signed float (little endian) per component without padding (`R-G-B-R-G-B`)
+   *
+   * Since: 1.28
+   */
+  GST_VIDEO_FORMAT_RGB323232F_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB323232F_BE:
+   *
+   * RGB packed into 32bit signed float (big endian) per component without padding (`R-G-B-R-G-B`)
+   *
+   * Since: 1.28
+   */
+  GST_VIDEO_FORMAT_RGB323232F_BE,
 
   /* Update GST_VIDEO_FORMAT_LAST below when adding more formats here */
 } GstVideoFormat;
