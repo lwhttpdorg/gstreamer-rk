@@ -285,6 +285,86 @@ typedef enum {
  */
 #define GST_VIDEO_CONVERTER_OPT_ASYNC_TASKS   "GstVideoConverter.async-tasks"
 
+/**
+ * GST_VIDEO_CONVERTER_OPT_ALPHA_OFFSET
+ *
+ * #G_TYPE_DOUBLE, offset applied to RGB323232F_* alpha component when doing
+ * format conversion to RGB. Default 0.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_ALPHA_OFFSET   "GstVideoConverter.a-offset"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_RED_OFFSET
+ *
+ * #G_TYPE_DOUBLE, offset applied to RGB323232F_* red component when doing
+ * format conversion to RGB. Default 0.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_RED_OFFSET   "GstVideoConverter.r-offset"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_GREEN_OFFSET
+ *
+ * #G_TYPE_DOUBLE, offset applied to RGB323232F_* green component when doing
+ * format conversion to RGB. Default 0.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_GREEN_OFFSET   "GstVideoConverter.g-offset"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_BLUE_OFFSET
+ *
+ * #G_TYPE_DOUBLE, offset applied to RGB323232F_* blue component when doing
+ * format conversion to RGB. Default 0.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_BLUE_OFFSET   "GstVideoConverter.b-offset"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_ALPHA_SCALE
+ *
+ * #G_TYPE_DOUBLE, scale applied to RGB323232F_* alpha component when doing
+ * format conversion to RGB. Default 1.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_ALPHA_SCALE   "GstVideoConverter.a-scale"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_RED_SCALE
+ *
+ * #G_TYPE_DOUBLE, scale applied to RGB323232F_* red component when doing
+ * format conversion to RGB. Default 1.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_RED_SCALE   "GstVideoConverter.r-scale"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_GREEN_SCALE
+ *
+ * #G_TYPE_DOUBLE, scale applied to RGB323232F_* green component when doing
+ * format conversion to RGB. Default 1.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_GREEN_SCALE   "GstVideoConverter.g-scale"
+
+/**
+ * GST_VIDEO_CONVERTER_OPT_BLUE_SCALE
+ *
+ * #G_TYPE_DOUBLE, scale applied to RGB323232F_* blue component when doing
+ * format conversion to RGB. Default 1.
+ *
+ * Since: 1.28
+ */
+#define GST_VIDEO_CONVERTER_OPT_BLUE_SCALE   "GstVideoConverter.b-scale"
+
 typedef struct _GstVideoConverter GstVideoConverter;
 
 GST_VIDEO_API

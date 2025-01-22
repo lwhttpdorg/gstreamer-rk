@@ -3388,6 +3388,8 @@ typedef struct
   gint in_x, in_y;
   gint out_x, out_y;
   gpointer tmpline;
+  gfloat a_offset, r_offset, g_offset, b_offset;
+  gfloat a_scale, r_scale, g_scale, b_scale;
 } FConvertTask;
 
 static void
@@ -7165,6 +7167,389 @@ convert_A420_BGRA (GstVideoConverter * convert, const GstVideoFrame * src,
 }
 
 static void
+convert_parse_RGB323232F_config (GstBuffer * buffer,
+    gfloat * alpha_offset, gfloat * red_offset, gfloat * green_offset,
+    gfloat * blue_offset, gfloat * alpha_scale, gfloat * red_scale,
+    gfloat * green_scale, gfloat * blue_scale)
+{
+  GstVideoConvertConfigMeta *meta;
+  gdouble res;
+
+  *alpha_offset = *red_offset = *green_offset = *blue_offset = 0;
+  *alpha_scale = *red_scale = *green_scale = *blue_scale = 1;
+
+  meta = gst_buffer_get_video_convert_config_meta (buffer);
+  if (!meta)
+    return;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_ALPHA_OFFSET, &res))
+    *alpha_offset = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_RED_OFFSET, &res))
+    *red_offset = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_GREEN_OFFSET, &res))
+    *green_offset = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_BLUE_OFFSET, &res))
+    *blue_offset = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_ALPHA_SCALE, &res))
+    *alpha_scale = res;
+
+  if (gst_structure_get_double (meta->config, GST_VIDEO_CONVERTER_OPT_RED_SCALE,
+          &res))
+    *red_scale = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_GREEN_SCALE, &res))
+    *green_scale = res;
+
+  if (gst_structure_get_double (meta->config,
+          GST_VIDEO_CONVERTER_OPT_BLUE_SCALE, &res))
+    *blue_scale = res;
+}
+
+static void
+convert_RBG323232F_LE_RGB_task (FConvertTask * task)
+{
+  gint i;
+
+  for (i = task->height_0; i < task->height_1; i++) {
+    guint8 *d;
+    gfloat *s;
+    gint j;
+
+    s = FRAME_GET_LINE (task->src, i + task->in_y);
+    s += task->in_x * 3;
+    d = FRAME_GET_LINE (task->dest, i + task->out_y);
+    d += task->out_x * 3;
+
+    for (j = 0; j < task->width; j++) {
+      d[j * 3 + 0] =
+          (GFLOAT_FROM_LE (s[j * 3 + 0]) * task->r_scale) - task->r_offset;
+      d[j * 3 + 1] =
+          (GFLOAT_FROM_LE (s[j * 3 + 1]) * task->g_scale) - task->g_offset;
+      d[j * 3 + 2] =
+          (GFLOAT_FROM_LE (s[j * 3 + 2]) * task->b_scale) - task->b_offset;
+    }
+  }
+}
+
+static void
+convert_RBG323232F_LE_RGB (GstVideoConverter * convert,
+    const GstVideoFrame * src, GstVideoFrame * dest)
+{
+  int i;
+  gint width = convert->in_width;
+  gint height = convert->in_height;
+  MatrixData *data = &convert->convert_matrix;
+  FConvertTask *tasks;
+  FConvertTask **tasks_p;
+  gint n_threads;
+  gint lines_per_thread;
+  gfloat alpha_offset, red_offset, green_offset, blue_offset;
+  gfloat alpha_scale, red_scale, green_scale, blue_scale;
+
+  n_threads = convert->conversion_runner->n_threads;
+  tasks = convert->tasks[0] =
+      g_renew (FConvertTask, convert->tasks[0], n_threads);
+  tasks_p = convert->tasks_p[0] =
+      g_renew (FConvertTask *, convert->tasks_p[0], n_threads);
+
+  lines_per_thread = (height + n_threads - 1) / n_threads;
+
+  convert_parse_RGB323232F_config (src->buffer,
+      &alpha_offset, &red_offset, &green_offset, &blue_offset,
+      &alpha_scale, &red_scale, &green_scale, &blue_scale);
+
+  for (i = 0; i < n_threads; i++) {
+    tasks[i].src = src;
+    tasks[i].dest = dest;
+
+    tasks[i].width = width;
+    tasks[i].data = data;
+    tasks[i].in_x = convert->in_x;
+    tasks[i].in_y = convert->in_y;
+    tasks[i].out_x = convert->out_x;
+    tasks[i].out_y = convert->out_y;
+    tasks[i].tmpline = convert->tmpline[i];
+
+    tasks[i].height_0 = i * lines_per_thread;
+    tasks[i].height_1 = tasks[i].height_0 + lines_per_thread;
+    tasks[i].height_1 = MIN (height, tasks[i].height_1);
+
+    tasks[i].r_offset = red_offset;
+    tasks[i].g_offset = green_offset;
+    tasks[i].b_offset = blue_offset;
+    tasks[i].r_scale = red_scale;
+    tasks[i].g_scale = green_scale;
+    tasks[i].b_scale = blue_scale;
+
+    tasks_p[i] = &tasks[i];
+  }
+
+  gst_parallelized_task_runner_run (convert->conversion_runner,
+      (GstParallelizedTaskFunc) convert_RBG323232F_LE_RGB_task,
+      (gpointer) tasks_p);
+}
+
+static void
+convert_RGB_RBG323232F_LE_task (FConvertTask * task)
+{
+  gint i;
+
+  for (i = task->height_0; i < task->height_1; i++) {
+    guint8 *s;
+    gfloat *d;
+    gint j;
+
+    s = FRAME_GET_LINE (task->src, i + task->in_y);
+    s += task->in_x * 3;
+    d = FRAME_GET_LINE (task->dest, i + task->out_y);
+    d += task->out_x * 3;
+
+    for (j = 0; j < task->width; j++) {
+      d[j * 3 + 0] =
+          GFLOAT_TO_LE ((s[j * 3 + 0] + task->r_offset) / task->r_scale);
+      d[j * 3 + 1] =
+          GFLOAT_TO_LE ((s[j * 3 + 1] + task->g_offset) / task->g_scale);
+      d[j * 3 + 2] =
+          GFLOAT_TO_LE ((s[j * 3 + 2] + task->b_offset) / task->b_scale);
+    }
+  }
+}
+
+static void
+convert_RGB_RBG323232F_LE (GstVideoConverter * convert,
+    const GstVideoFrame * src, GstVideoFrame * dest)
+{
+  int i;
+  gint width = convert->in_width;
+  gint height = convert->in_height;
+  MatrixData *data = &convert->convert_matrix;
+  FConvertTask *tasks;
+  FConvertTask **tasks_p;
+  gint n_threads;
+  gint lines_per_thread;
+  gfloat alpha_offset, red_offset, green_offset, blue_offset;
+  gfloat alpha_scale, red_scale, green_scale, blue_scale;
+
+  n_threads = convert->conversion_runner->n_threads;
+  tasks = convert->tasks[0] =
+      g_renew (FConvertTask, convert->tasks[0], n_threads);
+  tasks_p = convert->tasks_p[0] =
+      g_renew (FConvertTask *, convert->tasks_p[0], n_threads);
+
+  lines_per_thread = (height + n_threads - 1) / n_threads;
+
+  convert_parse_RGB323232F_config (dest->buffer,
+      &alpha_offset, &red_offset, &green_offset, &blue_offset,
+      &alpha_scale, &red_scale, &green_scale, &blue_scale);
+
+  for (i = 0; i < n_threads; i++) {
+    tasks[i].src = src;
+    tasks[i].dest = dest;
+
+    tasks[i].width = width;
+    tasks[i].data = data;
+    tasks[i].in_x = convert->in_x;
+    tasks[i].in_y = convert->in_y;
+    tasks[i].out_x = convert->out_x;
+    tasks[i].out_y = convert->out_y;
+    tasks[i].tmpline = convert->tmpline[i];
+
+    tasks[i].height_0 = i * lines_per_thread;
+    tasks[i].height_1 = tasks[i].height_0 + lines_per_thread;
+    tasks[i].height_1 = MIN (height, tasks[i].height_1);
+
+    tasks[i].r_offset = red_offset;
+    tasks[i].g_offset = green_offset;
+    tasks[i].b_offset = blue_offset;
+    tasks[i].r_scale = red_scale;
+    tasks[i].g_scale = green_scale;
+    tasks[i].b_scale = blue_scale;
+    tasks_p[i] = &tasks[i];
+  }
+
+  gst_parallelized_task_runner_run (convert->conversion_runner,
+      (GstParallelizedTaskFunc) convert_RGB_RBG323232F_LE_task,
+      (gpointer) tasks_p);
+}
+
+static void
+convert_RBG323232F_BE_RGB_task (FConvertTask * task)
+{
+  gint i;
+
+  for (i = task->height_0; i < task->height_1; i++) {
+    guint8 *d;
+    gfloat *s;
+    gint j;
+
+    s = FRAME_GET_LINE (task->src, i + task->in_y);
+    s += task->in_x * 3;
+    d = FRAME_GET_LINE (task->dest, i + task->out_y);
+    d += task->out_x * 3;
+
+    for (j = 0; j < task->width; j++) {
+      d[j * 3 + 0] =
+          (GFLOAT_FROM_BE (s[j * 3 + 0]) * task->r_scale) - task->r_offset;
+      d[j * 3 + 1] =
+          (GFLOAT_FROM_BE (s[j * 3 + 1]) * task->g_scale) - task->g_offset;
+      d[j * 3 + 2] =
+          (GFLOAT_FROM_BE (s[j * 3 + 2]) * task->b_scale) - task->b_offset;
+    }
+  }
+}
+
+static void
+convert_RBG323232F_BE_RGB (GstVideoConverter * convert,
+    const GstVideoFrame * src, GstVideoFrame * dest)
+{
+  int i;
+  gint width = convert->in_width;
+  gint height = convert->in_height;
+  MatrixData *data = &convert->convert_matrix;
+  FConvertTask *tasks;
+  FConvertTask **tasks_p;
+  gint n_threads;
+  gint lines_per_thread;
+  gfloat alpha_offset, red_offset, green_offset, blue_offset;
+  gfloat alpha_scale, red_scale, green_scale, blue_scale;
+
+  n_threads = convert->conversion_runner->n_threads;
+  tasks = convert->tasks[0] =
+      g_renew (FConvertTask, convert->tasks[0], n_threads);
+  tasks_p = convert->tasks_p[0] =
+      g_renew (FConvertTask *, convert->tasks_p[0], n_threads);
+
+  lines_per_thread = (height + n_threads - 1) / n_threads;
+
+  convert_parse_RGB323232F_config (src->buffer,
+      &alpha_offset, &red_offset, &green_offset, &blue_offset,
+      &alpha_scale, &red_scale, &green_scale, &blue_scale);
+
+  for (i = 0; i < n_threads; i++) {
+    tasks[i].src = src;
+    tasks[i].dest = dest;
+
+    tasks[i].width = width;
+    tasks[i].data = data;
+    tasks[i].in_x = convert->in_x;
+    tasks[i].in_y = convert->in_y;
+    tasks[i].out_x = convert->out_x;
+    tasks[i].out_y = convert->out_y;
+    tasks[i].tmpline = convert->tmpline[i];
+
+    tasks[i].height_0 = i * lines_per_thread;
+    tasks[i].height_1 = tasks[i].height_0 + lines_per_thread;
+    tasks[i].height_1 = MIN (height, tasks[i].height_1);
+
+    tasks[i].r_offset = red_offset;
+    tasks[i].g_offset = green_offset;
+    tasks[i].b_offset = blue_offset;
+    tasks[i].r_scale = red_scale;
+    tasks[i].g_scale = green_scale;
+    tasks[i].b_scale = blue_scale;
+
+    tasks_p[i] = &tasks[i];
+  }
+
+  gst_parallelized_task_runner_run (convert->conversion_runner,
+      (GstParallelizedTaskFunc) convert_RBG323232F_BE_RGB_task,
+      (gpointer) tasks_p);
+}
+
+static void
+convert_RGB_RBG323232F_BE_task (FConvertTask * task)
+{
+  gint i;
+
+  for (i = task->height_0; i < task->height_1; i++) {
+    guint8 *s;
+    gfloat *d;
+    gint j;
+
+    s = FRAME_GET_LINE (task->src, i + task->in_y);
+    s += task->in_x * 3;
+    d = FRAME_GET_LINE (task->dest, i + task->out_y);
+    d += task->out_x * 3;
+
+    for (j = 0; j < task->width; j++) {
+      d[j * 3 + 0] =
+          GFLOAT_TO_BE ((s[j * 3 + 0] + task->r_offset) / task->r_scale);
+      d[j * 3 + 1] =
+          GFLOAT_TO_BE ((s[j * 3 + 1] + task->g_offset) / task->g_scale);
+      d[j * 3 + 2] =
+          GFLOAT_TO_BE ((s[j * 3 + 2] + task->b_offset) / task->b_scale);
+    }
+  }
+}
+
+static void
+convert_RGB_RBG323232F_BE (GstVideoConverter * convert,
+    const GstVideoFrame * src, GstVideoFrame * dest)
+{
+  int i;
+  gint width = convert->in_width;
+  gint height = convert->in_height;
+  MatrixData *data = &convert->convert_matrix;
+  FConvertTask *tasks;
+  FConvertTask **tasks_p;
+  gint n_threads;
+  gint lines_per_thread;
+  gfloat alpha_offset, red_offset, green_offset, blue_offset;
+  gfloat alpha_scale, red_scale, green_scale, blue_scale;
+
+  n_threads = convert->conversion_runner->n_threads;
+  tasks = convert->tasks[0] =
+      g_renew (FConvertTask, convert->tasks[0], n_threads);
+  tasks_p = convert->tasks_p[0] =
+      g_renew (FConvertTask *, convert->tasks_p[0], n_threads);
+
+  lines_per_thread = (height + n_threads - 1) / n_threads;
+
+  convert_parse_RGB323232F_config (dest->buffer,
+      &alpha_offset, &red_offset, &green_offset, &blue_offset,
+      &alpha_scale, &red_scale, &green_scale, &blue_scale);
+
+  for (i = 0; i < n_threads; i++) {
+    tasks[i].src = src;
+    tasks[i].dest = dest;
+
+    tasks[i].width = width;
+    tasks[i].data = data;
+    tasks[i].in_x = convert->in_x;
+    tasks[i].in_y = convert->in_y;
+    tasks[i].out_x = convert->out_x;
+    tasks[i].out_y = convert->out_y;
+    tasks[i].tmpline = convert->tmpline[i];
+
+    tasks[i].height_0 = i * lines_per_thread;
+    tasks[i].height_1 = tasks[i].height_0 + lines_per_thread;
+    tasks[i].height_1 = MIN (height, tasks[i].height_1);
+
+    tasks[i].r_offset = red_offset;
+    tasks[i].g_offset = green_offset;
+    tasks[i].b_offset = blue_offset;
+    tasks[i].r_scale = red_scale;
+    tasks[i].g_scale = green_scale;
+    tasks[i].b_scale = blue_scale;
+    tasks_p[i] = &tasks[i];
+  }
+
+  gst_parallelized_task_runner_run (convert->conversion_runner,
+      (GstParallelizedTaskFunc) convert_RGB_RBG323232F_BE_task,
+      (gpointer) tasks_p);
+}
+
+static void
 memset_u24 (guint8 * data, guint8 col[3], unsigned int n)
 {
   unsigned int i;
@@ -8766,6 +9151,16 @@ static const VideoTransform transforms[] = {
       TRUE, TRUE, FALSE, FALSE, FALSE, 0, 0, convert_scale_planes},
   {GST_VIDEO_FORMAT_GRAY16_BE, GST_VIDEO_FORMAT_GRAY16_BE, TRUE, FALSE, FALSE,
       TRUE, TRUE, FALSE, FALSE, FALSE, 0, 0, convert_scale_planes},
+
+  {GST_VIDEO_FORMAT_RGB, GST_VIDEO_FORMAT_RGB323232F_LE, TRUE, FALSE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, FALSE, 0, 0, convert_RGB_RBG323232F_LE},
+  {GST_VIDEO_FORMAT_RGB323232F_LE, GST_VIDEO_FORMAT_RGB, TRUE, FALSE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, FALSE, 0, 0, convert_RBG323232F_LE_RGB},
+
+  {GST_VIDEO_FORMAT_RGB, GST_VIDEO_FORMAT_RGB323232F_BE, TRUE, FALSE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, FALSE, 0, 0, convert_RGB_RBG323232F_BE},
+  {GST_VIDEO_FORMAT_RGB323232F_BE, GST_VIDEO_FORMAT_RGB, TRUE, FALSE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, FALSE, 0, 0, convert_RBG323232F_BE_RGB},
 };
 
 static gboolean
