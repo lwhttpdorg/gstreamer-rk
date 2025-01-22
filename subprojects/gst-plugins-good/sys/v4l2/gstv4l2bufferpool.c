@@ -83,6 +83,9 @@ enum _GstV4l2BufferState
 static void gst_v4l2_buffer_pool_complete_release_buffer (GstBufferPool * bpool,
     GstBuffer * buffer, gboolean queued);
 
+static void gst_v4l2_buffer_pool_other_buffer_released (GstV4l2BufferPool *
+    pool);
+
 static gboolean
 gst_v4l2_is_buffer_valid (GstBuffer * buffer, GstV4l2MemoryGroup ** out_group,
     gboolean check_writable)
@@ -369,6 +372,14 @@ gst_v4l2_buffer_pool_import_dmabuf (GstV4l2BufferPool * pool,
           dma_mem))
     goto import_failed;
 
+  if (pool->other_buffers[group->buffer.index] &&
+      pool->other_buffers[group->buffer.index] != src) {
+    GST_WARNING_OBJECT (pool,
+        "other buffer for index %d will be changed from %p to %p",
+        group->buffer.index, pool->other_buffers[group->buffer.index], src);
+  }
+  pool->other_buffers[group->buffer.index] = src;
+
   gst_mini_object_set_qdata (GST_MINI_OBJECT (dest), GST_V4L2_IMPORT_QUARK,
       gst_buffer_ref (src), (GDestroyNotify) gst_buffer_unref);
 
@@ -394,9 +405,66 @@ import_failed:
   }
 }
 
+/* if exist owned buffers which are not queued or outstanding, then
+  we acquire other buffer, and try to find a owned buffer
+  that match other buffer
+*/
+static GstFlowReturn
+gst_v4l2_buffer_pool_prepare_matched_buffer (GstV4l2BufferPool * pool,
+    GstBuffer ** dest, GstBuffer ** src)
+{
+  gint buf_index = 0;
+  GstBuffer* owned_buffer = NULL;
+  GstBuffer* other_buffer = NULL;
+
+  g_return_val_if_fail (dest != NULL, GST_FLOW_ERROR);
+  g_return_val_if_fail (src != NULL, GST_FLOW_ERROR);
+
+  for (gint i = 0; i < VIDEO_MAX_FRAME; i++) {
+    gint old_buffer_state =
+        g_atomic_int_get (&pool->buffer_state[i]);
+    if (!(old_buffer_state & BUFFER_STATE_QUEUED) &&
+        !(old_buffer_state & BUFFER_STATE_OUTSTANDING) &&
+        pool->owned_buffers[i] &&
+        !gst_mini_object_get_qdata (GST_MINI_OBJECT (pool->owned_buffers[i]), GST_V4L2_IMPORT_QUARK)) {
+      owned_buffer = pool->owned_buffers[i];
+      buf_index = i;
+
+      if (!other_buffer) {
+        GstFlowReturn ret = GST_FLOW_OK;
+
+        ret = gst_buffer_pool_acquire_buffer (pool->other_pool, &other_buffer, NULL);
+        if (ret != GST_FLOW_OK) {
+          GST_ERROR_OBJECT (pool, "failed to acquire buffer from downstream pool");
+          goto fail;
+        }
+      }
+
+      if (pool->other_buffers[i] == other_buffer) {
+        GST_DEBUG_OBJECT(pool, "matched index %d found for other buffer %p", buf_index, other_buffer);
+        break;
+      }
+    }
+  }
+
+  if (!owned_buffer) {
+    GST_WARNING_OBJECT (pool, "no available owned buffer");
+    goto fail;
+  }
+
+  *dest = owned_buffer;
+  *src = other_buffer;
+  GST_DEBUG_OBJECT (pool, "buffer matched, dest %p src %p", owned_buffer, other_buffer);
+
+  return GST_FLOW_OK;
+
+fail:
+  return GST_FLOW_ERROR;
+}
+
 static GstFlowReturn
 gst_v4l2_buffer_pool_prepare_buffer (GstV4l2BufferPool * pool,
-    GstBuffer * dest, GstBuffer * src)
+    GstBuffer ** dest, GstBuffer * src)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   gboolean own_src = FALSE;
@@ -407,25 +475,41 @@ gst_v4l2_buffer_pool_prepare_buffer (GstV4l2BufferPool * pool,
       return GST_FLOW_ERROR;
     }
 
-    ret = gst_buffer_pool_acquire_buffer (pool->other_pool, &src, NULL);
-    if (ret != GST_FLOW_OK) {
-      GST_ERROR_OBJECT (pool, "failed to acquire buffer from downstream pool");
-      goto done;
-    }
+    if (*dest) {
+      ret = gst_buffer_pool_acquire_buffer (pool->other_pool, &src, NULL);
+      if (ret != GST_FLOW_OK) {
+        GST_ERROR_OBJECT (pool, "failed to acquire buffer from downstream pool");
+        goto done;
+      }
 
-    own_src = TRUE;
+      own_src = TRUE;
+    } else {
+      GstV4l2MemoryGroup *group = NULL;
+
+      ret = gst_v4l2_buffer_pool_prepare_matched_buffer (pool, dest, &src);
+      if (ret != GST_FLOW_OK) {
+        GST_DEBUG_OBJECT (pool, "no availble buffer prepared");
+        goto done;
+      }
+
+      if (gst_v4l2_is_buffer_valid (*dest, &group, FALSE)) {
+        gst_v4l2_allocator_reset_group (pool->vallocator, group);
+      }
+
+      own_src = TRUE;
+    }
   }
 
   switch (pool->obj->mode) {
     case GST_V4L2_IO_MMAP:
     case GST_V4L2_IO_DMABUF:
-      ret = gst_v4l2_buffer_pool_copy_buffer (pool, dest, src);
+      ret = gst_v4l2_buffer_pool_copy_buffer (pool, *dest, src);
       break;
     case GST_V4L2_IO_USERPTR:
-      ret = gst_v4l2_buffer_pool_import_userptr (pool, dest, src);
+      ret = gst_v4l2_buffer_pool_import_userptr (pool, *dest, src);
       break;
     case GST_V4L2_IO_DMABUF_IMPORT:
-      ret = gst_v4l2_buffer_pool_import_dmabuf (pool, dest, src);
+      ret = gst_v4l2_buffer_pool_import_dmabuf (pool, *dest, src);
       break;
     default:
       break;
@@ -763,7 +847,12 @@ gst_v4l2_buffer_pool_streamoff (GstV4l2BufferPool * pool)
       GstBuffer *buffer = pool->buffers[i];
       GstBufferPool *bpool = GST_BUFFER_POOL (pool);
 
+      GST_DEBUG ("buf index %d buffer %p owned buffer %p",
+          i, pool->buffers[i], pool->owned_buffers[i]);
+
       pool->buffers[i] = NULL;
+      pool->owned_buffers[i] = NULL;
+      pool->other_buffers[i] = NULL;
 
       if (!(old_buffer_state & BUFFER_STATE_OUTSTANDING)) {
         if (V4L2_TYPE_IS_OUTPUT (pool->obj->type))
@@ -774,6 +863,21 @@ gst_v4l2_buffer_pool_streamoff (GstV4l2BufferPool * pool)
       }
 
       g_atomic_int_add (&pool->num_queued, -1);
+    } else if (pool->owned_buffers[i]) {
+      GstBuffer *buffer = pool->owned_buffers[i];
+      GstBufferPool *bpool = GST_BUFFER_POOL (pool);
+
+      GST_DEBUG ("buf index %d buffer %p owned buffer %p",
+          i, pool->buffers[i], pool->owned_buffers[i]);
+
+      pool->other_buffers[i] = NULL;
+      pool->owned_buffers[i] = NULL;
+
+      if (!(old_buffer_state & BUFFER_STATE_OUTSTANDING)) {
+        if (V4L2_TYPE_IS_CAPTURE (pool->obj->type)) {
+          pclass->release_buffer (bpool, buffer);
+        }
+      }
     }
   }
 }
@@ -942,6 +1046,13 @@ gst_v4l2_buffer_pool_start (GstBufferPool * bpool)
     pool->group_released_handler =
         g_signal_connect_swapped (pool->vallocator, "group-released",
         G_CALLBACK (gst_v4l2_buffer_pool_resurrect_buffer), pool);
+
+    if (obj->mode == GST_V4L2_IO_DMABUF_IMPORT) {
+      pool->other_buffer_released_handler =
+          g_signal_connect_swapped (pool->other_pool, "buffer-released",
+          G_CALLBACK (gst_v4l2_buffer_pool_other_buffer_released), pool);
+      GST_DEBUG_OBJECT (pool, "connect buffer released handler");
+    }
     ret = gst_v4l2_buffer_pool_streamon (pool);
   }
 
@@ -1013,6 +1124,13 @@ gst_v4l2_buffer_pool_stop (GstBufferPool * bpool)
     g_signal_handler_disconnect (pool->vallocator,
         pool->group_released_handler);
     pool->group_released_handler = 0;
+  }
+
+  if (pool->other_buffer_released_handler > 0) {
+    g_signal_handler_disconnect (pool->other_pool,
+        pool->other_buffer_released_handler);
+    pool->other_buffer_released_handler = 0;
+    GST_DEBUG_OBJECT (pool, "disconnect buffer released handler");
   }
 
   if (pool->other_pool) {
@@ -1535,10 +1653,43 @@ done:
       GST_LOG_OBJECT (pool, "mark buffer %u outstanding", group->buffer.index);
       g_atomic_int_or (&pool->buffer_state[group->buffer.index],
           BUFFER_STATE_OUTSTANDING);
+      pool->owned_buffers[group->buffer.index] = NULL;
     }
   }
 
   return ret;
+}
+
+static void
+gst_v4l2_buffer_pool_other_buffer_released (GstV4l2BufferPool * pool)
+{
+  GstV4l2MemoryGroup *group;
+  GstBufferPool *bpool = GST_BUFFER_POOL (pool);
+  GstFlowReturn ret = GST_FLOW_OK;
+  GstBufferPoolClass *pclass = GST_BUFFER_POOL_CLASS (parent_class);
+
+  GST_DEBUG_OBJECT (pool, "other pool buffer avaiable");
+  g_signal_handler_block (pool->other_pool,
+      pool->other_buffer_released_handler);
+
+  do {
+    GstBuffer *dest = NULL;
+
+    GST_DEBUG_OBJECT (pool, "prepare buffer");
+
+    ret = gst_v4l2_buffer_pool_prepare_buffer (pool, &dest, NULL);
+    GST_DEBUG_OBJECT (pool, "prepare buffer done %d", ret);
+
+    if ((ret == GST_FLOW_OK) && gst_v4l2_is_buffer_valid (dest, &group)) {
+      GST_DEBUG_OBJECT (pool, "got valid buffer");
+      if (gst_v4l2_buffer_pool_qbuf (pool, dest, group, NULL) != GST_FLOW_OK)
+        pclass->release_buffer (bpool, dest);
+    }
+  } while (ret == GST_FLOW_OK);
+
+  g_signal_handler_unblock (pool->other_pool,
+      pool->other_buffer_released_handler);
+  GST_DEBUG_OBJECT (pool, "process available buffer done");
 }
 
 /*
@@ -1588,7 +1739,7 @@ gst_v4l2_buffer_pool_complete_release_buffer (GstBufferPool * bpool,
             gst_v4l2_allocator_reset_group (pool->vallocator, group);
             /* queue back in the device */
             if (pool->other_pool)
-              ret = gst_v4l2_buffer_pool_prepare_buffer (pool, buffer, NULL);
+              ret = gst_v4l2_buffer_pool_prepare_buffer (pool, &buffer, NULL);
             if (ret != GST_FLOW_OK ||
                 gst_v4l2_buffer_pool_qbuf (pool, buffer, group,
                     NULL) != GST_FLOW_OK)
@@ -1674,13 +1825,22 @@ gst_v4l2_buffer_pool_release_buffer (GstBufferPool * bpool, GstBuffer * buffer)
   GstV4l2MemoryGroup *group;
   gboolean queued = FALSE;
 
+  GST_DEBUG_OBJECT (pool, "releasing buffer %p", buffer);
+
   if (gst_v4l2_is_buffer_valid (buffer, &group, TRUE)) {
+    pool->owned_buffers[group->buffer.index] = buffer;
+
     gint old_buffer_state =
         g_atomic_int_and (&pool->buffer_state[group->buffer.index],
         ~BUFFER_STATE_OUTSTANDING);
     queued = (old_buffer_state & BUFFER_STATE_QUEUED) != 0;
     GST_LOG_OBJECT (pool, "mark buffer %u not outstanding",
         group->buffer.index);
+  }
+
+  if (pool->other_buffer_released_handler) {
+    GST_DEBUG_OBJECT (pool, "pending release buffer %p", buffer);
+    return;
   }
 
   gst_v4l2_buffer_pool_complete_release_buffer (bpool, buffer, queued);
@@ -2107,7 +2267,7 @@ gst_v4l2_buffer_pool_process (GstV4l2BufferPool * pool, GstBuffer ** buf,
             if (ret != GST_FLOW_OK)
               goto acquire_failed;
 
-            ret = gst_v4l2_buffer_pool_prepare_buffer (pool, to_queue, *buf);
+            ret = gst_v4l2_buffer_pool_prepare_buffer (pool, &to_queue, *buf);
             if (ret != GST_FLOW_OK) {
               gst_buffer_unref (to_queue);
               goto prepare_failed;

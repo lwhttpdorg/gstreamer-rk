@@ -5784,7 +5784,16 @@ gst_v4l2_object_decide_allocation (GstV4l2Object * obj, GstQuery * query)
       gst_v4l2_buffer_pool_copy_at_threshold (GST_V4L2_BUFFER_POOL (pool),
           FALSE);
     }
-
+  } else if (V4L2_TYPE_IS_CAPTURE (obj->type) &&
+      (obj->mode == GST_V4L2_IO_DMABUF_IMPORT)) {
+    /* In order to reuse the other buffer corresponding to the v4l2 buffer,
+     * we need to ensure that the v4l2 pool and the other pool have the same
+     * number of buffers. Additionally, to prevent the buffer flow from
+     * hanging, the number of buffers should be the sum of the minimum buffer
+     * number required by the current driver and the minimum buffer number
+     * required downstream, plus one. */
+    own_min = (obj->min_buffers) + min + 1;
+    min = own_min;
   } else {
     /* In this case we'll have to configure two buffer pool. For our buffer
      * pool, we'll need what the driver one, and one more, so we can dequeu */
