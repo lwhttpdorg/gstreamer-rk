@@ -90,11 +90,14 @@ struct _GstV4l2BufferPool
   gboolean streaming;
   gboolean flushing;
 
+  GstBuffer *owned_buffers[VIDEO_MAX_FRAME];
+  GstBuffer *other_buffers[VIDEO_MAX_FRAME];
   GstBuffer *buffers[VIDEO_MAX_FRAME];
   volatile gint buffer_state[VIDEO_MAX_FRAME];
 
   /* signal handlers */
   gulong group_released_handler;
+  gulong other_buffer_released_handler;
 
   /* Control to warn only once on buggy feild driver bug */
   gboolean has_warned_on_buggy_field;
