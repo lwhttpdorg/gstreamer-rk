@@ -31,9 +31,7 @@ stream the streamheader buffers. Additionally sink elements can remove buffers
 that are received and are duplicates of buffers in the streamheader if it know
 that receiver already has this buffer and it is appropriate to do so given the format of the stream. When an element starts sending data to
 a new destination it should start by sending streamheader buffers consecutively
-and before any of the data (non-HEADER) buffers they apply to. If necessary, the
-element should internally queue non-HEADER buffers until it received the
-streamheaders.
+and before any of the data (non-HEADER) buffers they apply to.
 
 ## Examples of elements using streamheader
 
