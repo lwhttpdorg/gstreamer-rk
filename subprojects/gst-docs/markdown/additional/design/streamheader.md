@@ -83,7 +83,7 @@ streamheaders.
 - flacdec
 - speexdec
 
-#### Elements that can receive and send streamheader caps
+### Elements that can receive and send streamheader caps
 Those consume Vorbis/Theora/FLAC/Speex/Opus, and output a streamable container
 
 - oggmux
