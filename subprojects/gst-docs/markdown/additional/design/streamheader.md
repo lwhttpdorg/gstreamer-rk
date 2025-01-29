@@ -34,3 +34,60 @@ a new destination it should start by sending streamheader buffers consecutively
 and before any of the data (non-HEADER) buffers they apply to. If necessary, the
 element should internally queue non-HEADER buffers until it received the
 streamheaders.
+
+## Examples of elements using streamheader
+
+### Elements that can send streamheader caps:
+
+#### Vorbis/Theora/FLAC/Speex encoders:
+- vorbisenc
+- theoraenc
+- flacenc
+- speexenc
+
+#### Demuxers that output Vorbis/Theora/FLAC/Speex:
+- oggdemux
+- flvdemux
+- qtdemux
+
+#### Demuxers that output H.264 bytestream:
+- asfdemux
+
+#### Muxers that create streamable containers
+- oggparse
+- asfmux
+- mpegtsmux
+- flvmux
+- qtmux
+
+#### Vòrbis/Theora RTP payloaders
+- rtptheorapay
+- rtpvorbispay
+
+### Elements that can receive streamheader caps:
+
+#### Network sinks:
+- multifdsink
+- multisocketsink
+- multifilesink
+- shmsink
+- srtsink
+- rtmpsink
+- rtmp2sink
+
+#### Vorbis/Theora/FLAC/Speex/Opus decoders:
+- amcaudiodec
+- opusdec
+- theoradec
+- vorbisdec
+- flacdec
+- speexdec
+
+#### Elements that can receive and send streamheader caps
+Those consume Vorbis/Theora/FLAC/Speex/Opus, and output a streamable container
+
+- oggmux
+- gdppay
+- theoraparse
+- matroskamux
+
