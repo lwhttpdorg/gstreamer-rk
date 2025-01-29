@@ -21,15 +21,15 @@ normal buffers.
 
 Data that is essential for data stream utilization are stored in buffers that
 are marked with `GST_BUFFER_FLAG_HEADER` flag. Additionally these buffers are
-embedded inside caps. More specifically these buffers are stored in a [value](https://docs.gtk.org/gobject/struct.Value.html)
+embedded inside caps. More specifically these buffers are stored in a caps field of
 type `GST_BUFFER` or `GST_TYPE_ARRAY`. This value is itself added to
 [caps](caps.md) under the field name "streamheader".
 
-The buffers themselves still get pushed as normal buffers, therefore it is the
-sink's elements responsibility to keep a copy, update the copy,  inject into the
+The buffers themselves will usually still get pushed as normal buffers, therefore it is the
+sink element's responsibility to keep a copy, update the copy, and inject into the
 stream the streamheader buffers. Additionally sink elements can remove buffers
 that are received and are duplicates of buffers in the streamheader if it know
-that receiver already has this buffer. When an element start sending data to
+that receiver already has this buffer and it is appropriate to do so given the format of the stream. When an element starts sending data to
 a new destination it should start by sending streamheader buffers consecutively
 and before any of the data (non-HEADER) buffers they apply to. If necessary, the
 element should internally queue non-HEADER buffers until it received the
