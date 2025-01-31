@@ -158,7 +158,7 @@ struct _GstSplitMuxSink
 
   gdouble mux_overhead;
 
-  GstClockTime threshold_time;
+  GstClockTime threshold_time, threshold_time_overshoot;
   guint64 threshold_bytes;
   guint max_files;
   gboolean send_keyframe_requests;
