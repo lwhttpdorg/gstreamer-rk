@@ -75,7 +75,7 @@ if opencv_found
   gstopencv = library('gstopencv',
     gstopencv_sources,
     cpp_args : gst_plugins_bad_args + gstopencv_cargs + [ '-DGST_USE_UNSTABLE_API' ],
-    link_args : [noseh_link_args, '-lopencv_tracking'],
+    link_args : [noseh_link_args],
     include_directories : [configinc, libsinc],
     dependencies : [gstbase_dep, gstvideo_dep, opencv_dep, gstopencv_dep],
     install : true,
