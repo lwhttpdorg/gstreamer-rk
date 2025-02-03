@@ -90,8 +90,8 @@ struct _GstFlvMux {
 
   /* <private> */
   GstFlvMuxState state;
-  GstFlvMuxPad *audio_pad;
-  GstFlvMuxPad *video_pad;
+  GList* audio_pads;
+  GList* video_pads;
   gboolean streamable;
   gchar *metadatacreator;
   gchar *encoder;
