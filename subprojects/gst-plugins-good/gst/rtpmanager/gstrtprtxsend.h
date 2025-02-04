@@ -49,6 +49,9 @@ struct _GstRtpRtxSend
   GstPad *sinkpad;
   GstPad *srcpad;
 
+  /* last push from the pad task */
+  GstFlowReturn last_ret;
+
   /* rtp packets that will be pushed out */
   GstDataQueue *queue;
 
@@ -81,6 +84,9 @@ struct _GstRtpRtxSend
   /* list of relevant RTP Header Extensions */
   GstRTPHeaderExtension *rid_stream;
   GstRTPHeaderExtension *rid_repaired;
+  GstRTPHeaderExtension *twcc_ext;
+  guint8 twcc_id;
+  guint16 twcc_seqnum;
 
   GstBuffer *dummy_writable;
 };
