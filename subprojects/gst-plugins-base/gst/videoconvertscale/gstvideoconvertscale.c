@@ -108,6 +108,8 @@ typedef struct
   GstStructure *converter_config;
   gboolean converter_config_changed;
 
+  GstStructure *converter_config_meta;
+
   gint borders_h;
   gint borders_w;
 } GstVideoConvertScalePrivate;
@@ -271,11 +273,30 @@ static gboolean
 gst_video_convert_scale_filter_meta (GstBaseTransform * trans, GstQuery * query,
     GType api, const GstStructure * params)
 {
+  GstVideoConvertScale *self = GST_VIDEO_CONVERT_SCALE_CAST (trans);
+  GstVideoConvertScalePrivate *priv = PRIV (self);
+  gboolean has_convert_config_meta;
+  guint convert_config_index;
+
   /* This element cannot passthrough the crop meta, because it would convert the
    * wrong sub-region of the image, and worst, our output image may not be large
    * enough for the crop to be applied later */
   if (api == GST_VIDEO_CROP_META_API_TYPE)
     return FALSE;
+
+  has_convert_config_meta =
+      gst_query_find_allocation_meta (query,
+      GST_VIDEO_CONVERT_CONFIG_META_API_TYPE, &convert_config_index);
+  if (has_convert_config_meta) {
+    const GstStructure *config;
+
+    gst_query_parse_nth_allocation_meta (query, convert_config_index, &config);
+    if (config) {
+      if (priv->converter_config_meta)
+        gst_structure_free (priv->converter_config_meta);
+      priv->converter_config_meta = gst_structure_copy (config);
+    }
+  }
 
   /* propose all other metadata upstream */
   return TRUE;
@@ -456,6 +477,8 @@ gst_video_convert_scale_init (GstVideoConvertScale * self)
 
   priv->converter_config = NULL;
   priv->converter_config_changed = FALSE;
+
+  priv->converter_config_meta = NULL;
 }
 
 static void
@@ -469,6 +492,10 @@ gst_video_convert_scale_finalize (GstVideoConvertScale * self)
   if (priv->converter_config)
     gst_structure_free (priv->converter_config);
   priv->converter_config = NULL;
+
+  if (priv->converter_config_meta)
+    gst_structure_free (priv->converter_config_meta);
+  priv->converter_config_meta = NULL;
 
   G_OBJECT_CLASS (parent_class)->finalize (G_OBJECT (self));
 }
@@ -1841,6 +1868,11 @@ gst_video_convert_scale_transform_frame (GstVideoFilter * filter,
         gst_video_converter_new (&filter->in_info, &filter->out_info, options);
 
     priv->converter_config_changed = FALSE;
+  }
+
+  if (priv->converter_config_meta) {
+    gst_buffer_add_video_convert_config_meta (out_frame->buffer,
+        priv->converter_config_meta);
   }
 
   gst_video_converter_frame (priv->convert, in_frame, out_frame);
