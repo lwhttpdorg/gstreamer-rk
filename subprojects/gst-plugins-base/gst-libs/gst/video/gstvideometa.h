@@ -419,7 +419,36 @@ gst_buffer_add_video_time_code_meta_full                     (GstBuffer         
                                                               guint                   seconds,
                                                               guint                   frames,
                                                               guint                   field_count);
+/**
+ * GstVideoConvertConfigMeta
+ * @meta: parent #GstMeta
+ * @config: the convert configuration to be applied
+ *
+ * Extra buffer metadata describing the converter configuration.
+ *
+ * Since: 1.28
+ */
+typedef struct {
+  GstMeta meta;
+  GstStructure *config;
+} GstVideoConvertConfigMeta;
+
+GST_VIDEO_API
+GType              gst_video_convert_config_meta_api_get_type (void);
+#define GST_VIDEO_CONVERT_CONFIG_META_API_TYPE (gst_video_convert_config_meta_api_get_type())
+
+GST_VIDEO_API
+const GstMetaInfo *gst_video_convert_config_meta_get_info (void);
+#define GST_VIDEO_CONVERT_CONFIG_META_INFO (gst_video_convert_config_meta_get_info())
+
+#define gst_buffer_get_video_convert_config_meta(b) \
+        ((GstVideoConvertConfigMeta*)gst_buffer_get_meta((b),GST_VIDEO_CONVERT_CONFIG_META_API_TYPE))
 
 G_END_DECLS
+
+GST_VIDEO_API
+GstVideoConvertConfigMeta *
+gst_buffer_add_video_convert_config_meta                     (GstBuffer * buffer,
+                                                              GstStructure * config);
 
 #endif /* __GST_VIDEO_META_H__ */
