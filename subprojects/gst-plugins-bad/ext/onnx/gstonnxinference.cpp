@@ -112,14 +112,14 @@ static GstStaticPadTemplate gst_onnx_inference_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA }"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA,RGB_32F_BE,RGB_32F_LE }"))
     );
 
 static GstStaticPadTemplate gst_onnx_inference_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA }"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA,BGRA,RGB_32F_BE,RGB_32F_LE }"))
     );
 
 static void gst_onnx_inference_set_property (GObject * object,
@@ -137,6 +137,9 @@ static GstCaps *gst_onnx_inference_transform_caps (GstBaseTransform *
 static gboolean
 gst_onnx_inference_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     GstCaps * outcaps);
+static gboolean
+gst_onnx_inference_propose_allocation (GstBaseTransform * trans,
+    GstQuery * decide_query, GstQuery * query);
 
 G_DEFINE_TYPE (GstOnnxInference, gst_onnx_inference, GST_TYPE_BASE_TRANSFORM);
 
@@ -331,6 +334,8 @@ gst_onnx_inference_class_init (GstOnnxInferenceClass * klass)
       GST_DEBUG_FUNCPTR (gst_onnx_inference_transform_caps);
   basetransform_class->set_caps =
       GST_DEBUG_FUNCPTR (gst_onnx_inference_set_caps);
+  basetransform_class->propose_allocation =
+      GST_DEBUG_FUNCPTR (gst_onnx_inference_propose_allocation);
 }
 
 static void
@@ -500,7 +505,7 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
       case 3:
         switch (onnxClient->getInputImageFormat ()) {
         case GST_ML_INPUT_IMAGE_FORMAT_HWC:
-          gst_caps_set_simple (restrictions, "format", G_TYPE_STRING, "RGB",
+	  gst_caps_set_simple (restrictions, "format", G_TYPE_STRING, "RGB",
                                NULL);
           break;
         case GST_ML_INPUT_IMAGE_FORMAT_CHW:
@@ -526,6 +531,16 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
           onnxClient->getChannels());
         return NULL;
     }
+  }
+
+  if (onnxClient->getInputImageDatatype() == GST_TENSOR_DATA_TYPE_FLOAT32) {
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+     gst_caps_set_simple (restrictions, "format", G_TYPE_STRING, "RGB_32F_BE",
+                          NULL);
+#else
+     gst_caps_set_simple (restrictions, "format", G_TYPE_STRING, "RGB_32F_LE",
+                          NULL);
+#endif
   }
 
   GST_DEBUG_OBJECT(self, "Applying caps restrictions: %" GST_PTR_FORMAT,
@@ -598,4 +613,36 @@ gst_onnx_inference_process (GstBaseTransform * trans, GstBuffer * buf)
   }
 
   return TRUE;
+}
+
+static gboolean
+gst_onnx_inference_propose_allocation (GstBaseTransform * trans,
+    GstQuery * decide_query, GstQuery * query)
+{
+  GstOnnxInference *self = GST_ONNX_INFERENCE (trans);
+  auto onnxClient = GST_ONNX_CLIENT_MEMBER (self);
+  GstStructure * config;
+  gfloat offset, scale;
+
+  if (onnxClient->getInputImageDatatype() != GST_TENSOR_DATA_TYPE_FLOAT32)
+    goto no_meta;
+
+  config = gst_structure_new_static_str_empty ("convert-config-meta");
+  offset = onnxClient->getInputImageOffset ();
+  scale = onnxClient->getInputImageScale ();
+ 
+  gst_structure_set_static_str (config,
+    GST_VIDEO_CONVERTER_OPT_RED_OFFSET, G_TYPE_DOUBLE, offset,
+    GST_VIDEO_CONVERTER_OPT_GREEN_OFFSET, G_TYPE_DOUBLE, offset,
+    GST_VIDEO_CONVERTER_OPT_BLUE_OFFSET, G_TYPE_DOUBLE, offset,
+    GST_VIDEO_CONVERTER_OPT_RED_SCALE, G_TYPE_DOUBLE, scale,
+    GST_VIDEO_CONVERTER_OPT_GREEN_SCALE, G_TYPE_DOUBLE, scale,
+    GST_VIDEO_CONVERTER_OPT_BLUE_SCALE, G_TYPE_DOUBLE, scale,
+    NULL);
+
+  gst_query_add_allocation_meta (query, GST_VIDEO_CONVERT_CONFIG_META_API_TYPE, config);
+
+no_meta:
+  return GST_BASE_TRANSFORM_CLASS(gst_onnx_inference_parent_class)->propose_allocation (trans,
+          decide_query, query);
 }

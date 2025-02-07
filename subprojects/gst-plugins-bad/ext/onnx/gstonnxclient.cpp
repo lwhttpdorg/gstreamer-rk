@@ -465,11 +465,8 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
               inputDims.size ()));
         break;
       case GST_TENSOR_DATA_TYPE_FLOAT32: {
-        convert_image_remove_alpha ((float*)dest, inputImageFormat , srcPtr,
-        srcSamplesPerPixel, stride, (float)inputTensorOffset, (float)
-        inputTensorScale);
         inputTensors.push_back (Ort::Value::CreateTensor < float > (
-              memoryInfo, (float*)dest, inputTensorSize, inputDims.data (),
+              memoryInfo, (float*)img_data, inputTensorSize, inputDims.data (),
               inputDims.size ()));
         }
         break;
