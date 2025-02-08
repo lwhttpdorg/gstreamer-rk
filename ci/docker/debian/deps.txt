@@ -35,6 +35,7 @@ guile-cairo-dev
 iproute2
 iso-codes
 itstool
+jq
 ladspa-sdk
 liba52-0.7.4-dev
 libaa1-dev
@@ -149,7 +150,6 @@ libogg-dev
 libopenal-dev
 libopencore-amrnb-dev
 libopencore-amrwb-dev
-libopencv-dev
 libopenexr-dev
 libopengl-dev
 libopenh264-dev
@@ -183,7 +183,6 @@ libsoup2.4-dev
 libspandsp-dev
 libspeex-dev
 libsphinxbase-dev
-libspice-client-glib-2.0-dev
 libsrt-openssl-dev
 libsrtp2-dev
 libssh2-1-dev
@@ -215,9 +214,6 @@ libwayland-dev
 libwebp-dev
 libwebrtc-audio-processing-dev
 libwildmidi-dev
-libwpe-1.0-dev
-libwpebackend-fdo-1.0-dev
-libwpewebkit-1.1-dev
 libx11-dev
 libx11-xcb-dev
 libx264-dev
@@ -251,7 +247,6 @@ libzxingcore-dev
 llvm-dev
 lua-zlib-dev
 make
-modemmanager-dev
 mono-complete
 mono-devel
 nasm
@@ -269,7 +264,6 @@ qtbase5-dev
 qtbase5-private-dev
 qtdeclarative5-dev
 qtdeclarative5-dev-tools
-qttools5-dev-tools
 sudo
 svt-av1
 valgrind
