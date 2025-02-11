@@ -229,15 +229,9 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
       auto inputTypeInfo = session->GetInputTypeInfo (0);
       std::vector < int64_t > inputDims =
           inputTypeInfo.GetTensorTypeAndShapeInfo ().GetShape ();
-      if (inputImageFormat == GST_ML_INPUT_IMAGE_FORMAT_HWC) {
-        height = inputDims[1];
-        width = inputDims[2];
-        channels = inputDims[3];
-      } else {
-        channels = inputDims[1];
-        height = inputDims[2];
-        width = inputDims[3];
-      }
+      channels = inputDims[1];
+      height = inputDims[2];
+      width = inputDims[3];
 
       fixedInputImageSize = width > 0 && height > 0;
       GST_DEBUG_OBJECT (debug_parent, "Number of Output Nodes: %d",
@@ -405,13 +399,9 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
     std::vector < int64_t > inputDims =
         inputTypeInfo.GetTensorTypeAndShapeInfo ().GetShape ();
     inputDims[0] = 1;
-    if (inputImageFormat == GST_ML_INPUT_IMAGE_FORMAT_HWC) {
-      inputDims[1] = height;
-      inputDims[2] = width;
-    } else {
-      inputDims[2] = height;
-      inputDims[3] = width;
-    }
+    inputDims[1] = channels;
+    inputDims[2] = height;
+    inputDims[3] = width;
 
     std::ostringstream buffer;
     buffer << inputDims;
