@@ -88,6 +88,14 @@ GST_DEBUG_CATEGORY_STATIC (gst_buffer_pool_debug);
 #define GST_BUFFER_POOL_LOCK(pool)   (g_rec_mutex_lock(&pool->priv->rec_lock))
 #define GST_BUFFER_POOL_UNLOCK(pool) (g_rec_mutex_unlock(&pool->priv->rec_lock))
 
+enum
+{
+  BUFFER_RELEASED,
+  LAST_SIGNAL
+};
+
+static guint gst_buffer_pool_signals[LAST_SIGNAL] = { 0 };
+
 struct _GstBufferPoolPrivate
 {
   GMutex queue_lock;
@@ -144,6 +152,10 @@ gst_buffer_pool_class_init (GstBufferPoolClass * klass)
   klass->alloc_buffer = default_alloc_buffer;
   klass->release_buffer = default_release_buffer;
   klass->free_buffer = default_free_buffer;
+
+  gst_buffer_pool_signals[BUFFER_RELEASED] = g_signal_new ("buffer-released",
+      G_TYPE_FROM_CLASS (gobject_class), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+      G_TYPE_NONE, 0);
 
   GST_DEBUG_CATEGORY_INIT (gst_buffer_pool_debug, "bufferpool", 0,
       "bufferpool debug");
@@ -1359,6 +1371,9 @@ gst_buffer_pool_release_buffer (GstBufferPool * pool, GstBuffer * buffer)
     pclass->release_buffer (pool, buffer);
 
   dec_outstanding (pool);
+
+  GST_DEBUG_OBJECT (pool, "release buffer %p", buffer);
+  g_signal_emit (pool, gst_buffer_pool_signals[BUFFER_RELEASED], 0);
 
   /* decrease the refcount that the buffer had to us */
   gst_object_unref (pool);
