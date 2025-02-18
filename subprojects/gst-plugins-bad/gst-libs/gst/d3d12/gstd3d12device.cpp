@@ -132,6 +132,7 @@ struct DeviceInner
     gst_clear_object (&copy_queue);
     for (guint i = 0; i < num_decode_queue; i++)
       gst_clear_object (&decode_queue[i]);
+    gst_clear_object (&vp_queue);
 
     gst_clear_object (&direct_ca_pool);
     gst_clear_object (&direct_cl_pool);
@@ -176,6 +177,9 @@ struct DeviceInner
 
     for (guint i = 0; i < num_decode_queue; i++)
       gst_d3d12_cmd_queue_drain (decode_queue[i]);
+
+    if (vp_queue)
+      gst_d3d12_cmd_queue_drain (vp_queue);
   }
 
   void ReportLiveObjects ()
@@ -254,6 +258,7 @@ struct DeviceInner
   GstD3D12CmdQueue *compute_queue = nullptr;
   GstD3D12CmdQueue *copy_queue = nullptr;
   GstD3D12CmdQueue *decode_queue[2] = { nullptr, };
+  GstD3D12CmdQueue *vp_queue = nullptr;
   guint num_decode_queue = 0;
   guint decode_queue_index = 0;
   std::recursive_mutex decoder_lock;
@@ -1357,6 +1362,41 @@ gst_d3d12_device_new_internal (const GstD3D12DeviceConstructData * data)
           break;
         }
       }
+
+      /* Checks VP caps */
+      D3D12_FEATURE_DATA_VIDEO_PROCESS_SUPPORT vp_support = { };
+      vp_support.InputSample.Width = 1280;
+      vp_support.InputSample.Height = 720;
+      vp_support.InputSample.Format.Format = DXGI_FORMAT_NV12;
+      vp_support.InputSample.Format.ColorSpace =
+          DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+      vp_support.InputFieldType = D3D12_VIDEO_FIELD_TYPE_NONE;
+      vp_support.InputStereoFormat = D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE;
+      vp_support.InputFrameRate.Numerator = 30;
+      vp_support.InputFrameRate.Denominator = 1;
+      vp_support.OutputFormat.Format = DXGI_FORMAT_NV12;
+      vp_support.OutputFormat.ColorSpace =
+          DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+      vp_support.OutputStereoFormat = D3D12_VIDEO_FRAME_STEREO_FORMAT_NONE;
+      vp_support.OutputFrameRate = vp_support.InputFrameRate;
+
+      hr = video_device->CheckFeatureSupport
+          (D3D12_FEATURE_VIDEO_PROCESS_SUPPORT, &vp_support,
+          sizeof (vp_support));
+      if (SUCCEEDED (hr) &&
+          (vp_support.SupportFlags & D3D12_VIDEO_PROCESS_SUPPORT_FLAG_SUPPORTED)
+          == D3D12_VIDEO_PROCESS_SUPPORT_FLAG_SUPPORTED) {
+        GST_INFO_OBJECT (self, "VP supported");
+
+        queue_desc.Type = D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS;
+        priv->vp_queue = gst_d3d12_cmd_queue_new (device.Get (),
+            &queue_desc, D3D12_FENCE_FLAG_SHARED, 8);
+        if (priv->vp_queue) {
+          GST_OBJECT_FLAG_SET (priv->vp_queue, GST_OBJECT_FLAG_MAY_BE_LEAKED);
+        } else {
+          GST_WARNING_OBJECT (self, "Couldn't create VP queue");
+        }
+      }
     }
   }
 
@@ -1529,6 +1569,8 @@ gst_d3d12_device_get_queue_unchecked (GstD3D12Device * device,
       return priv->compute_queue;
     case D3D12_COMMAND_LIST_TYPE_COPY:
       return priv->copy_queue;
+    case D3D12_COMMAND_LIST_TYPE_VIDEO_PROCESS:
+      return priv->vp_queue;
     default:
       GST_ERROR_OBJECT (device, "Not supported queue type %d", queue_type);
       break;
