@@ -895,10 +895,8 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
             break;
           }
         }
-        /* Empty string if the id attribute is not present on either
-         * element. */
-        if (!track_id)
-          track_id = g_strdup ("");
+        /* The id attribute is not present on either
+         * element, adding no container-specific-track-id tag. */
       }
     }
     if (track_id) {
@@ -1059,7 +1057,8 @@ gst_dash_demux_send_content_protection_event (gpointer data, gpointer userdata)
   GST_TRACE_OBJECT (bstream, "check schemeIdUri %s", cp->schemeIdUri);
   /* RFC 2141 states: The leading "urn:" sequence is case-insensitive */
   schemeIdUri = g_ascii_strdown (cp->schemeIdUri, -1);
-  if (g_str_has_prefix (schemeIdUri, "urn:uuid:")) {
+  if (g_str_has_prefix (schemeIdUri, "urn:uuid:") ||
+      g_str_has_prefix (schemeIdUri, "urn:mpeg:")) {
     pssi_len = strlen (cp->value);
     pssi = gst_buffer_new_wrapped (g_memdup2 (cp->value, pssi_len), pssi_len);
     GST_LOG_OBJECT (bstream, "Queuing Protection event on source pad");
