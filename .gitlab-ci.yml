@@ -1051,6 +1051,7 @@ valgrind ges:
       -Drs=enabled
       -Dgst-docs:fatal_warnings=true
       -Dgst-plugins-bad:svthevcenc=disabled
+      -Dgst-plugins-bad:opencv=enabled
     # Disable werror for the docs build, we don't need it
     GST_WERROR: 'false'
     SUBPROJECTS_CACHE_DIR: "/subprojects"

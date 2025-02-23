@@ -19,16 +19,78 @@ dnf config-manager --set-enabled '*-debuginfo'
 
 dnf upgrade -y && dnf distro-sync -y
 
+# Build and install our own minimal opencv, the distro-provided opencv has 2GB
+# of deps, including gstreamer itself
+OPENCV_VERSION="4.10.0"
+dnf install -y gcc-c++ zlib-devel nasm cmake ninja-build
+curl -L -o opencv-$OPENCV_VERSION.tar.gz https://github.com/opencv/opencv/archive/refs/tags/$OPENCV_VERSION.tar.gz
+curl -L -o opencv_contrib-$OPENCV_VERSION.tar.gz https://github.com/opencv/opencv_contrib/archive/refs/tags/$OPENCV_VERSION.tar.gz
+echo "b2171af5be6b26f7a06b1229948bbb2bdaa74fcf5cd097e0af6378fce50a6eb9  opencv-4.10.0.tar.gz
+65597f8fb8dc2b876c1b45b928bbcc5f772ddbaf97539bf1b737623d0604cba1  opencv_contrib-4.10.0.tar.gz" > opencv.sha256sum
+sha256sum opencv.sha256sum
+tar -xf opencv-$OPENCV_VERSION.tar.gz
+tar -xf opencv_contrib-$OPENCV_VERSION.tar.gz
+cmake -S opencv-$OPENCV_VERSION -B opencv_build -G Ninja \
+  -DOPENCV_EXTRA_MODULES_PATH="opencv_contrib-$OPENCV_VERSION/modules/bgsegm;opencv_contrib-$OPENCV_VERSION/modules/plot;opencv_contrib-$OPENCV_VERSION/modules/tracking" \
+  -DBUILD_opencv_calib3d=ON \
+  -DBUILD_opencv_features2d=ON \
+  -DBUILD_opencv_flann=ON \
+  -DBUILD_opencv_imgproc=ON \
+  -DBUILD_opencv_imgcodecs=ON \
+  -DBUILD_opencv_objdetect=ON \
+  -DBUILD_opencv_video=ON \
+  -DOPENCV_GENERATE_PKGCONFIG=ON \
+  -DCMAKE_INSTALL_PREFIX=/usr \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTS=OFF \
+  -DBUILD_PERF_TESTS=OFF \
+  -DBUILD_EXAMPLES=OFF \
+  -DBUILD_DOCS=OFF \
+  -DBUILD_JAVA=OFF \
+  -DBUILD_PYTHON=OFF \
+  -DBUILD_opencv_apps=OFF \
+  -DBUILD_opencv_dnn=OFF \
+  -DBUILD_opencv_gapi=OFF \
+  -DBUILD_opencv_highgui=OFF \
+  -DBUILD_opencv_ml=OFF \
+  -DBUILD_opencv_photo=OFF \
+  -DBUILD_opencv_stitching=OFF \
+  -DBUILD_opencv_videoio=OFF \
+  -DWITH_1394=OFF \
+  -DWITH_FFMPEG=OFF \
+  -DWITH_GSTREAMER=OFF \
+  -DWITH_GTK=OFF \
+  -DWITH_IPP=OFF \
+  -DWITH_JPEG=OFF \
+  -DWITH_OPENEXR=OFF \
+  -DWITH_PNG=OFF \
+  -DWITH_TIFF=OFF \
+  -DWITH_V4L=OFF \
+  -DWITH_WEBP=OFF \
+  -DWITH_OPENJPEG=OFF \
+  -DWITH_JASPER=OFF \
+  -DWITH_IMGCODEC_PFM=OFF \
+  -DWITH_IMGCODEC_PFM=OFF \
+  -DWITH_IMGCODEC_SUNRASTER=OFF \
+  -DWITH_PROTOBUF=OFF \
+  -DWITH_FLATBUFFERS=OFF \
+  -DWITH_OPENCL=OFF
+ninja -C opencv_build install
+rm -rf opencv*
+
 # Install the dependencies of gstreamer
 dnf install --setopt=install_weak_deps=false -y $(<./ci/docker/fedora/deps.txt)
 
-# Install devhelp files for hotdoc
-dnf install -y glib2-doc gdk-pixbuf2-devel gtk3-devel-docs gtk4-devel-docs libsoup-doc
+# Install devhelp files for hotdoc. Use the rpms so we don't pull in tons of
+# unnecessary deps, including gstreamer itself.
+dnf download glib2-doc gtk3-devel-docs gtk4-devel-docs libsoup-doc
+rpm -i --nodeps *.rpm
+rm -f *.rpm
 
 # Make sure we don't end up installing these from some transient dependency
 dnf remove -y "gstreamer1*-devel" rust cargo meson 'fdk-aac-free*'
 
-pip3 install meson==1.5.2 python-gitlab tomli junitparser bs4
+pip3 install meson==1.6.1 python-gitlab tomli junitparser bs4
 pip3 install git+https://github.com/hotdoc/hotdoc.git@8c1cc997f5bc16e068710a8a8121f79ac25cbcce
 
 # Install most debug symbols, except the big ones from things we use
