@@ -123,7 +123,7 @@ ges_extractable_get_asset (GESExtractable * self)
 }
 
 /**
- * ges_extractable_set_asset:
+ * ges_extractable_set_asset: (virtual set_asset_full)
  * @self: A #GESExtractable
  * @asset: (transfer none): The asset to set
  *
