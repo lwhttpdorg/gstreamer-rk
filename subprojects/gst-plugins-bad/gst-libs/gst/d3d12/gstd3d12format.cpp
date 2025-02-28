@@ -1279,3 +1279,215 @@ gst_d3d12_color_primaries_matrix_unorm (const GstVideoColorPrimariesInfo *
 
   return TRUE;
 }
+
+static gboolean
+rgb_to_colorspace (const GstVideoColorimetry * cinfo,
+    DXGI_COLOR_SPACE_TYPE * color_space)
+{
+  /* sRGB */
+  DXGI_COLOR_SPACE_TYPE type = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+
+  if (cinfo->transfer == GST_VIDEO_TRANSFER_GAMMA10) {
+    type = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+    goto done;
+  }
+
+  /* HLG RGB colorspace is not defined, approximated to HDR10 */
+  if (cinfo->transfer == GST_VIDEO_TRANSFER_SMPTE2084 ||
+      cinfo->transfer == GST_VIDEO_TRANSFER_ARIB_STD_B67) {
+    if (cinfo->range == GST_VIDEO_COLOR_RANGE_16_235) {
+      type = DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020;
+    } else {
+      type = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+    }
+    goto done;
+  }
+
+  if (cinfo->primaries == GST_VIDEO_COLOR_PRIMARIES_BT2020) {
+    if (cinfo->range == GST_VIDEO_COLOR_RANGE_16_235) {
+      type = DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P2020;
+    } else {
+      type = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020;
+    }
+    goto done;
+  }
+
+  if (cinfo->range == GST_VIDEO_COLOR_RANGE_16_235)
+    type = DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709;
+
+done:
+  *color_space = (DXGI_COLOR_SPACE_TYPE) type;
+
+  return TRUE;
+}
+
+static gboolean
+yuv_to_colorspace (const GstVideoColorimetry * cinfo,
+    GstVideoChromaSite chroma_site, DXGI_COLOR_SPACE_TYPE * color_space)
+{
+  /* BT709 */
+  DXGI_COLOR_SPACE_TYPE type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+
+  /* HLG */
+  if (cinfo->transfer == GST_VIDEO_TRANSFER_ARIB_STD_B67) {
+    if (cinfo->range == GST_VIDEO_COLOR_RANGE_0_255) {
+      type = DXGI_COLOR_SPACE_YCBCR_FULL_GHLG_TOPLEFT_P2020;
+    } else {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_GHLG_TOPLEFT_P2020;
+    }
+    goto done;
+  }
+
+  /* HDR10 */
+  if (cinfo->transfer == GST_VIDEO_TRANSFER_SMPTE2084) {
+    if (chroma_site == GST_VIDEO_CHROMA_SITE_H_COSITED) {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020;
+    } else {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020;
+    }
+    goto done;
+  }
+
+  /* BT2020 */
+  if (cinfo->primaries == GST_VIDEO_COLOR_PRIMARIES_BT2020) {
+    if (cinfo->range == GST_VIDEO_COLOR_RANGE_0_255) {
+      type = DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P2020;
+    } else if (chroma_site == GST_VIDEO_CHROMA_SITE_H_COSITED) {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P2020;
+    } else {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_TOPLEFT_P2020;
+    }
+    goto done;
+  }
+
+  /* BT601/BT709 primaries are similar. Depends on RGB matrix */
+  if (cinfo->matrix == GST_VIDEO_COLOR_MATRIX_BT601) {
+    if (cinfo->range == GST_VIDEO_COLOR_RANGE_0_255) {
+      if (cinfo->primaries == GST_VIDEO_COLOR_PRIMARIES_BT709) {
+        type = DXGI_COLOR_SPACE_YCBCR_FULL_G22_NONE_P709_X601;
+      } else {
+        type = DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P601;
+      }
+    } else {
+      type = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P601;
+    }
+    goto done;
+  }
+
+  if (cinfo->range == GST_VIDEO_COLOR_RANGE_0_255)
+    type = DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P709;
+
+done:
+  *color_space = (DXGI_COLOR_SPACE_TYPE) type;
+
+  return TRUE;
+}
+
+/**
+ * gst_d3d12_dxgi_color_space_from_video_info:
+ * @info: a #GstVideoInfo
+ * @color_space: (out): DXGI_COLOR_SPACE_TYPE
+ *
+ * Lookup DXGI_COLOR_SPACE_TYPE corresponding to @info
+ *
+ * Returns: %TRUE if successful
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_d3d12_dxgi_color_space_from_video_info (const GstVideoInfo * info,
+    DXGI_COLOR_SPACE_TYPE * color_space)
+{
+  GstVideoColorimetry c = { };
+
+  g_return_val_if_fail (info != nullptr, FALSE);
+  g_return_val_if_fail (color_space != nullptr, FALSE);
+
+  auto cinfo = &info->colorimetry;
+
+  if (GST_VIDEO_INFO_IS_RGB (info)) {
+    /* ensure RGB matrix if format is already RGB */
+    c.matrix = GST_VIDEO_COLOR_MATRIX_RGB;
+  } else if (GST_VIDEO_INFO_IS_YUV (info) &&
+      cinfo->matrix == GST_VIDEO_COLOR_MATRIX_RGB) {
+    /* Invalid matrix */
+    c.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
+  } else {
+    c.matrix = cinfo->matrix;
+  }
+
+  switch (cinfo->range) {
+    case GST_VIDEO_COLOR_RANGE_0_255:
+      c.range = GST_VIDEO_COLOR_RANGE_0_255;
+      break;
+    case GST_VIDEO_COLOR_RANGE_16_235:
+      c.range = GST_VIDEO_COLOR_RANGE_16_235;
+      break;
+    default:
+      if (c.matrix == GST_VIDEO_COLOR_MATRIX_RGB)
+        c.range = GST_VIDEO_COLOR_RANGE_0_255;
+      else
+        c.range = GST_VIDEO_COLOR_RANGE_16_235;
+      break;
+  }
+
+  /* DXGI primaries: BT601, BT709, BT2020 */
+  switch (cinfo->primaries) {
+    case GST_VIDEO_COLOR_PRIMARIES_BT2020:
+      c.primaries = GST_VIDEO_COLOR_PRIMARIES_BT2020;
+      break;
+    case GST_VIDEO_COLOR_PRIMARIES_SMPTE170M:
+    case GST_VIDEO_COLOR_PRIMARIES_SMPTE240M:
+      c.primaries = GST_VIDEO_COLOR_PRIMARIES_SMPTE170M;
+      break;
+    default:
+      c.primaries = GST_VIDEO_COLOR_PRIMARIES_BT709;
+      break;
+  }
+
+  /* DXGI gamma functions: linear (RGB only), gamma2.2, PQ, and HLG */
+  switch (cinfo->transfer) {
+    case GST_VIDEO_TRANSFER_SMPTE2084:
+      c.transfer = GST_VIDEO_TRANSFER_SMPTE2084;
+      break;
+    case GST_VIDEO_TRANSFER_ARIB_STD_B67:
+      c.transfer = GST_VIDEO_TRANSFER_ARIB_STD_B67;
+      break;
+    case GST_VIDEO_TRANSFER_GAMMA10:
+      /* Only DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709 supports linear gamma */
+      if (c.matrix == GST_VIDEO_COLOR_MATRIX_RGB) {
+        c.transfer = GST_VIDEO_TRANSFER_GAMMA10;
+        c.range = GST_VIDEO_COLOR_RANGE_0_255;
+      } else {
+        c.transfer = GST_VIDEO_TRANSFER_GAMMA22;
+      }
+      break;
+    default:
+      /* Simply map the rest of values to gamma 2.2. We don't have any other
+       * choice */
+      c.transfer = GST_VIDEO_TRANSFER_GAMMA22;
+      break;
+  }
+
+  /* DXGI transform matrix: BT601, BT709, and BT2020 */
+  switch (c.matrix) {
+    case GST_VIDEO_COLOR_MATRIX_RGB:
+      c.matrix = GST_VIDEO_COLOR_MATRIX_RGB;
+      break;
+    case GST_VIDEO_COLOR_MATRIX_FCC:
+    case GST_VIDEO_COLOR_MATRIX_BT601:
+      c.matrix = GST_VIDEO_COLOR_MATRIX_BT601;
+      break;
+    case GST_VIDEO_COLOR_MATRIX_BT2020:
+      c.matrix = GST_VIDEO_COLOR_MATRIX_BT2020;
+      break;
+    default:
+      c.matrix = GST_VIDEO_COLOR_MATRIX_BT709;
+      break;
+  }
+
+  if (c.matrix == GST_VIDEO_COLOR_MATRIX_RGB)
+    return rgb_to_colorspace (&c, color_space);
+
+  return yuv_to_colorspace (&c, info->chroma_site, color_space);
+}

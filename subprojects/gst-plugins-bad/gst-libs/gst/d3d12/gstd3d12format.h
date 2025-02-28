@@ -78,5 +78,9 @@ struct _GstD3D12Format
 GST_D3D12_API
 GstVideoFormat  gst_d3d12_dxgi_format_to_gst        (DXGI_FORMAT format);
 
+GST_D3D12_API
+gboolean        gst_d3d12_dxgi_color_space_from_video_info (const GstVideoInfo * info,
+                                                            DXGI_COLOR_SPACE_TYPE * color_space);
+
 G_END_DECLS
 
