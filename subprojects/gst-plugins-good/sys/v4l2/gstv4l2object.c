@@ -125,6 +125,8 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (ARGB32, ARGB),            KNOWN_DRM_MAP,                  GST_V4L2_RAW},
   {MAP_FMT (XRGB32, xRGB),            KNOWN_DRM_MAP,                  GST_V4L2_RAW},
   {MAP_FMT (ARGB2101010, BGR10A2_LE), KNOWN_DRM_MAP,                  GST_V4L2_RAW},
+  {MAP_FMT (BGR48_12, BGR_12LE),      MAP_DRM (INVALID, INVALID),     GST_V4L2_RAW},
+  {MAP_FMT (ABGR64_12, BGRA_12LE),    MAP_DRM (INVALID, INVALID),     GST_V4L2_RAW},
 
   /* Deprecated Packed RGB Image Formats (alpha ambiguity) */
   {MAP_FMT (RGB444, UNKNOWN), MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
@@ -141,6 +143,7 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (Y6, UNKNOWN),       MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
   {MAP_FMT (Y10, UNKNOWN),      MAP_DRM (R10, LINEAR),      GST_V4L2_RAW},
   {MAP_FMT (Y12, UNKNOWN),      MAP_DRM (R12, LINEAR),      GST_V4L2_RAW},
+  {MAP_FMT (Y012, Y012_LE),     MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
   {MAP_FMT (Y16, GRAY16_LE),    KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (Y16_BE, GRAY16_BE), KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (Y10BPACK, UNKNOWN), MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
@@ -173,6 +176,8 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (YUV32, UNKNOWN),  MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
   {MAP_FMT (HI240, UNKNOWN),  MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
   {MAP_FMT (M420, UNKNOWN),   MAP_DRM (INVALID, INVALID),  GST_V4L2_RAW},
+  {MAP_FMT (Y212, Y212_LE),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
+  {MAP_FMT (YUV48_12, Y312_LE),   MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
 
   /* two planes -- one Y,         one Cr + Cb interleaved  */
   {MAP_FMT (NV12M, NV12),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW},
@@ -192,6 +197,8 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (NV42, UNKNOWN),                     MAP_DRM (NV42, LINEAR),             GST_V4L2_RAW},
   {MAP_FMT (MM21, NV12_16L32S),                 KNOWN_DRM_MAP,                      GST_V4L2_RAW},
   {MAP_FMT (P010, P010_10LE),                   KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (P012M, P012_LE),                    KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (P012,  P012_LE),                    KNOWN_DRM_MAP,                      GST_V4L2_RAW},
 
   /* Bayer formats - see http://www.siliconimaging.com/RGB%20Bayer.htm */
   {MAP_ENC_FMT (SBGGR8,  ENCODED),   GST_V4L2_BAYER},
@@ -1100,6 +1107,7 @@ gst_v4l2_object_format_get_rank (const struct v4l2_fmtdesc *fmt)
     case V4L2_PIX_FMT_Y6:
     case V4L2_PIX_FMT_Y10:
     case V4L2_PIX_FMT_Y12:
+    case V4L2_PIX_FMT_Y012:
     case V4L2_PIX_FMT_Y10BPACK:
     case V4L2_PIX_FMT_YUV555:
     case V4L2_PIX_FMT_YUV565:
@@ -1126,6 +1134,8 @@ gst_v4l2_object_format_get_rank (const struct v4l2_fmtdesc *fmt)
     case V4L2_PIX_FMT_ARGB32:
     case V4L2_PIX_FMT_XRGB32:
     case V4L2_PIX_FMT_ARGB2101010:
+    case V4L2_PIX_FMT_BGR48_12:
+    case V4L2_PIX_FMT_ABGR64_12:
       rank = RGB_BASE_RANK;
       break;
 
@@ -1146,6 +1156,8 @@ gst_v4l2_object_format_get_rank (const struct v4l2_fmtdesc *fmt)
     case V4L2_PIX_FMT_MM21:    /* NV12 Y 16x32, UV 16x16 tile */
     case V4L2_PIX_FMT_NV12M_8L128:
     case V4L2_PIX_FMT_NV12M_10BE_8L128:
+    case V4L2_PIX_FMT_Y212:
+    case V4L2_PIX_FMT_YUV48_12:
       rank = YUV_ODD_BASE_RANK;
       break;
 
