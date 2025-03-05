@@ -79,14 +79,13 @@ guint32 gst_kms_memory_get_fb_id (GstMemory *mem);
 GstAllocator* gst_kms_allocator_new (gint fd);
 
 GstMemory*    gst_kms_allocator_bo_alloc (GstAllocator *allocator,
-					  GstVideoInfo *vinfo);
+					  GstVideoInfoDmaDrm *drm_info);
 
 GstKMSMemory* gst_kms_allocator_dmabuf_import (GstAllocator *allocator,
                                                gint *prime_fds,
                                                gint n_planes,
                                                gsize offsets[GST_VIDEO_MAX_PLANES],
-                                               GstVideoInfo *vinfo,
-                                               guint64 modifier);
+                                               GstVideoInfoDmaDrm *drm_info);
 
 GstMemory*    gst_kms_allocator_dmabuf_export (GstAllocator *allocator,
                                                GstMemory *kmsmem);

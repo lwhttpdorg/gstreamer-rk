@@ -39,7 +39,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_kms_buffer_pool_debug);
 
 struct _GstKMSBufferPoolPrivate
 {
-  GstVideoInfo vinfo;
+  GstVideoInfoDmaDrm drm_info;
   GstAllocator *allocator;
   gboolean add_videometa;
   gboolean has_prime_export;
@@ -68,7 +68,6 @@ gst_kms_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
   GstKMSBufferPool *vpool;
   GstKMSBufferPoolPrivate *priv;
   GstCaps *caps;
-  GstVideoInfoDmaDrm dma_drm;
   GstAllocator *allocator;
   GstAllocationParams params;
 
@@ -81,17 +80,17 @@ gst_kms_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
   if (!caps)
     goto no_caps;
 
-  gst_video_info_dma_drm_init (&dma_drm);
+  gst_video_info_dma_drm_init (&priv->drm_info);
 
   /* now parse the caps from the config */
   if (gst_video_is_dma_drm_caps (caps)) {
-    if (!gst_video_info_dma_drm_from_caps (&dma_drm, caps))
+    if (!gst_video_info_dma_drm_from_caps (&priv->drm_info, caps))
       goto wrong_caps;
 
-    if (dma_drm.drm_modifier != DRM_FORMAT_MOD_LINEAR)
+    if (priv->drm_info.drm_modifier != DRM_FORMAT_MOD_LINEAR)
       goto wrong_modifier;
 
-  } else if (!gst_video_info_from_caps (&dma_drm.vinfo, caps))
+  } else if (!gst_video_info_from_caps (&priv->drm_info.vinfo, caps))
     goto wrong_caps;
 
   allocator = NULL;
@@ -105,8 +104,6 @@ gst_kms_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
   }
   if (!priv->allocator)
     goto no_allocator;
-
-  priv->vinfo = dma_drm.vinfo;
 
   /* enable metadata based on config of the pool */
   priv->add_videometa = gst_buffer_pool_config_has_option (config,
@@ -135,8 +132,9 @@ wrong_caps:
   }
 wrong_modifier:
   {
-    gchar *drmfmtstr = gst_video_dma_drm_fourcc_to_string (dma_drm.drm_fourcc,
-        dma_drm.drm_modifier);
+    gchar *drmfmtstr =
+        gst_video_dma_drm_fourcc_to_string (priv->drm_info.drm_fourcc,
+        priv->drm_info.drm_modifier);
 
     GST_WARNING_OBJECT (pool,
         "dumb allocator can't allocate nonlinear format %s", drmfmtstr);
@@ -158,14 +156,14 @@ gst_kms_buffer_pool_alloc_buffer (GstBufferPool * pool, GstBuffer ** buffer,
 {
   GstKMSBufferPool *vpool;
   GstKMSBufferPoolPrivate *priv;
-  GstVideoInfo *info;
+  GstVideoInfoDmaDrm *drm_info;
   GstMemory *mem;
 
   vpool = GST_KMS_BUFFER_POOL_CAST (pool);
   priv = vpool->priv;
-  info = &priv->vinfo;
+  drm_info = &priv->drm_info;
 
-  mem = gst_kms_allocator_bo_alloc (priv->allocator, info);
+  mem = gst_kms_allocator_bo_alloc (priv->allocator, drm_info);
   if (!mem)
     goto no_memory;
 
@@ -186,9 +184,11 @@ gst_kms_buffer_pool_alloc_buffer (GstBufferPool * pool, GstBuffer ** buffer,
     GST_DEBUG_OBJECT (pool, "adding GstVideoMeta");
 
     gst_buffer_add_video_meta_full (*buffer, GST_VIDEO_FRAME_FLAG_NONE,
-        GST_VIDEO_INFO_FORMAT (info),
-        GST_VIDEO_INFO_WIDTH (info), GST_VIDEO_INFO_HEIGHT (info),
-        GST_VIDEO_INFO_N_PLANES (info), info->offset, info->stride);
+        GST_VIDEO_INFO_FORMAT (&drm_info->vinfo),
+        GST_VIDEO_INFO_WIDTH (&drm_info->vinfo),
+        GST_VIDEO_INFO_HEIGHT (&drm_info->vinfo),
+        GST_VIDEO_INFO_N_PLANES (&drm_info->vinfo), drm_info->vinfo.offset,
+        drm_info->vinfo.stride);
   }
 
   return GST_FLOW_OK;
