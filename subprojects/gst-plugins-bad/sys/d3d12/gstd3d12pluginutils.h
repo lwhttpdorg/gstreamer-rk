@@ -62,4 +62,15 @@ void          gst_d3d12_calculate_sample_desc_for_msaa (GstD3D12Device * device,
                                                         GstD3D12MSAAMode msaa_mode,
                                                         DXGI_SAMPLE_DESC * desc);
 
+GstCaps *     gst_d3d12_caps_remove_format_info (GstCaps * caps);
+
+GstCaps *     gst_d3d12_caps_rangify_size_info (GstCaps * caps);
+
+GstCaps *     gst_d3d12_caps_remove_format_and_rangify_size_info (GstCaps * caps);
+
+void          gst_d3d12_video_format_score_value (const GstVideoFormatInfo * in_info,
+                                                  const GValue * val,
+                                                  gint * min_loss,
+                                                  const GstVideoFormatInfo ** out_info);
+
 G_END_DECLS
