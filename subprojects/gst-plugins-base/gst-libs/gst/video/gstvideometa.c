@@ -1414,3 +1414,111 @@ gst_buffer_add_video_time_code_meta_full (GstBuffer * buffer, guint fps_n,
 
   return meta;
 }
+
+/* Convert Config Meta implementation */
+
+GType
+gst_video_convert_config_meta_api_get_type (void)
+{
+  static GType type;
+
+  if (g_once_init_enter (&type)) {
+    static const gchar *tags[] = { NULL };
+    GType _type =
+        gst_meta_api_type_register ("GstVideoConvertConfigMetaAPI", tags);
+    GST_INFO ("registering");
+    g_once_init_leave (&type, _type);
+  }
+  return type;
+}
+
+static gboolean
+gst_video_convert_config_meta_transform (GstBuffer * dest, GstMeta * meta,
+    GstBuffer * buffer, GQuark type, gpointer data)
+{
+  GstVideoConvertConfigMeta *dmeta, *smeta;
+
+  if (GST_META_TRANSFORM_IS_COPY (type)) {
+    smeta = (GstVideoConvertConfigMeta *) meta;
+
+    dmeta = (GstVideoConvertConfigMeta *) gst_buffer_add_meta (buffer,
+        GST_VIDEO_CONVERT_CONFIG_META_INFO, NULL);
+    if (!dmeta)
+      return FALSE;
+
+    GST_DEBUG ("copy convert config metadata");
+    dmeta->config = gst_structure_copy (smeta->config);
+  } else {
+    /* return FALSE, if transform type is not supported */
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean
+gst_video_convert_config_meta_init (GstMeta * meta, gpointer params,
+    GstBuffer * buffer)
+{
+  GstVideoConvertConfigMeta *emeta = (GstVideoConvertConfigMeta *) meta;
+  emeta->config = NULL;
+
+  return TRUE;
+}
+
+static void
+gst_video_convert_config_meta_free (GstMeta * meta, GstBuffer * buffer)
+{
+  GstVideoConvertConfigMeta *emeta = (GstVideoConvertConfigMeta *) meta;
+
+  if (emeta->config) {
+    gst_structure_free (emeta->config);
+    emeta->config = NULL;
+  }
+}
+
+const GstMetaInfo *
+gst_video_convert_config_meta_get_info (void)
+{
+  static const GstMetaInfo *meta_info = NULL;
+
+  if (g_once_init_enter ((GstMetaInfo **) & meta_info)) {
+    const GstMetaInfo *mi =
+        gst_meta_register (GST_VIDEO_CONVERT_CONFIG_META_API_TYPE,
+        "GstVideoConvertConfigMeta",
+        sizeof (GstVideoConvertConfigMeta),
+        gst_video_convert_config_meta_init,
+        gst_video_convert_config_meta_free,
+        gst_video_convert_config_meta_transform);
+    g_once_init_leave ((GstMetaInfo **) & meta_info, (GstMetaInfo *) mi);
+  }
+  return meta_info;
+}
+
+/**
+ * gst_buffer_add_video_convert_config_meta:
+ * @buffer: a #GstBuffer
+ * @config: a #GstStructure
+ *
+ * Attaches #GstVideoConvertConfigMeta metadata to @buffer with the
+ * given parameters.
+ *
+ * Returns: (transfer none) (nullable): the #GstVideoConvertConfigMeta on @buffer
+ * or %NULL is error cases.
+ *
+ * Since: 1.28
+ */
+GstVideoConvertConfigMeta *
+gst_buffer_add_video_convert_config_meta (GstBuffer * buffer,
+    GstStructure * config)
+{
+  GstVideoConvertConfigMeta *meta;
+
+  g_return_val_if_fail (GST_IS_BUFFER (buffer), NULL);
+
+  meta = (GstVideoConvertConfigMeta *) gst_buffer_add_meta (buffer,
+      GST_VIDEO_CONVERT_CONFIG_META_INFO, NULL);
+  g_return_val_if_fail (meta != NULL, NULL);
+
+  meta->config = gst_structure_copy (config);
+  return meta;
+}

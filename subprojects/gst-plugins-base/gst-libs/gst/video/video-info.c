@@ -1389,6 +1389,22 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
       info->size = info->offset[1] + info->offset[1] / 2;
       break;
     }
+    case GST_VIDEO_FORMAT_RGB323232F_LE:
+    case GST_VIDEO_FORMAT_RGB323232F_BE:
+      info->stride[0] = width * 12;
+      info->offset[0] = 0;
+      info->size = info->stride[0] * height;
+      break;
+    case GST_VIDEO_FORMAT_RGB_32F_LE:
+    case GST_VIDEO_FORMAT_RGB_32F_BE:
+      info->stride[0] = width * sizeof(gfloat);
+      info->stride[1] = info->stride[0];
+      info->stride[2] = info->stride[0];
+      info->offset[0] = 0;
+      info->offset[1] = info->stride[0] * height;
+      info->offset[2] = info->offset[1] * 2;
+      info->size = info->stride[0] * height * 3;
+      break;
     case GST_VIDEO_FORMAT_ENCODED:
     case GST_VIDEO_FORMAT_DMA_DRM:
       break;
