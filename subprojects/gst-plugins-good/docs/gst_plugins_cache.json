@@ -19901,6 +19901,17 @@
                         "return-type": "void",
                         "when": "last"
                     },
+                    "request-caps": {
+                        "action": true,
+                        "args": [
+                            {
+                                "name": "arg0",
+                                "type": "GstBuffer"
+                            }
+                        ],
+                        "return-type": "GstCaps",
+                        "when": "last"
+                    },
                     "request-pt-map": {
                         "args": [
                             {

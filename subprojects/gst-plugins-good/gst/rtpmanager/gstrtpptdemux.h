@@ -56,6 +56,8 @@ struct _GstRtpPtDemuxClass
   void     (*payload_type_change) (GstRtpPtDemux *demux, guint pt);
 
   void     (*clear_pt_map)        (GstRtpPtDemux *demux);
+
+  GstCaps* (*request_caps)        (GstRtpPtDemux *demux, GstBuffer * buffer);
 };
 
 GType gst_rtp_pt_demux_get_type (void);
