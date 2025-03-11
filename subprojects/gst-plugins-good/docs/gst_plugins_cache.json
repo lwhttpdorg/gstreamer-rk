@@ -18862,6 +18862,21 @@
                         "return-type": "GstElement",
                         "when": "last"
                     },
+                    "request-caps": {
+                        "action": true,
+                        "args": [
+                            {
+                                "name": "arg0",
+                                "type": "guint"
+                            },
+                            {
+                                "name": "arg1",
+                                "type": "GstBuffer"
+                            }
+                        ],
+                        "return-type": "GstCaps",
+                        "when": "last"
+                    },
                     "request-fec-decoder": {
                         "args": [
                             {

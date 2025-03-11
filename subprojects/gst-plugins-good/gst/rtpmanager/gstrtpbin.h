@@ -186,6 +186,8 @@ struct _GstRtpBinClass {
 
   void     (*on_new_sender_ssrc)      (GstRtpBin *rtpbin, guint session, guint32 ssrc);
   void     (*on_sender_ssrc_active)   (GstRtpBin *rtpbin, guint session, guint32 ssrc);
+
+  GstCaps* (*request_caps)            (GstRtpBin *rtpbin, GstBuffer *buffer);
 };
 
 GType gst_rtp_bin_get_type (void);
