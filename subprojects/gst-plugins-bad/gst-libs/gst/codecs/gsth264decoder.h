@@ -234,6 +234,18 @@ struct _GstH264DecoderClass
   guint (*get_preferred_output_delay)   (GstH264Decoder * decoder,
                                          gboolean live);
 
+    /**
+   * GstH264DecoderClass::new_picture_params:
+   * @decoder: a #GstH264Decoder
+   * @pps: a #GstH264SPS
+   *
+   * Optional. Notifies subclass of PPS update
+   *
+   * Since: 1.26
+   *
+   */
+  GstFlowReturn (*new_picture_params)  (GstH264Decoder * decoder,
+                                        const GstH264PPS * pps);
   /*< private >*/
   gpointer padding[GST_PADDING_LARGE];
 };
