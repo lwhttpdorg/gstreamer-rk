@@ -854,8 +854,8 @@ add_musicbrainz_tag (GstId3v2Tag * id3v2tag, const GstTagList * list,
     {GST_TAG_MUSICBRAINZ_RELEASEGROUPID, "MusicBrainz Release Group Id",
       "musicbrainz_releasegroupid"},
     {GST_TAG_MUSICBRAINZ_TRMID, "MusicBrainz TRM Id", "musicbrainz_trmid"},
-    {GST_TAG_CDDA_MUSICBRAINZ_DISCID, "MusicBrainz DiscID",
-      "musicbrainz_discid"},
+    {GST_TAG_CDDA_MUSICBRAINZ_DISCID, "MusicBrainz Disc Id",
+      "MusicBrainz DiscID", "musicbrainz_discid"},
     /* the following one is more or less made up, there seems to be little
      * evidence that any popular application is actually putting this info
      * into TXXX frames; the first one comes from a musicbrainz wiki 'proposed
