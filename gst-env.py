@@ -248,8 +248,19 @@ def setup_gdb(options):
     except FileNotFoundError:
         pass
 
-    with open(os.path.join(options.srcdir, '.gdbinit'), 'a') as f:
-        f.write(gdbinit_line)
+    try:
+        with open(os.path.join(options.srcdir, '.gdbinit'), 'a') as f:
+            f.write(gdbinit_line)
+    except PermissionError:
+        try:
+            with open(os.path.join(options.builddir, '.gdbinit'), 'r') as f:
+                if gdbinit_line in f.readlines():
+                    return python_paths
+        except FileNotFoundError:
+            pass
+
+        with open(os.path.join(options.builddir, '.gdbinit'), 'a') as f:
+            f.write(gdbinit_line)
 
     return python_paths
 
