@@ -31,6 +31,8 @@ if not os.path.exists(DEFAULT_BUILDDIR):
     DEFAULT_BUILDDIR = os.path.join(SCRIPTDIR, '_build')
 if not os.path.exists(DEFAULT_BUILDDIR):
     DEFAULT_BUILDDIR = os.path.join(SCRIPTDIR, 'builddir')
+if not os.path.exists(DEFAULT_BUILDDIR) and os.path.exists("meson-info"):
+    DEFAULT_BUILDDIR = os.path.realpath('.')
 
 TYPELIB_REG = re.compile(r'.*\.typelib$')
 SHAREDLIB_REG = re.compile(r'\.so|\.dylib|\.dll')
@@ -510,7 +512,8 @@ def get_windows_shell():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="gst-env")
+    parser = argparse.ArgumentParser(prog="gst-env",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--builddir",
                         default=DEFAULT_BUILDDIR,
