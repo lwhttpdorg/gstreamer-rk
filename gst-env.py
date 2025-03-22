@@ -562,7 +562,9 @@ if __name__ == "__main__":
     try:
         gst_version = git("rev-parse", "--symbolic-full-name", "--abbrev-ref", "HEAD",
                           repository_path=options.srcdir).strip('\n')
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        if b'detected dubious ownership in repository' in e.output:
+            print(e.output.decode("utf-8"))
         gst_version = "unknown"
 
     if options.wine:
