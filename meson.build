@@ -59,12 +59,8 @@ if cmdres.returncode() == 0
   endif
 endif
 
-pre_commit_req = '>= 3.6.0'
-pre_commit = find_program('pre-commit', version: pre_commit_req, required: false)
-if pre_commit.found()
-  run_command(pre_commit, 'install', '-f', check: true)
-else
-  warning('pre-commit not found or too old, please install it with your package manager or `python3 -m pip install pre-commit`')
+if not get_option('devtools').disabled() and host_system != 'windows'
+  run_command('ln', '-fns', meson.project_source_root() + '/gst-env.py', meson.project_build_root() + '/gst-env.py', check: true)
 endif
 
 # On macOS, you have to run "Install Certificates.command" otherwise Python
