@@ -31,16 +31,32 @@ if cmdres.returncode() != 0
   error('Do not run `ninja reconfigure` or `meson` for gst-build inside the development environment, you will run into problems')
 endif
 
-# pre-commit hooks are not interactive so we use gitlint's hook to check commit messages
-gitlint_req = '>= 0.18'
-gitlint = find_program('gitlint', version: gitlint_req, required: false)
-if gitlint.found()
-  gitlint_status = run_command(gitlint, 'install-hook', check: false)
-  if gitlint_status.returncode() != 0
-    warning(gitlint_status.stderr().strip())
+git_hooks_writeable = '''
+import sys
+import tempfile
+tempfile.TemporaryFile(dir=sys.argv[1] + '/.git/hooks/')
+'''
+cmdres = run_command(python3, '-c', git_hooks_writeable, meson.project_source_root(), check: false)
+if cmdres.returncode() == 0
+  # pre-commit hooks are not interactive so we use gitlint's hook to check commit messages
+  gitlint_req = '>= 0.18'
+  gitlint = find_program('gitlint', version: gitlint_req, required: false)
+  if gitlint.found()
+    gitlint_status = run_command(gitlint, 'install-hook', check: false)
+    if gitlint_status.returncode() != 0
+      warning(gitlint_status.stderr().strip())
+    endif
+  else
+    warning('gitlint not found or too old, please install it with your package manager or `python3 -m pip install gitlint` to enable the commit message hook')
   endif
-else
-  warning('gitlint not found or too old, please install it with your package manager or `python3 -m pip install gitlint` to enable the commit message hook')
+
+  pre_commit_req = '>= 3.6.0'
+  pre_commit = find_program('pre-commit', version: pre_commit_req, required: false)
+  if pre_commit.found()
+    run_command(pre_commit, 'install', '-f', check: true)
+  else
+    warning('pre-commit not found or too old, please install it with your package manager or `python3 -m pip install pre-commit`')
+  endif
 endif
 
 pre_commit_req = '>= 3.6.0'
