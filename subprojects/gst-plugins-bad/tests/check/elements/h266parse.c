@@ -236,6 +236,18 @@ static const guint8 h266_suffix_sei[] = {
   0xf7, 0x77, 0xd5, 0xa4, 0x13, 0x30, 0x2c, 0x10, 0xb5, 0xf0, 0x80
 };
 
+/* SEI With Scalability Dimension Info */
+static const guint8 h266_prefix_sei_sdi[] = {
+  0x00, 0x00, 0x00, 0x01, 0x01, 0xb9, 0xd0, 0x06, 0x05, 0x00, 0x00, 0x10,
+  0x10, 0x00, 0x80
+};
+
+/* SEI with Alpha Channel Info */
+static const guint8 h266_prefix_sei_aci[] = {
+  0x00, 0x00, 0x00, 0x01, 0x01, 0xb9, 0xa5, 0x04, 0x14, 0x00, 0x20, 0x01,
+  0x80
+};
+
 /* A single access unit comprising of VPS, SPS, PPS, APS and IDR frame */
 static gboolean
 verify_buffer_bs_au (buffer_verify_data_s * vdata, GstBuffer * buffer)
@@ -590,6 +602,83 @@ GST_START_TEST (test_headers_au_nal)
   bytestream_set_caps (h, "au", "nal");
   bytestream_push_all_nals_as_au (h);
   test_headers_outalign_nal (h);
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_sei_alpha_nal_nal)
+{
+  GstHarness *h = gst_harness_new ("h266parse");
+
+  gst_harness_set_caps_str (h,
+      "video/x-h266, parsed=(boolean)false, stream-format=byte-stream, alignment=nal, framerate=30/1",
+      "video/x-h266, parsed=(boolean)true, stream-format=byte-stream, alignment=nal");
+
+  GstBuffer *buf;
+
+  buf = wrap_buffer (h266_vps, sizeof (h266_vps), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_sps, sizeof (h266_sps), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_pps, sizeof (h266_pps), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_prefix_aps, sizeof (h266_prefix_aps), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_prefix_sei_sdi, sizeof (h266_prefix_sei_sdi), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_prefix_sei_aci, sizeof (h266_prefix_sei_aci), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  buf = wrap_buffer (h266_idr, sizeof (h266_idr), 10, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  GstEvent *event;
+  gboolean codec_alpha = FALSE;
+  while ((event = gst_harness_try_pull_event (h))) {
+    GstCaps *event_caps;
+    if (GST_EVENT_TYPE (event) != GST_EVENT_CAPS) {
+      gst_event_unref (event);
+      continue;
+    }
+
+    gst_event_parse_caps (event, &event_caps);
+
+    for (guint i = 0; i < gst_caps_get_size (event_caps); i++) {
+      const GstStructure *structure = gst_caps_get_structure (event_caps, i);
+      if (gst_structure_has_field (structure, "codec-alpha")) {
+        gst_structure_get_boolean (structure, "codec-alpha", &codec_alpha);
+      }
+    }
+
+    gst_event_unref (event);
+  }
+  fail_unless_equals_int (codec_alpha, TRUE);
+
+  /* VPS + SPS + PPS + APS + slice + 2xSEI */
+  fail_unless_equals_int (gst_harness_buffers_in_queue (h), 7);
+
+  /* parser must have inserted AUD before the headers, with the same PTS */
+  pull_and_check (h, h266_vps, 10, 0);
+  pull_and_check (h, h266_sps, 10, 0);
+  pull_and_check (h, h266_pps, 10, 0);
+
+  /* FIXME The timestamp should be 10 really, but base parse refuse to repeat
+   * the same TS for two consecutive calls to _finish_frame(), see [0] for
+   * more details. It's not a huge issue, the decoder can fix it for now.
+   *
+   * [0] https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/287
+   */
+  pull_and_check (h, h266_prefix_aps, -1, 0);
+  pull_and_check (h, h266_prefix_sei_sdi, -1, 0);
+  pull_and_check (h, h266_prefix_sei_aci, -1, 0);
+  pull_and_check (h, h266_idr, -1, 0);
 
   gst_harness_teardown (h);
 }
@@ -1371,6 +1460,8 @@ h266parse_harnessed_suite (void)
   tcase_add_test (tc_chain, test_transform_vvi1_bytestream);
   tcase_add_test (tc_chain,
       test_transform_vvc1_bytestream_missing_sps_in_frame);
+
+  tcase_add_test (tc_chain, test_sei_alpha_nal_nal);
 
   tcase_add_test (tc_chain, test_drain);
 

@@ -107,6 +107,11 @@ struct _GstH266Parse
   /* FFI SEI Info we need to keep track of */
   GstH266FrameFieldInfo sei_frame_field;
   guint interlaced_mode;
+  GstH266ScalabilityDimensionInfo sei_sdi;
+  gboolean sei_sdi_alpha_present;
+  gboolean sei_aci_present;
+  gboolean codec_alpha;
+  gboolean codec_alpha_decoder;
 
   gboolean discont;
   gboolean marker;
