@@ -62,6 +62,10 @@ if not build_gir
     subdir_done()
 endif
 
+if get_option('doc').disabled()
+  subdir_done()
+endif
+
 all_plugins_paths = []
 foreach l: plugins
     all_plugins_paths += l.full_path()
