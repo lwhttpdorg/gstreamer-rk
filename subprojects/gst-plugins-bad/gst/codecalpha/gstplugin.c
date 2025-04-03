@@ -47,6 +47,7 @@
 #include "gstalphacombine.h"
 #include "gstvp8alphadecodebin.h"
 #include "gstvp9alphadecodebin.h"
+#include "gsth266alphadecodebin.h"
 
 /* When wrapping, use the original rank plus this offset. The ad-hoc rules is
  * that hardware implementation will use PRIMARY+1 or +2 to override the
@@ -65,6 +66,7 @@ plugin_init (GstPlugin * plugin)
   ret |= GST_ELEMENT_REGISTER (alpha_combine, plugin);
   ret |= GST_ELEMENT_REGISTER (vp8_alpha_decode_bin, plugin);
   ret |= GST_ELEMENT_REGISTER (vp9_alpha_decode_bin, plugin);
+  ret |= GST_ELEMENT_REGISTER (h266_alpha_decode_bin, plugin);
 
   return ret;
 }

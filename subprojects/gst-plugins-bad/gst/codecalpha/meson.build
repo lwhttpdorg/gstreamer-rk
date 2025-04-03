@@ -5,6 +5,7 @@ codecalpha_sources = [
   'gstvp8alphadecodebin.c',
   'gstvp9alphadecodebin.c',
   'gstcodecalphademux.c',
+  'gsth266alphadecodebin.c',
 ]
 
 codecalpha_headers = [
@@ -13,6 +14,7 @@ codecalpha_headers = [
   'gstvp9alphadecodebin.h',
   'gstcodecalphademux.h',
   'gstvp8alphadecodebin.h',
+  'gsth266alphadecodebin.h',
 ]
 
 doc_sources = []
