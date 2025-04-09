@@ -109,6 +109,9 @@ struct _GstDiscovererPrivate
   /* List of these sinks and their handler IDs (to remove the probe) */
   guint pending_subtitle_pads;
 
+  /* Whether we are waiting for the duration to be known */
+  gboolean pending_duration;
+
   /* Whether we received no_more_pads */
   gboolean no_more_pads;
 
@@ -1434,42 +1437,15 @@ discoverer_collect (GstDiscoverer * dc)
     /* FIXME : Make this querying optional */
     if (TRUE) {
       GstElement *pipeline = (GstElement *) dc->priv->pipeline;
-      gint64 dur;
 
-      GST_DEBUG ("Attempting to query duration");
+      if (dc->priv->current_info->duration == 0) {
+        gint64 dur;
 
-      if (gst_element_query_duration (pipeline, GST_FORMAT_TIME, &dur)) {
-        GST_DEBUG ("Got duration %" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
-        dc->priv->current_info->duration = (guint64) dur;
-      } else if (dc->priv->current_info->result != GST_DISCOVERER_ERROR) {
-        GstStateChangeReturn sret;
-        /* Note: We don't switch to PLAYING if we previously saw an ERROR since
-         * the state of various element isn't guaranteed anymore */
+        GST_DEBUG ("Attempting to query duration");
 
-        /* Some parsers may not even return a rough estimate right away, e.g.
-         * because they've only processed a single frame so far, so if we
-         * didn't get a duration the first time, spin a bit and try again.
-         * Ugly, but still better than making parsers or other elements return
-         * completely bogus values. We need some API extensions to solve this
-         * better. */
-        GST_INFO ("No duration yet, try a bit harder..");
-        /* Make sure we don't add/remove elements while switching to PLAYING itself */
-        DISCO_LOCK (dc);
-        sret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
-        DISCO_UNLOCK (dc);
-        if (sret != GST_STATE_CHANGE_FAILURE) {
-          int i;
-
-          for (i = 0; i < 2; ++i) {
-            g_usleep (G_USEC_PER_SEC / 20);
-            if (gst_element_query_duration (pipeline, GST_FORMAT_TIME, &dur)
-                && dur > 0) {
-              GST_DEBUG ("Got duration %" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
-              dc->priv->current_info->duration = (guint64) dur;
-              break;
-            }
-          }
-          gst_element_set_state (pipeline, GST_STATE_PAUSED);
+        if (gst_element_query_duration (pipeline, GST_FORMAT_TIME, &dur)) {
+          GST_DEBUG ("Got duration %" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
+          dc->priv->current_info->duration = (guint64) dur;
         }
       }
 
@@ -1567,6 +1543,15 @@ handle_current_async (GstDiscoverer * dc)
   dc->priv->timeout_source = source;
 }
 
+/* returns TRUE if the discoverer is done */
+static gboolean
+evaluate_done (GstDiscoverer * dc)
+{
+  return (dc->priv->pending_subtitle_pads == 0)
+      && dc->priv->no_more_pads
+      && dc->priv->current_state >= dc->priv->target_state
+      && !dc->priv->pending_duration;
+}
 
 /* Returns TRUE if processing should stop */
 static gboolean
@@ -1632,17 +1617,27 @@ handle_message (GstDiscoverer * dc, GstMessage * msg)
         break;
 
       /* Maybe we already reached the target state, and all we're waiting for
-       * is either the subtitle tags or no_more_pads
+       * is the duration, the subtitle tags or no_more_pads
        */
       DISCO_LOCK (dc);
-      if (dc->priv->pending_subtitle_pads == 0)
-        done = dc->priv->no_more_pads
-            && dc->priv->target_state == dc->priv->current_state;
+      done = evaluate_done (dc);
       DISCO_UNLOCK (dc);
 
       if (done)
         dump_name = "gst-discoverer-application-message";
     }
+      break;
+
+    case GST_MESSAGE_DURATION_CHANGED:
+      GST_DEBUG_OBJECT (GST_MESSAGE_SRC (msg), "Got duration changed");
+
+      DISCO_LOCK (dc);
+      dc->priv->pending_duration = FALSE;
+      done = evaluate_done (dc);
+      DISCO_UNLOCK (dc);
+
+      if (done)
+        dump_name = "gst-discoverer-duration-changed";
       break;
 
     case GST_MESSAGE_STATE_CHANGED:{
@@ -1653,9 +1648,29 @@ handle_message (GstDiscoverer * dc, GstMessage * msg)
         DISCO_LOCK (dc);
         dc->priv->current_state = new;
 
-        if (dc->priv->pending_subtitle_pads == 0)
-          done = dc->priv->no_more_pads
-              && dc->priv->target_state == dc->priv->current_state;
+        /* Some parsers may not even return a rough estimate right away, e.g.
+         * because they've only processed a single frame so far, so if we
+         * didn't get a duration yet, go to PLAYING and let it spin until
+         * we get either DURATION_CHANGED or EOS.
+         */
+        if (dc->priv->current_state == GST_STATE_PAUSED &&
+            dc->priv->pending_duration) {
+          GstElement *pipeline = (GstElement *) dc->priv->pipeline;
+          gint64 dur;
+
+          GST_DEBUG ("Attempting to query duration");
+
+          if (gst_element_query_duration (pipeline, GST_FORMAT_TIME, &dur)) {
+            GST_DEBUG ("Got duration %" GST_TIME_FORMAT, GST_TIME_ARGS (dur));
+            dc->priv->current_info->duration = (guint64) dur;
+            dc->priv->pending_duration = FALSE;
+          } else {
+            GST_DEBUG ("PAUSED but no duration, continue to PLAYING");
+            gst_element_set_state (pipeline, GST_STATE_PLAYING);
+          }
+        }
+
+        done = evaluate_done (dc);
         /* Else we should get unblocked in GST_MESSAGE_APPLICATION */
 
         DISCO_UNLOCK (dc);
@@ -1933,6 +1948,7 @@ _setup_locked (GstDiscoverer * dc)
   dc->priv->processing = TRUE;
 
   dc->priv->target_state = GST_STATE_PAUSED;
+  dc->priv->pending_duration = TRUE;
 
   /* set pipeline to PAUSED */
   DISCO_UNLOCK (dc);
@@ -2004,6 +2020,7 @@ discoverer_cleanup (GstDiscoverer * dc)
   }
 
   dc->priv->pending_subtitle_pads = 0;
+  dc->priv->pending_duration = FALSE;
 
   dc->priv->current_state = GST_STATE_NULL;
   dc->priv->target_state = GST_STATE_NULL;
