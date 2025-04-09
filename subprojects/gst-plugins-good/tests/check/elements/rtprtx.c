@@ -1162,6 +1162,114 @@ GST_START_TEST (test_rtxsend_header_extensions)
 
 GST_END_TEST;
 
+static gboolean
+read_twcc_from_packet (GstRTPHeaderExtension * ext, GstBuffer * output,
+    guint16 * data)
+{
+  GstRTPBuffer rtp = { NULL, };
+  gpointer ext_data;
+  guint ext_size;
+  fail_unless (gst_rtp_buffer_map (output, GST_MAP_READ, &rtp));
+
+  /* if there already is a twcc-seqnum inside the packet */
+  if (!gst_rtp_buffer_get_extension_onebyte_header (&rtp,
+          gst_rtp_header_extension_get_id (ext), 0, &ext_data, &ext_size)) {
+    return FALSE;
+  }
+  *data = GST_READ_UINT16_BE (ext_data);
+  gst_rtp_buffer_unmap (&rtp);
+  return TRUE;
+}
+
+// Verify that four packets in a row, with TWCC enabled, have correct
+// twcc sequence (monotonically increasing).
+static void
+test_rtx_twcc (gboolean enabled)
+{
+  const guint32 main_ssrc = 1234567;
+  const guint main_pt = 96;
+  const guint32 rtx_ssrc = 7654321;
+  const guint rtx_pt = 106;
+
+  GstHarness *h = gst_harness_new ("rtprtxsend");
+  GstStructure *ssrc_map =
+      create_rtx_map ("application/x-rtp-ssrc-map", main_ssrc, rtx_ssrc);
+  GstStructure *pt_map =
+      create_rtx_map ("application/x-rtp-pt-map", main_pt, rtx_pt);
+
+  GstRTPHeaderExtension *twcc =
+      gst_rtp_header_extension_create_from_uri (TWCC_EXTMAP_STR);
+  g_assert_nonnull (twcc);
+  gst_rtp_header_extension_set_id (twcc, 3);
+  g_object_set (h->element, "ssrc-map", ssrc_map, NULL);
+  if (enabled) {
+    g_object_set (h->element, "payload-type-map", pt_map, NULL);
+  }
+  g_signal_emit_by_name (h->element, "add-extension", twcc);
+
+  gst_harness_set_src_caps_str (h, "application/x-rtp, "
+      "clock-rate = (int)90000");
+
+  /* push a packet */
+  fail_unless_equals_int (GST_FLOW_OK,
+      gst_harness_push (h, create_rtp_buffer (main_ssrc, main_pt, 0)));
+
+  GstBuffer *buf_0 = gst_harness_pull (h);
+  verify_buf (buf_0, FALSE, main_ssrc, main_pt, 0);
+
+  fail_unless_equals_int (GST_FLOW_OK,
+      gst_harness_push (h, create_rtp_buffer (main_ssrc, main_pt, 1)));
+
+  GstBuffer *buf_1 = gst_harness_pull (h);
+  verify_buf (buf_1, FALSE, main_ssrc, main_pt, 1);
+  guint16 fst = 0;
+  guint16 sec = 0;
+  fail_unless (read_twcc_from_packet (twcc, buf_0, &fst));
+  fail_unless (read_twcc_from_packet (twcc, buf_1, &sec));
+  fail_unless_equals_int (sec, fst + 1);
+  gst_buffer_unref (buf_0);
+  gst_buffer_unref (buf_1);
+
+  if (enabled) {
+    gst_harness_push_upstream_event (h, create_rtx_event (main_ssrc, main_pt,
+            0));
+    GstBuffer *rtx_0 = gst_harness_pull (h);
+    verify_buf (rtx_0, TRUE, rtx_ssrc, rtx_pt, 0);
+
+    guint16 first_rtx;
+    fail_unless (read_twcc_from_packet (twcc, rtx_0, &first_rtx));
+    fail_unless_equals_int (first_rtx, (sec + 1));
+    gst_harness_push_upstream_event (h, create_rtx_event (main_ssrc, main_pt,
+            1));
+    GstBuffer *rtx_1 = gst_harness_pull (h);
+    verify_buf (rtx_1, TRUE, rtx_ssrc, rtx_pt, 1);
+    guint16 second_rtx;
+    fail_unless (read_twcc_from_packet (twcc, rtx_1, &second_rtx));
+    fail_unless (second_rtx == first_rtx + 1);
+    gst_buffer_unref (rtx_0);
+    gst_buffer_unref (rtx_1);
+  }
+  gst_structure_free (ssrc_map);
+  gst_structure_free (pt_map);
+  gst_object_unref (twcc);
+  gst_harness_teardown (h);
+}
+
+
+GST_START_TEST (test_rtxsend_twcc_enabled)
+{
+  test_rtx_twcc (TRUE);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_rtxsend_twcc_disabled)
+{
+  test_rtx_twcc (FALSE);
+}
+
+GST_END_TEST;
+
 static Suite *
 rtprtx_suite (void)
 {
@@ -1189,6 +1297,8 @@ rtprtx_suite (void)
   tcase_add_test (tc_chain, test_rtxsender_clock_rate_map);
   tcase_add_test (tc_chain, test_rtxsend_header_extensions);
   tcase_add_test (tc_chain, test_rtxsend_header_extensions_copy);
+  tcase_add_test (tc_chain, test_rtxsend_twcc_enabled);
+  tcase_add_test (tc_chain, test_rtxsend_twcc_disabled);
 
   return s;
 }

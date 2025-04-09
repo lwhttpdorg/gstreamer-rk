@@ -270,6 +270,7 @@ static guint ssrc_before;
 static guint ssrc_after;
 static guint rtx_ssrc_before;
 static guint rtx_ssrc_after;
+static guint num_rtx;
 
 static GstPadProbeReturn
 rtpsession_sinkpad_probe2 (GstPad * pad, GstPadProbeInfo * info,
@@ -281,17 +282,23 @@ rtpsession_sinkpad_probe2 (GstPad * pad, GstPadProbeInfo * info,
     GstBuffer *buffer = GST_BUFFER (info->data);
     GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
     guint payload_type = 0;
-
     static gint i = 0;
-
     /* retrieve current ssrc for retransmission stream only */
     gst_rtp_buffer_map (buffer, GST_MAP_READ, &rtp);
     payload_type = gst_rtp_buffer_get_payload_type (&rtp);
+
     if (payload_type == 99) {
-      if (i < 3)
-        rtx_ssrc_before = gst_rtp_buffer_get_ssrc (&rtp);
-      else
-        rtx_ssrc_after = gst_rtp_buffer_get_ssrc (&rtp);
+      guint ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+      if (num_rtx == 0)
+        rtx_ssrc_before = ssrc;
+      else if (ssrc != rtx_ssrc_before || num_rtx > 30) {
+        // also send eos if we have tried for too long.
+        rtx_ssrc_after = ssrc;
+        GstPad *peer = gst_pad_get_peer (pad);
+        gst_pad_push_event (peer, gst_event_new_eos ());
+        gst_object_unref (peer);
+      }
+      num_rtx++;
     } else {
       /* ask to retransmit every packet */
       GstEvent *event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
@@ -303,7 +310,7 @@ rtpsession_sinkpad_probe2 (GstPad * pad, GstPadProbeInfo * info,
 
       if (i < 3)
         ssrc_before = gst_rtp_buffer_get_ssrc (&rtp);
-      else
+      else if (i > 3)
         ssrc_after = gst_rtp_buffer_get_ssrc (&rtp);
     }
     gst_rtp_buffer_unmap (&rtp);
@@ -312,7 +319,7 @@ rtpsession_sinkpad_probe2 (GstPad * pad, GstPadProbeInfo * info,
      * (note that after being marked as collied the rtpsession ignores
      * all non bye packets)
      */
-    if (i == 2) {
+    if (i > 3 && rtx_ssrc_before > 0) {
       GstBuffer *rtcp_buffer = create_rtcp_app (rtx_ssrc_before, 0);
 
       /* push collied packet on recv_rtcp_sink */
@@ -347,14 +354,13 @@ GST_START_TEST (test_rtx_ssrc_collision)
   GstStructure *pt_map;
 
   GST_INFO ("preparing test");
-
   /* build pipeline */
   bin = gst_pipeline_new ("pipeline");
   bus = gst_element_get_bus (bin);
   gst_bus_add_signal_watch_full (bus, G_PRIORITY_HIGH);
 
   src = gst_element_factory_make ("audiotestsrc", "src");
-  g_object_set (src, "num-buffers", 5, NULL);
+
   encoder = gst_element_factory_make ("alawenc", NULL);
   rtppayloader = gst_element_factory_make ("rtppcmapay", NULL);
   g_object_set (rtppayloader, "pt", 8, NULL);
@@ -439,6 +445,7 @@ GST_START_TEST (test_rtx_ssrc_collision)
   /* check results */
   fail_if (rtx_ssrc_before == rtx_ssrc_after);
   fail_if (ssrc_before != ssrc_after);
+  fail_if (rtx_ssrc_after == 0);
 }
 
 GST_END_TEST;
