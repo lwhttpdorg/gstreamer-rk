@@ -92,6 +92,11 @@
 #include <gst/tag/tag.h>
 #include <gst/pbutils/pbutils.h>
 
+#include <glib.h>
+#ifdef G_PLATFORM_ANDROID
+#include <glib-android.h>
+#endif
+
 #include <string.h>
 
 GST_DEBUG_CATEGORY_STATIC (gst_play_debug);
@@ -2514,6 +2519,11 @@ gst_play_main (gpointer data)
   GstElement *scaletempo;
 
   GST_TRACE_OBJECT (self, "Starting main thread");
+#ifdef G_PLATFORM_ANDROID
+  GJavaThreadSentinel *sentinel = NULL;
+  if (glib_java_is_initialized ())
+    sentinel = g_java_enter_thread ();
+#endif
 
   g_main_context_push_thread_default (self->context);
 
@@ -2620,6 +2630,10 @@ gst_play_main (gpointer data)
     self->playbin = NULL;
   }
 
+#ifdef G_PLATFORM_ANDROID
+  if (sentinel)
+    g_java_leave_thread (sentinel);
+#endif
   GST_TRACE_OBJECT (self, "Stopped main thread");
 
   return NULL;

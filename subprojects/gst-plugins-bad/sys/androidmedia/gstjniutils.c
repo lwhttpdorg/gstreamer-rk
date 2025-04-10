@@ -31,6 +31,7 @@
 #include <gst/gst.h>
 #include <pthread.h>
 #include <gmodule.h>
+#include <glib-android.h>
 
 #include "gstjniutils.h"
 
@@ -38,10 +39,8 @@ static GModule *java_module;
 static jint (*get_created_java_vms) (JavaVM ** vmBuf, jsize bufLen,
     jsize * nVMs);
 static jint (*create_java_vm) (JavaVM ** p_vm, JNIEnv ** p_env, void *vm_args);
-static JavaVM *java_vm;
 static gboolean started_java_vm = FALSE;
-static pthread_key_t current_jni_env;
-static jobject (*get_class_loader) (void);
+static pthread_key_t current_jni_thread;
 
 gint
 gst_amc_jni_get_android_level ()
@@ -486,58 +485,11 @@ done:
   return g_string_free (gs, FALSE);
 }
 
-static JNIEnv *
-gst_amc_jni_attach_current_thread (void)
-{
-  JNIEnv *env;
-  JavaVMAttachArgs args;
-  gint ret;
-
-  GST_DEBUG ("Attaching thread %p", g_thread_self ());
-  args.version = JNI_VERSION_1_6;
-  args.name = NULL;
-  args.group = NULL;
-
-  if ((ret = (*java_vm)->AttachCurrentThread (java_vm, &env, &args)) != JNI_OK) {
-    GST_ERROR ("Failed to attach current thread: %d", ret);
-    return NULL;
-  }
-
-  return env;
-}
-
 static void
-gst_amc_jni_detach_current_thread (void *env)
+gst_amc_jni_detach_thread_sentinel (void *sentinel)
 {
-  gint ret;
-
   GST_DEBUG ("Detaching thread %p", g_thread_self ());
-  if ((ret = (*java_vm)->DetachCurrentThread (java_vm)) != JNI_OK) {
-    GST_DEBUG ("Failed to detach current thread: %d", ret);
-  }
-}
-
-static JavaVM *
-get_application_java_vm (void)
-{
-  GModule *module = NULL;
-  JavaVM *(*get_java_vm) (void);
-  JavaVM *vm = NULL;
-
-  module = g_module_open (NULL, G_MODULE_BIND_LOCAL);
-
-  if (!module) {
-    return NULL;
-  }
-
-  if (g_module_symbol (module, "gst_android_get_java_vm",
-          (gpointer *) & get_java_vm) && get_java_vm) {
-    vm = get_java_vm ();
-  }
-
-  g_module_close (module);
-
-  return vm;
+  g_java_leave_thread ((GJavaThreadSentinel *)sentinel);
 }
 
 static gboolean
@@ -607,51 +559,25 @@ symbol_error:
   }
 }
 
-static gboolean
-check_application_class_loader (void)
-{
-  gboolean ret = TRUE;
-  GModule *module = NULL;
-
-  module = g_module_open (NULL, G_MODULE_BIND_LOCAL);
-  if (!module) {
-    return FALSE;
-  }
-  if (!g_module_symbol (module, "gst_android_get_application_class_loader",
-          (gpointer *) & get_class_loader)) {
-    ret = FALSE;
-  }
-
-  g_module_close (module);
-
-  return ret;
-}
 
 static gboolean
 initialize_classes (void)
 {
-  if (!check_application_class_loader ()) {
-    GST_ERROR ("Could not find application class loader provider");
-    return FALSE;
-  }
-
-  return TRUE;
+  if (g_java_get_class_loader () != NULL)
+    return TRUE;
+  GST_ERROR ("Could not find application class loader provider");
+  return FALSE;
 }
 
 static gboolean
 gst_amc_jni_initialize_java_vm (void)
 {
+  JavaVM *java_vm;
   jsize n_vms;
   gint ret;
 
-  if (java_vm) {
+  if (glib_java_is_initialized ()) {
     GST_DEBUG ("Java VM already provided by the application");
-    return initialize_classes ();
-  }
-
-  java_vm = get_application_java_vm ();
-  if (java_vm) {
-    GST_DEBUG ("Java VM successfully requested from the application");
     return initialize_classes ();
   }
 
@@ -707,6 +633,7 @@ gst_amc_jni_initialize_java_vm (void)
   if (java_vm == NULL)
     return FALSE;
 
+  glib_java_initialize (java_vm, NULL);
   return initialize_classes ();
 
 get_created_failed:
@@ -780,7 +707,7 @@ G_GNUC_PRINTF (5, 6)
 static gpointer
 gst_amc_jni_initialize_internal (gpointer data)
 {
-  pthread_key_create (&current_jni_env, gst_amc_jni_detach_current_thread);
+  pthread_key_create (&current_jni_thread, gst_amc_jni_detach_thread_sentinel);
   return gst_amc_jni_initialize_java_vm ()? GINT_TO_POINTER (1) : NULL;
 }
 
@@ -789,7 +716,7 @@ void
 gst_amc_jni_set_java_vm (JavaVM * vm)
 {
   GST_DEBUG ("Application provides Java VM %p", vm);
-  java_vm = vm;
+  glib_java_initialize (vm, NULL);
 }
 
 gboolean
@@ -804,14 +731,14 @@ gst_amc_jni_initialize (void)
 JNIEnv *
 gst_amc_jni_get_env (void)
 {
-  JNIEnv *env;
+  GJavaThreadSentinel *sentinel;
 
-  if ((env = pthread_getspecific (current_jni_env)) == NULL) {
-    env = gst_amc_jni_attach_current_thread ();
-    pthread_setspecific (current_jni_env, env);
+  if ((sentinel = pthread_getspecific (current_jni_thread)) == NULL) {
+    sentinel = g_java_enter_thread ();
+    pthread_setspecific (current_jni_thread, sentinel);
   }
 
-  return env;
+  return g_java_get_env ();
 }
 
 gboolean
@@ -834,13 +761,7 @@ gst_amc_jni_get_application_class (JNIEnv * env, const gchar * name,
 
   GST_LOG ("attempting to retrieve class %s", name);
 
-  if (!get_class_loader) {
-    g_set_error (err, GST_LIBRARY_ERROR, GST_LIBRARY_ERROR_FAILED,
-        "Could not retrieve application class loader function");
-    goto done;
-  }
-
-  class_loader = get_class_loader ();
+  class_loader = g_java_get_class_loader ();
   if (!class_loader) {
     g_set_error (err, GST_LIBRARY_ERROR, GST_LIBRARY_ERROR_FAILED,
         "Could not retrieve application class loader");
