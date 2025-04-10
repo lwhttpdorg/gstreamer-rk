@@ -94,7 +94,7 @@ if not meson.is_subproject() and cc.get_id() == 'msvc'
       language: ['c', 'cpp'])
 endif
 
-building_full = get_option('default_library') == 'static' and not get_option('gst-full').disabled()
+building_full = get_option('gst-full').enabled() or (get_option('gst-full').auto() and get_option('default_library') == 'static')
 building_full_static = false
 building_full_options = []
 if building_full
@@ -429,7 +429,6 @@ if building_full
   exposed_libs = []
   exposed_deps = []
   exposed_girs = []
-  incdir_deps = []
   wanted_libs = ['gstreamer-1.0'] + get_option('gst-full-libraries')
   all_libs = '*' in wanted_libs
 
@@ -440,12 +439,20 @@ if building_full
 
     if pkg_name in wanted_libs or all_libs
       if lib_def.has_key('lib')
-        exposed_deps += dependency(pkg_name)
-        incdir_deps += dependency(pkg_name).partial_dependency(includes: true, sources: true)
-        exposed_libs += [lib_def['lib']]
+        # if pkg_name is overriden with a shared library, it'll fall back to
+        # pkg-config which (if installed) gives us a dependency from the OS
+        # Ideally we could tell meson to only look for overriden dependencies,
+        # but no such method exists.
+        static_dep = dependency(pkg_name, static: true, required: false)
+        if static_dep.found() and static_dep.type_name() == 'internal'
+          exposed_deps += static_dep.partial_dependency(includes: true, sources: true)
+          exposed_libs += [lib_def['lib']]
+        else
+          exposed_deps += dependency(pkg_name)
+        endif
       endif
 
-      if lib_def.has_key('gir')
+      if lib_def.has_key('gir') and not lib_def.has_key('gir_targets')
         exposed_girs += lib_def['gir']
       endif
     endif
@@ -458,19 +465,36 @@ if building_full
   # Windows/Cygwin, because symbols from static libraries must
   # be manually marked as exported through a module definition file.
   # See e.g. https://github.com/FFmpeg/FFmpeg/blob/3057ce797f6e1348b978f5ffe9e2afd2224544f0/configure#L5726
-  glib_deps = []
-  glib_dep = dependency('glib-2.0')
-  gobject_dep = dependency('gobject-2.0')
-  if gobject_dep.type_name() == 'internal'
-    glib_subproject = subproject('glib')
-    exposed_libs += glib_subproject.get_variable('libglib')
-    exposed_libs += glib_subproject.get_variable('libgobject')
-    incdir_deps += [
-      glib_dep.partial_dependency(includes: true),
-      gobject_dep.partial_dependency(includes: true),
-    ]
+  glib_pc_deps = []
+  glib_dep = dependency('glib-2.0', static: true, required: false)
+  gobject_dep = dependency('gobject-2.0', static: true, required: false)
+  if glib_dep.found() and gobject_dep.found()
+    if gobject_dep.type_name() == 'internal'
+      glib_subproject = subproject('glib')
+      exposed_libs += glib_subproject.get_variable('libglib')
+      exposed_libs += glib_subproject.get_variable('libgobject')
+      exposed_deps += [
+        glib_dep.partial_dependency(includes: true),
+        gobject_dep.partial_dependency(includes: true),
+      ]
+    else
+      glib_pc_deps = [glib_dep, gobject_dep]
+      exposed_deps += [glib_dep, gobject_dep]
+    endif
   else
-    glib_deps = [glib_dep, gobject_dep]
+    glib_dep = dependency('glib-2.0')
+    gobject_dep = dependency('gobject-2.0')
+    if gobject_dep.type_name() == 'internal'
+      glib_subproject = subproject('glib')
+      glib_pc_deps = [
+        glib_subproject.get_variable('libglib'),
+        glib_subproject.get_variable('libgobject')
+      ]
+      exposed_deps += [glib_dep, gobject_dep]
+    else
+      glib_pc_deps = [glib_dep, gobject_dep]
+      exposed_deps += [glib_dep, gobject_dep]
+    endif
   endif
 
   link_deps = []
@@ -499,7 +523,7 @@ if building_full
     target_type: get_option('gst-full-target-type'),
     link_args: gstfull_link_args,
     link_whole : exposed_libs,
-    dependencies : [incdir_deps, glib_deps, all_plugins, giomodules_deps],
+    dependencies : [exposed_deps, all_plugins, giomodules_deps],
     link_depends : link_deps,
     install : true,
   )
@@ -514,7 +538,7 @@ if building_full
 
   gst_full_dep = declare_dependency(link_with: gst_full_libs,
     compile_args: gst_full_c_flags,
-    dependencies : incdir_deps + glib_deps,
+    dependencies : exposed_deps,
     include_directories: include_directories('.')
   )
 
@@ -546,7 +570,7 @@ if building_full
   endif
 
   pkgconfig.generate(gstfull,
-    requires: glib_deps,
+    requires: glib_pc_deps,
     libraries_private: gst_full_libs_private,
     extra_cflags: gst_full_c_flags,
     subdirs : 'gstreamer-1.0')
