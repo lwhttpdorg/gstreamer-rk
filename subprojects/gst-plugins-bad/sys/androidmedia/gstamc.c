@@ -1808,6 +1808,7 @@ register_codecs (GstPlugin * plugin)
        * that there's an alternative with a higher rank.
        */
       if (g_str_has_prefix (codec_info->name, "OMX.google") ||
+          g_str_has_prefix (codec_info->name, "c2.android") ||
           g_str_has_suffix (codec_info->name, ".sw.dec")) {
         /* For video we prefer hardware codecs, for audio we prefer software
          * codecs. Hardware codecs don't make much sense for audio */
@@ -1823,7 +1824,7 @@ register_codecs (GstPlugin * plugin)
          * ones
          */
         rank = GST_RANK_MARGINAL;
-      } else if (g_str_has_prefix (codec_info->name, "OMX.")) {
+      } else if (g_str_has_prefix (codec_info->name, "OMX.") || g_str_has_prefix (codec_info->name, "c2.")) {
         rank = is_video ? GST_RANK_PRIMARY : GST_RANK_SECONDARY;
       } else {
         rank = GST_RANK_MARGINAL;
