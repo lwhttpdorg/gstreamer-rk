@@ -24,6 +24,30 @@
 
 #include "audio-buffer.h"
 
+/**
+ * gst_audio_buffer_remap_readonly:
+ * @buffer: the #GstAudioBuffer to unmap
+ *
+ * Re-map an audio buffer that was previously mapped read-write with
+ * gst_audio_buffer_map() to be read-only mapped. The data pointers
+ * and sizes stay the same.
+ *
+ * On failure the original mapping is preserved.
+ *
+ * Returns: TRUE if the memory was successfully remapped.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_audio_buffer_remap_readonly (GstAudioBuffer * buffer)
+{
+  guint i;
+  for (i = 0; i < buffer->n_planes; i++) {
+    gst_buffer_remap_readonly (buffer->buffer, &buffer->map_infos[i]);
+  }
+
+  return TRUE;
+}
 
 static void
 gst_audio_buffer_unmap_internal (GstAudioBuffer * buffer, guint n_unmap)

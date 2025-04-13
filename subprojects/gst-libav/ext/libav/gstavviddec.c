@@ -2042,9 +2042,19 @@ gst_ffmpegviddec_video_frame (GstFFMpegVidDec * ffmpegdec,
     output_frame->output_buffer = NULL;
     *ret = get_output_buffer (ffmpegdec, output_frame);
     gst_buffer_unref (tmp);
-  }
+  } else {
+    GstFFMpegVidDecVideoFrame *dframe;
+
+    g_assert (ffmpegdec->picture->opaque);
+    dframe = ffmpegdec->picture->opaque;
+    g_assert (dframe->buffer == NULL);
+    g_assert (dframe->mapped);
+
+    if (!gst_video_frame_remap_readonly (&dframe->vframe)) {
+      GST_ERROR_OBJECT (ffmpegdec, "Failed to remap output video frame read-only");
+    }
+
 #ifndef G_DISABLE_ASSERT
-  else {
     GstVideoMeta *vmeta =
         gst_buffer_get_video_meta (output_frame->output_buffer);
     if (vmeta) {
@@ -2056,8 +2066,8 @@ gst_ffmpegviddec_video_frame (GstFFMpegVidDec * ffmpegdec,
             GST_VIDEO_INFO_HEIGHT (info));
       }
     }
-  }
 #endif
+  }
   gst_object_unref (pool);
 
   if (G_UNLIKELY (*ret != GST_FLOW_OK))
@@ -2160,9 +2170,6 @@ gst_ffmpegviddec_video_frame (GstFFMpegVidDec * ffmpegdec,
     gst_video_decoder_have_last_subframe (GST_VIDEO_DECODER (ffmpegdec),
         output_frame);
 
-  /* FIXME: Ideally we would remap the buffer read-only now before pushing but
-   * libav might still have a reference to it!
-   */
   if (GST_BUFFER_FLAG_IS_SET (output_frame->input_buffer,
           GST_VIDEO_BUFFER_FLAG_ONEFIELD)) {
     GST_BUFFER_FLAG_SET (output_frame->output_buffer,

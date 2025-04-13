@@ -285,6 +285,45 @@ gst_video_frame_unmap (GstVideoFrame * frame)
 }
 
 /**
+ * gst_video_frame_remap_readonly:
+ * @frame: a #GstVideoFrame
+ *
+ * Re-map the memory that was previously mapped read-write with
+ * gst_video_frame_map() to be read-only mapped. The data pointers and sizes
+ * stay the same.
+ *
+ * On failure the original mapping is preserved.
+ *
+ * Returns: TRUE if the memory was successfully remapped.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_video_frame_remap_readonly (GstVideoFrame * frame)
+{
+  GstBuffer *buffer;
+  GstVideoMeta *meta;
+  gint i;
+
+  g_return_val_if_fail (frame != NULL, FALSE);
+  g_return_val_if_fail (frame->buffer != NULL, FALSE);
+
+  buffer = frame->buffer;
+  meta = frame->meta;
+
+  if (meta) {
+    for (i = 0; i < frame->info.finfo->n_planes; i++) {
+      if (!gst_video_meta_remap_readonly (meta, i, &frame->map[i]))
+        return FALSE;
+    }
+  } else {
+    return gst_buffer_remap_readonly (buffer, &frame->map[0]);
+  }
+
+  return TRUE;
+}
+
+/**
  * gst_video_frame_copy_plane:
  * @dest: a #GstVideoFrame
  * @src: a #GstVideoFrame

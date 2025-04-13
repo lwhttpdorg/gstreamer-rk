@@ -37,6 +37,8 @@ default_map (GstVideoMeta * meta, guint plane, GstMapInfo * info,
     gpointer * data, gint * stride, GstMapFlags flags);
 static gboolean
 default_unmap (GstVideoMeta * meta, guint plane, GstMapInfo * info);
+static gboolean
+default_remap_readonly (GstVideoMeta * meta, guint plane, GstMapInfo * info);
 
 #ifndef GST_DISABLE_GST_DEBUG
 #define GST_CAT_DEFAULT ensure_debug_category()
@@ -74,6 +76,7 @@ gst_video_meta_init (GstMeta * meta, gpointer params, GstBuffer * buffer)
   gst_video_alignment_reset (&emeta->alignment);
   emeta->map = NULL;
   emeta->unmap = NULL;
+  emeta->remap_readonly = NULL;
 
   return TRUE;
 }
@@ -116,6 +119,7 @@ gst_video_meta_transform (GstBuffer * dest, GstMeta * meta,
       }
       dmeta->map = smeta->map;
       dmeta->unmap = smeta->unmap;
+      dmeta->remap_readonly = smeta->remap_readonly;
     }
   } else {
     /* return FALSE, if transform type is not supported */
@@ -212,7 +216,7 @@ video_meta_serialize (const GstMeta * meta, GstByteArrayInterface * data,
 {
   GstVideoMeta *vmeta = (GstVideoMeta *) meta;
 
-  if (vmeta->map != default_map || vmeta->unmap != default_unmap) {
+  if (vmeta->map != default_map || vmeta->unmap != default_unmap || vmeta->remap_readonly != default_remap_readonly) {
     GST_WARNING ("Cannot serialize video meta with custom map/unmap functions");
     return FALSE;
   }
@@ -439,6 +443,14 @@ default_unmap (GstVideoMeta * meta, guint plane, GstMapInfo * info)
   return TRUE;
 }
 
+static gboolean
+default_remap_readonly (GstVideoMeta * meta, guint plane, GstMapInfo * info)
+{
+  GstBuffer *buffer = meta->buffer;
+
+  return gst_buffer_remap_readonly (buffer, info);
+}
+
 /**
  * gst_buffer_add_video_meta:
  * @buffer: a #GstBuffer
@@ -518,6 +530,7 @@ gst_buffer_add_video_meta_full (GstBuffer * buffer,
   }
   meta->map = default_map;
   meta->unmap = default_unmap;
+  meta->remap_readonly = default_remap_readonly;
 
   return meta;
 }
@@ -572,6 +585,35 @@ gst_video_meta_unmap (GstVideoMeta * meta, guint plane, GstMapInfo * info)
   g_return_val_if_fail (info != NULL, FALSE);
 
   return meta->unmap (meta, plane, info);
+}
+
+/**
+ * gst_video_meta_remap_readonly:
+ * @meta: a #GstVideoMeta
+ * @plane: a plane
+ * @info: a #GstMapInfo
+ *
+ * Re-map the plane that was previously mapped read-write with
+ * gst_video_meta_map() to be read-only mapped. The data pointers
+ * and sizes stay the same.
+ *
+ * On failure the original mapping is preserved.
+ *
+ * Returns: TRUE if the memory was successfully remapped.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_video_meta_remap_readonly (GstVideoMeta * meta, guint plane, GstMapInfo * info)
+{
+  g_return_val_if_fail (meta != NULL, FALSE);
+  g_return_val_if_fail (plane < meta->n_planes, FALSE);
+  g_return_val_if_fail (info != NULL, FALSE);
+
+  if (!meta->remap_readonly)
+    return FALSE;
+
+  return meta->remap_readonly (meta, plane, info);
 }
 
 static gboolean

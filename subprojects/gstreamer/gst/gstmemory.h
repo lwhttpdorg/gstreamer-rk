@@ -382,6 +382,9 @@ gboolean       gst_memory_map          (GstMemory *mem, GstMapInfo *info, GstMap
 GST_API
 void           gst_memory_unmap        (GstMemory *mem, GstMapInfo *info);
 
+GST_API
+gboolean       gst_memory_remap_readonly (GstMemory * mem, GstMapInfo * info);
+
 /* copy and subregions */
 
 GST_API

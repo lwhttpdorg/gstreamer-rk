@@ -357,6 +357,46 @@ gst_memory_unmap (GstMemory * mem, GstMapInfo * info)
 }
 
 /**
+ * gst_memory_remap_readonly:
+ * @mem: a #GstMemory
+ * @info: a #GstMapInfo
+ *
+ * Re-map a memory that was previously mapped read-write with gst_memory_map() to
+ * be read-only mapped. The data pointers and sizes stay the same.
+ *
+ * On failure the original mapping is preserved.
+ *
+ * Returns: %TRUE if remapping was successful.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_memory_remap_readonly (GstMemory * mem, GstMapInfo * info)
+{
+  GstMapFlags flags;
+
+  g_return_val_if_fail (mem != NULL, FALSE);
+  g_return_val_if_fail (info != NULL, FALSE);
+  g_return_val_if_fail (info->memory == mem, FALSE);
+
+  flags = info->flags;
+
+  // Not mapped writable so can just return.
+  if ((flags & GST_MAP_WRITE) == 0)
+    return TRUE;
+  // Not mapped readable so can't just re-lock the memory
+  if ((flags & GST_MAP_READ) == 0)
+    return FALSE;
+
+  gst_memory_unlock (mem, (GstLockFlags) info->flags);
+  flags = flags & (~GST_MAP_WRITE);
+  gst_memory_lock (mem, (GstLockFlags) flags);
+  info->flags = flags;
+
+  return TRUE;
+}
+
+/**
  * gst_memory_copy:
  * @mem: a #GstMemory
  * @offset: offset to copy from

@@ -115,6 +115,9 @@ GST_VIDEO_API
 void        gst_video_frame_unmap         (GstVideoFrame *frame);
 
 GST_VIDEO_API
+gboolean    gst_video_frame_remap_readonly (GstVideoFrame *frame);
+
+GST_VIDEO_API
 gboolean    gst_video_frame_copy          (GstVideoFrame *dest, const GstVideoFrame *src);
 
 GST_VIDEO_API
