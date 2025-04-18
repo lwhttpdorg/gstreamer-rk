@@ -160,23 +160,29 @@ static const GstVideoColorimetry default_color[] = {
 };
 
 static void
-set_default_colorimetry (GstVideoInfo * info)
+get_default_colorimetry (GstVideoInfo * info, GstVideoColorimetry * colorimetry)
 {
   const GstVideoFormatInfo *finfo = info->finfo;
 
   if (GST_VIDEO_FORMAT_INFO_IS_YUV (finfo)) {
     if (info->height > 576) {
-      info->colorimetry = default_color[DEFAULT_YUV_HD];
+      *colorimetry = default_color[DEFAULT_YUV_HD];
     } else {
-      info->colorimetry = default_color[DEFAULT_YUV_SD];
+      *colorimetry = default_color[DEFAULT_YUV_SD];
     }
   } else if (GST_VIDEO_FORMAT_INFO_IS_GRAY (finfo)) {
-    info->colorimetry = default_color[DEFAULT_GRAY];
+    *colorimetry = default_color[DEFAULT_GRAY];
   } else if (GST_VIDEO_FORMAT_INFO_IS_RGB (finfo)) {
-    info->colorimetry = default_color[DEFAULT_RGB];
+    *colorimetry = default_color[DEFAULT_RGB];
   } else {
-    info->colorimetry = default_color[DEFAULT_UNKNOWN];
+    *colorimetry = default_color[DEFAULT_UNKNOWN];
   }
+}
+
+static void
+set_default_colorimetry (GstVideoInfo * info)
+{
+  get_default_colorimetry (info, &info->colorimetry);
 }
 
 static gboolean
@@ -204,19 +210,25 @@ validate_colorimetry (const GstVideoInfo * info)
 }
 
 static void
-set_default_chroma_site (GstVideoInfo * info)
+get_default_chroma_site (GstVideoInfo * info, GstVideoChromaSite * chroma_site)
 {
   const GstVideoFormatInfo *finfo = info->finfo;
 
   if (GST_VIDEO_FORMAT_INFO_IS_YUV (finfo)) {
     if (info->height > 576) {
-      info->chroma_site = GST_VIDEO_CHROMA_SITE_H_COSITED;
+      *chroma_site = GST_VIDEO_CHROMA_SITE_H_COSITED;
     } else {
-      info->chroma_site = GST_VIDEO_CHROMA_SITE_NONE;
+      *chroma_site = GST_VIDEO_CHROMA_SITE_NONE;
     }
   } else {
-    info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+    *chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
   }
+}
+
+static void
+set_default_chroma_site (GstVideoInfo * info)
+{
+  get_default_chroma_site (info, &info->chroma_site);
 }
 
 static gboolean
@@ -719,6 +731,7 @@ gst_video_info_to_caps (const GstVideoInfo * info)
   gchar *color;
   gint par_n, par_d;
   GstVideoColorimetry colorimetry;
+  GstVideoChromaSite chroma_site;
 
   g_return_val_if_fail (info != NULL, NULL);
   g_return_val_if_fail (info->finfo != NULL, NULL);
@@ -797,21 +810,31 @@ gst_video_info_to_caps (const GstVideoInfo * info)
   gst_caps_set_simple_static_str (caps, "pixel-aspect-ratio",
       GST_TYPE_FRACTION, par_n, par_d, NULL);
 
-  if (info->chroma_site != GST_VIDEO_CHROMA_SITE_UNKNOWN) {
-    gchar *chroma_site = gst_video_chroma_site_to_string (info->chroma_site);
+  chroma_site = info->chroma_site;
+  /* Make sure chroma siting is valid */
+  if (!validate_chroma_site (info)) {
+    get_default_chroma_site ((GstVideoInfo *) info, &chroma_site);
+  }
 
-    if (!chroma_site) {
-      GST_WARNING ("Couldn't convert chroma-site 0x%x to string",
-          info->chroma_site);
+  if (chroma_site != GST_VIDEO_CHROMA_SITE_UNKNOWN) {
+    gchar *chroma_site_str = gst_video_chroma_site_to_string (chroma_site);
+
+    if (!chroma_site_str) {
+      GST_WARNING ("Couldn't convert chroma-site 0x%x to string", chroma_site);
     } else {
-      gst_caps_set_simple_static_str (caps,
-          "chroma-site", G_TYPE_STRING, chroma_site, NULL);
-      g_free (chroma_site);
+      gst_caps_set_simple (caps,
+          "chroma-site", G_TYPE_STRING, chroma_site_str, NULL);
+      g_free (chroma_site_str);
     }
   }
 
-  /* make sure we set the RGB matrix for RGB formats */
   colorimetry = info->colorimetry;
+  /* Make sure colorimetry is valid */
+  if (!validate_colorimetry ((GstVideoInfo *) info)) {
+    get_default_colorimetry ((GstVideoInfo *) info, &colorimetry);
+  }
+
+  /* make sure we set the RGB matrix for RGB formats */
   if (GST_VIDEO_FORMAT_INFO_IS_RGB (info->finfo) &&
       colorimetry.matrix != GST_VIDEO_COLOR_MATRIX_RGB) {
     GST_WARNING ("invalid matrix %d for RGB format, using RGB",
