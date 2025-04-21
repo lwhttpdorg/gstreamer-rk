@@ -31,6 +31,8 @@ if not os.path.exists(DEFAULT_BUILDDIR):
     DEFAULT_BUILDDIR = os.path.join(SCRIPTDIR, '_build')
 if not os.path.exists(DEFAULT_BUILDDIR):
     DEFAULT_BUILDDIR = os.path.join(SCRIPTDIR, 'builddir')
+if not os.path.exists(DEFAULT_BUILDDIR) and os.path.exists("meson-info"):
+    DEFAULT_BUILDDIR = os.path.realpath('.')
 
 TYPELIB_REG = re.compile(r'.*\.typelib$')
 SHAREDLIB_REG = re.compile(r'\.so|\.dylib|\.dll')
@@ -246,8 +248,19 @@ def setup_gdb(options):
     except FileNotFoundError:
         pass
 
-    with open(os.path.join(options.srcdir, '.gdbinit'), 'a') as f:
-        f.write(gdbinit_line)
+    try:
+        with open(os.path.join(options.srcdir, '.gdbinit'), 'a') as f:
+            f.write(gdbinit_line)
+    except PermissionError:
+        try:
+            with open(os.path.join(options.builddir, '.gdbinit'), 'r') as f:
+                if gdbinit_line in f.readlines():
+                    return python_paths
+        except FileNotFoundError:
+            pass
+
+        with open(os.path.join(options.builddir, '.gdbinit'), 'a') as f:
+            f.write(gdbinit_line)
 
     return python_paths
 
@@ -510,7 +523,8 @@ def get_windows_shell():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="gst-env")
+    parser = argparse.ArgumentParser(prog="gst-env",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--builddir",
                         default=DEFAULT_BUILDDIR,
@@ -548,7 +562,9 @@ if __name__ == "__main__":
     try:
         gst_version = git("rev-parse", "--symbolic-full-name", "--abbrev-ref", "HEAD",
                           repository_path=options.srcdir).strip('\n')
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        if b'detected dubious ownership in repository' in e.output:
+            print(e.output.decode("utf-8"))
         gst_version = "unknown"
 
     if options.wine:
