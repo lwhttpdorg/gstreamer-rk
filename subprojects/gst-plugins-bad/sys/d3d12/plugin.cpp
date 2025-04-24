@@ -51,6 +51,7 @@
 #include "gstd3d12swapchainsink.h"
 #include "gstd3d12mipmapping.h"
 #include "gstd3d12deinterlace.h"
+#include "gstd3d12vpp.h"
 #include <windows.h>
 #include <versionhelpers.h>
 #include <wrl.h>
@@ -154,6 +155,8 @@ plugin_init (GstPlugin * plugin)
 
     gst_d3d12_h264_enc_register (plugin, device, video_device.Get (),
         GST_RANK_NONE);
+
+    gst_d3d12_vpp_register (plugin, device, video_device.Get (), GST_RANK_NONE);
 
     gst_object_unref (device);
   }

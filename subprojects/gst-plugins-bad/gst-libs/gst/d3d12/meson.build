@@ -15,6 +15,7 @@ d3d12_sources = [
   'gstd3d12memory.cpp',
   'gstd3d12mipgen.cpp',
   'gstd3d12utils.cpp',
+  'gstd3d12videoproc.cpp',
 ]
 
 d3d12_headers = [
@@ -32,6 +33,7 @@ d3d12_headers = [
   'gstd3d12frame.h',
   'gstd3d12memory.h',
   'gstd3d12utils.h',
+  'gstd3d12videoproc.h',
 ]
 
 extra_args = [

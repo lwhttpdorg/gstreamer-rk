@@ -90,5 +90,10 @@ typedef struct _GstD3D12FenceData GstD3D12FenceData;
 
 typedef struct _GstD3D12Frame GstD3D12Frame;
 
+typedef struct _GstD3D12VideoProc GstD3D12VideoProc;
+typedef struct _GstD3D12VideoProcClass GstD3D12VideoProcClass;
+typedef struct _GstD3D12VideoProcPrivate GstD3D12VideoProcPrivate;
+
+
 G_END_DECLS
 
