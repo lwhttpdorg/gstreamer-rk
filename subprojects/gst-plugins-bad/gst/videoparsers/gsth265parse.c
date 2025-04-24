@@ -288,6 +288,7 @@ gst_h265_parse_start (GstBaseParse * parse)
 
   h265parse->nalparser = gst_h265_parser_new ();
   h265parse->state = 0;
+  h265parse->invalid_bs = FALSE;
 
   gst_base_parse_set_min_frame_size (parse, 5);
 
@@ -855,8 +856,12 @@ gst_h265_parse_process_nal (GstH265Parse * h265parse, GstH265NalUnit * nalu)
     case GST_H265_NAL_PREFIX_SEI:
     case GST_H265_NAL_SUFFIX_SEI:
       /* expected state: got-sps */
-      if (!GST_H265_PARSE_STATE_VALID (h265parse, GST_H265_PARSE_STATE_GOT_SPS))
-        return FALSE;
+      if (!GST_H265_PARSE_STATE_VALID (h265parse, GST_H265_PARSE_STATE_GOT_SPS)) {
+        goto invalid_state;
+      } else if (h265parse->invalid_bs) {
+        h265parse->invalid_bs = FALSE;
+        GST_INFO_OBJECT (h265parse, "Invalid bit-stream resolved");
+      }
 
       h265parse->header = TRUE;
 
@@ -897,8 +902,12 @@ gst_h265_parse_process_nal (GstH265Parse * h265parse, GstH265NalUnit * nalu)
       /* expected state: got-sps|got-pps (valid picture headers) */
       h265parse->state &= GST_H265_PARSE_STATE_VALID_PICTURE_HEADERS;
       if (!GST_H265_PARSE_STATE_VALID (h265parse,
-              GST_H265_PARSE_STATE_VALID_PICTURE_HEADERS))
-        return FALSE;
+              GST_H265_PARSE_STATE_VALID_PICTURE_HEADERS)) {
+        goto invalid_state;
+      } else if (h265parse->invalid_bs) {
+        h265parse->invalid_bs = FALSE;
+        GST_INFO_OBJECT (h265parse, "Invalid bit-stream resolved");
+      }
 
       /* This is similar to the GOT_SLICE state, but is only reset when the
        * AU is complete. This is used to keep track of AU */
@@ -981,8 +990,10 @@ gst_h265_parse_process_nal (GstH265Parse * h265parse, GstH265NalUnit * nalu)
     }
     case GST_H265_NAL_FD:
       if (!GST_H265_PARSE_STATE_VALID (h265parse, GST_H265_PARSE_STATE_GOT_SPS)) {
-        GST_DEBUG_OBJECT (h265parse, "dropping FD received before SPS");
-        return FALSE;
+        goto invalid_state;
+      } else if (h265parse->invalid_bs) {
+        h265parse->invalid_bs = FALSE;
+        GST_INFO_OBJECT (h265parse, "Invalid bit-stream resolved");
       }
       pres = gst_h265_parser_parse_nal (nalparser, nalu);
       if (pres != GST_H265_PARSER_OK)
@@ -1009,6 +1020,13 @@ gst_h265_parse_process_nal (GstH265Parse * h265parse, GstH265NalUnit * nalu)
   }
 
   return TRUE;
+
+invalid_state:
+  h265parse->invalid_bs = TRUE;
+  GST_INFO_OBJECT (h265parse, "Invalid state, VPS, SPS, PPS NALs are "
+      "required before %s, dropping this NAL", _nal_name (nal_type));
+
+  return FALSE;
 }
 
 /* caller guarantees at least 3 bytes of nal payload for each nal
@@ -1338,8 +1356,8 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
 
     if (!gst_h265_parse_process_nal (h265parse, &nalu)) {
       GST_WARNING_OBJECT (h265parse,
-          "broken/invalid nal Type: %d %s, Size: %u will be dropped",
-          nalu.type, _nal_name (nalu.type), nalu.size);
+          "broken/invalid bit-stream, NAL Unit of type: %d %s, Size: %u will be"
+          " dropped", nalu.type, _nal_name (nalu.type), nalu.size);
       *skipsize = nalu.size;
       goto skip;
     }
