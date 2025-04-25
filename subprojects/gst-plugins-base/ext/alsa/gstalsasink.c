@@ -1038,29 +1038,14 @@ xrun_recovery (GstAlsaSink * alsa, snd_pcm_t * handle, gint err)
 {
   GST_WARNING_OBJECT (alsa, "xrun recovery %d: %s", err, g_strerror (-err));
 
-  if (err == -EPIPE) {          /* under-run */
-    err = snd_pcm_prepare (handle);
-    if (err < 0)
-      GST_WARNING_OBJECT (alsa,
-          "Can't recover from underrun, prepare failed: %s",
-          snd_strerror (err));
-    gst_audio_base_sink_report_device_failure (GST_AUDIO_BASE_SINK (alsa));
-    return 0;
-  } else if (err == -ESTRPIPE) {
-    while ((err = snd_pcm_resume (handle)) == -EAGAIN)
-      g_usleep (100);           /* wait until the suspend flag is released */
-
-    if (err < 0) {
-      err = snd_pcm_prepare (handle);
-      if (err < 0)
-        GST_WARNING_OBJECT (alsa,
-            "Can't recover from suspend, prepare failed: %s",
-            snd_strerror (err));
-    }
-    if (err == 0)
-      gst_audio_base_sink_report_device_failure (GST_AUDIO_BASE_SINK (alsa));
-    return 0;
+  err = snd_pcm_recover (handle, err, 0);
+  if (err < 0) {
+    GST_WARNING_OBJECT (alsa,
+        "Can't recover from xrun: %s", snd_strerror (err));
   }
+
+  gst_audio_base_sink_report_device_failure (GST_AUDIO_BASE_SINK (alsa));
+
   return err;
 }
 
