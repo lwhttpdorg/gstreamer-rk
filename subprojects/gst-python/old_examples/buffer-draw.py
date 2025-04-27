@@ -72,7 +72,7 @@ class PyGstBufferDraw(gst.Element):
             surface = cairo.ImageSurface.create_for_data (buf, cairo.FORMAT_ARGB32, width, height, 4 * width)
             ctx = cairo.Context(surface)
         except:
-            print "Failed to create cairo surface for buffer"
+            print("Failed to create cairo surface for buffer")
             traceback.print_exc()
             return
 
@@ -96,7 +96,7 @@ class PyGstBufferDraw(gst.Element):
             ctx.fill()
 
         except:
-            print "Failed cairo render"
+            print("Failed cairo render")
             traceback.print_exc()
 
 gobject.type_register(PyGstBufferDraw)

@@ -101,7 +101,7 @@ class SyscallParser:
                 s.colors = palette[program_hash % len (palette)]
                 self.syscalls.append (s)
         else:
-            print 'No log in %s' % str
+            print('No log in %s' % str)
             return
 
 def parse_strace(filename):
@@ -158,14 +158,14 @@ def compute_syscall_metrics(syscalls):
 
     if time_height > line_height:
         metrics.height = time_height
-        print "Adjusting PIXELS_PER_LINE = %d" % PIXELS_PER_LINE
+        print("Adjusting PIXELS_PER_LINE = %d" % PIXELS_PER_LINE)
         PIXELS_PER_LINE = metrics.height / num_syscalls
-        print "          PIXELS_PER_LINE = %d" % PIXELS_PER_LINE
+        print("          PIXELS_PER_LINE = %d" % PIXELS_PER_LINE)
     else:
         metrics.height = line_height
-        print "Adjusting PIXELS_PER_SECOND %d" % PIXELS_PER_SECOND
+        print("Adjusting PIXELS_PER_SECOND %d" % PIXELS_PER_SECOND)
         PIXELS_PER_SECOND = int(math.ceil(metrics.height / last_timestamp))
-        print "          PIXELS_PER_SECOND %d" % PIXELS_PER_SECOND
+        print("          PIXELS_PER_SECOND %d" % PIXELS_PER_SECOND)
 
     text_ypos = 0
 
@@ -212,7 +212,7 @@ def plot_syscall(surface, ctx, syscall):
 def plot_syscalls_to_surface(syscalls, metrics):
     num_syscalls = len(syscalls)
 
-    print 'picture size: %d x %d' % (metrics.width, metrics.height);
+    print('picture size: %d x %d' % (metrics.width, metrics.height));
 
     surface = cairo.ImageSurface(cairo.FORMAT_RGB24,
                                  metrics.width, metrics.height)
@@ -267,11 +267,11 @@ def main(args):
     options, args = option_parser.parse_args()
 
     if not options.output:
-        print 'Please specify an output filename with "-o file.png" or "--output=file.png".'
+        print('Please specify an output filename with "-o file.png" or "--output=file.png".')
         return 1
 
     if len(args) != 1:
-        print 'Please specify only one input filename, which is an debug log taken with "GST_DEBUG_COLOR_MODE=off GST_DEBUG=XXX <application>"'
+        print('Please specify only one input filename, which is an debug log taken with "GST_DEBUG_COLOR_MODE=off GST_DEBUG=XXX <application>"')
         return 1
 
     in_filename = args[0]
@@ -299,7 +299,7 @@ def main(args):
             break
 
     if not syscalls:
-        print 'No logs in %s' % in_filename
+        print('No logs in %s' % in_filename)
         return 1
 
     normalize_timestamps(syscalls)

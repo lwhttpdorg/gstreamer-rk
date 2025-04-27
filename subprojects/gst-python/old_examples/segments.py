@@ -73,7 +73,7 @@ class Looper (gobject.GObject):
 	
 	def play (self):
 		if not (self.__start_pos or self.__stop_pos):
-			raise RuntimeError, "Cannot start playback, segment was not set!"
+			raise RuntimeError("Cannot start playback, segment was not set!")
 		
 		self.__playbin.set_state (gst.STATE_PLAYING)
 	
@@ -90,7 +90,7 @@ class Looper (gobject.GObject):
 		elif property.name == "stop-pos":
 			return self.__stop_pos
 		else:
-			raise AttributeError, "Unknown property %s" % property.name
+			raise AttributeError("Unknown property %s" % property.name)
 	
 	def do_set_property (self, property, value):
 		if property.name == "loop":
@@ -100,7 +100,7 @@ class Looper (gobject.GObject):
 		elif property.name == "stop-pos":
 			self.__stop_pos = value
 		else:
-			raise AttributeError, "Unknown property %s" % property.name
+			raise AttributeError("Unknown property %s" % property.name)
 	
 	def do_stopped (self):
 		if self.__timeout_id:
@@ -165,17 +165,17 @@ def on_looper_stopped (looper):
 	mainloop.quit ()
 
 def on_looper_pos_updated (looper, position):
-	print round (position / gst.SECOND, 2)
+	print(round (position / gst.SECOND, 2))
 
 def on_looper_error (looper, error_tuple):
 	error, debug = error_tuple
-	print "\n\n%s\n\n%s\n\n" % (error, debug)
+	print("\n\n%s\n\n%s\n\n" % (error, debug))
 	mainloop.quit ()
 
 if __name__ == "__main__":
 	import sys
 	if len (sys.argv) != 5:
-		print "Usage: %s <filename|uri> <start_seconds> <stop_seconds> <loop = 0|1>" % sys.argv [0]
+		print("Usage: %s <filename|uri> <start_seconds> <stop_seconds> <loop = 0|1>" % sys.argv [0])
 		sys.exit (1)
 	
 	if "://" in sys.argv [1]:
@@ -186,8 +186,8 @@ if __name__ == "__main__":
 	
 	looper = Looper (uri)
 	
-	looper.props.start_pos = long (sys.argv [2]) * gst.SECOND
-	looper.props.stop_pos = long (sys.argv [3]) * gst.SECOND
+	looper.props.start_pos = int (sys.argv [2]) * gst.SECOND
+	looper.props.stop_pos = int (sys.argv [3]) * gst.SECOND
 	looper.props.loop = int (sys.argv [4])
 	
 	looper.connect ("stopped", on_looper_stopped)

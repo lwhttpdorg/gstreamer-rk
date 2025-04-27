@@ -25,9 +25,6 @@ import re
 from glib_gobject_helper import g_type_to_name, g_type_name_from_instance, \
     g_type_to_typenode, g_quark_to_string, g_type_fundamental_name
 
-if sys.version_info[0] >= 3:
-    long = int
-
 
 def is_gst_type(val, klass):
     def _is_gst_type(type):
@@ -65,9 +62,9 @@ class GstMiniObjectPrettyPrinter:
             inst = self.val.cast(gdb.lookup_type("GstMiniObject").pointer())
             gtype = inst["type"]
             name = g_type_to_name(gtype)
-            return "0x%x [%s]" % (long(self.val), name)
+            return "0x%x [%s]" % (int(self.val), name)
         except RuntimeError:
-            return "0x%x" % long(self.val)
+            return "0x%x" % int(self.val)
 
 
 class GstObjectPrettyPrinter:
@@ -81,14 +78,14 @@ class GstObjectPrettyPrinter:
             name = g_type_name_from_instance(self.val)
             if not name:
                 name = str(self.val.type.target())
-            if long(self.val) != 0:
+            if int(self.val) != 0:
                 inst = self.val.cast(gdb.lookup_type("GstObject").pointer())
                 inst_name = inst["name"].string()
                 if inst_name:
                     name += "|" + inst_name
-            return ("0x%x [%s]") % (long(self.val), name)
+            return ("0x%x [%s]") % (int(self.val), name)
         except RuntimeError:
-            return "0x%x" % long(self.val)
+            return "0x%x" % int(self.val)
 
 
 GST_SECOND = 1000000000
@@ -166,7 +163,7 @@ def save_memory_access_print(message):
 
 
 def _g_type_from_instance(instance):
-    if long(instance) != 0:
+    if int(instance) != 0:
         try:
             inst = instance.cast(gdb.lookup_type("GTypeInstance").pointer())
             klass = inst["g_class"]
@@ -311,12 +308,12 @@ class GdbCapsFeatures:
         self.val = val
 
     def size(self):
-        if long(self.val) == 0:
+        if int(self.val) == 0:
             return 0
         return int(self.val["array"]["len"])
 
     def items(self):
-        if long(self.val) == 0:
+        if int(self.val) == 0:
             return
         for q in _g_array_iter(self.val["array"], gdb.lookup_type("GQuark")):
             yield q
@@ -332,7 +329,7 @@ class GdbCapsFeatures:
         return True
 
     def __str__(self):
-        if long(self.val) == 0:
+        if int(self.val) == 0:
             return ""
         count = self.size()
         if int(self.val["is_any"]) == 1 and count == 0:
@@ -424,7 +421,7 @@ class GdbGValue:
             if tname == "GstFraction":
                 v = "%d/%d" % (value[0], value[1])
             elif tname == "GstBitmask":
-                v = "0x%016x" % long(value)
+                v = "0x%016x" % int(value)
             elif tname == "gboolean":
                 v = "false" if int(value) == 0 else "true"
             elif tname == "GstFlagSet":
@@ -724,7 +721,7 @@ class GdbGstPad(GdbGstObject):
         return self.val == other.val
 
     def is_linked(self):
-        return long(self.val["peer"]) != 0
+        return int(self.val["peer"]) != 0
 
     def peer(self):
         return GdbGstPad(self.val["peer"])
@@ -733,7 +730,7 @@ class GdbGstPad(GdbGstObject):
         return str(self.val["direction"])
 
     def events(self):
-        if long(self.val["priv"]) == 0:
+        if int(self.val["priv"]) == 0:
             return
         array = self.val["priv"]["events"]
         for ev in _g_array_iter(array, gdb.lookup_type("PadEvent")):
@@ -786,11 +783,11 @@ class GdbGstPad(GdbGstObject):
                            internal.peer().full_name())
 
         task = self.val["task"]
-        if long(task) != 0:
+        if int(task) != 0:
             _gdb_write(indent + 1, "task: %s" %
                        task_state_to_name(int(task["state"])))
 
-        offset = long(self.val["offset"])
+        offset = int(self.val["offset"])
         if offset != 0:
             _gdb_write(indent + 1, "offset: %d [%s]" %
                        (offset, format_time(offset, True)))
@@ -810,7 +807,7 @@ class GdbGstPad(GdbGstObject):
                 style = "filled,dashed"
         task_mode = ""
         task = self.val["task"]
-        if long(task) != 0:
+        if int(task) != 0:
             task_state = int(task["state"])
             if task_state == 0:  # started
                 task_mode = "[T]"
@@ -1050,7 +1047,7 @@ class GdbGstElement(GdbGstObject):
                 s += child._dot(indent)
             except gdb.MemoryError:
                 gdb.write("warning: inaccessible memory in element 0x%x\n" %
-                          long(child.val))
+                          int(child.val))
         return s
 
     def pipeline_dot(self):

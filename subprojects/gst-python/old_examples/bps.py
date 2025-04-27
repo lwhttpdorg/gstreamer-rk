@@ -46,7 +46,7 @@ class BPS(object):
         dt = end - self.start
         bps = self.buffers/dt
         spb = dt/self.buffers
-        print '\t%d buffers / %fs\t= %f bps\t= %f spb' % (self.buffers, dt, bps, spb)
+        print('\t%d buffers / %fs\t= %f bps\t= %f spb' % (self.buffers, dt, bps, spb))
 
     def fakesrc(self, buffers):
         src = gst.element_factory_make('fakesrc','src')
@@ -91,9 +91,9 @@ class BPS(object):
     def run(self, buffers):
         self.buffers = buffers
         
-        print '# Testing buffer processing rate for "fakesrc ! fakesink"'
-        print '# bps = buffers per second'
-        print '# spb = seconds per buffer'
+        print('# Testing buffer processing rate for "fakesrc ! fakesink"')
+        print('# bps = buffers per second')
+        print('# spb = seconds per buffer')
         
         self.pipeline = self.build_pipeline(buffers)
         assert self.pipeline
@@ -104,14 +104,14 @@ def main(args):
     "GStreamer Buffers-Per-Second tester"
 
     if len(args) < 2:
-        print 'usage: %s buffers' % args[0]
+        print('usage: %s buffers' % args[0])
         return 1
     
     bps = BPS()
     
     buffers = int(args[1])
     if buffers < 1:
-        print 'buffers must be higher than 0'
+        print('buffers must be higher than 0')
         return
 
     bps.run(buffers)

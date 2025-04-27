@@ -29,13 +29,12 @@ gi.require_version("Gst", "1.0")
 from gi.repository import Gst
 Gst.init(None)
 
-Gst.DoubleRange = Gst.DoubleRange
 
 class TestDoubleRange(TestCase):
     def testConstructor(self):
         Gst.init(None)
 
-        Gst.DoubleRange = Gst.DoubleRange(1.2, 3.4)
+        r = Gst.DoubleRange(1.2, 3.4)
         self.assertEqual(r.start, 1.2)
         self.assertEqual(r.stop, 3.4)
         self.assertRaises(TypeError, Gst.DoubleRange, {}, 2)
@@ -222,7 +221,6 @@ class TestDoubleRange(TestCase):
 
 
 class TestInt64Range(TestCase):
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testConstructor(self):
         Gst.init(None)
 
@@ -234,13 +232,11 @@ class TestInt64Range(TestCase):
         self.assertRaises(TypeError, Gst.Int64Range, 1)
         self.assertRaises(TypeError, Gst.Int64Range)
 
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testRepr(self):
         Gst.init(None)
 
         self.assertEqual(repr(Gst.Int64Range(range(0, 10, 2))), '<Gst.Int64Range [0,10,2]>')
 
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testGetValue(self):
         Gst.init(None)
 
@@ -351,7 +347,6 @@ class TestValueList(TestCase):
         self.assertEqual(value[1][1], 0)
 
 class TestIntRange(TestCase):
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testConstructor(self):
         Gst.init(None)
 
@@ -363,13 +358,11 @@ class TestIntRange(TestCase):
         self.assertRaises(TypeError, Gst.IntRange, 1)
         self.assertRaises(TypeError, Gst.IntRange)
 
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testRepr(self):
         Gst.init(None)
 
         self.assertEqual(repr(Gst.IntRange(range(0, 10, 2))), '<Gst.IntRange [0,10,2]>')
 
-    @unittest.skipUnless(sys.version_info >= (3, 0), "requires Python 3")
     def testGetValue(self):
         Gst.init(None)
 
@@ -396,7 +389,4 @@ class TestBitmask(TestCase):
         Gst.init(None)
 
         r = Gst.Bitmask(1 << 5)
-        if sys.version_info >= (3, 0):
-            self.assertEqual(str(r), '0x20')
-        else:
-            self.assertEqual(str(r), '0x20L')
+        self.assertEqual(str(r), '0x20')

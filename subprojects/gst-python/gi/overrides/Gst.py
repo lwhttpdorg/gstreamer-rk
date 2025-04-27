@@ -101,7 +101,7 @@ __all__.append('Bin')
 
 class Caps(Gst.Caps):
 
-    def __nonzero__(self):
+    def __bool__(self):
         return not self.is_empty()
 
     def __new__(cls, *args):
@@ -261,7 +261,7 @@ __all__.append('MapError')
 class Iterator(Gst.Iterator):
     def __iter__(self):
         while True:
-            result, value = self.next()
+            result, value = next(self)
             if result == Gst.IteratorResult.DONE:
                 break
 
@@ -474,9 +474,8 @@ class IntRange(Gst.IntRange):
         return False
 
 
-if sys.version_info >= (3, 0):
-    IntRange = override(IntRange)
-    __all__.append('IntRange')
+IntRange = override(IntRange)
+__all__.append('IntRange')
 
 
 class Int64Range(Gst.Int64Range):
@@ -532,9 +531,8 @@ Bitmask = override(Bitmask)
 __all__.append('Bitmask')
 
 
-if sys.version_info >= (3, 0):
-    Int64Range = override(Int64Range)
-    __all__.append('Int64Range')
+Int64Range = override(Int64Range)
+__all__.append('Int64Range')
 
 
 class DoubleRange(Gst.DoubleRange):
@@ -658,7 +656,7 @@ class TagList(Gst.TagList):
         return keys
 
     def enumerate(self):
-        return map(lambda k: (k, Gst.TagList.copy_value(self, k)[1]), self.keys())
+        return [(k, Gst.TagList.copy_value(self, k)[1]) for k in list(self.keys())]
 
     def __len__(self):
         return self.n_tags()

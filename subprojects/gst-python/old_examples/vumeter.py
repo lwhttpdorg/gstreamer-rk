@@ -79,7 +79,7 @@ class Window(gtk.Dialog):
                 decay = clamp(s['decay'][i], -90.0, 0.0)
                 peak = clamp(s['peak'][i], -90.0, 0.0)
                 if peak > decay:
-                    print "ERROR: peak bigger than decay!"
+                    print("ERROR: peak bigger than decay!")
             
                 self.vus[i].set_property('decay', decay)
                 self.vus[i].set_property('peak', peak)
@@ -98,7 +98,7 @@ class Window(gtk.Dialog):
             pipeline.get_bus().disconnect(i)
             pipeline.get_bus().remove_signal_watch()
             pipeline.set_state(gst.STATE_NULL)
-        except gobject.GError, e:
+        except gobject.GError as e:
             self.set_sensitive(True)
             self.error('Could not create pipeline', e.__str__)
         

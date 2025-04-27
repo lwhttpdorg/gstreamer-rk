@@ -73,7 +73,7 @@ class AudioDec(gst.Bin):
 	def __on_new_decoded_pad(self, element, pad, last):
 		caps = pad.get_caps()
 		name = caps[0].get_name()
-		print '\n__on_new_decoded_pad:', name
+		print('\n__on_new_decoded_pad:', name)
 		if 'audio' in name:
 			if not self.__apad.is_linked(): # Only link once
 				pad.link(self.__apad)
@@ -90,7 +90,7 @@ class AudioConcat:
 		# These are used in iteration through infiles	
 		self.infiles = infiles
 		self.i = 0
-		self.start = 0L
+		self.start = 0
 
 		# The pipeline
 		self.pipeline = gst.Pipeline()
@@ -140,13 +140,13 @@ class AudioConcat:
 
 
 	def on_discovered(self, discoverer, ismedia, infile):
-		print '\non_discovered:', infile
+		print('\non_discovered:', infile)
 		discoverer.print_info()
 		if discoverer.is_audio:
 			dec = AudioDec(infile, self.caps)
 			src = gst.element_factory_make('gnlsource')
 			src.add(dec)
-			src.set_property('media-start', 0L)
+			src.set_property('media-start', 0)
 			src.set_property('media-duration', discoverer.audiolength)
 			src.set_property('start', self.start)
 			src.set_property('duration', discoverer.audiolength)
@@ -165,20 +165,20 @@ class AudioConcat:
 	def on_pad_added(self, element, pad):
 		caps = pad.get_caps()
 		name = caps[0].get_name()
-		print '\non_pad_added:', name
+		print('\non_pad_added:', name)
 		if name == 'audio/x-raw-float':
 			if not self.apad.is_linked(): # Only link once
 				pad.link(self.apad)
 
 
 	def on_eos(self, bus, msg):
-		print '\non_eos'
+		print('\non_eos')
 		self.mainloop.quit()
 
 
 	def on_error(self, bus, msg):
 		error = msg.parse_error()
-		print '\non_error:', error[1]
+		print('\non_error:', error[1])
 		self.mainloop.quit()
 
 
@@ -188,5 +188,5 @@ if __name__ == '__main__':
 	if len(sys.argv) >= 3:
 		AudioConcat(sys.argv[1:-1], sys.argv[-1])
 	else:
-		print 'Usage: %s <input_file(s)> <output_file>' % sys.argv[0]
-		print 'Example: %s song1.mp3 song2.ogg output.ogg' % sys.argv[0]
+		print('Usage: %s <input_file(s)> <output_file>' % sys.argv[0])
+		print('Example: %s song1.mp3 song2.ogg output.ogg' % sys.argv[0])

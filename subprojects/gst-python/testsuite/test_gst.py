@@ -40,10 +40,7 @@ class TimeArgsTest(TestCase):
 
 class TestNotInitialized(TestCase):
     def testNotInitialized(self):
-        if sys.version_info >= (3, 0):
-            assert_type = Gst.NotInitialized
-        else:
-            assert_type = TypeError
+        assert_type = Gst.NotInitialized
 
         with self.assertRaises(assert_type):
             Gst.Caps.from_string("audio/x-raw")
@@ -62,10 +59,7 @@ class TestNotInitialized(TestCase):
         assert(Gst.ElementFactory.make("identity", None))
 
         Gst.deinit()
-        if sys.version_info >= (3, 0):
-            assert_type = Gst.NotInitialized
-        else:
-            assert_type = TypeError
+        assert_type = Gst.NotInitialized
 
         with self.assertRaises(assert_type):
             Gst.Caps.from_string("audio/x-raw")

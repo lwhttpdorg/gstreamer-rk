@@ -115,7 +115,7 @@ class FVUMeter(gtk.DrawingArea):
         elif property.name == 'red-threshold':
             return self.red_threshold
         else:
-            raise AttributeError, 'unknown property %s' % property.name
+            raise AttributeError('unknown property %s' % property.name)
 
     def do_set_property(self, property, value):
         if property.name == 'peak':
@@ -127,7 +127,7 @@ class FVUMeter(gtk.DrawingArea):
         elif property.name == 'red-threshold':
             self.red_threshold = value
         else:
-            raise AttributeError, 'unknown property %s' % property.name
+            raise AttributeError('unknown property %s' % property.name)
 
         self.queue_draw()
                 

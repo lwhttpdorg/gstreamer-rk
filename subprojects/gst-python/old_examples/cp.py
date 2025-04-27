@@ -74,10 +74,10 @@ def main(args):
    "A GStreamer based cp(1) with stats"
 
    if len(args) != 3:
-      print 'usage: %s source dest' % (sys.argv[0])
+      print('usage: %s source dest' % (sys.argv[0]))
       return -1
 
-   return filter(args[1], args[2])
+   return list(filter(args[1], args[2]))
 
 if __name__ == '__main__':
    sys.exit(main(sys.argv))

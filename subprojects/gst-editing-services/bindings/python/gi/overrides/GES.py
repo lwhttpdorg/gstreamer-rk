@@ -26,12 +26,8 @@ from ..importer import modules
 from gi.repository import GObject
 
 
-if sys.version_info >= (3, 0):
-    _basestring = str
-    _callable = lambda c: hasattr(c, '__call__')
-else:
-    _basestring = basestring
-    _callable = callable
+_basestring = str
+_callable = lambda c: hasattr(c, '__call__')
 
 GES = modules['GES']._introspection_module
 __all__ = []

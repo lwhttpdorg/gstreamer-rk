@@ -56,35 +56,35 @@ class PipeTest(TestCase):
         gst.info("setUp")
         TestCase.setUp(self)
         self.pipeline = gst.Pipeline()
-        self.assertEquals(self.pipeline.__gstrefcount__, 1)
-        self.assertEquals(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.pipeline.__gstrefcount__, 1)
+        self.assertEqual(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
 
         self.src = SrcBin()
         self.src.prepare()
         self.sink = SinkBin()
         self.sink.prepare()
-        self.assertEquals(self.src.__gstrefcount__, 1)
-        self.assertEquals(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
-        self.assertEquals(self.sink.__gstrefcount__, 1)
-        self.assertEquals(sys.getrefcount(self.sink), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.src.__gstrefcount__, 1)
+        self.assertEqual(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.sink.__gstrefcount__, 1)
+        self.assertEqual(sys.getrefcount(self.sink), pygobject_2_13 and 2 or 3)
         gst.info("end of SetUp")
 
     def tearDown(self):
         gst.info("tearDown")
         self.assertTrue (self.pipeline.__gstrefcount__ >= 1 and self.pipeline.__gstrefcount__ <= 2)
-        self.assertEquals(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
-        self.assertEquals(self.src.__gstrefcount__, 2)
-        self.assertEquals(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
-        self.assertEquals(self.sink.__gstrefcount__, 2)
-        self.assertEquals(sys.getrefcount(self.sink), 3)
+        self.assertEqual(sys.getrefcount(self.pipeline), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.src.__gstrefcount__, 2)
+        self.assertEqual(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.sink.__gstrefcount__, 2)
+        self.assertEqual(sys.getrefcount(self.sink), 3)
         gst.debug('deleting pipeline')
         del self.pipeline
         self.gccollect()
 
-        self.assertEquals(self.src.__gstrefcount__, 1) # parent gone
-        self.assertEquals(self.sink.__gstrefcount__, 1) # parent gone
-        self.assertEquals(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
-        self.assertEquals(sys.getrefcount(self.sink), pygobject_2_13 and 2 or 3)
+        self.assertEqual(self.src.__gstrefcount__, 1) # parent gone
+        self.assertEqual(self.sink.__gstrefcount__, 1) # parent gone
+        self.assertEqual(sys.getrefcount(self.src), pygobject_2_13 and 2 or 3)
+        self.assertEqual(sys.getrefcount(self.sink), pygobject_2_13 and 2 or 3)
         gst.debug('deleting src')
         del self.src
         self.gccollect()
@@ -109,7 +109,7 @@ class PipeTest(TestCase):
         while self._handoffs < 10:
                 pass
 
-        self.assertEquals(self.pipeline.set_state(gst.STATE_NULL), gst.STATE_CHANGE_SUCCESS)
+        self.assertEqual(self.pipeline.set_state(gst.STATE_NULL), gst.STATE_CHANGE_SUCCESS)
         while True:
             (ret, cur, pen) = self.pipeline.get_state()
             if ret == gst.STATE_CHANGE_SUCCESS and cur == gst.STATE_NULL:
@@ -182,13 +182,13 @@ class TargetTest(TestCase):
         src = gst.Pad("src", gst.PAD_SRC)
 
         ghost = gst.GhostPad("ghost_src", src)
-        self.failUnless(ghost.get_target() is src)
+        self.assertTrue(ghost.get_target() is src)
 
         ghost.set_target(None)
-        self.failUnless(ghost.get_target() is None)
+        self.assertTrue(ghost.get_target() is None)
 
         ghost.set_target(src)
-        self.failUnless(ghost.get_target() is src)
+        self.assertTrue(ghost.get_target() is src)
 
 if __name__ == "__main__":
     unittest.main()
