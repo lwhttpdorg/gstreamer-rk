@@ -704,8 +704,10 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   g_type_class_ref (gst_state_change_return_get_type ());
   g_type_class_ref (gst_state_change_get_type ());
   g_type_class_ref (gst_element_flags_get_type ());
+#ifndef  GST_DISABLE_GST_TRACER_HOOKS
   g_type_class_ref (gst_tracer_value_scope_get_type ());
   g_type_class_ref (gst_tracer_value_flags_get_type ());
+#endif
   g_type_class_ref (gst_core_error_get_type ());
   g_type_class_ref (gst_library_error_get_type ());
   g_type_class_ref (gst_resource_error_get_type ());
@@ -1167,8 +1169,10 @@ gst_deinit (void)
   g_type_class_unref (g_type_class_peek (gst_state_change_return_get_type ()));
   g_type_class_unref (g_type_class_peek (gst_state_change_get_type ()));
   g_type_class_unref (g_type_class_peek (gst_element_flags_get_type ()));
+#ifndef  GST_DISABLE_GST_TRACER_HOOKS
   g_type_class_unref (g_type_class_peek (gst_tracer_value_scope_get_type ()));
   g_type_class_unref (g_type_class_peek (gst_tracer_value_flags_get_type ()));
+#endif
   g_type_class_unref (g_type_class_peek (gst_core_error_get_type ()));
   g_type_class_unref (g_type_class_peek (gst_library_error_get_type ()));
   g_type_class_unref (g_type_class_peek (gst_plugin_dependency_flags_get_type
