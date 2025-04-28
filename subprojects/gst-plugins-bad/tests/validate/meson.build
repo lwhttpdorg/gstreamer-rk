@@ -10,6 +10,7 @@ tests = [
     {'path': 'wpe/load_bytes_first', 'skip': not building_wpe},
     {'path': 'vtenc/vtenc_h264', 'skip': not applemedia_found_deps},
     {'path': 'vtenc/vtenc_h264_b_frames', 'skip': not applemedia_found_deps},
+    {'path': 'vtenc/vtenc_h264_constrained_baseline', 'skip': not applemedia_found_deps},
     {'path': 'vtenc/vtenc_h265', 'skip': not applemedia_found_deps},
     {'path': 'vtenc/vtenc_h265_b_frames', 'skip': not applemedia_found_deps},
     {'path': 'autovideoconvert/renegotiate'},

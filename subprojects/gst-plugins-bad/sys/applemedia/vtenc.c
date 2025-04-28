@@ -96,7 +96,7 @@
  *
  * Apple VideoToolbox H265 encoder with alpha channel support.
  * This encoder can either use HW or a SW implementation depending on the device.
- * 
+ *
  * ## Example pipeline (assuming a PNG with an alpha channel as input)
  * |[
  * gst-launch-1.0 -v filesrc location=test.png ! pngdec ! imagefreeze num-buffers=1000 ! videoconvert ! vtenc_h265a ! qtmux ! filesink location=out.mov
@@ -111,7 +111,7 @@
  *
  * Apple VideoToolbox H265 HW-only encoder with alpha channel support.
  * Currently only available on macOS.
- * 
+ *
  * ## Example pipeline (assuming a PNG with an alpha channel as input)
  * |[
  * gst-launch-1.0 -v filesrc location=test.png ! pngdec ! imagefreeze num-buffers=1000 ! videoconvert ! vtenc_h265a ! qtmux ! filesink location=out.mov
@@ -374,11 +374,34 @@ gst_vtenc_base_init (GstVTEncClass * klass)
   }
 
   switch (codec_details->format_id) {
-    case kCMVideoCodecType_H264:
+    case kCMVideoCodecType_H264: {
+      GValue profiles = G_VALUE_INIT;
+      g_value_init(&profiles, GST_TYPE_LIST);
+      GValue val = G_VALUE_INIT;
+      g_value_init (&val, G_TYPE_STRING);
+      g_value_set_static_string(&val, "baseline");
+      gst_value_list_append_value(&profiles, &val);
+      g_value_set_static_string(&val, "main");
+      gst_value_list_append_value(&profiles, &val);
+      g_value_set_static_string(&val, "high");
+      gst_value_list_append_value(&profiles, &val);
+
+      if (__builtin_available (macOS 12, iOS 15, *)) {
+        g_value_set_static_string(&val, "constrained-baseline");
+        gst_value_list_append_value(&profiles, &val);
+
+        g_value_set_static_string(&val, "constrained-high");
+        gst_value_list_append_value(&profiles, &val);
+      }
+
+      gst_structure_set_value (gst_caps_get_structure (src_caps, 0), "profile", &profiles);
+      g_value_unset (&val);
+      g_value_unset (&profiles);
       gst_structure_set (gst_caps_get_structure (src_caps, 0),
           "stream-format", G_TYPE_STRING, "avc",
           "alignment", G_TYPE_STRING, "au", NULL);
       break;
+    }
     case kCMVideoCodecType_HEVC:
     case kCMVideoCodecType_HEVCWithAlpha:
       gst_structure_set (gst_caps_get_structure (src_caps, 0),
@@ -912,14 +935,30 @@ gst_vtenc_h264_parse_profile_level_key (GstVTEnc * self, const gchar * profile,
 
   if (profile == NULL)
     profile = "main";
-  if (level_arg == NULL)
-    level_arg = "AutoLevel";
-  strncpy (level, level_arg, sizeof (level));
 
-  if (!strcmp (profile, "constrained-baseline") ||
-      !strcmp (profile, "baseline")) {
+  if (!strcmp (profile, "constrained-baseline")) {
+    if (__builtin_available (macOS 12, iOS 15, *)) {
+      profile = "ConstrainedBaseline";
+      level_arg = "AutoLevel";
+    } else  {
+      GST_ERROR_OBJECT (self,
+          "OS version is too old, ConstrainedBaseline profile is not available.");
+      return FALSE;
+    }
+    self->h264_profile = GST_H264_PROFILE_BASELINE;
+  } else if (!strcmp (profile, "baseline")) {
     profile = "Baseline";
     self->h264_profile = GST_H264_PROFILE_BASELINE;
+  } else if (!strcmp (profile, "constrained-high")) {
+    if (__builtin_available (macOS 12, iOS 15, *)) {
+      profile = "ConstrainedHigh";
+      level_arg = "AutoLevel";
+    } else  {
+      GST_ERROR_OBJECT (self,
+          "OS version is too old, ConstrainedHigh profile is not available.");
+      return FALSE;
+    }
+    self->h264_profile = GST_H264_PROFILE_HIGH;
   } else if (g_str_has_prefix (profile, "high")) {
     profile = "High";
     self->h264_profile = GST_H264_PROFILE_HIGH;
@@ -930,6 +969,10 @@ gst_vtenc_h264_parse_profile_level_key (GstVTEnc * self, const gchar * profile,
     GST_ERROR_OBJECT (self, "invalid profile: %s", profile);
     return FALSE;
   }
+
+  if (level_arg == NULL)
+    level_arg = "AutoLevel";
+  strncpy (level, level_arg, sizeof (level));
 
   if (strlen (level) == 1) {
     level[1] = '_';
@@ -1194,7 +1237,7 @@ gst_vtenc_negotiate_downstream (GstVTEnc * self, CMSampleBufferRef sbuf)
         gst_codec_utils_h265_caps_set_level_tier_and_profile (caps, sps, 12);
       } else {
         sps[0] = codec_data[1];
-        sps[1] = codec_data[2] & ~0xDF;
+        sps[1] = codec_data[2];
         sps[2] = codec_data[3];
         gst_codec_utils_h264_caps_set_level_and_profile (caps, sps, 3);
       }
@@ -2222,7 +2265,7 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
    * When paired with a fast enough source like videotestsrc, this can result in
    * a ton of memory being taken up by frames inside the encoder, eventually killing
    * the process because of OOM.
-   * 
+   *
    * The workaround here tries to block until the number of pending frames falls
    * below a certain threshold. Best we can do until Apple fixes this. */
   if (self->specific_format_id == kCMVideoCodecType_HEVCWithAlpha) {
@@ -2436,7 +2479,7 @@ gst_vtenc_output_loop (GstVTEnc * self)
   GST_VIDEO_ENCODER_STREAM_LOCK (self);
   self->downstream_ret = ret;
 
-  /* We need to empty the queue immediately so that enqueue_buffer() 
+  /* We need to empty the queue immediately so that enqueue_buffer()
    * can push out the current buffer, otherwise it can block other
    * encoder callbacks completely */
   if (ret != GST_FLOW_OK) {
