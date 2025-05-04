@@ -122,6 +122,16 @@ elif host_system == 'darwin'
   gtk_options += ['x11-backend=false']
 endif
 
+if get_option('gtk').enabled()
+  gtk3_option = ['gtk3=enabled']
+elif get_option('gtk').disabled()
+  gtk3_option = ['gtk3=disabled']
+elif get_option('gtk').auto()
+  gtk3_option = ['gtk3=auto']
+else
+  gtk3_option = []
+endif
+
 # Disable gst-python if we've disabled introspection
 gst_python_option = get_option('python').disable_if(get_option('introspection').disabled())
 
@@ -129,9 +139,9 @@ gst_python_option = get_option('python').disable_if(get_option('introspection').
 subprojects = [
   ['gstreamer', {'build-hotdoc': true, 'subproject_options': building_full_options}],
   ['gst-plugins-base', {'option': get_option('base'), 'build-hotdoc': true}],
-  ['gst-plugins-good', {'option': get_option('good'), 'build-hotdoc': true}],
+  ['gst-plugins-good', {'option': get_option('good'), 'build-hotdoc': true, 'subproject_options': gtk3_option}],
   ['libnice', { 'option': get_option('libnice'), 'match_gst_version': false, 'subproject_options': libnice_options}],
-  ['gst-plugins-bad', { 'option': get_option('bad'), 'build-hotdoc': true}],
+  ['gst-plugins-bad', { 'option': get_option('bad'), 'build-hotdoc': true, 'subproject_options': gtk3_option}],
   ['gst-plugins-ugly', { 'option': get_option('ugly'), 'build-hotdoc': true}],
   ['gst-libav', { 'option': get_option('libav'), 'build-hotdoc': true}],
   ['gst-rtsp-server', { 'option': get_option('rtsp_server'), 'build-hotdoc': true}],
