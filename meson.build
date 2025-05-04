@@ -207,6 +207,10 @@ foreach sp : subprojects
   match_gst_version = build_infos.get('match_gst_version', true)
   default_options =  build_infos.get('subproject_options', [])
 
+  if building_full
+    default_options += 'default_library=static'
+  endif
+
   if match_gst_version
     subproj = subproject(project_name, version: gst_version, required: is_required, default_options: default_options)
   elif sysdep != ''
