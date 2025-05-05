@@ -15,6 +15,7 @@ codecs_sources = files(
   'gstav1picture.c',
   'gstvp9statefulparser.c',
   'gstcodecpicture.c',
+  'gsth264encoder.c',
 )
 
 codecs_headers = files(
@@ -34,6 +35,7 @@ codecs_headers = files(
   'gstav1picture.h',
   'gstvp9statefulparser.h',
   'gstcodecpicture.h',
+  'gsth264encoder.h',
 )
 
 cp_args = [
@@ -82,6 +84,7 @@ if build_gir
       '--c-include=gst/codecs/gstvp8decoder.h',
       '--c-include=gst/codecs/gstmpeg2decoder.h',
       '--c-include=gst/codecs/gsth266decoder.h',
+      '--c-include=gst/codecs/gsth264encoder.h',
       ],
     'dependencies' : [gstvideo_dep, gstcodecparsers_dep]
   }

@@ -3214,15 +3214,17 @@ gst_h264_calculate_coded_size (GstH264SPS * sps, guint num_slices)
 
   /* Account for SPS header */
   /* XXX: exclude scaling lists, MVC/SVC extensions */
-  codedbuf_size += 4 /* start code */  + GST_ROUND_UP_8 (MAX_SPS_HDR_SIZE +
-      MAX_VUI_PARAMS_SIZE + 2 * MAX_HRD_PARAMS_SIZE) / 8;
+  codedbuf_size += 4            /* start code */
+      + GST_ROUND_UP_8 (GST_H264_MAX_SPS_HDR_SIZE + GST_H264_MAX_VUI_PARAMS_SIZE
+      + 2 * GST_H264_MAX_HRD_PARAMS_SIZE) / 8;
 
   /* Account for PPS header */
   /* XXX: exclude slice groups, scaling lists, MVC/SVC extensions */
-  codedbuf_size += 4 + GST_ROUND_UP_8 (MAX_PPS_HDR_SIZE) / 8;
+  codedbuf_size += 4 + GST_ROUND_UP_8 (GST_H264_MAX_PPS_HDR_SIZE) / 8;
 
   /* Account for slice header */
-  codedbuf_size += num_slices * (4 + GST_ROUND_UP_8 (MAX_SLICE_HDR_SIZE) / 8);
+  codedbuf_size += num_slices
+      * (4 + GST_ROUND_UP_8 (GST_H264_MAX_SLICE_HDR_SIZE) / 8);
 
   /* Add ceil 5% for safety */
   codedbuf_size = ((guint) (((gfloat) codedbuf_size * 1.05) + 1)) >> 0;

@@ -57,10 +57,9 @@
 #include "vkh264enc.h"
 
 #include <gst/codecparsers/gsth264bitwriter.h>
-#include <gst/codecparsers/gsth264parser.h>
+#include <gst/codecs/gsth264encoder.h>
+#include <gst/vulkan/gstvkencoder-private.h>
 
-#include "base/gsth264encoder.h"
-#include "gst/vulkan/gstvkencoder-private.h"
 #include "gstvkvideocaps.h"
 #include "gstvulkanelements.h"
 

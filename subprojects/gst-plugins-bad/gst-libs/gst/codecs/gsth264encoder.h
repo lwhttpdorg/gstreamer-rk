@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <gst/codecs/codecs-prelude.h>
+
 #include <gst/codecparsers/gsth264parser.h>
 #include <gst/video/gstvideoencoder.h>
 
@@ -212,34 +214,45 @@ struct _GstH264EncoderClass
   gpointer padding[GST_PADDING_LARGE];
 };
 
+GST_CODECS_API
 GType                gst_h264_encoder_get_type               (void);
 
+GST_CODECS_API
 void                 gst_h264_encoder_set_max_num_references (GstH264Encoder * self,
                                                               guint list0,
                                                               guint list1);
 
+GST_CODECS_API
 void                 gst_h264_encoder_set_preferred_output_delay
                                                              (GstH264Encoder * self,
                                                               guint delay);
 
+GST_CODECS_API
 gboolean             gst_h264_encoder_is_live                (GstH264Encoder * self);
 
+GST_CODECS_API
 gboolean             gst_h264_encoder_reconfigure            (GstH264Encoder * self,
                                                               gboolean force);
 
+GST_CODECS_API
 guint32              gst_h264_encoder_get_idr_period         (GstH264Encoder * self);
 
+GST_CODECS_API
 guint32              gst_h264_encoder_get_num_b_frames       (GstH264Encoder * self);
 
+GST_CODECS_API
 gboolean             gst_h264_encoder_gop_is_b_pyramid       (GstH264Encoder * self);
 
+GST_CODECS_API
 const GstH264LevelDescriptor *gst_h264_get_level_descriptor  (GstH264Profile profile,
                                                               guint64 bitrate,
                                                               GstVideoInfo * in_info,
                                                               int max_dec_frame_buffering);
 
+GST_CODECS_API
 guint                gst_h264_get_cpb_nal_factor             (GstH264Profile profile);
 
+GST_CODECS_API
 gsize                gst_h264_calculate_coded_size           (GstH264SPS * sps,
                                                               guint num_slices);
 
@@ -297,10 +310,13 @@ struct _GstH264EncoderFrame
   GDestroyNotify user_data_destroy_notify;
 };
 
+GST_CODECS_API
 GType                gst_h264_encoder_frame_get_type         (void);
 
+GST_CODECS_API
 GstH264EncoderFrame *gst_h264_encoder_frame_new              (void);
 
+GST_CODECS_API
 void                 gst_h264_encoder_frame_set_user_data    (GstH264EncoderFrame * frame,
                                                               gpointer user_data,
                                                               GDestroyNotify notify);
