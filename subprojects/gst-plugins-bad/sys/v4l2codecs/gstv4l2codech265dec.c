@@ -792,8 +792,8 @@ gst_v4l2_codec_h265_dec_fill_slice_params (GstV4l2CodecH265Dec * self,
   /* *INDENT-OFF* */
   params = &g_array_index (self->slice_params, struct v4l2_ctrl_hevc_slice_params, n);
   *params = (struct v4l2_ctrl_hevc_slice_params) {
-    .bit_size = (slice_size + sc_offset) * 8,
-    .data_byte_offset = get_slice_header_byte_offset (slice) + sc_offset,
+    .bit_size = (slice_size - get_slice_header_byte_offset(slice)) * 8,
+    .data_byte_offset = get_slice_header_byte_offset (slice) + sc_offset + self->bitstream_map.size,
     .num_entry_point_offsets = slice_hdr->num_entry_point_offsets,
     .nal_unit_type = slice->nalu.type,
     .nuh_temporal_id_plus1 = slice->nalu.temporal_id_plus1,
