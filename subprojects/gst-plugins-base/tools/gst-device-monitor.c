@@ -390,6 +390,10 @@ real_main (int argc, char **argv)
 
   if (!gst_device_monitor_start (app.monitor)) {
     g_printerr ("Failed to start device monitor!\n");
+    gst_object_unref (app.monitor);
+    g_source_remove (app.bus_watch_id);
+    g_main_loop_unref (app.loop);
+    g_timer_destroy (timer);
     return -1;
   }
 
