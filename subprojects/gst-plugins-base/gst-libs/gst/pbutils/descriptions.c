@@ -114,6 +114,7 @@ static const FormatInfo formats[] = {
   {"audio/ac3", "AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
   {"audio/x-private-ac3", "DVD AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
   {"audio/x-private1-ac3", "DVD AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
+  {"audio/x-ac4", "Dolby AC-4", FLAG_AUDIO, "ac4"},
   {"audio/x-alaw", "A-Law", FLAG_AUDIO, ""},
   {"audio/amr", "Adaptive Multi Rate (AMR)", FLAG_AUDIO, "amr"},
   {"audio/AMR", "Adaptive Multi Rate (AMR)", FLAG_AUDIO, "amr"},
