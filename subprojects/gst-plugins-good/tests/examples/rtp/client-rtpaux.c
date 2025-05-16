@@ -249,7 +249,7 @@ handle_new_stream (GstElement * element, GstPad * newPad, gpointer data)
     GstPad *outputSinkPad;
     GstElement *parent;
 
-    parent = GST_ELEMENT (gst_element_get_parent (session->rtpbin));
+    parent = gst_element_get_parent (session->rtpbin);
     gst_bin_add (GST_BIN (parent), session->output);
     gst_element_sync_state_with_parent (session->output);
     gst_object_unref (parent);

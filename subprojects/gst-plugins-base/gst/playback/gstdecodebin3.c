@@ -2544,7 +2544,7 @@ find_message_parsebin (GstDecodebin3 * dbin, GstElement * child)
         break;
       }
     }
-    next_parent = (GstElement *) gst_element_get_parent (parent);
+    next_parent = gst_element_get_parent (parent);
     gst_object_unref (parent);
     parent = next_parent;
 

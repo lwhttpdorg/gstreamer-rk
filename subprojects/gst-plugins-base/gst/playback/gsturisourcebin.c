@@ -2860,7 +2860,7 @@ find_adaptive_demuxer_cspi_for_msg (GstURISourceBin * urisrc,
         break;
       }
     }
-    next_parent = (GstElement *) gst_element_get_parent (parent);
+    next_parent = gst_element_get_parent (parent);
     gst_object_unref (parent);
     parent = next_parent;
   } while (parent && parent != (GstElement *) urisrc);

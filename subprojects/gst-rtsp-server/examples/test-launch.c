@@ -42,12 +42,12 @@ static GOptionEntry entries[] = {
 static gboolean
 dump_debug (gpointer user_data)
 {
-  GstObject *pipe;
+  GstElement *pipe;
   GWeakRef *ref = user_data;
   GstElement *e = g_weak_ref_get (ref);
   if (!e)
     return G_SOURCE_REMOVE;
-  pipe = gst_element_get_parent (GST_ELEMENT (e));
+  pipe = gst_element_get_parent (e);
   GST_DEBUG_BIN_TO_DOT_FILE (GST_BIN (pipe), GST_DEBUG_GRAPH_SHOW_ALL,
       "rtsp-server-test-launch");
   return G_SOURCE_CONTINUE;

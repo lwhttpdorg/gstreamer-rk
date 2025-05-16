@@ -1002,7 +1002,7 @@ void
 gst_insert_bin_remove (GstInsertBin * self, GstElement * element,
     GstInsertBinCallback callback, gpointer user_data)
 {
-  GstObject *parent;
+  GstElement *parent;
 
   g_return_if_fail (GST_IS_ELEMENT (element));
 
@@ -1011,7 +1011,7 @@ gst_insert_bin_remove (GstInsertBin * self, GstElement * element,
   if (parent) {
     gboolean is_parent;
 
-    is_parent = (parent == GST_OBJECT_CAST (self));
+    is_parent = (parent == GST_ELEMENT_CAST (self));
     gst_object_unref (parent);
 
     if (!is_parent) {

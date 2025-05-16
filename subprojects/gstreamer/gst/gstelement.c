@@ -2447,7 +2447,7 @@ gst_element_sync_state_with_parent (GstElement * element)
 
   g_return_val_if_fail (GST_IS_ELEMENT (element), FALSE);
 
-  if ((parent = GST_ELEMENT_CAST (gst_element_get_parent (element)))) {
+  if ((parent = gst_element_get_parent (element))) {
     GstState parent_current, parent_pending;
 
     GST_OBJECT_LOCK (parent);
