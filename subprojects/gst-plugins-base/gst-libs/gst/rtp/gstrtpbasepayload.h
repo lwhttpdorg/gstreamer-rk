@@ -106,6 +106,10 @@ struct _GstRTPBasePayload
   guint64  ptime; /* in ns */
   guint64  ptime_multiple; /* in ns */
 
+  /* pacing speed */
+  gboolean pacing;
+  GstClockTime last_packet_sending_time;
+
   /*< private >*/
   GstRTPBasePayloadPrivate *priv;
 

@@ -24,8 +24,8 @@
 #include "config.h"
 #endif
 
+#include <math.h>
 #include <string.h>
-
 #include <gst/rtp/gstrtpbuffer.h>
 
 #include "gstrtpbasepayload.h"
@@ -112,11 +112,14 @@ static guint gst_rtp_base_payload_signals[LAST_SIGNAL] = { 0 };
 #define DEFAULT_ONVIF_NO_RATE_CONTROL   FALSE
 #define DEFAULT_SCALE_RTPTIME           TRUE
 #define DEFAULT_AUTO_HEADER_EXTENSION   TRUE
+#define DEFAULT_PACING                  FALSE
 
 #define RTP_HEADER_EXT_ONE_BYTE_MAX_SIZE 16
 #define RTP_HEADER_EXT_TWO_BYTE_MAX_SIZE 255
 #define RTP_HEADER_EXT_ONE_BYTE_MAX_ID 14
 #define RTP_HEADER_EXT_TWO_BYTE_MAX_ID 255
+
+#define MAX_PACING_INTERVAL 1000000    /* Max. pacing interval 1000000 nanosecond = 1000us = 1ms */
 
 enum
 {
@@ -138,7 +141,8 @@ enum
   PROP_SCALE_RTPTIME,
   PROP_AUTO_HEADER_EXTENSION,
   PROP_EXTENSIONS,
-  PROP_LAST
+  PROP_LAST,
+  PROP_PACING
 };
 
 static GParamSpec *gst_rtp_base_payload_extensions_pspec;
@@ -181,6 +185,9 @@ static void gst_rtp_base_payload_add_extension (GstRTPBasePayload * payload,
 static void gst_rtp_base_payload_clear_extensions (GstRTPBasePayload * payload);
 static void gst_rtp_base_payload_get_extensions (GstRTPBasePayload * payload,
     GValue * out_value);
+
+static void gst_rtp_base_payload_get_framerate_from_caps (GstRTPBasePayload *payload, gint *num, gint *den);
+static void pacing_by_framerate(GstRTPBasePayload * payload, GstBuffer * buffer, float framerate);
 
 static GstElementClass *parent_class = NULL;
 static gint private_offset = 0;
@@ -491,6 +498,20 @@ gst_rtp_base_payload_class_init (GstRTPBasePayloadClass * klass)
       G_TYPE_NONE, 1, GST_TYPE_RTP_HEADER_EXTENSION);
 
   /**
+   * GstRTPBasePayload:pacing:
+   *
+   * Control the packet sending speed. When this option is disabled (default), 
+   * the payload element pushes the packet normally. When it is enabled, the payload
+   * takes into account the frame rate and MTU and limit the sending speed when needed.
+   * 
+   * Since: 1.26
+   */
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_PACING,
+      g_param_spec_boolean ("pacing", "Pace the RTP speed",
+          "Constrain the RTP packet sending speed when needed",
+          DEFAULT_PACING, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
    * GstRTPBasePayload::request-extension:
    * @object: the #GstRTPBasePayload
    * @ext_id: the extension id being requested
@@ -592,6 +613,9 @@ gst_rtp_base_payload_init (GstRTPBasePayload * rtpbasepayload, gpointer g_class)
   rtpbasepayload->encoding_name = NULL;
 
   rtpbasepayload->clock_rate = 0;
+
+  rtpbasepayload->pacing = DEFAULT_PACING;
+  rtpbasepayload->last_packet_sending_time = 0;
 
   rtpbasepayload->priv->caps_max_ptime = DEFAULT_MAX_PTIME;
   rtpbasepayload->priv->prop_max_ptime = DEFAULT_MAX_PTIME;
@@ -2033,6 +2057,59 @@ no_rate:
 }
 
 /**
+ * pacing_by_framerate:
+ * @payload: a #GstRTPBasePayload
+ * @buffer: (transfer full): a #GstBuffer
+ * @framerate: the framerate of the video stream
+ *
+ * Control the sending rate of RTP packets to a certain framerate.
+ */
+static void pacing_by_framerate(GstRTPBasePayload * payload, GstBuffer * buffer, float framerate){
+    /* If we are pacing, we need to wait for the next time to push */
+    GstClock *clock = gst_element_get_clock(GST_ELEMENT(payload));
+    if (clock) {
+      GstClockTime current_time = gst_clock_get_time (clock);
+      if (payload->last_packet_sending_time == 0) {
+        payload->last_packet_sending_time = current_time;
+      }else {
+        /* We need to wait for the next time to push */
+        GstClockTime time_delta_ns = current_time - payload->last_packet_sending_time;
+        // guint64 time_delta_us = time_delta_ns / GST_USECOND; 
+        GST_DEBUG_OBJECT(payload, "Delta time: %" G_GUINT64_FORMAT " nanoseconds", time_delta_ns);
+        GST_DEBUG_OBJECT(payload, "Processing buffer of size %zu", gst_buffer_get_size(buffer));
+        GST_DEBUG_OBJECT(payload, "Processing frame rate %.2f", framerate);
+
+        // Caiculate the pacing delay
+        guint64 buffer_size = gst_buffer_get_size(buffer);
+        gint packet_count = (gint)ceil((float)buffer_size / (float) payload->mtu);
+        if (packet_count == 0) {
+            packet_count = 1;
+        }
+        GST_DEBUG_OBJECT(payload, "Packet count %d", packet_count);
+        gint interval = (gint)ceil((1000000000. / framerate) / packet_count * 0.9); // pacing period in nanoseconds (us)
+        GST_DEBUG_OBJECT(payload, "Expected interval %d", interval);
+        if (time_delta_ns < interval){
+            GstClockTime delayed_time = (interval - time_delta_ns);
+            // Set a upper limit for the delay
+            delayed_time = MIN(delayed_time, MAX_PACING_INTERVAL);
+            GST_DEBUG_OBJECT(payload, " >>>> delay %" G_GUINT64_FORMAT " nanosecond", (delayed_time));
+            GstClockTime wait_until = current_time + delayed_time; 
+            GstClockID clockId = gst_clock_new_single_shot_id(clock, wait_until); 
+            gst_clock_id_wait(clockId, NULL); // GstClockReturn waitResult = 
+            // TODO: check if waitResult == GST_CLOCK_OK
+            // Cleanup
+            gst_clock_id_unschedule(clockId);
+            gst_clock_id_unref(clockId);
+        }
+      }
+      payload->last_packet_sending_time = current_time; 
+      gst_object_unref (clock);
+    }else {
+      GST_WARNING_OBJECT (payload, "No clock available?");
+    }
+}
+
+/**
  * gst_rtp_base_payload_push_list:
  * @payload: a #GstRTPBasePayload
  * @list: (transfer full): a #GstBufferList
@@ -2058,11 +2135,36 @@ gst_rtp_base_payload_push_list (GstRTPBasePayload * payload,
       payload->priv->pending_segment = FALSE;
       payload->priv->delay_segment = FALSE;
     }
-    res = gst_pad_push_list (payload->srcpad, list);
+    if (payload->pacing) {
+      /* We disable push_list when the pacing is enabled  */
+      /* Get framerate for potential use in pacing */
+      gint framerate_num, framerate_den;
+      gst_rtp_base_payload_get_framerate_from_caps (payload, &framerate_num, &framerate_den);
+      GST_DEBUG_OBJECT(payload, "Frame rate %d/%d via push", framerate_num, framerate_den);
+      float framerate = (float)framerate_num / (float)framerate_den;
+      
+      guint i, n_buffers;
+      n_buffers = gst_buffer_list_length (list);
+      for (i = 0; i < n_buffers; i++) {
+        GstBuffer *buffer = gst_buffer_list_get (list, i);
+        /* Ref the buffer (increase the ref counter) to ensure it's valid after pushing */
+        gst_buffer_ref (buffer);
+        
+        pacing_by_framerate(payload, buffer, framerate);
+        res = gst_pad_push (payload->srcpad, buffer);
+        if (res != GST_FLOW_OK) {
+           /* Unref the list and return early on error */
+           gst_buffer_list_unref (list);
+           return res;
+        }
+      }
+    }else{    
+      res = gst_pad_push_list (payload->srcpad, list);
+    }
   } else {
     gst_buffer_list_unref (list);
   }
-
+  
   return res;
 }
 
@@ -2085,6 +2187,13 @@ gst_rtp_base_payload_push (GstRTPBasePayload * payload, GstBuffer * buffer)
 
   res = gst_rtp_base_payload_prepare_push (payload, buffer, FALSE);
 
+  if (payload->pacing) {
+      /* Get framerate for potential use in pacing */
+      gint framerate_num, framerate_den;
+      gst_rtp_base_payload_get_framerate_from_caps (payload, &framerate_num, &framerate_den);
+      float framerate = (float)framerate_num / (float)framerate_den;
+      pacing_by_framerate(payload, buffer, framerate);
+  }
   if (G_LIKELY (res == GST_FLOW_OK)) {
     if (G_UNLIKELY (payload->priv->pending_segment)) {
       gst_pad_push_event (payload->srcpad, payload->priv->pending_segment);
@@ -2238,6 +2347,9 @@ gst_rtp_base_payload_set_property (GObject * object, guint prop_id,
     case PROP_AUTO_HEADER_EXTENSION:
       priv->auto_hdr_ext = g_value_get_boolean (value);
       break;
+    case PROP_PACING:
+      rtpbasepayload->pacing = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2317,6 +2429,9 @@ gst_rtp_base_payload_get_property (GObject * object, guint prop_id,
     case PROP_EXTENSIONS:
       gst_rtp_base_payload_get_extensions (rtpbasepayload, value);
       break;
+    case PROP_PACING:
+      g_value_set_boolean (value, rtpbasepayload->pacing);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2384,6 +2499,37 @@ gst_rtp_base_payload_change_state (GstElement * element,
       break;
   }
   return ret;
+}
+
+/**
+ * Helper function to get framerate from caps
+ * @payload: a #GstRTPBasePayload
+ * @num: (out): numerator of the framerate
+ * @den: (out): denominator of the framerate
+ * 
+ **/ 
+static void
+gst_rtp_base_payload_get_framerate_from_caps (GstRTPBasePayload *payload, gint *num, gint *den)
+{
+  GstCaps *caps;
+  GstStructure *s;
+
+  g_return_if_fail (GST_IS_RTP_BASE_PAYLOAD (payload));
+  g_return_if_fail (num != NULL && den != NULL);
+
+  *num = 0;
+  *den = 1; /* Default: unknown framerate */
+
+  caps = gst_pad_get_current_caps (payload->sinkpad);
+  if (caps) {
+    s = gst_caps_get_structure (caps, 0);
+    if (gst_structure_get_fraction (s, "framerate", num, den)) {
+      GST_DEBUG_OBJECT (payload, "Retrieved framerate: %d/%d", *num, *den);
+    } else {
+      GST_DEBUG_OBJECT (payload, "No framerate in current caps");
+    }
+    gst_caps_unref (caps);
+  }
 }
 
 /**
