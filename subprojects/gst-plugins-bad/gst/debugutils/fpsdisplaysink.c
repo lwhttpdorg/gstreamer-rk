@@ -35,12 +35,6 @@
 /* FIXME:
  * - can we avoid plugging the textoverlay?
  * - gst-seek 15 "videotestsrc ! fpsdisplaysink" dies when closing gst-seek
- *
- * NOTE:
- * - if we make ourself RANK_PRIMARY+10 or something that autovideosink would
- *   select and fpsdisplaysink is set to use autovideosink as its internal sink
- *   it doesn't work. Reason: autovideosink creates a fpsdisplaysink, that
- *   creates an autovideosink, that...
  */
 
 #ifdef HAVE_CONFIG_H
