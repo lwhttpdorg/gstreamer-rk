@@ -308,6 +308,7 @@ GST_START_TEST (test_vorbis_tags)
 
   gst_vorbis_tag_add (list, "REPLAYGAIN_REFERENCE_LOUDNESS", "89.");
   ASSERT_TAG_LIST_HAS_DOUBLE (list, GST_TAG_REFERENCE_LEVEL, 89.);
+  ASSERT_TAG_LIST_HAS_STRING (list, GST_TAG_REFERENCE_LEVEL_UNIT, "dB");
   gst_vorbis_tag_add (list, "REPLAYGAIN_TRACK_GAIN", "+12.36");
   ASSERT_TAG_LIST_HAS_DOUBLE (list, GST_TAG_TRACK_GAIN, +12.36);
   gst_vorbis_tag_add (list, "REPLAYGAIN_TRACK_PEAK", "0.96349");
@@ -319,6 +320,17 @@ GST_START_TEST (test_vorbis_tags)
   gst_vorbis_tag_add (list, "REPLAYGAIN_ALBUM_PEAK", "0,98107");
   ASSERT_TAG_LIST_HAS_DOUBLE (list, GST_TAG_ALBUM_PEAK, 0.98107);
   gst_vorbis_tag_add (list, "LICENSE", "http://foo.com/license-1.html");
+
+  /* replaygain reference level as LUFS */
+  {
+    GstTagList *rg_list;
+    rg_list = gst_tag_list_new_empty ();
+    gst_vorbis_tag_add (rg_list, "REPLAYGAIN_REFERENCE_LOUDNESS", "-23. LUFS");
+    ASSERT_TAG_LIST_HAS_DOUBLE (rg_list, GST_TAG_REFERENCE_LEVEL, -23.);
+    ASSERT_TAG_LIST_HAS_STRING (rg_list, GST_TAG_REFERENCE_LEVEL_UNIT, "LUFS");
+
+    gst_tag_list_unref (rg_list);
+  }
 
   /* make sure we can convert back and forth without loss */
   {
