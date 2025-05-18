@@ -821,6 +821,15 @@ gboolean  gst_tag_list_take    (GstTagList ** old_taglist,
  */
 #define GST_TAG_REFERENCE_LEVEL        "replaygain-reference-level"
 /**
+ * GST_TAG_REFERENCE_LEVEL_UNIT:
+ *
+ * unit of the reference level of track and album gain values (string)
+ *
+ * Since: 1.27
+ *
+ */
+#define GST_TAG_REFERENCE_LEVEL_UNIT        "replaygain-reference-level-unit"
+/**
  * GST_TAG_LANGUAGE_CODE:
  *
  * ISO-639-2 or ISO-639-1 code for the language the content is in (string)
