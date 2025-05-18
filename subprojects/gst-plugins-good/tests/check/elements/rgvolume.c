@@ -636,6 +636,20 @@ GST_START_TEST (test_reference_level)
   fail_unless_gain (element, +6.00);    /* pre-amp + track gain */
   send_eos_event (element);
 
+  /* Same as above, but reference level given in LUFS. */
+  send_flush_events (element);
+  send_segment_event (element);
+
+  tag_list = gst_tag_list_new_empty ();
+  gst_tag_list_add (tag_list, GST_TAG_MERGE_REPLACE,
+      GST_TAG_TRACK_GAIN, 0.00, GST_TAG_TRACK_PEAK, 0.2,
+      GST_TAG_REFERENCE_LEVEL, -23.,
+      GST_TAG_REFERENCE_LEVEL_UNIT, "LUFS", NULL);
+  fail_unless (send_tag_event (element, gst_event_new_tag (tag_list)) == NULL);
+  /* -18 LUFS is equal to 89 dB, so we bump it up by +5 dB. */
+  fail_unless_gain (element, +5.00);    /* pre-amp + track gain */
+  send_eos_event (element);
+
   g_object_set (element, "album-mode", TRUE, NULL);
 
   /* Same as above, but with album gain. */
