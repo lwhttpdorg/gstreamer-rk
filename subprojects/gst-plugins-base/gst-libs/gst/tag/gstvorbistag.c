@@ -274,6 +274,17 @@ gst_vorbis_tag_add (GstTagList * list, const gchar * tag, const gchar * value)
       g_strdelimit (c, ",", '.');
       gst_tag_list_add (list, GST_TAG_MERGE_APPEND, gst_tag,
           g_strtod (c, NULL), NULL);
+      if (strcmp (gst_tag, GST_TAG_REFERENCE_LEVEL) == 0) {
+        /* also provide unit if given in tag */
+        if (g_str_has_suffix (c, "LUFS")) {
+          gst_tag_list_add (list, GST_TAG_MERGE_APPEND,
+              GST_TAG_REFERENCE_LEVEL_UNIT, "LUFS", NULL);
+        } else {
+          /* default to "dB" */
+          gst_tag_list_add (list, GST_TAG_MERGE_APPEND,
+              GST_TAG_REFERENCE_LEVEL_UNIT, "dB", NULL);
+        }
+      }
       g_free (c);
       break;
     }
