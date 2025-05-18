@@ -627,6 +627,8 @@ gst_rg_analysis_handle_eos (GstRgAnalysis * filter)
       GST_LOG_OBJECT (filter, "posting tag list with results");
       gst_tag_list_add (tag_list, GST_TAG_MERGE_APPEND,
           GST_TAG_REFERENCE_LEVEL, filter->reference_level, NULL);
+      gst_tag_list_add (tag_list, GST_TAG_MERGE_REPLACE,
+          GST_TAG_REFERENCE_LEVEL_UNIT, "dB", NULL);
       /* This takes ownership of our reference to the list */
       gst_pad_push_event (GST_BASE_TRANSFORM_SRC_PAD (filter),
           gst_event_new_tag (tag_list));
