@@ -3997,12 +3997,17 @@ db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg,
           GST_PAD_LINK_CHECK_NOTHING);
       output->linked = TRUE;
     }
-  } else {
+  } else if (needs_decoder) {
     /* We need to reset the output and set it up again */
     db_output_stream_reset (output);
 
     /* Setup the decoder */
     ret = db_output_stream_setup_decoder (output, new_caps, msg);
+  } else {
+    GST_DEBUG_OBJECT (dbin, "no decoder needed");
+    db_output_stream_reset (output);
+    decode_pad_set_target ((GstGhostPad *) output->src_pad, slot->src_pad);
+    db_output_stream_expose_src_pad (output);
   }
 
   gst_caps_unref (new_caps);
