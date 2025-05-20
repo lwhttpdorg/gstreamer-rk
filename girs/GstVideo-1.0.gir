@@ -3446,7 +3446,7 @@ Return the width of one tile in pixels, zero if its not an integer.</doc>
         </parameter>
       </parameters>
     </function-macro>
-    <constant name="VIDEO_FORMAT_LAST" value="143" c:type="GST_VIDEO_FORMAT_LAST" version="1.26">
+    <constant name="VIDEO_FORMAT_LAST" value="144" c:type="GST_VIDEO_FORMAT_LAST" version="1.26">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h">Number of video formats in #GstVideoFormat.</doc>
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h"/>
       <type name="gint" c:type="gint"/>
@@ -10810,6 +10810,10 @@ bits.</doc>
       </member>
       <member name="nv12_128c8" value="142" c:identifier="GST_VIDEO_FORMAT_NV12_128C8" version="1.30" glib:nick="nv12-128c8" glib:name="GST_VIDEO_FORMAT_NV12_128C8">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h">NV12 tiled as 128 pixel wide columns</doc>
+      </member>
+      <member name="nv12_10le32_128c8" value="143" c:identifier="GST_VIDEO_FORMAT_NV12_10LE32_128C8" version="1.30" glib:nick="nv12-10le32-128c8" glib:name="GST_VIDEO_FORMAT_NV12_10LE32_128C8">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h">10-bit NV12, with 3 values packed as 4 bytes.
+Tiled as 96 pixel / 128 byte wide columns.</doc>
       </member>
       <function name="from_fourcc" c:identifier="gst_video_format_from_fourcc">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-format.c">Converts a FOURCC value into the corresponding #GstVideoFormat.

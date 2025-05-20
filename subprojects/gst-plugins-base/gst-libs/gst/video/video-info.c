@@ -1399,6 +1399,19 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
       info->size = info->offset[1] + info->offset[1] / 2;
       break;
     }
+    case GST_VIDEO_FORMAT_NV12_10LE32_128C8:
+    {
+      const gsize tile_size = GST_VIDEO_FORMAT_INFO_TILE_SIZE (info->finfo, 0);
+      gint n_tile_x = (info->width + 95) / 96;
+      gint n_tile_y = GST_ROUND_UP_8 (info->height) / 8;
+
+      info->stride[0] = GST_VIDEO_TILE_MAKE_STRIDE (n_tile_x, n_tile_y);
+      info->stride[1] = info->stride[0];
+      info->offset[0] = 0;
+      info->offset[1] = tile_size * n_tile_x * n_tile_y;
+      info->size = info->offset[1] + info->offset[1] / 2;
+      break;
+    }
     case GST_VIDEO_FORMAT_ENCODED:
     case GST_VIDEO_FORMAT_DMA_DRM:
       break;
