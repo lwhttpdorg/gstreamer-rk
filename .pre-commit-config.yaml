@@ -20,13 +20,6 @@ repos:
         files: ^subprojects/gstreamer-sharp/.*
         entry: dotnet format subprojects/gstreamer-sharp/gstreamer-sharp.sln -v normal --include
         types_or: ["c#", "vb"]
-    -   id: gst-indent
-        name: gst-indent
-        language: python
-        entry: python ./scripts/gst-indent-all.py
-        pass_filenames: false
-        types_or: ["c", "c++"]
-        additional_dependencies: ["gst-indent==1.0.0"]
     # The rust hook uses cargo fmt, which requires a Cargo.toml
     # We use a local hook to run rustfmt directly
     -   id: rustfmt
@@ -40,3 +33,12 @@ repos:
         entry: python ./scripts/git-hooks/pre-commit-python.hook
         pass_filenames: false
         additional_dependencies: ["autopep8==2.3.2", "pycodestyle==2.12.1"]
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v20.1.4
+    hooks:
+    -   id: clang-format
+        # Use our git-clang-format wrapper script
+        language: python
+        entry: python ./scripts/gst-indent.py
+        args: ["--staged"]
+        pass_filenames: false
