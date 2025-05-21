@@ -2168,7 +2168,7 @@ gst_element_post_message (GstElement * element, GstMessage * message)
   if (klass->post_message)
     res = klass->post_message (element, message);
   else
-    gst_message_unref (message);
+    gst_message_unref  (message);
 
   GST_TRACER_ELEMENT_POST_MESSAGE_POST (element, res);
   return res;
