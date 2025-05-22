@@ -2723,6 +2723,48 @@ notify_mute_cb (GObject * object, GParamSpec * pspec, GstPlaySink * playsink)
   g_object_notify (G_OBJECT (playsink), "mute");
 }
 
+/* Allow early sink creation outside playsink in order to be able to query its
+ * caps which is useful to setup passthrough for encoded data */
+GstElement *
+gst_play_sink_get_or_create_sink (GstPlaySink * playsink, GstPlaySinkType type)
+{
+  GstElement *sink;
+
+  sink = gst_play_sink_get_sink (playsink, type);
+  if (!sink) {
+    if (type == GST_PLAY_SINK_TYPE_AUDIO)
+      sink = gst_play_sink_create_audio_sink (playsink);
+    else if (type == GST_PLAY_SINK_TYPE_VIDEO)
+      sink = gst_play_sink_create_video_sink (playsink);
+    if (!sink)
+      return NULL;
+  } else if (GST_STATE (sink) < GST_STATE_READY) {
+    gst_element_set_state (sink, GST_STATE_READY);
+  }
+
+  return sink;
+}
+
+GstCaps *
+gst_play_sink_get_sink_caps (GstPlaySink * playsink, GstPlaySinkType type)
+{
+  GstCaps *sink_caps;
+  GstElement *sink;
+  GstPad *pad;
+
+  sink = gst_play_sink_get_or_create_sink (playsink, type);
+  if (!sink)
+    return NULL;
+
+  pad = gst_element_get_static_pad (sink, "sink");
+  if (!pad)
+    return NULL;
+
+  sink_caps = gst_pad_query_caps (pad, NULL);
+  gst_object_unref (pad);
+  return sink_caps;
+}
+
 /* make the chain that contains the elements needed to perform
  * audio playback.
  *
