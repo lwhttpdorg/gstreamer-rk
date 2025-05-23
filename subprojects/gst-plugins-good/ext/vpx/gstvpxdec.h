@@ -109,6 +109,8 @@ struct _GstVPXDecClass
    * decoding error
    */
   gboolean (*get_needs_sync_point)(GstVPXDec *dec);
+  /*virtual function to send rpsi message*/
+  void (*send_rpsi) (GstVPXDec *dec, GstVideoCodecFrame *frame);
 };
 
 GType gst_vpx_dec_get_type (void);

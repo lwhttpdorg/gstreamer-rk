@@ -759,12 +759,16 @@ gst_vpx_dec_handle_frame (GstVideoDecoder * decoder, GstVideoCodecFrame * frame)
       if (img->fb_priv && dec->have_video_meta) {
         frame->output_buffer = gst_vpx_dec_prepare_image (dec, img);
         ret = gst_video_decoder_finish_frame (decoder, frame);
+        if (!ret && vpxclass->send_rpsi)
+          vpxclass->send_rpsi (dec, frame);
       } else {
         ret = gst_video_decoder_allocate_output_frame (decoder, frame);
 
         if (ret == GST_FLOW_OK) {
           gst_vpx_dec_image_to_buffer (dec, img, frame->output_buffer);
           ret = gst_video_decoder_finish_frame (decoder, frame);
+          if (!ret && vpxclass->send_rpsi)
+            vpxclass->send_rpsi (dec, frame);
         } else {
           gst_video_decoder_drop_frame (decoder, frame);
         }
