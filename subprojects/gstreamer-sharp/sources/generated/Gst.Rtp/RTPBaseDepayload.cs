@@ -550,6 +550,64 @@ namespace Gst.Rtp {
 			return __result;
 		}
 
+		static SrcHandleEventNativeDelegate SrcHandleEvent_cb_delegate;
+		static SrcHandleEventNativeDelegate SrcHandleEventVMCallback {
+			get {
+				if (SrcHandleEvent_cb_delegate == null)
+					SrcHandleEvent_cb_delegate = new SrcHandleEventNativeDelegate (SrcHandleEvent_cb);
+				return SrcHandleEvent_cb_delegate;
+			}
+		}
+
+		static void OverrideSrcHandleEvent (GLib.GType gtype)
+		{
+			OverrideSrcHandleEvent (gtype, SrcHandleEventVMCallback);
+		}
+
+		static void OverrideSrcHandleEvent (GLib.GType gtype, SrcHandleEventNativeDelegate callback)
+		{
+			unsafe {
+				IntPtr* raw_ptr = (IntPtr*)(((long) gtype.GetClassPtr()) + (long) class_abi.GetFieldOffset("src_handle_event"));
+				*raw_ptr = Marshal.GetFunctionPointerForDelegate((Delegate) callback);
+			}
+		}
+
+		[UnmanagedFunctionPointer (CallingConvention.Cdecl)]
+		delegate bool SrcHandleEventNativeDelegate (IntPtr inst, IntPtr evnt);
+
+		static bool SrcHandleEvent_cb (IntPtr inst, IntPtr evnt)
+		{
+			try {
+				RTPBaseDepayload __obj = GLib.Object.GetObject (inst, false) as RTPBaseDepayload;
+				bool __result;
+				__result = __obj.OnSrcHandleEvent (evnt == IntPtr.Zero ? null : (Gst.Event) GLib.Opaque.GetOpaque (evnt, typeof (Gst.Event), false));
+				return __result;
+			} catch (Exception e) {
+				GLib.ExceptionManager.RaiseUnhandledException (e, true);
+				// NOTREACHED: above call does not return.
+				throw e;
+			}
+		}
+
+		[GLib.DefaultSignalHandler(Type=typeof(Gst.Rtp.RTPBaseDepayload), ConnectionMethod="OverrideSrcHandleEvent")]
+		protected virtual bool OnSrcHandleEvent (Gst.Event evnt)
+		{
+			return InternalSrcHandleEvent (evnt);
+		}
+
+		private bool InternalSrcHandleEvent (Gst.Event evnt)
+		{
+			SrcHandleEventNativeDelegate unmanaged = null;
+			unsafe {
+				IntPtr* raw_ptr = (IntPtr*)(((long) this.LookupGType().GetThresholdType().GetClassPtr()) + (long) class_abi.GetFieldOffset("src_handle_event"));
+				unmanaged = (SrcHandleEventNativeDelegate) Marshal.GetDelegateForFunctionPointer(*raw_ptr, typeof(SrcHandleEventNativeDelegate));
+			}
+			if (unmanaged == null) return false;
+
+			bool __result = unmanaged (this.Handle, evnt == null ? IntPtr.Zero : evnt.Handle);
+			return __result;
+		}
+
 		static ProcessRtpPacketNativeDelegate ProcessRtpPacket_cb_delegate;
 		static ProcessRtpPacketNativeDelegate ProcessRtpPacketVMCallback {
 			get {
@@ -645,14 +703,22 @@ namespace Gst.Rtp {
 							, -1
 							, (uint) Marshal.SizeOf(typeof(IntPtr)) // handle_event
 							, "packet_lost"
-							, "process_rtp_packet"
+							, "src_handle_event"
 							, (uint) Marshal.SizeOf(typeof(IntPtr))
 							, 0
 							),
 						new GLib.AbiField("process_rtp_packet"
 							, -1
 							, (uint) Marshal.SizeOf(typeof(IntPtr)) // process_rtp_packet
-							, "handle_event"
+							, "src_handle_event"
+							, "src_handle_event"
+							, (uint) Marshal.SizeOf(typeof(IntPtr))
+							, 0
+							),
+						new GLib.AbiField("src_handle_event"
+							, -1
+							, (uint) Marshal.SizeOf(typeof(IntPtr)) // src_handle_event
+							, "process_rtp_packet"
 							, "_gst_reserved"
 							, (uint) Marshal.SizeOf(typeof(IntPtr))
 							, 0
@@ -660,7 +726,7 @@ namespace Gst.Rtp {
 						new GLib.AbiField("_gst_reserved"
 							, -1
 							, (uint) Marshal.SizeOf(typeof(IntPtr)) * 3 // _gst_reserved
-							, "process_rtp_packet"
+							, "src_handle_event"
 							, null
 							, (uint) Marshal.SizeOf(typeof(IntPtr))
 							, 0

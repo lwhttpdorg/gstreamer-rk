@@ -82,6 +82,7 @@ struct _GstRTPBaseDepayload
  * timestamp, the timestamp of the input buffer will be applied to the result
  * buffer and the output buffer will be pushed out. If this function returns
  * %NULL, nothing is pushed out. Since: 1.6.
+ * @src_handle_event: source pad even handler. Since: 1.30.
  *
  * Base class for RTP depayloaders.
  */
@@ -107,8 +108,18 @@ struct _GstRTPBaseDepayloadClass
 
   GstBuffer * (*process_rtp_packet) (GstRTPBaseDepayload *base, GstRTPBuffer * rtp_buffer);
 
+  /**
+   * GstRTPBaseDepayloadClass::src_handle_event:
+   *
+   * Optional. The default implementation does the default actions for events but
+   * implementation can override.
+   *
+   * Since: 1.30
+   */
+  gboolean (*src_handle_event) (GstRTPBaseDepayload * filter, GstEvent * event);
+
   /*< private >*/
-  gpointer _gst_reserved[GST_PADDING - 1];
+  gpointer _gst_reserved[GST_PADDING - 2];
 };
 
 GST_RTP_API

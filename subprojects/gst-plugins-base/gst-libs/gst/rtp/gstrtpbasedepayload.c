@@ -158,6 +158,8 @@ static GstFlowReturn gst_rtp_base_depayload_chain_list (GstPad * pad,
     GstObject * parent, GstBufferList * list);
 static gboolean gst_rtp_base_depayload_handle_sink_event (GstPad * pad,
     GstObject * parent, GstEvent * event);
+static gboolean gst_rtp_base_depayload_handle_src_event (GstPad * pad,
+    GstObject * parent, GstEvent * event);
 
 static GstStateChangeReturn gst_rtp_base_depayload_change_state (GstElement *
     element, GstStateChange transition);
@@ -165,6 +167,8 @@ static GstStateChangeReturn gst_rtp_base_depayload_change_state (GstElement *
 static gboolean gst_rtp_base_depayload_packet_lost (GstRTPBaseDepayload *
     filter, GstEvent * event);
 static gboolean gst_rtp_base_depayload_handle_event (GstRTPBaseDepayload *
+    filter, GstEvent * event);
+static gboolean gst_rtp_base_depayload_src_handle_event (GstRTPBaseDepayload *
     filter, GstEvent * event);
 
 static GstElementClass *parent_class = NULL;
@@ -431,6 +435,7 @@ gst_rtp_base_depayload_class_init (GstRTPBaseDepayloadClass * klass)
 
   klass->packet_lost = gst_rtp_base_depayload_packet_lost;
   klass->handle_event = gst_rtp_base_depayload_handle_event;
+  klass->src_handle_event = gst_rtp_base_depayload_src_handle_event;
 
   GST_DEBUG_CATEGORY_INIT (rtpbasedepayload_debug, "rtpbasedepayload", 0,
       "Base class for RTP Depayloaders");
@@ -465,6 +470,8 @@ gst_rtp_base_depayload_init (GstRTPBaseDepayload * filter,
   g_return_if_fail (pad_template != NULL);
   filter->srcpad = gst_pad_new_from_template (pad_template, "src");
   gst_pad_use_fixed_caps (filter->srcpad);
+  gst_pad_set_event_function (filter->srcpad,
+      gst_rtp_base_depayload_handle_src_event);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
   priv->npt_start = 0;
@@ -1147,6 +1154,33 @@ gst_rtp_base_depayload_handle_sink_event (GstPad * pad, GstObject * parent,
   bclass = GST_RTP_BASE_DEPAYLOAD_GET_CLASS (filter);
   if (bclass->handle_event)
     res = bclass->handle_event (filter, event);
+  else
+    gst_event_unref (event);
+
+  return res;
+}
+
+static gboolean
+gst_rtp_base_depayload_src_handle_event (GstRTPBaseDepayload * filter,
+    GstEvent * event)
+{
+  GstObject *parent = GST_OBJECT_CAST (filter);
+
+  return gst_pad_event_default (filter->srcpad, parent, event);
+}
+
+static gboolean
+gst_rtp_base_depayload_handle_src_event (GstPad * pad, GstObject * parent,
+    GstEvent * event)
+{
+  gboolean res = FALSE;
+  GstRTPBaseDepayload *filter;
+  GstRTPBaseDepayloadClass *bclass;
+
+  filter = GST_RTP_BASE_DEPAYLOAD (parent);
+  bclass = GST_RTP_BASE_DEPAYLOAD_GET_CLASS (filter);
+  if (bclass->src_handle_event)
+    res = bclass->src_handle_event (filter, event);
   else
     gst_event_unref (event);
 
