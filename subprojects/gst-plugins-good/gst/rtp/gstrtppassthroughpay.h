@@ -79,6 +79,7 @@ struct _GstRtpPassthroughPay
   GstClockTime pts_or_dts;
 
   GstRtpPassthroughPayRetimestampMode retimestamp_mode;
+  gboolean clear_marker;
 };
 
 GType gst_rtp_passthrough_pay_get_type (void);
