@@ -339,9 +339,9 @@ gst_cuda_ipc_server_on_incoming_connection (GstCudaIpcServer * server,
   priv->next_conn_id++;
   priv->lock.unlock ();
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   priv->conn_map.insert ({conn->id, conn});
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (conn->data) {
     conn->configured = true;
@@ -630,7 +630,7 @@ gst_cuda_ipc_server_on_idle (GstCudaIpcServer * server)
     }
 
     std::vector < std::shared_ptr < GstCudaIpcServerConn >> to_send_eos;
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (auto it : priv->conn_map) {
       auto conn = it.second;
       if (conn->eos || !conn->pending_have_data)
@@ -661,7 +661,7 @@ gst_cuda_ipc_server_on_idle (GstCudaIpcServer * server)
         num_closed++;
       }
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     if (priv->conn_map.size () == num_closed) {
       GST_DEBUG_OBJECT (server, "All connections were closed");
@@ -680,7 +680,7 @@ gst_cuda_ipc_server_on_idle (GstCudaIpcServer * server)
   if (!priv->data)
     return;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   std::vector < std::shared_ptr < GstCudaIpcServerConn >> to_config_data;
   std::vector < std::shared_ptr < GstCudaIpcServerConn >> to_send_have_data;
   for (auto it : priv->conn_map) {
@@ -701,7 +701,7 @@ gst_cuda_ipc_server_on_idle (GstCudaIpcServer * server)
 
   for (auto it: to_send_have_data)
     gst_cuda_ipc_server_have_data (server, it.get ());
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 void

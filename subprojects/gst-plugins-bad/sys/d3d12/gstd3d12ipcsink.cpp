@@ -45,9 +45,9 @@
 #include <vector>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_ipc_sink_debug);
 #define GST_CAT_DEFAULT gst_d3d12_ipc_sink_debug
@@ -69,7 +69,7 @@ enum
 #define DEFAULT_ADAPTER -1
 #define DEFAULT_PIPE_NAME "\\\\.\\pipe\\gst.d3d12.ipc"
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D12IpcSinkPrivate
 {
   GstD3D12Device *device = nullptr;
@@ -89,7 +89,7 @@ struct GstD3D12IpcSinkPrivate
   gint adapter = DEFAULT_ADAPTER;
   std::string pipe_name = DEFAULT_PIPE_NAME;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12IpcSink
 {

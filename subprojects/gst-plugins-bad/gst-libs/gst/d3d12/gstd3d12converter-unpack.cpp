@@ -32,9 +32,9 @@
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_converter_debug);
 #define GST_CAT_DEFAULT gst_d3d12_converter_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GstD3D12UnpackPrivate
 {

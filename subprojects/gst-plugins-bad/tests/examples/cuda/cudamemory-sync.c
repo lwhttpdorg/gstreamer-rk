@@ -115,7 +115,7 @@ bus_sync_handler (GstBus * bus, GstMessage * msg, AppData * data)
   return GST_BUS_PASS;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar kernel_func_str[] =
 "extern \"C\" {\n"
 "__device__ inline unsigned char\n"
@@ -140,7 +140,7 @@ static const gchar kernel_func_str[] =
 "  dst[dst_pos + 3] = scale_to_uchar (sample.w);\n"
 "}\n"
 "}\n";
-/* *INDENT-ON* */
+/* clang-format on */
 
 gint
 main (gint argc, gchar ** argv)

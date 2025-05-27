@@ -33,7 +33,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_overlay_compositor_debug);
 #define GST_CAT_DEFAULT gst_d3d12_overlay_compositor_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct VertexData
@@ -112,7 +112,7 @@ struct GstD3D12OverlayCompositorPrivate
 
   std::vector<GstVideoOverlayRectangle *> rects_to_upload;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12OverlayCompositor
 {

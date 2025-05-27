@@ -44,9 +44,9 @@
 #ifdef G_OS_WIN32
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 #endif
 
 #ifdef HAVE_CUDA_GST_GL

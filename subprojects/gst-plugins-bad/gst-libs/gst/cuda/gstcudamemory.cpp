@@ -41,9 +41,9 @@ GST_DEBUG_CATEGORY_STATIC (cuda_allocator_debug);
 
 static GstAllocator *_gst_cuda_allocator = nullptr;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::recursive_mutex _callback_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 static GstCudaMemoryAllocatorNeedPoolCallback _need_pool_callback = nullptr;
 static gpointer _alloc_callback_user_data = nullptr;
 static GDestroyNotify _alloc_callback_notify = nullptr;
@@ -66,7 +66,7 @@ gst_cuda_memory_alloc_method_get_type (void)
   return type;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaMemoryTokenData
 {
   GstCudaMemoryTokenData (gpointer data, GDestroyNotify notify_func)
@@ -131,7 +131,7 @@ struct _GstCudaMemoryPrivate
   gpointer user_data = nullptr;
   GDestroyNotify notify = nullptr;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaAllocatorPrivate
 {

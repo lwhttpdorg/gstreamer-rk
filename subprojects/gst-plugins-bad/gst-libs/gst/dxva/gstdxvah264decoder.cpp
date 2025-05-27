@@ -30,7 +30,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_dxva_h264_decoder_debug);
 #define GST_CAT_DEFAULT gst_dxva_h264_decoder_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDxvaH264DecoderPrivate
 {
   DXVA_PicParams_H264 pic_params;
@@ -54,7 +54,7 @@ struct _GstDxvaH264DecoderPrivate
 
   gboolean configured = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_dxva_h264_decoder_finalize (GObject * object);
 

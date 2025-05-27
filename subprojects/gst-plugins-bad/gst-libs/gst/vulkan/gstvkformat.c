@@ -128,7 +128,7 @@
 
 #define ASPECT_2PLANE (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT)
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static GstVulkanFormatInfo formats[] = {
   {FORMAT (R8G8B8A8, UNORM), FLAG (RGB) | FLAG (ALPHA) | NE, DPTH8888, PSTR4444, PLANE0, OFFS0123, SUB444, VK_IMAGE_ASPECT_COLOR_BIT},
   {FORMAT (R8G8B8A8, SNORM), FLAG (RGB) | FLAG (ALPHA) | NE, DPTH8888, PSTR4444, PLANE0, OFFS0123, SUB444, VK_IMAGE_ASPECT_COLOR_BIT},
@@ -384,7 +384,7 @@ FIXME: implement:
   VK_FORMAT_PVRTC2_4BPP_SRGB_BLOCK_IMG = 1000054007,
 #endif
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * gst_vulkan_format_get_info:
@@ -430,7 +430,7 @@ gst_vulkan_format_get_aspect (VkFormat format)
   return 0;                     /* VK_IMAGE_ASPECT_NONE */
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 const static GstVulkanFormatMap vk_formats_map[] = {
   /* RGB                   unsigned normalized format         sRGB nonlinear encoding */
   { GST_VIDEO_FORMAT_RGBA,  VK_FORMAT_R8G8B8A8_UNORM,      { VK_FORMAT_R8G8B8A8_SRGB, } },
@@ -462,7 +462,7 @@ const static GstVulkanFormatMap vk_formats_map[] = {
   { GST_VIDEO_FORMAT_YV12, VK_FORMAT_UNDEFINED, { VK_FORMAT_R8_UNORM, } },
   {GST_VIDEO_FORMAT_P010_10LE, VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16, { VK_FORMAT_R16_UNORM, VK_FORMAT_R16G16_UNORM } }
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * gst_vulkan_format_get_map: (skip)
@@ -532,7 +532,7 @@ _get_usage (guint64 feature)
 {
   int i;
   VkImageUsageFlags usage = 0;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   const struct vkUsage vk_usage_map[] = {
     {VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT, VK_IMAGE_USAGE_SAMPLED_BIT},
     {VK_FORMAT_FEATURE_TRANSFER_SRC_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT},
@@ -551,7 +551,7 @@ _get_usage (guint64 feature)
           VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR},
 #endif
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < G_N_ELEMENTS (vk_usage_map); i++) {
     if (vk_usage_map[i].feature & feature)

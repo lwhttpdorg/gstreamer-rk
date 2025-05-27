@@ -36,7 +36,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_decoder_cpb_pool_debug);
 #define GST_CAT_DEFAULT gst_d3d12_decoder_cpb_pool_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct DecoderBuffer
@@ -142,7 +142,7 @@ struct _GstD3D12DecoderCpbPool
   GstObject parent;
   GstD3D12DecoderCpbPoolPrivate *priv;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstD3D12DecoderCpb, gst_d3d12_decoder_cpb);
 
@@ -201,7 +201,7 @@ gst_d3d12_decoder_cpb_pool_new (ID3D12Device * device)
   return self;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static void
 gst_d3d12_decoder_cpb_pool_release (GstD3D12DecoderCpbPool * pool,
     GstD3D12DecoderCpb * cpb)
@@ -222,7 +222,7 @@ gst_d3d12_decoder_cpb_pool_release (GstD3D12DecoderCpbPool * pool,
 
   gst_object_unref (pool);
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static gboolean
 gst_d3d12_decoder_cpb_dispose (GstD3D12DecoderCpb * cpb)
@@ -245,7 +245,7 @@ gst_d3d12_decoder_cpb_free (GstD3D12DecoderCpb * cpb)
 #define ROUND_UP_N(num,align) \
     (((((UINT64) num) + (((UINT64) align) - 1)) & ~(((UINT64) align) - 1)))
 
-/* *INDENT-OFF* */
+/* clang-format off */
 HRESULT
 gst_d3d12_decoder_cpb_pool_acquire (GstD3D12DecoderCpbPool * pool,
     gpointer data, gsize size, GstD3D12DecoderCpb ** cpb)
@@ -377,7 +377,7 @@ gst_d3d12_decoder_cpb_pool_acquire (GstD3D12DecoderCpbPool * pool,
 
   return S_OK;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstD3D12DecoderCpb *
 gst_d3d12_decoder_cpb_ref (GstD3D12DecoderCpb * cpb)

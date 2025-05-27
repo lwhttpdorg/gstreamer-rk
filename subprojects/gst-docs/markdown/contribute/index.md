@@ -426,13 +426,33 @@ In the simplest case, you might be able to get away with just doing a `git pull
 
 #### Coding Style
 
-Try to stick to the GStreamer indentation and coding style. There is an
-application called [`gst-indent-1.0`][gst-indent] that can be installed
-with `pip install gst-indent`. You can run it over your `.c` or
-`.cpp` files if you want your code auto-indented before making the patch.
+Try to stick to the GStreamer indentation and coding style. There is a
+`.clang-format` file at the root of this repository that can be used by most
+editors. Since different versions of clang-format could have slightly different
+output, we recommend using latest version available on PyPi (`pip install clang-format`),
+which is the version used by our CI.
 
-Please do _not_ run `gst-indent-1.0` on header files, our header file
-indentation is free-form.
+You can run `scripts/gst-indent [--staged]` to auto-indent your code before
+making the patch. Do not re-indent whole files as it could generate spurious
+changes caused by slightly different tools we were using in the past. Some IDEs
+can be configured to format only modifications (e.g. vscode `editor.formatOnSaveMode`
+setting).
+
+To reformat a branch patch by patch, you can run:
+`git rebase -x 'scripts/gst-indent HEAD^' main`
+
+Please do _not_ run `clang-format` on header files, our header file indentation
+is free-form.
+
+C++ source files (.cpp files) currently have inconsistent coding style.
+By default they follow the same style as C code, but since it's not a great fit
+for C++ code, some plugins might have a different `.clang-format` in their
+directory. New code should be using the LLVM style, existing code can be
+reformatted to that style as long as it's done in a separate commit that
+reformat the whole directory. That commit can then be added into
+`.git-blame-ignore-revs`.
+
+Rust source files (.rs files) are indented with the standard `rustfmt`.
 
 If you build GStreamer from git, a local commit hook will be installed that
 checks if your commit conforms to the required style. You can bypass that local
@@ -455,7 +475,6 @@ Other style guidelines:
    - declare variables inline (as opposed to only at the beginning of a block)
    - use advanced/nicer struct initialisers
 
-[gst-indent]: https://gitlab.freedesktop.org/gstreamer/gst-indent/
 [bitreader]: https://gstreamer.freedesktop.org/documentation/base/gstbitreader.html?gi-language=c#GstBitReader
 [bytereader]: https://gstreamer.freedesktop.org/documentation/base/gstbytereader.html?gi-language=c#GstByteReader
 

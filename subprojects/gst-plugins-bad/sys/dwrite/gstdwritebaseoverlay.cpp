@@ -31,9 +31,9 @@
 GST_DEBUG_CATEGORY_STATIC (dwrite_base_overlay_debug);
 #define GST_CAT_DEFAULT dwrite_base_overlay_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
@@ -71,9 +71,9 @@ enum
   PROP_ENABLE_COLOR_FONT,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::vector <GParamSpec *> _pspec;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define DEFAULT_VISIBLE TRUE
 #define DEFAULT_FONT_FAMILY "MS Reference Sans Serif"
@@ -93,7 +93,7 @@ static std::vector <GParamSpec *> _pspec;
 #define DEFAULT_PARAGRAPH_ALIGNMENT DWRITE_PARAGRAPH_ALIGNMENT_NEAR
 #define DEFAULT_COLOR_FONT TRUE
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDWriteBaseOverlayPrivate
 {
   _GstDWriteBaseOverlayPrivate ()
@@ -145,7 +145,7 @@ struct _GstDWriteBaseOverlayPrivate
 
   gboolean color_font = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_dwrite_base_overlay_finalize (GObject * object);
 static void gst_dwrite_base_overlay_set_property (GObject * object,

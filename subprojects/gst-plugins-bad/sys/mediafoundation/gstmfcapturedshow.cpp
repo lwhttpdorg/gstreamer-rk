@@ -34,9 +34,9 @@
 #include <vector>
 #include <algorithm>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_source_object_debug);
 #define GST_CAT_DEFAULT gst_mf_source_object_debug
@@ -60,7 +60,7 @@ DEFINE_GUID (IID_ISampleGrabber, 0x6b652fff, 0x11fe,
 DEFINE_GUID (IID_IGstMFSampleGrabberCB, 0xbfae6598, 0x5df6,
     0x11ed, 0x9b, 0x6a, 0x02, 0x42, 0xac, 0x12, 0x00, 0x02);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct ISampleGrabberCB : public IUnknown
 {
   virtual HRESULT STDMETHODCALLTYPE SampleCB(
@@ -352,7 +352,7 @@ struct GstMFCaptureDShowInner
   ComPtr <IBaseFilter> fakesink;
   GstMFDShowPinInfo selected_pin_info;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum CAPTURE_STATE
 {
@@ -702,14 +702,14 @@ gst_mf_capture_dshow_set_caps (GstMFSourceObject * object, GstCaps * caps)
   GstMFCaptureDShowInner *inner = self->inner;
   GstMFDShowPinInfo pin_info;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto & iter: inner->pin_infos) {
     if (gst_caps_can_intersect (iter.caps, caps)) {
       pin_info = iter;
       break;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!pin_info.caps) {
     GST_ERROR_OBJECT (self, "Could not determine target pin with given caps %"
@@ -990,10 +990,10 @@ gst_mf_capture_dshow_open (GstMFCaptureDShow * self, IMoniker * moniker)
   std::sort (inner->pin_infos.begin (), inner->pin_infos.end ());
 
   self->supported_caps = gst_caps_new_empty ();
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto & iter : inner->pin_infos)
     gst_caps_append (self->supported_caps, gst_caps_ref (iter.caps));
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_DEBUG_OBJECT (self, "Available output caps %" GST_PTR_FORMAT,
       self->supported_caps);
@@ -1092,7 +1092,7 @@ gst_mf_dshow_enum_device (GstMFCaptureDShow * self,
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static gpointer
 gst_mf_capture_dshow_thread_func (GstMFCaptureDShow * self)
 {
@@ -1229,7 +1229,7 @@ run_loop:
 
   return nullptr;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_mf_capture_dshow_on_buffer (double sample_time, BYTE * data, LONG len,

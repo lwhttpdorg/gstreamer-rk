@@ -142,7 +142,7 @@ enum
 
 #define DEFAULT_DEVICE_ID -1
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaCompositorPadPrivate
 {
   ~GstCudaCompositorPadPrivate ()
@@ -192,7 +192,7 @@ struct GstCudaCompositorPrivate
   /* properties */
   gint device_id = DEFAULT_DEVICE_ID;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaCompositor
 {

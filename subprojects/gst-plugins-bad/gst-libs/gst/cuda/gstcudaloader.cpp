@@ -58,7 +58,7 @@ GST_DEBUG_CATEGORY (gst_cudaloader_debug);
   } \
 } G_STMT_END;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef struct _GstNvCodecCudaVTable
 {
   gboolean loaded;
@@ -269,7 +269,7 @@ typedef struct _GstNvCodecCudaVTable
       size_t dstPitch, unsigned int ui, size_t Width, size_t Height,
       CUstream hStream);
 } GstNvCodecCudaVTable;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstNvCodecCudaVTable gst_cuda_vtable = { 0, };
 
@@ -639,7 +639,7 @@ CuGraphicsSubResourceGetMappedArray (CUarray * pArray,
       arrayIndex, mipLevel);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 CUresult CUDAAPI
 CuGraphicsResourceGetMappedPointer (CUdeviceptr * pDevPtr, size_t * pSize,
     CUgraphicsResource resource)
@@ -649,7 +649,7 @@ CuGraphicsResourceGetMappedPointer (CUdeviceptr * pDevPtr, size_t * pSize,
   return gst_cuda_vtable.CuGraphicsResourceGetMappedPointer (pDevPtr, pSize,
       resource);
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 CUresult CUDAAPI
 CuGraphicsUnregisterResource (CUgraphicsResource resource)
@@ -667,7 +667,7 @@ CuMemAlloc (CUdeviceptr * dptr, unsigned int bytesize)
   return gst_cuda_vtable.CuMemAlloc (dptr, bytesize);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 CUresult CUDAAPI
 CuMemAllocPitch (CUdeviceptr * dptr, size_t * pPitch, size_t WidthInBytes,
     size_t Height, unsigned int ElementSizeBytes)
@@ -677,7 +677,7 @@ CuMemAllocPitch (CUdeviceptr * dptr, size_t * pPitch, size_t WidthInBytes,
   return gst_cuda_vtable.CuMemAllocPitch (dptr, pPitch, WidthInBytes, Height,
       ElementSizeBytes);
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 CUresult CUDAAPI
 CuMemAllocHost (void **pp, unsigned int bytesize)

@@ -29,9 +29,9 @@
 #include <wrl.h>
 #include <math.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef struct
 {

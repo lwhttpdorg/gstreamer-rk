@@ -28,7 +28,7 @@
 GST_DEBUG_CATEGORY_EXTERN (cuda_ipc_server_debug);
 #define GST_CAT_DEFAULT cuda_ipc_server_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcServerConnWin32 : public GstCudaIpcServerConn
 {
   GstCudaIpcServerConnWin32 (HANDLE pipe_handle) : pipe (pipe_handle)
@@ -76,7 +76,7 @@ struct GstCudaIpcServerWin32Private
   HANDLE cancellable;
   HANDLE wakeup_event;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaIpcServerWin32
 {

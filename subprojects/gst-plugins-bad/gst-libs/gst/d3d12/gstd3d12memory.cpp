@@ -37,9 +37,9 @@
 #include <algorithm>
 #include <d3d11_1.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #ifndef GST_DISABLE_GST_DEBUG
 #define GST_CAT_DEFAULT ensure_debug_category()
@@ -321,7 +321,7 @@ gst_d3d12_allocation_params_set_mip_levels (GstD3D12AllocationParams * params,
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D12MemoryTokenData
 {
   GstD3D12MemoryTokenData (gpointer data, GDestroyNotify notify_func)
@@ -390,7 +390,7 @@ struct _GstD3D12MemoryPrivate
   ComPtr<ID3D12Fence> fence;
   UINT64 fence_val = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEFINE_MINI_OBJECT_TYPE (GstD3D12Memory, gst_d3d12_memory);
 
@@ -1590,7 +1590,7 @@ gst_d3d12_allocator_set_active (GstD3D12Allocator * allocator, gboolean active)
 
 /* GstD3D12PoolAllocator */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstD3D12PoolAllocatorPrivate
 {
   _GstD3D12PoolAllocatorPrivate()
@@ -1619,7 +1619,7 @@ struct _GstD3D12PoolAllocatorPrivate
   guint cur_mems = 0;
   gboolean flushing = FALSE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d12_pool_allocator_finalize (GObject * object);
 

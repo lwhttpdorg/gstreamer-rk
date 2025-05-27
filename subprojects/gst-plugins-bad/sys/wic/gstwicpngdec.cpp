@@ -32,9 +32,9 @@
 #include <wrl.h>
 #include <string.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_wic_png_dec_debug);
 #define GST_CAT_DEFAULT gst_wic_png_dec_debug

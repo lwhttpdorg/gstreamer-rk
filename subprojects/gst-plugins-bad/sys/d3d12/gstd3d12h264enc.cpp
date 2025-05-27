@@ -41,9 +41,9 @@
 #include <memory>
 #include <algorithm>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_h264_enc_debug);
 #define GST_CAT_DEFAULT gst_d3d12_h264_enc_debug
@@ -98,7 +98,7 @@ struct GstD3D12H264EncClassData
   guint slice_mode_support;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class GstD3D12H264EncGop
 {
 public:
@@ -454,7 +454,7 @@ struct GstD3D12H264EncPrivate
 
   GstD3D12EncoderSeiInsertMode cc_insert = DEFAULT_CC_INSERT;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GstD3D12H264Enc
 {
@@ -1006,7 +1006,7 @@ gst_d3d12_h264_enc_build_sps (GstD3D12H264Enc * self, const GstVideoInfo * info,
 {
   auto priv = self->priv;
   guint8 sps_buf[4096] = { 0, };
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static const std::unordered_map<D3D12_VIDEO_ENCODER_LEVELS_H264, guint8>
       level_map = {
     {D3D12_VIDEO_ENCODER_LEVELS_H264_1, GST_H264_LEVEL_L1},
@@ -1049,7 +1049,7 @@ gst_d3d12_h264_enc_build_sps (GstD3D12H264Enc * self, const GstVideoInfo * info,
     {3, 2},
     {2, 1}
   }};
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   priv->sps.Clear ();
   auto & sps = priv->sps.sps;

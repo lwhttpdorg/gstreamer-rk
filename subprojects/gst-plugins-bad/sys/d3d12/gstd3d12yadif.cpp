@@ -31,9 +31,9 @@
 #include <memory>
 #include <mutex>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #ifndef GST_DISABLE_GST_DEBUG
 #define GST_CAT_DEFAULT ensure_debug_category()
@@ -50,7 +50,7 @@ ensure_debug_category (void)
 }
 #endif /* GST_DISABLE_GST_DEBUG */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct YadifCBData
 {
   UINT width;
@@ -150,7 +150,7 @@ struct GstD3D12YadifPrivate
   D3D12_COMMAND_LIST_TYPE queue_type = D3D12_COMMAND_LIST_TYPE_DIRECT;
   std::mutex lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12Yadif
 {

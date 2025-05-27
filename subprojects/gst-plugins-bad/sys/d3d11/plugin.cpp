@@ -87,9 +87,9 @@
 
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_d3d11_debug);
 GST_DEBUG_CATEGORY (gst_d3d11_plugin_utils_debug);

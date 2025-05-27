@@ -31,7 +31,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_encoder_buffer_pool_debug);
 #define GST_CAT_DEFAULT gst_d3d12_encoder_buffer_pool_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct _GstD3D12EncoderBuffer : public GstMiniObject
@@ -64,7 +64,7 @@ struct GstD3D12EncoderBufferPoolPrivate
   guint bitstream_size;
   guint pool_size;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12EncoderBufferPool
 {

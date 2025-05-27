@@ -35,9 +35,9 @@
 #include <vector>
 #include <mutex>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_converter_debug);
 #define GST_CAT_DEFAULT gst_d3d11_converter_debug
@@ -74,7 +74,7 @@ struct _GstD3D11ConverterHelper
   guint y_unit;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 GstD3D11ConverterHelper *
 gst_d3d11_converter_helper_new (GstD3D11Device * device,
     GstVideoFormat in_format, GstVideoFormat out_format, guint width,
@@ -164,7 +164,7 @@ gst_d3d11_converter_helper_new (GstD3D11Device * device,
 
   return self;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 void
 gst_d3d11_converter_helper_free (GstD3D11ConverterHelper * converter)

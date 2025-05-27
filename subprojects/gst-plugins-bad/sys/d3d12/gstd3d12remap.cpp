@@ -28,9 +28,9 @@
 #include <memory>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_remap_debug);
 #define GST_CAT_DEFAULT gst_d3d12_remap_debug
@@ -61,7 +61,7 @@ enum
   PROP_UV_REMAP,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct RemapContext
 {
   ~RemapContext()
@@ -104,7 +104,7 @@ struct GstD3D12RemapPrivate
 
   std::mutex lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12Remap
 {

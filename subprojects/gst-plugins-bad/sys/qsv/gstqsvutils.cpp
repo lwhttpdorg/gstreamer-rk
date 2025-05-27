@@ -27,9 +27,9 @@
 #include <gst/d3d11/gstd3d11.h>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 #else
 #include <gst/va/gstva.h>
 #endif

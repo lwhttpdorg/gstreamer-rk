@@ -79,7 +79,7 @@ enum
 #define DEFAULT_CONN_TIMEOUT 5
 #define DEFAULT_BUFFER_SIZE 3
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcSrcPrivate
 {
   GstCudaContext *context = nullptr;
@@ -100,7 +100,7 @@ struct GstCudaIpcSrcPrivate
   guint conn_timeout = DEFAULT_CONN_TIMEOUT;
   guint buffer_size = DEFAULT_BUFFER_SIZE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstCudaIpcSrc
 {

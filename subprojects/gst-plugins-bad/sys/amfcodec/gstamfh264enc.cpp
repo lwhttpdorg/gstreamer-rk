@@ -1309,7 +1309,7 @@ gst_amf_h264_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
     return gst_video_encoder_proxy_getcaps (encoder, NULL, filter);
 
   /* Profile allows interlaced? */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   gboolean can_support_interlaced = FALSE;
   for (const auto &iter: downstream_profiles) {
     if (iter == "high" || iter == "main" || iter == "constrained-high") {
@@ -1317,7 +1317,7 @@ gst_amf_h264_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
       break;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_DEBUG_OBJECT (self, "Downstream %s support interlaced format",
       can_support_interlaced ? "can" : "cannot");

@@ -235,7 +235,7 @@ reposition_properties (GstFramePositioner * pos, gint old_track_width,
     gint old_track_height)
 {
   gint i;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   RepositionPropertyData props_data[] = {
     {&pos->width, old_track_width, pos->track_width, properties[PROP_FWIDTH]},
     {&pos->width, old_track_width, pos->track_width, properties[PROP_WIDTH]},
@@ -249,8 +249,7 @@ reposition_properties (GstFramePositioner * pos, gint old_track_width,
     {&pos->posy, old_track_height, pos->track_height, properties[PROP_FPOSY]},
     {&pos->posy, old_track_height, pos->track_height, properties[PROP_POSY]},
   };
-  /* *INDENT-ON* */
-
+  /* clang-format on */
 
   for (i = 0; i < G_N_ELEMENTS (props_data); i++) {
     GList *values, *tmp;

@@ -51,7 +51,7 @@ G_DECLARE_FINAL_TYPE (GstDotsTracer, gst_dots_tracer, GST, DOTS_TRACER,
  *
  * Since: 1.26
  */
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstDotsTracer
 {
   GstTracer parent;
@@ -79,7 +79,7 @@ GST_DEBUG_CATEGORY_STATIC (dots_debug);
 static void
 gst_dots_tracer_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
-/* *INDENT-ON* */
+/* clang-format on */
 {
   GstDotsTracer *self = GST_DOTS_TRACER (object);
 

@@ -107,7 +107,7 @@ const guint8 scaling_pred_all_16[8 * 8] = {
   16, 16, 16, 16, 16, 16, 16, 16,
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 /* Only need square matrix at most 8x8 for syntax level. */
 static const guint8 square_DiagScanOrder_x[4][8 * 8] = {
   /* 1x1 */
@@ -137,7 +137,7 @@ static const guint8 square_DiagScanOrder_y[4][8 * 8] = {
     3, 2, 1, 0, 7, 6, 5, 4, 3, 2, 1, 7, 6, 5, 4, 3,
     2, 7, 6, 5, 4, 3, 7, 6, 5, 4, 7, 6, 5, 7, 6, 7, }
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef struct
 {
@@ -455,7 +455,7 @@ gst_h266_vui_parameters_set_default (GstH266VUIParams * vui)
   GST_LOG ("setting \"VUI parameters set default\"");
 
   /* Annex D.8 */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *vui = (GstH266VUIParams) {
     .colour_primaries = 2,
     .transfer_characteristics = 2,
@@ -464,7 +464,7 @@ gst_h266_vui_parameters_set_default (GstH266VUIParams * vui)
     .chroma_sample_loc_type_top_field = 6,
     .chroma_sample_loc_type_bottom_field = 6,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gboolean

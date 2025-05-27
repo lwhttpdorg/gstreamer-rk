@@ -114,7 +114,7 @@ GST_END_TEST;
 GST_START_TEST (test_vulkan_profiles)
 {
   GstCaps *caps;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   GstVulkanVideoProfile profile2 = { { 0, }, }, profile = {
     .profile = {
       .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
@@ -129,7 +129,7 @@ GST_START_TEST (test_vulkan_profiles)
       .stdProfileIdc = STD_VIDEO_H265_PROFILE_IDC_MAIN_10,
     }
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   caps = gst_vulkan_video_profile_to_caps (&profile);
   fail_unless (caps);
@@ -153,7 +153,7 @@ GST_START_TEST (test_decoding_image)
   GstCaps *dec_caps;
   GstBuffer *buffer = NULL;
   GstFlowReturn ret;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   GstVulkanVideoProfile profile = {
     .profile = {
       .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
@@ -169,7 +169,7 @@ GST_START_TEST (test_decoding_image)
       .pictureLayout = VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_PROGRESSIVE_KHR,
     }
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* force to use a queue with decoding support */
   if (queue && (device->physical_device->queue_family_ops[queue->family].video

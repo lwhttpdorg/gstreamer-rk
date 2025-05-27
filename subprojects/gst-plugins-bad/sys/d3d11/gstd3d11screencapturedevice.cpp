@@ -30,9 +30,9 @@
 #include <locale>
 #include <codecvt>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_d3d11_screen_capture_device_debug);
 #define GST_CAT_DEFAULT gst_d3d11_screen_capture_device_debug
@@ -320,9 +320,9 @@ create_device (const DXGI_ADAPTER_DESC * adapter_desc,
   GstCaps *caps;
   gint width, height, left, top, right, bottom;
   GstStructure *props;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   std::wstring_convert < std::codecvt_utf8 < wchar_t >, wchar_t > converter;
-  /* *INDENT-ON* */
+  /* clang-format on */
   std::string device_name;
   std::string display_name;
   std::string device_path;

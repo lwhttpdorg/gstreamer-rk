@@ -252,7 +252,7 @@ gst_vulkan_encoder_new_video_session_parameters (GstVulkanEncoder * self,
   if (!priv->session.session)
     return NULL;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   quality_info = (VkVideoEncodeQualityLevelInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR,
     .pNext = params,
@@ -263,7 +263,7 @@ gst_vulkan_encoder_new_video_session_parameters (GstVulkanEncoder * self,
     .pNext = &quality_info,
     .videoSession = priv->session.session->handle,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   res = priv->vk.CreateVideoSessionParameters (self->queue->device->device,
       &session_params_info, NULL, &session_params);
@@ -609,9 +609,9 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
         return FALSE;
       }
       priv->caps.encoder.codec.h264 = (VkVideoEncodeH264CapabilitiesKHR) {
-        /* *INDENT-OFF* */
+        /* clang-format off */
         .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_KHR,
-        /* *INDENT-ON* */
+        /* clang-format on */
       };
       codec_idx = GST_VK_VIDEO_EXTENSION_ENCODE_H264;
       break;
@@ -622,9 +622,9 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
         return FALSE;
       }
       priv->caps.encoder.codec.h265 = (VkVideoEncodeH265CapabilitiesKHR) {
-        /* *INDENT-OFF* */
+        /* clang-format off */
         .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_KHR,
-        /* *INDENT-ON* */
+        /* clang-format on */
       };
       codec_idx = GST_VK_VIDEO_EXTENSION_ENCODE_H265;
       break;
@@ -640,7 +640,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   priv->profile.usage.encode.pNext = &priv->profile.codec;
   priv->profile.profile.pNext = &priv->profile.usage.encode;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   priv->caps.encoder.caps = (VkVideoEncodeCapabilitiesKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR,
     .pNext = &priv->caps.encoder.codec,
@@ -649,7 +649,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
     .sType = VK_STRUCTURE_TYPE_VIDEO_CAPABILITIES_KHR,
     .pNext = &priv->caps.encoder.caps,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gpu = gst_vulkan_device_get_physical_device (self->queue->device);
   res = priv->vk.GetPhysicalDeviceVideoCapabilities (gpu,
@@ -690,14 +690,14 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   gst_object_unref (cmd_pool);
 
   /* we don't want overridden parameters in queries */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   query_create = (VkQueryPoolVideoEncodeFeedbackCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR,
     .pNext = &profile->profile,
     .encodeFeedbackFlags = priv->caps.encoder.caps.supportedEncodeFeedbackFlags &
         (~VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_HAS_OVERRIDES_BIT_KHR),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_vulkan_operation_enable_query (priv->exec,
           VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR, 1, &query_create,
@@ -777,7 +777,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
     priv->quality = priv->caps.encoder.caps.maxQualityLevels / 2;
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   quality_info = (VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR,
     .pVideoProfile = &profile->profile,
@@ -787,7 +787,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_PROPERTIES_KHR,
     .pNext = &codec_quality_props->codec,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   res = priv->vk.GetPhysicalDeviceVideoEncodeQualityLevelProperties (gpu,
       &quality_info, &quality_props);
@@ -796,7 +796,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
       != VK_SUCCESS)
     goto failed;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   session_create = (VkVideoSessionCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_CREATE_INFO_KHR,
     .queueFamilyIndex = self->queue->family,
@@ -808,7 +808,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
     .maxActiveReferencePictures = priv->caps.caps.maxActiveReferencePictures,
     .pStdHeaderVersion = &_vk_codec_extensions[codec_idx],
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_vulkan_video_session_create (&priv->session, self->queue->device,
           &priv->vk, &session_create, error))
@@ -936,7 +936,7 @@ gst_vulkan_encoder_video_session_parameters_overrides (GstVulkanEncoder * self,
       return FALSE;
   }
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   video_params_info = (VkVideoEncodeSessionParametersGetInfoKHR) {
 	  .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_PARAMETERS_GET_INFO_KHR,
 		.pNext = params,
@@ -947,7 +947,7 @@ gst_vulkan_encoder_video_session_parameters_overrides (GstVulkanEncoder * self,
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_PARAMETERS_FEEDBACK_INFO_KHR,
     .pNext = feedback,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   res = priv->vk.GetEncodedVideoSessionParameters (self->queue->device->device,
       &video_params_info, &feedback_info, &size, NULL);
@@ -1069,15 +1069,15 @@ _setup_rate_control (GstVulkanEncoder * self, GstVulkanEncoderPicture * pic,
 
   g_assert (priv->callbacks.setup_rc_pic);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *rc_info = (VkVideoEncodeRateControlInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_INFO_KHR,
     .rateControlMode = priv->rc_mode,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (priv->rc_mode > VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     *rc_layer = (VkVideoEncodeRateControlLayerInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_LAYER_INFO_KHR,
       .averageBitrate = 0, /* to be filled in callback */
@@ -1085,7 +1085,7 @@ _setup_rate_control (GstVulkanEncoder * self, GstVulkanEncoderPicture * pic,
       .frameRateNumerator = GST_VIDEO_INFO_FPS_N (info),
       .frameRateDenominator = GST_VIDEO_INFO_FPS_D (info),
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     rc_info->layerCount++;
     rc_info->pLayers = rc_layer;
@@ -1141,7 +1141,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
 
   _setup_rate_control (self, pic, info, &rc_info, &rc_layer);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   quality_info = (VkVideoEncodeQualityLevelInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR,
     .pNext = &rc_info,
@@ -1154,7 +1154,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
         | VK_VIDEO_CODING_CONTROL_ENCODE_RATE_CONTROL_BIT_KHR
         | VK_VIDEO_CODING_CONTROL_RESET_BIT_KHR,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   g_assert (pic->dpb_buffer && pic->dpb_view);
   g_assert (pic->in_buffer && pic->img_view);
@@ -1173,7 +1173,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
   /* Set the ref slots according to the pic refs to bound the video
      session encoding. It should contain all the references + 1 to book
      a new slotIndex (-1) for the current picture. */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   pic->dpb = (VkVideoPictureResourceInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
     .pNext = NULL,
@@ -1191,7 +1191,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
     .slotIndex = slot_index,
     .pPictureResource = &pic->dpb,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < nb_refs; i++)
     ref_slots[i] = ref_pics[i]->dpb_slot;
@@ -1200,7 +1200,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
   ref_slots[nb_refs].slotIndex = -1;
 
   /* Setup the begin coding structure using the reference slots */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   begin_coding = (VkVideoBeginCodingInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_BEGIN_CODING_INFO_KHR,
     .pNext = !priv->session_reset ? &rc_info : NULL,
@@ -1209,7 +1209,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
     .referenceSlotCount = nb_refs + 1,
     .pReferenceSlots = ref_slots,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   cmd_buf = priv->exec->cmd_buf;
   priv->vk.CmdBeginVideoCoding (cmd_buf->cmd, &begin_coding);
@@ -1228,7 +1228,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
   mem = gst_buffer_peek_memory (pic->out_buffer, 0);
 
   /* Setup the encode info */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   encode_info = (VkVideoEncodeInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_INFO_KHR,
     .pNext = NULL, /* to fill in callback */
@@ -1252,7 +1252,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
     .pReferenceSlots = ref_slots,
     .precedingExternallyEncodedBytes = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   encode_info.dstBufferRange -= encode_info.dstBufferOffset;
   encode_info.dstBufferRange = GST_ROUND_DOWN_N (encode_info.dstBufferRange,
@@ -1282,7 +1282,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
 
   barriers = gst_vulkan_operation_retrieve_image_barriers (priv->exec);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   vkCmdPipelineBarrier2 (cmd_buf->cmd, &(VkDependencyInfo) {
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
       .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
@@ -1290,7 +1290,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
       .imageMemoryBarrierCount = barriers->len,
       }
   );
-  /* *INDENT-ON* */
+  /* clang-format on */
   g_array_unref (barriers);
 
   gst_vulkan_operation_begin_query (priv->exec,
@@ -1298,11 +1298,11 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
   priv->vk.CmdEncodeVideo (cmd_buf->cmd, &encode_info);
   gst_vulkan_operation_end_query (priv->exec, 0);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   end_coding = (VkVideoEndCodingInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_END_CODING_INFO_KHR,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* 41.5 4. vkCmdEndVideoCodingKHR signals the end of the recording of the
    * Vulkan Video Context, as established by vkCmdBeginVideoCodingKHR. */
@@ -1455,7 +1455,7 @@ gst_vulkan_encoder_rate_control_mode_get_type (void)
   static GType type = 0;
 
   if (type == 0) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     static const GEnumValue values[] = {
       { VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR,
         "Driver's default", "default" },
@@ -1467,7 +1467,7 @@ gst_vulkan_encoder_rate_control_mode_get_type (void)
         "Variable bitrate", "vbr" },
       { 0, }
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     type = g_enum_register_static ("GstVulkanEncoderRateControlMode", values);
   }

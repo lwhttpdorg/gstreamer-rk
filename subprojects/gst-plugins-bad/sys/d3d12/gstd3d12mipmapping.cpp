@@ -42,9 +42,9 @@
 #include <atomic>
 #include <math.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_mip_mapping_debug);
 #define GST_CAT_DEFAULT gst_d3d12_mip_mapping_debug
@@ -81,7 +81,7 @@ enum
 #define DEFAULT_ASYNC_DEPTH 0
 #define DEFAULT_MIP_LEVELS 0
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct MipMappingContext
 {
   MipMappingContext (GstD3D12Device * dev)
@@ -134,7 +134,7 @@ struct GstD3D12MipMappingPrivate
 
   std::mutex lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12MipMapping
 {

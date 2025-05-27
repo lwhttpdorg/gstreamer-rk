@@ -32,10 +32,10 @@
 #include <queue>
 #include <algorithm>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace amf;
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * GstAmfEncPAActivityType:
@@ -348,8 +348,7 @@ typedef struct
   GstMapInfo info;
 } GstAmfEncoderFrameData;
 
-
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstAmfEncoderPrivate
 {
   gint64 adapter_luid = 0;
@@ -370,7 +369,7 @@ struct _GstAmfEncoderPrivate
   GstClockTime dts_offset = 0;
   GstClockTime last_dts = GST_CLOCK_TIME_NONE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define gst_amf_encoder_parent_class parent_class
 G_DEFINE_ABSTRACT_TYPE (GstAmfEncoder, gst_amf_encoder, GST_TYPE_VIDEO_ENCODER);
@@ -1443,7 +1442,7 @@ gst_amf_encoder_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 void
 gst_amf_encoder_set_subclass_data (GstAmfEncoder * encoder, gint64 adapter_luid,
     const wchar_t * codec_id)
@@ -1456,7 +1455,7 @@ gst_amf_encoder_set_subclass_data (GstAmfEncoder * encoder, gint64 adapter_luid,
   priv->adapter_luid = adapter_luid;
   priv->codec_id = codec_id;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 AMF_RESULT
 gst_amf_encoder_set_pre_analysis_options (GstAmfEncoder * self,

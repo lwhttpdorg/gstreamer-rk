@@ -478,7 +478,7 @@ GstIterator *
 gst_media_source_sample_map_iter_samples_by_dts (GstMediaSourceSampleMap * self,
     GMutex * lock, guint32 * master_cookie)
 {
-/* *INDENT-OFF* */
+  /* clang-format off */
   SampleMapIterator *it = (SampleMapIterator *) gst_iterator_new (
       sizeof (SampleMapIterator),
       GST_TYPE_MEDIA_SOURCE_CODED_FRAME_GROUP,
@@ -490,7 +490,7 @@ gst_media_source_sample_map_iter_samples_by_dts (GstMediaSourceSampleMap * self,
       (GstIteratorResyncFunction) iter_resync,
       (GstIteratorFreeFunction) iter_free
   );
-/* *INDENT-ON* */
+  /* clang-format on */
 
   it->map = gst_object_ref (self);
   it->reset_func = iter_reset_by_dts;
@@ -503,7 +503,7 @@ GstIterator *
 gst_media_source_sample_map_iter_samples_by_pts (GstMediaSourceSampleMap * self,
     GMutex * lock, guint32 * master_cookie)
 {
-/* *INDENT-OFF* */
+  /* clang-format off */
   SampleMapIterator *it = (SampleMapIterator *) gst_iterator_new (
       sizeof (SampleMapIterator),
       GST_TYPE_SAMPLE,
@@ -515,7 +515,7 @@ gst_media_source_sample_map_iter_samples_by_pts (GstMediaSourceSampleMap * self,
       (GstIteratorResyncFunction) iter_resync,
       (GstIteratorFreeFunction) iter_free
   );
-/* *INDENT-ON* */
+  /* clang-format on */
 
   it->map = gst_object_ref (self);
   it->reset_func = iter_reset_by_pts;

@@ -29,7 +29,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_dpb_storage_debug);
 #define GST_CAT_DEFAULT gst_d3d12_dpb_storage_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct OwnedTexture
@@ -51,7 +51,7 @@ struct GstD3D12DpbStoragePrivate
   std::vector<OwnedTexture> pool;
   ComPtr<ID3D12Resource> base_texture;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12DpbStorage
 {

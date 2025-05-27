@@ -31,9 +31,9 @@ typedef struct
   GstElement *nle_object;
 } NleQueryParentNleObject;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #define NLE_TYPE_QUERY_PARENT_NLE_OBJECT nle_query_parent_nle_object_get_type ()
 GType nle_query_parent_nle_object_get_type (void) G_GNUC_CONST;
-/* *INDENT-ON* */
+/* clang-format on */
 
 void nle_query_parent_nle_object_release (NleQueryParentNleObject * query);

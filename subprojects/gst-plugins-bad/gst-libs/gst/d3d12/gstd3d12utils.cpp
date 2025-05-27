@@ -27,9 +27,9 @@
 #include <atomic>
 #include <directx/d3dx12.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::recursive_mutex context_lock_;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_CONTEXT);
 
@@ -528,9 +528,9 @@ gst_d3d12_context_new (GstD3D12Device * device)
 gint64
 gst_d3d12_create_user_token (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static std::atomic<gint64> user_token { 0 };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return user_token.fetch_add (1);
 }

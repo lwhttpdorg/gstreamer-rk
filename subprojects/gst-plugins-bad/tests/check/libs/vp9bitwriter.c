@@ -21,7 +21,7 @@
 #include <gst/check/gstcheck.h>
 #include <gst/codecparsers/gstvp9bitwriter.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const guint8 vp9_frames[][1024] = {
   {
     0x84, 0x00, 0x40, 0x00, 0x00, 0x1f, 0xc0, 0x17, 0xd2, 0x03, 0x8e, 0x02, 0x02, 0x02, 0x02, 0x02,
@@ -210,7 +210,7 @@ static const guint8 vp9_frames[][1024] = {
 static const gint vp9_frames_size[] = {
   717, 673, 669, 698
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_START_TEST (test_vp9_bitwriter_superframe)
 {

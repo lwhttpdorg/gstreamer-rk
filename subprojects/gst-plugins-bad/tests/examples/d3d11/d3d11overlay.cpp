@@ -32,7 +32,7 @@
 #include <locale>
 #include <codecvt>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct OverlayContext
@@ -55,7 +55,7 @@ struct OverlayContext
 
   GMainLoop *loop = nullptr;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static gboolean
 bus_msg (GstBus * bus, GstMessage * msg, OverlayContext * context)
@@ -234,13 +234,13 @@ main (gint argc, gchar ** argv)
     std::wstring_convert < std::codecvt_utf8_utf16 < wchar_t >>converter;
     text_wide = converter.from_bytes (text);
   } else {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     text_wide =
         std::wstring (L"Hello GStreamer! 😊 안녕하세요 GStreamer! 😉 ") +
         std::wstring (L"नमस्ते GStreamer! ❤️ Bonjour GStreamer! 😁 ") +
         std::wstring (L"Hallo GStreamer! 😎 Hola GStreamer! 😍 ") +
         std::wstring (L"こんにちは GStreamer! ✌️ 你好 GStreamer! 👍");
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   text_height = (FLOAT) height / 10.0f;

@@ -32,9 +32,9 @@
 #include <d3d11_1.h>
 #include <dxgi1_2.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #define APP_DATA_PROP_NAME "AppData"
 

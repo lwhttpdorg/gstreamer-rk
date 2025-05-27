@@ -32,7 +32,7 @@ static HRESULT gst_wasapi2_ring_buffer_io_callback (GstWasapi2RingBuffer * buf);
 static HRESULT
 gst_wasapi2_ring_buffer_loopback_callback (GstWasapi2RingBuffer * buf);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GstWasapi2RingBufferPtr
@@ -145,7 +145,7 @@ struct GstWasapi2RingBufferPrivate
   std::shared_ptr<GstWasapi2RingBufferPtr> obj_ptr;
   std::atomic<bool> monitor_device_mute;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstWasapi2RingBuffer
 {

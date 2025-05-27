@@ -58,10 +58,10 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_mip_gen_debug);
 #define GST_CAT_DEFAULT gst_d3d12_mip_gen_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace DirectX;
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GenerateMipsCB
 {
@@ -97,7 +97,7 @@ struct _GstD3D12MipGen
 
   GstD3D12MipGenPrivate *priv;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d12_mip_gen_finalize (GObject * object);
 

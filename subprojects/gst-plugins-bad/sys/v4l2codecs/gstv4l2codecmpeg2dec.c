@@ -259,7 +259,7 @@ gst_v4l2_codec_mpeg2_dec_negotiate (GstVideoDecoder * decoder)
 {
   GstV4l2CodecMpeg2Dec *self = GST_V4L2_CODEC_MPEG2_DEC (decoder);
   GstMpeg2Decoder *mpeg2dec = GST_MPEG2_DECODER (decoder);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct v4l2_ext_control control[] = {
     {
       .id = V4L2_CID_STATELESS_MPEG2_SEQUENCE,
@@ -273,7 +273,7 @@ gst_v4l2_codec_mpeg2_dec_negotiate (GstVideoDecoder * decoder)
     },
   };
 
-  /* *INDENT-ON* */
+  /* clang-format on */
   GstCaps *peer_caps, *filter, *caps;
   GstStaticCaps *static_filter;
 
@@ -505,7 +505,7 @@ gst_v4l2_codec_mpeg2_dec_new_sequence (GstMpeg2Decoder * decoder,
       seq->non_intra_quantizer_matrix,
       sizeof (self->v4l2_quantisation.non_intra_quantiser_matrix));;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->v4l2_sequence = (struct v4l2_ctrl_mpeg2_sequence) {
     .horizontal_size = self->width,
     .vertical_size = self->height,
@@ -516,7 +516,7 @@ gst_v4l2_codec_mpeg2_dec_new_sequence (GstMpeg2Decoder * decoder,
     .chroma_format = seq_ext ? seq_ext->chroma_format : 0,
     .flags = seq_ext->progressive ? V4L2_MPEG2_SEQ_FLAG_PROGRESSIVE : 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (negotiation_needed) {
     gst_v4l2_codec_mpeg2_dec_streamoff (self);
@@ -635,8 +635,7 @@ gst_v4l2_codec_mpeg2_dec_start_picture (GstMpeg2Decoder * decoder,
   if (!gst_v4l2_codec_mpeg2_dec_ensure_bitstream (self))
     return GST_FLOW_ERROR;
 
-
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->v4l2_picture = (struct v4l2_ctrl_mpeg2_picture) {
     .backward_ref_ts = next_picture ?
         GST_CODEC_PICTURE_TS_NS (next_picture) : GST_CLOCK_TIME_NONE,
@@ -652,7 +651,7 @@ gst_v4l2_codec_mpeg2_dec_start_picture (GstMpeg2Decoder * decoder,
              (slice->pic_ext && slice->pic_ext->repeat_first_field ? V4L2_MPEG2_PIC_FLAG_REPEAT_FIRST : 0) |
              (slice->pic_ext && slice->pic_ext->progressive_frame ? V4L2_MPEG2_PIC_FLAG_PROGRESSIVE : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   _parse_picture_coding_type (&self->v4l2_picture, picture);
   _parse_picture_structure (&self->v4l2_picture, slice);
@@ -841,7 +840,7 @@ gst_v4l2_codec_mpeg2_dec_submit_bitstream (GstV4l2CodecMpeg2Dec * self,
   guint count = 0;
   guint flags = 0;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   /* Reserve space for controls */
   struct v4l2_ext_control control[] = {
     { }, /* sequence */
@@ -849,7 +848,7 @@ gst_v4l2_codec_mpeg2_dec_submit_bitstream (GstV4l2CodecMpeg2Dec * self,
     { }, /* slice */
     { }, /* quantization */
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (picture->structure != GST_MPEG_VIDEO_PICTURE_STRUCTURE_FRAME) {
     if (picture->first_field)

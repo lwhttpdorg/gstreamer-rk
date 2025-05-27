@@ -48,7 +48,7 @@ ensure_debug_category (void)
   } \
 } G_STMT_END;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef struct _GstCudaNvmmVTable
 {
   gboolean loaded;
@@ -56,7 +56,7 @@ typedef struct _GstCudaNvmmVTable
   GstBufferPool * (*gst_nvds_buffer_pool_new) (void);
 
 } GstCudaNvmmVTable;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstCudaNvmmVTable gst_cuda_nvmm_vtable = { 0, };
 

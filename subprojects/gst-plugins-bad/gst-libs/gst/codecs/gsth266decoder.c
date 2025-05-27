@@ -132,7 +132,7 @@ typedef struct
   guint32 MaxLumaPs;
 } GstH266LevelLimits;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 /* Table A.2 - General tier and level limits */
 static const GstH266LevelLimits level_limits[] = {
   /* level    idc                   MaxLumaPs */
@@ -151,7 +151,7 @@ static const GstH266LevelLimits level_limits[] = {
   {  "6.2",   GST_H266_LEVEL_L6_2,  35651584 },
   {  "6.3",   GST_H266_LEVEL_L6_3,  80216064 },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static gboolean
 gst_h266_decoder_start (GstVideoDecoder * decoder)

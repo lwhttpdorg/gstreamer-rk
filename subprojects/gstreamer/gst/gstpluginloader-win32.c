@@ -980,7 +980,7 @@ gst_plugin_loader_server_load (GstPluginLoader * self,
   return win32_plugin_loader_run (loader, 60000);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static gboolean
 is_path_env_string (wchar_t *str)
 {
@@ -997,7 +997,7 @@ is_path_env_string (wchar_t *str)
 
   return FALSE;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static wchar_t *
 generate_env_string (void)

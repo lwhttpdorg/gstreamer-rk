@@ -31,7 +31,7 @@
 #include <string.h>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_transform_debug);
@@ -214,7 +214,7 @@ private:
 
   bool running_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 enum
 {

@@ -34,7 +34,7 @@
 #include <wrl.h>
 #include <wrl/wrappers/corewrappers.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 
 using namespace Microsoft::WRL;
 using namespace Microsoft::WRL::Wrappers;
@@ -55,7 +55,7 @@ typedef struct _SwapChainPanelWinRTStorage
   HANDLE cancellable;
   EventRegistrationToken event_token;
 } SwapChainPanelWinRTStorage;
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11WindowSwapChainPanel
 {
@@ -95,7 +95,7 @@ gst_d3d11_window_swap_chain_panel_on_resize_sync (GstD3D11Window * window);
 static void
 gst_d3d11_window_swap_chain_panel_unprepare (GstD3D11Window * window);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class PanelResizeHandler
     : public RuntimeClass<RuntimeClassFlags<ClassicCom>,
         Xaml::ISizeChangedEventHandler>
@@ -199,7 +199,7 @@ get_panel_size (const ComPtr<Core::ICoreDispatcher> &dispatcher,
 
   return hr;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_d3d11_window_swap_chain_panel_class_init (GstD3D11WindowSwapChainPanelClass
@@ -237,7 +237,7 @@ gst_d3d11_window_swap_chain_panel_init (GstD3D11WindowSwapChainPanel * self)
   self->storage->cancellable = CreateEvent (NULL, TRUE, FALSE, NULL);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static void
 gst_d3d11_window_swap_chain_panel_constructed (GObject * object)
 {
@@ -307,7 +307,7 @@ error:
   GST_ERROR_OBJECT (self, "Invalid window handle");
   return;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_d3d11_window_swap_chain_panel_dispose (GObject * object)
@@ -317,7 +317,7 @@ gst_d3d11_window_swap_chain_panel_dispose (GObject * object)
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static void
 gst_d3d11_window_swap_chain_panel_unprepare (GstD3D11Window * window)
 {
@@ -347,7 +347,7 @@ gst_d3d11_window_swap_chain_panel_unprepare (GstD3D11Window * window)
 
   self->storage = NULL;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static IDXGISwapChain1 *
 create_swap_chain_for_composition (GstD3D11WindowSwapChainPanel * self,
@@ -378,7 +378,7 @@ create_swap_chain_for_composition (GstD3D11WindowSwapChainPanel * self,
   return swap_chain;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static gboolean
 gst_d3d11_window_swap_chain_panel_create_swap_chain (GstD3D11Window * window,
     DXGI_FORMAT format, guint width, guint height, guint swapchain_flags,
@@ -431,7 +431,7 @@ gst_d3d11_window_swap_chain_panel_create_swap_chain (GstD3D11Window * window,
 
   return TRUE;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstFlowReturn
 gst_d3d11_window_swap_chain_panel_present (GstD3D11Window * window,

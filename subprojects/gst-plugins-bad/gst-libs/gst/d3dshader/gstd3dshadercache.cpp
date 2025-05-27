@@ -32,7 +32,7 @@
 #include "converter-hlsl/hlsl.h"
 #include "plugin-hlsl/hlsl.h"
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 #ifdef HLSL_PRECOMPILED
@@ -55,7 +55,7 @@ static std::vector<std::pair<std::string, ID3DBlob *>> g_compiled_blobs;
 static std::mutex g_blob_lock;
 static std::mutex g_ps_cache_lock;
 
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct ShaderItem
 {

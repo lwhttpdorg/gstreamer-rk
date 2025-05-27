@@ -64,7 +64,7 @@ typedef struct
   GstVaapiDisplayCreateFromHandleFunc create_display_from_handle;
 } DisplayMap;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const DisplayMap g_display_map[] = {
 #if GST_VAAPI_USE_WAYLAND
   {"wayland",
@@ -94,7 +94,7 @@ static const DisplayMap g_display_map[] = {
 #endif
   {NULL,}
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstVaapiDisplay *
 gst_vaapi_create_display (GstVaapiDisplayType display_type,
@@ -1134,7 +1134,7 @@ gst_vaapi_build_caps_from_formats (GArray * formats, gint min_width,
 /* these are the commonly used formats in VA for chromas, by i965, iHD and
  * gallium. We could query the VA config object, but for that there's GstVA
  * plugin. */
-/* *INDENT-OFF* */
+/* clang-format off */
 const static struct {
   GstVaapiChromaType chroma;
   GstVideoFormat format;
@@ -1149,7 +1149,7 @@ const static struct {
   { GST_VAAPI_CHROMA_TYPE_YUV422_12BPP, GST_VIDEO_FORMAT_Y212_LE },
   { GST_VAAPI_CHROMA_TYPE_YUV444_12BPP, GST_VIDEO_FORMAT_Y412_LE }
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * gst_vaapi_build_template_raw_caps_by_codec:

@@ -149,7 +149,7 @@ enum
 /* It is used to compensate timestamp for input mfx surface */
 #define PTS_OFFSET                       GST_SECOND * 60 * 60 * 1000
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *doc_sink_caps_str =
     GST_VIDEO_CAPS_MAKE (
         "{ NV12, YV12, I420, P010_10LE, YUY2, UYVY, BGRA, BGRx, RGB16, VUYA, "
@@ -173,7 +173,7 @@ static const gchar *doc_src_caps_str =
         "{ NV12, VUYA, P010_10LE }") " ;"
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES ("memory:D3D11Memory",
         "{ NV12, VUYA, P010_10LE }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstElementClass *parent_class = NULL;
 

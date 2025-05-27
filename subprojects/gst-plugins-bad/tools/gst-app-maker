@@ -218,7 +218,7 @@ gst_replace_create_pipeline_playbin (GstReplace *replace, const char *uri)
 {
   GstElement *pipeline;
   GError *error = NULL;
-  
+
   pipeline = gst_pipeline_new (NULL);
   gst_bin_add (GST_BIN(pipeline),
       gst_element_factory_make ("playbin", "source"));
@@ -249,7 +249,7 @@ gst_replace_create_pipeline (GstReplace *replace)
   GString *pipe_desc;
   GstElement *pipeline;
   GError *error = NULL;
-  
+
   pipe_desc = g_string_new ("");
 
   g_string_append (pipe_desc, "videotestsrc name=source num-buffers=100 ! ");
@@ -543,7 +543,7 @@ generate | sed \
   -e "s/gstreplace/$gstreplace/g" \
   -e "s/replace/$replace/g" >$gstreplace.c
 
-gst-indent-1.0 $gstreplace.c
+clang-format -i $gstreplace.c
 
 gcc -O2 -Wall $(pkg-config --cflags gstreamer-1.0) -c -o $gstreplace.o $gstreplace.c
 gcc -o $gstreplace $gstreplace.o $(pkg-config --libs gstreamer-1.0)

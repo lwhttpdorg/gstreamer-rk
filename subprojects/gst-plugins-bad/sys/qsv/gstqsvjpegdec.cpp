@@ -204,7 +204,7 @@ gst_qsv_jpeg_dec_register (GstPlugin * plugin, guint rank, guint impl_index,
   src_caps_str += ", width=(int) [ 1, " + std::to_string (resolution) + " ]";
   src_caps_str += ", height=(int) [ 1, " + std::to_string (resolution) + " ]";
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (supported_formats.size () > 1) {
     src_caps_str += ", format=(string) { ";
     bool first = true;
@@ -220,7 +220,7 @@ gst_qsv_jpeg_dec_register (GstPlugin * plugin, guint rank, guint impl_index,
   } else {
     src_caps_str += ", format=(string) " + supported_formats[0];
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GstCaps *src_caps = gst_caps_from_string (src_caps_str.c_str ());
 

@@ -184,7 +184,7 @@ resolution_change_probe (GstPad * pad, GstPadProbeInfo * info,
 static void
 print_keyboard_help (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static struct
   {
     const gchar *key_desc;
@@ -212,7 +212,7 @@ print_keyboard_help (void)
     "f", "Force to set a key frame"}, {
     "k", "show keyboard shortcuts"}
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   guint i, chars_to_pad, desc_len, max_desc_len = 0;
 
@@ -452,7 +452,7 @@ main (gint argc, gchar ** argv)
   guint idx;
   gboolean res;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   const GOptionEntry options[] = {
     {"codec", 'c', 0, G_OPTION_ARG_STRING, &codec,
         "Codec to test: "
@@ -477,7 +477,7 @@ main (gint argc, gchar ** argv)
     { "vp9lp", "vavp9lpenc", "vp9parse", "vavp9dec" },
     { "av1lp", "vaav1lpenc", "av1parse", "vaav1dec" },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
 #define MAKE_ELEMENT_AND_ADD(elem, name) G_STMT_START { \
   GstElement *_elem = gst_element_factory_make (name, NULL); \

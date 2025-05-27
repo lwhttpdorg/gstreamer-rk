@@ -292,13 +292,13 @@ gst_play_init (GstPlay * self)
   self->api_bus = gst_bus_new ();
   gst_object_set_name (GST_OBJECT (self->api_bus), "api_bus");
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->config = gst_structure_new_static_str ("play-config",
       "position-interval-update", G_TYPE_UINT, DEFAULT_POSITION_UPDATE_INTERVAL_MS,
       "accurate-seek", G_TYPE_BOOLEAN, FALSE,
       "pipeline-dump-error-in-details", G_TYPE_BOOLEAN, FALSE,
       NULL);
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   self->seek_pending = FALSE;
   self->seek_position = GST_CLOCK_TIME_NONE;

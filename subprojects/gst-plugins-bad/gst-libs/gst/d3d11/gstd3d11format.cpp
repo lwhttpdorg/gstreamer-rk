@@ -904,7 +904,7 @@ gst_video_info_apply_dxgi_color_space (DXGI_COLOR_SPACE_TYPE color_space,
 gchar *
 gst_d3d11_dump_color_matrix (GstD3D11ColorMatrix * matrix)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static const gchar format[] =
       "[MATRIX]\n"
       "|% .6f, % .6f, % .6f|\n"
@@ -916,7 +916,7 @@ gst_d3d11_dump_color_matrix (GstD3D11ColorMatrix * matrix)
       "|% .6f, % .6f, % .6f|\n"
       "[MAX]\n"
       "|% .6f, % .6f, % .6f|";
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   g_return_val_if_fail (matrix != nullptr, nullptr);
 

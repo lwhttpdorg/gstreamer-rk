@@ -28,9 +28,9 @@
 #include <mutex>
 #include <condition_variable>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_START_TEST (test_device_equal)
 {

@@ -38,9 +38,9 @@
 #include <wrl.h>
 #include <string.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_mf_aac_dec_debug);
 #define GST_CAT_DEFAULT gst_mf_aac_dec_debug

@@ -20,9 +20,9 @@
 #include "gstwicimagingfactory.h"
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_wic_imaging_factory_debug);
 #define GST_CAT_DEFAULT gst_wic_imaging_factory_debug

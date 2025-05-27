@@ -45,9 +45,9 @@
 #include <vector>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d11_ipc_sink_debug);
 #define GST_CAT_DEFAULT gst_d3d11_ipc_sink_debug
@@ -69,7 +69,7 @@ enum
 #define DEFAULT_PIPE_NAME "\\\\.\\pipe\\gst.d3d11.ipc"
 #define DEFAULT_MIN_BUFFER_SIZE 0
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D11IpcSinkPrivate
 {
   GstD3D11Device *device = nullptr;
@@ -90,7 +90,7 @@ struct GstD3D11IpcSinkPrivate
   std::string pipe_name = DEFAULT_PIPE_NAME;
   guint buffer_size = DEFAULT_MIN_BUFFER_SIZE;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D11IpcSink
 {

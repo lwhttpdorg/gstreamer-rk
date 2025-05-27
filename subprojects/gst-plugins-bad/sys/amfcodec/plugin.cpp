@@ -39,10 +39,10 @@
 
 #include <glib/gi18n-lib.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace amf;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static gboolean
 plugin_init (GstPlugin * plugin)

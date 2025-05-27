@@ -154,7 +154,7 @@ static gboolean
 gst_v4l2_decoder_h264_api_check (GstV4l2Decoder * decoder)
 {
   guint i, ret_size;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   #define SET_ID(cid) .id = (cid), .name = #cid
   struct
   {
@@ -187,7 +187,7 @@ gst_v4l2_decoder_h264_api_check (GstV4l2Decoder * decoder)
     }
   };
   #undef SET_ID
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /*
    * Compatibility check: make sure the pointer controls are
@@ -219,7 +219,7 @@ gst_v4l2_codec_h264_dec_open (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH264Dec *self = GST_V4L2_CODEC_H264_DEC (decoder);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct v4l2_ext_control control[] = {
     {
       .id = V4L2_CID_STATELESS_H264_DECODE_MODE,
@@ -228,7 +228,7 @@ gst_v4l2_codec_h264_dec_open (GstVideoDecoder * decoder)
       .id = V4L2_CID_STATELESS_H264_START_CODE,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_v4l2_decoder_open (self->decoder)) {
     GST_ELEMENT_ERROR (self, RESOURCE, OPEN_READ_WRITE,
@@ -342,7 +342,7 @@ gst_v4l2_codec_h264_dec_negotiate (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH264Dec *self = GST_V4L2_CODEC_H264_DEC (decoder);
   GstH264Decoder *h264dec = GST_H264_DECODER (decoder);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   struct v4l2_ext_control control[] = {
     {
       .id = V4L2_CID_STATELESS_H264_SPS,
@@ -350,7 +350,7 @@ gst_v4l2_codec_h264_dec_negotiate (GstVideoDecoder * decoder)
       .size = sizeof (self->sps),
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
   GstCaps *peer_caps, *filter, *caps;
   GstStaticCaps *static_filter;
 
@@ -521,7 +521,7 @@ gst_v4l2_codec_h264_dec_fill_sequence (GstV4l2CodecH264Dec * self,
 {
   gint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->sps = (struct v4l2_ctrl_h264_sps) {
     .profile_idc = sps->profile_idc,
     .constraint_set_flags = (sps->constraint_set0_flag)
@@ -550,7 +550,7 @@ gst_v4l2_codec_h264_dec_fill_sequence (GstV4l2CodecH264Dec * self,
         | (sps->mb_adaptive_frame_field_flag ? V4L2_H264_SPS_FLAG_MB_ADAPTIVE_FRAME_FIELD : 0)
         | (sps->direct_8x8_inference_flag ? V4L2_H264_SPS_FLAG_DIRECT_8X8_INFERENCE : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < sps->num_ref_frames_in_pic_order_cnt_cycle; i++)
     self->sps.offset_for_ref_frame[i] = sps->offset_for_ref_frame[i];
@@ -559,7 +559,7 @@ gst_v4l2_codec_h264_dec_fill_sequence (GstV4l2CodecH264Dec * self,
 static void
 gst_v4l2_codec_h264_dec_fill_pps (GstV4l2CodecH264Dec * self, GstH264PPS * pps)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->pps = (struct v4l2_ctrl_h264_pps) {
     .pic_parameter_set_id = pps->id,
     .seq_parameter_set_id = pps->sequence->id,
@@ -581,7 +581,7 @@ gst_v4l2_codec_h264_dec_fill_pps (GstV4l2CodecH264Dec * self, GstH264PPS * pps)
         | (pps->transform_8x8_mode_flag ? V4L2_H264_PPS_FLAG_TRANSFORM_8X8_MODE : 0)
         | (self->scaling_matrix_present ? V4L2_H264_PPS_FLAG_SCALING_MATRIX_PRESENT : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static void
@@ -614,7 +614,7 @@ gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
   GArray *refs = gst_h264_dpb_get_pictures_all (dpb);
   gint i, entry_id = 0;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->decode_params = (struct v4l2_ctrl_h264_decode_params) {
     .nal_ref_idc = picture->nal_ref_idc,
     .frame_num = slice_hdr->frame_num,
@@ -630,7 +630,7 @@ gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
              (slice_hdr->field_pic_flag ? V4L2_H264_DECODE_PARAM_FLAG_FIELD_PIC : 0) |
              (slice_hdr->bottom_field_flag ? V4L2_H264_DECODE_PARAM_FLAG_BOTTOM_FIELD : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   switch (picture->field) {
     case GST_H264_PICTURE_FIELD_FRAME:
@@ -677,7 +677,7 @@ gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
     }
 
     entry = &self->decode_params.dpb[entry_id++];
-    /* *INDENT-OFF* */
+    /* clang-format off */
     *entry = (struct v4l2_h264_dpb_entry) {
       /*
        * The reference is multiplied by 1000 because it's was set as micro
@@ -691,7 +691,7 @@ gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
           | (GST_H264_PICTURE_IS_LONG_TERM_REF (ref_pic) ? V4L2_H264_DPB_ENTRY_FLAG_LONG_TERM : 0)
           | (ref_pic->field_pic_flag ? V4L2_H264_DPB_ENTRY_FLAG_FIELD : 0),
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     switch (ref_pic->field) {
       case GST_H264_PICTURE_FIELD_FRAME:
@@ -731,12 +731,12 @@ gst_v4l2_codec_h264_dec_fill_pred_weight (GstV4l2CodecH264Dec * self,
 {
   gint i, j;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   self->pred_weight = (struct v4l2_ctrl_h264_pred_weights) {
     .luma_log2_weight_denom = slice_hdr->pred_weight_table.luma_log2_weight_denom,
     .chroma_log2_weight_denom = slice_hdr->pred_weight_table.chroma_log2_weight_denom,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i <= slice_hdr->num_ref_idx_l0_active_minus1; i++) {
     self->pred_weight.weight_factors[0].luma_weight[i] =
@@ -797,7 +797,7 @@ gst_v4l2_codec_h264_dec_fill_slice_params (GstV4l2CodecH264Dec * self,
   if (self->slice_params->len < self->num_slices)
     g_array_set_size (self->slice_params, self->slice_params->len * 2);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   params = &g_array_index (self->slice_params, struct v4l2_ctrl_h264_slice_params, n);
   *params = (struct v4l2_ctrl_h264_slice_params) {
     .header_bit_size = get_slice_header_bit_size (slice),
@@ -816,7 +816,7 @@ gst_v4l2_codec_h264_dec_fill_slice_params (GstV4l2CodecH264Dec * self,
     .flags = (slice->header.direct_spatial_mv_pred_flag ? V4L2_H264_SLICE_FLAG_DIRECT_SPATIAL_MV_PRED : 0) |
              (slice->header.sp_for_switch_flag ? V4L2_H264_SLICE_FLAG_SP_FOR_SWITCH : 0),
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static guint8
@@ -1211,7 +1211,7 @@ gst_v4l2_codec_h264_dec_submit_bitstream (GstV4l2CodecH264Dec * self,
   gboolean ret = FALSE;
   guint num_controls = 0;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   /* Reserve space for controls */
   struct v4l2_ext_control control[] = {
     { }, /* SPS */
@@ -1221,7 +1221,7 @@ gst_v4l2_codec_h264_dec_submit_bitstream (GstV4l2CodecH264Dec * self,
     { }, /* SCALING_MATRIX */
     { }, /* PRED_WEIGHTS */
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   prev_request = gst_h264_picture_get_user_data (picture);
 

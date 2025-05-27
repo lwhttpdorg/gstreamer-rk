@@ -221,7 +221,7 @@ exit:
 typedef HANDLE (WINAPI * AvSetMmThreadCharacteristicsPtr) (LPCSTR, LPDWORD);
 typedef BOOL (WINAPI * AvRevertMmThreadCharacteristicsPtr) (HANDLE);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static struct
 {
   HMODULE dll;
@@ -229,7 +229,7 @@ static struct
   AvSetMmThreadCharacteristicsPtr AvSetMmThreadCharacteristics;
   AvRevertMmThreadCharacteristicsPtr AvRevertMmThreadCharacteristics;
 } _gst_audio_avrt_tbl = { 0 };
-/* *INDENT-ON* */
+/* clang-format on */
 #endif
 
 static gboolean

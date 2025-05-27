@@ -29,9 +29,9 @@
 #include <gst/d3d12/gstd3d12.h>
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_EXTERN (gst_qsv_allocator_debug);
 #define GST_CAT_DEFAULT gst_qsv_allocator_debug

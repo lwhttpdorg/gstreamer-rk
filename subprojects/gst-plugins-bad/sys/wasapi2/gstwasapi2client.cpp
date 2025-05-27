@@ -42,7 +42,7 @@
 #include <codecvt>
 #include <atomic>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace ABI::Windows::ApplicationModel::Core;
 using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Foundation::Collections;
@@ -90,7 +90,7 @@ GST_DEBUG_CATEGORY_EXTERN (gst_wasapi2_client_debug);
 #define GST_CAT_DEFAULT gst_wasapi2_client_debug
 
 G_END_DECLS
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_wasapi2_client_on_device_activated (GstWasapi2Client * client,
@@ -104,7 +104,7 @@ static void
 gst_wasapi2_client_set_endpoint_muted (GstWasapi2Client * client,
     gboolean muted);
 
-/* *INDENT-OFF* */
+/* clang-format off */
 class GstWasapiDeviceActivator
     : public RuntimeClass<RuntimeClassFlags<ClassicCom>, FtmBase,
         IActivateAudioInterfaceCompletionHandler>
@@ -325,7 +325,7 @@ public:
 private:
   GWeakRef client_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 typedef enum
 {
@@ -695,7 +695,7 @@ gst_wasapi2_client_set_endpoint_muted (GstWasapi2Client * self, gboolean muted)
   self->priv->is_endpoint_muted.store (muted, std::memory_order_release);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::string
 convert_wstring_to_string (const std::wstring &wstr)
 {
@@ -738,20 +738,20 @@ gst_wasapi2_client_get_default_device_id (GstWasapi2Client * self)
 
   return ret;
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_wasapi2_client_activate_async (GstWasapi2Client * self,
     GstWasapiDeviceActivator * activator,
     GstWasapiDeviceActivator * endpoint_volume_activator)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<IDeviceInformationStatics> device_info_static;
   ComPtr<IAsyncOperation<DeviceInformationCollection*>> async_op;
   ComPtr<IVectorView<DeviceInformation*>> device_list;
   HStringReference hstr_device_info =
       HStringReference(RuntimeClass_Windows_Devices_Enumeration_DeviceInformation);
-  /* *INDENT-ON* */
+  /* clang-format on */
   HRESULT hr;
   DeviceClass device_class;
   unsigned int count = 0;
@@ -872,9 +872,9 @@ gst_wasapi2_client_activate_async (GstWasapi2Client * self,
   if (!gst_wasapi2_result (hr))
     return;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   hr = SyncWait<DeviceInformationCollection*>(async_op.Get ());
-  /* *INDENT-ON* */
+  /* clang-format on */
   if (!gst_wasapi2_result (hr))
     return;
 
@@ -910,9 +910,9 @@ gst_wasapi2_client_activate_async (GstWasapi2Client * self,
   }
 
   for (unsigned int i = 0; i < count; i++) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     ComPtr<IDeviceInformation> device_info;
-    /* *INDENT-ON* */
+    /* clang-format on */
     HString id;
     HString name;
     boolean b_value;
@@ -1080,13 +1080,13 @@ gst_wasapi2_client_thread_func (GstWasapi2Client * self)
   RoInitializeWrapper initialize (RO_INIT_MULTITHREADED);
   GSource *source;
   HRESULT hr;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<GstWasapiDeviceActivator> client_activator;
   ComPtr<GstWasapiDeviceActivator> endpoint_volume_activator;
 
   hr = MakeAndInitialize<GstWasapiDeviceActivator> (&client_activator,
       self, self->dispatcher, GstWasapiDeviceActivator::WASAPI_IFACE_AUDIO_CLIENT);
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (!gst_wasapi2_result (hr)) {
     GST_ERROR_OBJECT (self, "Could not create activator object");
@@ -1216,13 +1216,13 @@ gst_wasapi2_client_ensure_activation (GstWasapi2Client * client)
 static HRESULT
 find_dispatcher (ICoreDispatcher ** dispatcher)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   HStringReference hstr_core_app =
       HStringReference(RuntimeClass_Windows_ApplicationModel_Core_CoreApplication);
   ComPtr<ICoreApplication> core_app;
   ComPtr<ICoreApplicationView> core_app_view;
   ComPtr<ICoreWindow> core_window;
-  /* *INDENT-ON* */
+  /* clang-format on */
   HRESULT hr;
 
   hr = GetActivationFactory (hstr_core_app.Get (), &core_app);
@@ -1246,9 +1246,9 @@ gst_wasapi2_client_new (GstWasapi2ClientDeviceClass device_class,
     gpointer dispatcher)
 {
   GstWasapi2Client *self;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<ICoreDispatcher> core_dispatcher;
-  /* *INDENT-ON* */
+  /* clang-format on */
   /* Multiple COM init is allowed */
   RoInitializeWrapper init_wrapper (RO_INIT_MULTITHREADED);
 
@@ -1293,9 +1293,9 @@ gst_wasapi2_client_enumerate (GstWasapi2ClientDeviceClass device_class,
     gint device_index, GstWasapi2Client ** client)
 {
   GstWasapi2Client *self;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   ComPtr<ICoreDispatcher> core_dispatcher;
-  /* *INDENT-ON* */
+  /* clang-format on */
   /* Multiple COM init is allowed */
   RoInitializeWrapper init_wrapper (RO_INIT_MULTITHREADED);
 

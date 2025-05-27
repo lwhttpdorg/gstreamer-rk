@@ -1265,7 +1265,7 @@ gst_qsv_h264_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
   gst_clear_caps (&allowed_caps);
 
   /* Profile allows interlaced? */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   gboolean can_support_interlaced = FALSE;
   for (const auto &iter: downstream_profiles) {
     if (iter == "high" || iter == "main") {
@@ -1273,7 +1273,7 @@ gst_qsv_h264_enc_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
       break;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GST_DEBUG_OBJECT (self, "Downstream %s support interlaced format",
       can_support_interlaced ? "can" : "cannot");
@@ -1590,7 +1590,7 @@ gst_qsv_h264_enc_set_format (GstQsvEncoder * encoder,
   }
 
   /* we have our preference order */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (guint i = 0; i < G_N_ELEMENTS (profile_map); i++) {
     auto it = downstream_profiles.find (profile_map[i].profile_str);
     if (it != downstream_profiles.end ()) {
@@ -1598,7 +1598,7 @@ gst_qsv_h264_enc_set_format (GstQsvEncoder * encoder,
       break;
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (profile_str.empty ()) {
     GST_WARNING_OBJECT (self, "Failed to determine profile");
@@ -2045,14 +2045,14 @@ gst_qsv_h264_enc_create_output_buffer (GstQsvEncoder * encoder,
     gst_buffer_map (buf, &info, GST_MAP_WRITE);
     data = (guint8 *) info.data;
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     for (const auto & it : nalu_list) {
       GST_WRITE_UINT32_BE (data, it.size);
       data += 4;
       memcpy (data, it.data + it.offset, it.size);
       data += it.size;
     }
-    /* *INDENT-ON* */
+    /* clang-format on */
 
     gst_buffer_unmap (buf, &info);
   }
@@ -2191,7 +2191,7 @@ gst_qsv_h264_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
    * methods, since the device might not be able to support some of them */
 
   /* Check interlaced encoding */
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: supported_profiles) {
     if (iter == MFX_PROFILE_AVC_MAIN ||
         iter == MFX_PROFILE_AVC_HIGH) {
@@ -2223,7 +2223,7 @@ gst_qsv_h264_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
       }
     }
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* To cover both landscape and portrait,
    * select max value (width in this case) */
@@ -2269,7 +2269,7 @@ gst_qsv_h264_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
 
   src_caps_str += ", stream-format= (string) { avc, byte-stream }";
   src_caps_str += ", alignment=(string) au";
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (supported_profiles.size () > 1) {
     src_caps_str += ", profile=(string) { ";
     bool first = true;
@@ -2286,7 +2286,7 @@ gst_qsv_h264_enc_register (GstPlugin * plugin, guint rank, guint impl_index,
     src_caps_str += ", profile=(string) ";
     src_caps_str += gst_qsv_h264_profile_to_string (supported_profiles[0]);
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   GstCaps *src_caps = gst_caps_from_string (src_caps_str.c_str ());
 

@@ -296,7 +296,7 @@ upload_buffer_to_image (GstBufferPool * pool, GstBuffer * inbuf,
     else
       plane_aspect = aspects[i];
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     region = (VkBufferImageCopy) {
         .bufferOffset = 0,
         .bufferRowLength = GST_VIDEO_INFO_COMP_WIDTH (&in_info, i),
@@ -392,7 +392,7 @@ setup_codec_pic (GstVulkanEncoderPicture * pic, VkVideoEncodeInfoKHR * info,
   pic->dpb_slot.pNext = &frame->dpb_slot_info;
 
   {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     frame->enc_pic_info = (VkVideoEncodeH265PictureInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PICTURE_INFO_KHR,
       .pNext = NULL,
@@ -405,7 +405,7 @@ setup_codec_pic (GstVulkanEncoderPicture * pic, VkVideoEncodeInfoKHR * info,
       .pNext = NULL,
       .pStdReferenceInfo = &frame->ref_info,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 }
 
@@ -416,7 +416,7 @@ setup_rc_codec (GstVulkanEncoderPicture * pic,
 {
   GstVulkanH265EncodeFrame *frame = (GstVulkanH265EncodeFrame *) pic;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame->rc_info = (VkVideoEncodeH265RateControlInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_KHR,
     .flags = VK_VIDEO_ENCODE_H264_RATE_CONTROL_REFERENCE_PATTERN_FLAT_BIT_KHR |
@@ -426,7 +426,7 @@ setup_rc_codec (GstVulkanEncoderPicture * pic,
     .idrPeriod = 1,
     .consecutiveBFrameCount = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   rc_info->pNext = &frame->rc_info;
 }
@@ -455,7 +455,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
   ref_pics_num = list0_num + list1_num;
 
   frame->slice_wt = (StdVideoEncodeH265WeightTable) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoEncodeH265WeightTableFlags) {
         .luma_weight_l0_flag = 0,
         .chroma_weight_l0_flag = 0,
@@ -472,11 +472,11 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     .luma_offset_l1 = { 0 },
     .delta_chroma_weight_l1 = { { 0 } },
     .delta_chroma_offset_l1 = { { 0 } },
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   frame->slice_hdr = (StdVideoEncodeH265SliceSegmentHeader) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoEncodeH265SliceSegmentHeaderFlags) {
       .first_slice_segment_in_pic_flag = 1,
       .dependent_slice_segment_flag = 0,
@@ -504,7 +504,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     .slice_act_cr_qp_offset = 0,
     .slice_qp_delta = 0,
     .pWeightTable = &frame->slice_wt,
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   if (list0_num)
@@ -513,7 +513,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     delta_poc_s1_minus1 = list1[0]->pic_num - frame->pic_num - 1;
 
   frame->short_term_ref_pic_set = (StdVideoH265ShortTermRefPicSet) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoH265ShortTermRefPicSetFlags) {
       .inter_ref_pic_set_prediction_flag = 0u,
       .delta_rps_sign = 0u,
@@ -528,11 +528,11 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     .num_positive_pics = list1_num,
     .delta_poc_s0_minus1 = {delta_poc_s0_minus1},
     .delta_poc_s1_minus1 = {delta_poc_s1_minus1},
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   frame->pic_info = (StdVideoEncodeH265PictureInfo) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     .flags = (StdVideoEncodeH265PictureInfoFlags) {
           .is_reference = frame->is_ref,
           .IrapPicFlag = (picture_type == STD_VIDEO_H265_PICTURE_TYPE_IDR),
@@ -551,12 +551,12 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     .PicOrderCntVal = frame->pic_num,
     .pShortTermRefPicSet = &frame->short_term_ref_pic_set,
     .pLongTermRefPics = NULL,
-    /* *INDENT-ON* */
+    /* clang-format on */
   };
 
   if (ref_pics_num > 0) {
     frame->ref_list_info = (StdVideoEncodeH265ReferenceListsInfo) {
-      /* *INDENT-OFF* */
+        /* clang-format off */
       .flags = (StdVideoEncodeH265ReferenceListsInfoFlags) {
         .ref_pic_list_modification_flag_l0 = 0,
         .ref_pic_list_modification_flag_l1 = 0,
@@ -567,7 +567,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
       .RefPicList1 = {0, },
       .list_entry_l0 = {0, },
       .list_entry_l1 = {0, },
-      /* *INDENT-ON* */
+        /* clang-format on */
     };
     frame->pic_info.pRefLists = &frame->ref_list_info;
   }
@@ -577,7 +577,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
   memset (frame->ref_list_info.RefPicList1, STD_VIDEO_H265_NO_REFERENCE_PICTURE,
       STD_VIDEO_H265_MAX_NUM_LIST_REF);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   frame->slice_info = (VkVideoEncodeH265NaluSliceSegmentInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_INFO_KHR,
     .pNext = NULL,
@@ -600,7 +600,7 @@ encode_frame (GstVulkanEncoder * enc, GstVulkanH265EncodeFrame * frame,
     .PicOrderCntVal = frame->pic_num,
     .TemporalId = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   picture->codec_rc_info = &frame->rc_info;
 
@@ -739,7 +739,7 @@ setup_h265_encoder (uint32_t width, uint32_t height, gint vps_id,
   gint max_transform_hierarchy;
   GstVulkanEncoderQualityProperties quality_props;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   profile = (GstVulkanVideoProfile) {
     .profile = {
       .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR,
@@ -767,7 +767,7 @@ setup_h265_encoder (uint32_t width, uint32_t height, gint vps_id,
       .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_QUALITY_LEVEL_PROPERTIES_KHR,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (i = 0; i < instance->n_physical_devices; i++) {
     GstVulkanDevice *device = gst_vulkan_device_new_with_index (instance, i);
@@ -887,7 +887,7 @@ setup_h265_encoder (uint32_t width, uint32_t height, gint vps_id,
   h265_std_pps.pps_seq_parameter_set_id = sps_id;
   h265_std_pps.pps_pic_parameter_set_id = pps_id;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   params_add = (VkVideoEncodeH265SessionParametersAddInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR,
     .pStdVPSs = &h265_std_vps,
@@ -904,7 +904,7 @@ setup_h265_encoder (uint32_t width, uint32_t height, gint vps_id,
     .maxStdPPSCount = 1,
     .pParametersAddInfo = &params_add
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   fail_unless (gst_vulkan_encoder_update_video_session_parameters (enc,
           &enc_params, &err));

@@ -28,9 +28,9 @@
 #define _XM_NO_INTRINSICS_
 #include <DirectXMath.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace DirectX;
-/* *INDENT-ON* */
+/* clang-format on */
 
 /* Enable this once we use debug print in this file */
 #if 0

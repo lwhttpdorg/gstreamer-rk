@@ -48,12 +48,12 @@
 
 #ifdef HAVE_DXGIDEBUG_H
 #include <dxgidebug.h>
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef HRESULT (WINAPI * DXGIGetDebugInterface_t) (REFIID riid, void **iface);
 static DXGIGetDebugInterface_t GstDXGIGetDebugInterface = nullptr;
 static IDXGIInfoQueue *g_dxgi_info_queue = nullptr;
 static std::mutex g_dxgi_debug_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 #endif
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_sdk_debug);
@@ -113,7 +113,7 @@ enum
 
 static GParamSpec *pspec_removed_reason = nullptr;
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct DeviceInner
@@ -529,7 +529,7 @@ private:
   std::vector<DeviceInnerPtr> list_;
   std::unordered_map<UINT,UINT> name_map_;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static VOID NTAPI
 on_device_removed (PVOID context, BOOLEAN unused)
@@ -941,7 +941,7 @@ is_intel_gen11_or_older (UINT vendor_id, D3D_FEATURE_LEVEL feature_level,
   return FALSE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #ifndef GST_DISABLE_GST_DEBUG
 static void
 dump_feature_support (GstD3D12Device * self)
@@ -1105,7 +1105,7 @@ dump_feature_support (GstD3D12Device * self)
   GST_DEBUG_OBJECT (self, "%s", dump_str.c_str ());
 }
 #endif
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct TestFormatInfo
 {
@@ -1123,7 +1123,7 @@ gst_d3d12_device_new_internal (const GstD3D12DeviceConstructData * data)
   HRESULT hr;
   UINT factory_flags = 0;
   guint index = 0;
-  /* *INDENT-OFF* */
+  /* clang-format off */
   const TestFormatInfo required_formats[] = {
     { DXGI_FORMAT_R8G8B8A8_UNORM,
       D3D12_FORMAT_SUPPORT1_TEXTURE2D |
@@ -1184,7 +1184,7 @@ gst_d3d12_device_new_internal (const GstD3D12DeviceConstructData * data)
       D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   gst_d3d12_device_enable_debug ();
   gst_d3d12_device_enable_dred ();

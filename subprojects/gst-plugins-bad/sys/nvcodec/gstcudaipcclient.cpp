@@ -34,10 +34,10 @@ GST_DEBUG_CATEGORY (cuda_ipc_client_debug);
 #define GST_CAT_DEFAULT cuda_ipc_client_debug
 
 static GThreadPool *gc_thread_pool = nullptr;
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::mutex gc_pool_lock;
 static std::recursive_mutex import_lock_;
-/* *INDENT-ON* */
+/* clang-format on */
 
 void
 gst_cuda_ipc_client_deinit (void)
@@ -81,7 +81,7 @@ gst_cuda_ipc_client_close_handle (GstCudaSharableHandle handle)
 #endif
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstCudaIpcHandle
 {
   GstCudaIpcHandle (CUipcMemHandle mem_handle,
@@ -207,7 +207,7 @@ struct GstCudaIpcClientPrivate
   std::vector<std::weak_ptr<GstCudaIpcImportData>> imported;
   int device_id = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_cuda_ipc_client_dispose (GObject * object);
 static void gst_cuda_ipc_client_finalize (GObject * object);

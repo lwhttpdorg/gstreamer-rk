@@ -87,9 +87,9 @@
 #include <wrl.h>
 #include <atomic>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_base_convert_debug);
 #define GST_CAT_DEFAULT gst_d3d12_base_convert_debug
@@ -132,7 +132,7 @@ enum
 #define DEFAULT_CONTRAST 1.0
 #define DEFAULT_MAX_MIP_LEVELS 1
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct ConvertContext
 {
   ConvertContext (GstD3D12Device * dev)
@@ -246,7 +246,7 @@ struct GstD3D12BaseConvertPrivate
 
   std::mutex lock;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12BaseConvert
 {

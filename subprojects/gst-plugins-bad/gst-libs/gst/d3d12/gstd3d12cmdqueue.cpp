@@ -32,7 +32,7 @@
 GST_DEBUG_CATEGORY_STATIC (gst_d3d12_cmd_queue_debug);
 #define GST_CAT_DEFAULT gst_d3d12_cmd_queue_debug
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 struct GCData
@@ -93,7 +93,7 @@ struct _GstD3D12CmdQueuePrivate
   bool shutdown = false;
   size_t queue_size = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void gst_d3d12_cmd_queue_finalize (GObject * object);
 

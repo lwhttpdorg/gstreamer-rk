@@ -57,9 +57,9 @@
  * and gst_d3d11_device_unlock()
  */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 #if HAVE_D3D11SDKLAYERS_H
 #include <d3d11sdklayers.h>
@@ -104,7 +104,7 @@ static GParamSpec *pspec_removed_reason = nullptr;
 #define DEFAULT_ADAPTER 0
 #define DEFAULT_CREATE_FLAGS 0
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstD3D11DevicePrivate
 {
   _GstD3D11DevicePrivate ()
@@ -171,7 +171,7 @@ struct _GstD3D11DevicePrivate
   HANDLE cancallable;
   std::atomic<HRESULT> removed_reason = { S_OK };
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 debug_init_once (void)
@@ -1750,9 +1750,9 @@ gst_d3d11_fence_wait (GstD3D11Fence * fence)
 gint64
 gst_d3d11_pixel_shader_token_new (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static std::atomic < gint64 > token_ { 0 };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return token_.fetch_add (1);
 }
@@ -1760,9 +1760,9 @@ gst_d3d11_pixel_shader_token_new (void)
 gint64
 gst_d3d11_vertex_shader_token_new (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static std::atomic < gint64 > token_ { 0 };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return token_.fetch_add (1);
 }
@@ -1770,9 +1770,9 @@ gst_d3d11_vertex_shader_token_new (void)
 gint64
 gst_d3d11_compute_shader_token_new (void)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static std::atomic < gint64 > token_ { 0 };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return token_.fetch_add (1);
 }

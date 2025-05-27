@@ -34,14 +34,14 @@ static gboolean
 wpe_toplevel_gstreamer_resize (WPEToplevel * toplevel, int width, int height)
 {
   wpe_toplevel_resized (toplevel, width, height);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   wpe_toplevel_foreach_view(toplevel, [](WPEToplevel *toplevel, WPEView *view, gpointer) -> gboolean {
     int width, height;
     wpe_toplevel_get_size (toplevel, &width, &height);
     wpe_view_resized (view, width, height);
     return FALSE;
   }, nullptr);
-  /* *INDENT-ON* */
+  /* clang-format on */
   return TRUE;
 }
 

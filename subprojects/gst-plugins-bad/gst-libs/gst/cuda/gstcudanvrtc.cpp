@@ -54,8 +54,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_cuda_nvrtc_debug);
   } \
 } G_STMT_END;
 
-
-/* *INDENT-OFF* */
+/* clang-format off */
 typedef struct _GstCudaNvrtcVTable
 {
   gboolean loaded;
@@ -75,7 +74,7 @@ typedef struct _GstCudaNvrtcVTable
   nvrtcResult (*NvrtcGetCUBINSize) (nvrtcProgram prog, size_t *cubinSizeRet);
   nvrtcResult (*NvrtcGetCUBIN) (nvrtcProgram prog, char *cubin);
 } GstCudaNvrtcVTable;
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstCudaNvrtcVTable gst_cuda_nvrtc_vtable = { 0, };
 
@@ -211,7 +210,7 @@ gst_cuda_nvrtc_load_library (void)
   return gst_cuda_nvrtc_vtable.loaded;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static nvrtcResult
 NvrtcCompileProgram (nvrtcProgram prog, int numOptions, const char **options)
 {
@@ -285,7 +284,7 @@ NvrtcGetCUBIN (nvrtcProgram prog, char *cubin)
 
   return gst_cuda_nvrtc_vtable.NvrtcGetCUBIN (prog, cubin);
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 gchar *
 gst_cuda_nvrtc_compile_with_option (const gchar * source,

@@ -40,9 +40,9 @@
 #include "gstmfh265enc.h"
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_mf_h265_enc_debug);
 #define GST_CAT_DEFAULT gst_mf_h265_enc_debug

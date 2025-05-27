@@ -28,7 +28,7 @@
 
 #include <vk_video/vulkan_video_codecs_common.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 const VkExtensionProperties _vk_codec_extensions[] = {
   [GST_VK_VIDEO_EXTENSION_DECODE_H264] = {
     .extensionName = VK_STD_VULKAN_VIDEO_CODEC_H264_DECODE_EXTENSION_NAME,
@@ -54,7 +54,7 @@ const VkComponentMapping _vk_identity_component_map = {
     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
     .a = VK_COMPONENT_SWIZZLE_IDENTITY,
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 gboolean
 gst_vulkan_video_get_vk_functions (GstVulkanInstance * instance,
@@ -143,7 +143,7 @@ gst_vulkan_video_session_create (GstVulkanVideoSession * session,
   bind_mem = g_new (VkBindVideoSessionMemoryInfoKHR, n_mems);
 
   for (i = 0; i < n_mems; i++) {
-    /* *INDENT-OFF* */
+    /* clang-format off */
     mem_req[i] = (VkMemoryRequirements2) {
       .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
     };
@@ -151,7 +151,7 @@ gst_vulkan_video_session_create (GstVulkanVideoSession * session,
       .sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_MEMORY_REQUIREMENTS_KHR,
       .memoryRequirements = mem_req[i].memoryRequirements,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
   res = vk->GetVideoSessionMemoryRequirements (device->device, vk_session,
       &n_mems, mem);
@@ -182,14 +182,14 @@ gst_vulkan_video_session_create (GstVulkanVideoSession * session,
     }
     gst_buffer_append_memory (session->buffer, vk_mem);
 
-    /* *INDENT-OFF* */
+    /* clang-format off */
     bind_mem[i] = (VkBindVideoSessionMemoryInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_BIND_VIDEO_SESSION_MEMORY_INFO_KHR,
       .memory = ((GstVulkanMemory *) vk_mem)->mem_ptr,
       .memoryBindIndex = mem[i].memoryBindIndex,
       .memorySize = vk_mem->size,
     };
-    /* *INDENT-ON* */
+    /* clang-format on */
   }
 
   res =
@@ -286,10 +286,10 @@ gst_vulkan_video_image_create_view (GstBuffer * buf, gboolean layered_dpb,
   if (sampler
       && sampler->type == GST_VULKAN_HANDLE_TYPE_SAMPLER_YCBCR_CONVERSION) {
     yuv_sampler_info = (VkSamplerYcbcrConversionInfo) {
-      /* *INDENT-OFF* */
+      /* clang-format off */
       .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
       .conversion = sampler->handle,
-      /* *INDENT-ON* */
+      /* clang-format on */
     };
 
     pnext = &yuv_sampler_info;
@@ -297,7 +297,7 @@ gst_vulkan_video_image_create_view (GstBuffer * buf, gboolean layered_dpb,
 
   vkmem = (GstVulkanImageMemory *) mem;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   view_create_info = (VkImageViewCreateInfo) {
     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
     .pNext = pnext,
@@ -314,7 +314,7 @@ gst_vulkan_video_image_create_view (GstBuffer * buf, gboolean layered_dpb,
       .levelCount     = 1,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return gst_vulkan_get_or_create_image_view_with_info (vkmem,
       &view_create_info);

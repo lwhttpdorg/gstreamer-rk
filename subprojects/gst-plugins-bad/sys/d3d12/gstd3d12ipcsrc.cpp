@@ -65,7 +65,7 @@ enum
 #define DEFAULT_IO_MODE GST_D3D12_IPC_IO_COPY
 #define DEFAULT_CONN_TIMEOUT 5
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstD3D12IpcSrcPrivate
 {
   GstD3D12Device *device = nullptr;
@@ -83,7 +83,7 @@ struct GstD3D12IpcSrcPrivate
   GstD3D12IpcIOMode io_mode = DEFAULT_IO_MODE;
   guint conn_timeout = DEFAULT_CONN_TIMEOUT;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12IpcSrc
 {

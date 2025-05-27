@@ -143,7 +143,7 @@ static GstElementClass *parent_class = NULL;
 
 #define MAX_GOP_SIZE  1024
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct _GstVaH264EncClass
 {
   GstVaBaseEncClass parent_class;
@@ -152,7 +152,7 @@ struct _GstVaH264EncClass
   char rate_control_type_name[64];
   GEnumValue rate_control[16];
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstVaH264Enc
 {
@@ -328,7 +328,7 @@ struct _GstVaH264LevelLimits
 };
 
 /* Table A-1 - Level limits */
-/* *INDENT-OFF* */
+/* clang-format off */
 static const GstVaH264LevelLimits _va_h264_level_limits[] = {
   /* level   idc                  MaxMBPS   MaxFS   MaxDpbMbs  MaxBR   MaxCPB  MinCr */
   {  "1",    GST_H264_LEVEL_L1,   1485,     99,     396,       64,     175,    2 },
@@ -352,7 +352,7 @@ static const GstVaH264LevelLimits _va_h264_level_limits[] = {
   {  "6.1",  GST_H264_LEVEL_L6_1, 8355840,  139264, 696320,    480000, 480000, 2 },
   {  "6.2",  GST_H264_LEVEL_L6_2, 16711680, 139264, 696320,    800000, 800000, 2 },
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 #ifndef GST_DISABLE_GST_DEBUG
 static const gchar *
@@ -2127,7 +2127,7 @@ _fill_sps (GstVaH264Enc * self, VAEncSequenceParameterBufferH264 * seq_param)
   /* only progressive frames encoding is supported now */
   g_assert (seq_param->seq_fields.bits.frame_mbs_only_flag);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   GST_DEBUG_OBJECT (self, "filling SPS");
   self->sequence_hdr = (GstH264SPS) {
     .id = 0,
@@ -2201,7 +2201,7 @@ _fill_sps (GstVaH264Enc * self, VAEncSequenceParameterBufferH264 * seq_param)
       .max_dec_frame_buffering = self->gop.max_dec_frame_buffering,
     },
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return TRUE;
 }
@@ -2257,7 +2257,7 @@ _fill_sequence_param (GstVaH264Enc * self,
   if (base->profile == VAProfileH264ConstrainedBaseline)
     direct_8x8_inference_flag = FALSE;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *sequence = (VAEncSequenceParameterBufferH264) {
     .seq_parameter_set_id = 0,
     .level_idc = self->level_idc,
@@ -2302,7 +2302,7 @@ _fill_sequence_param (GstVaH264Enc * self,
     .num_units_in_tick = GST_VIDEO_INFO_FPS_D (&base->in_info),
     .time_scale = GST_VIDEO_INFO_FPS_N (&base->in_info) * 2,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* frame_cropping_flag */
   if (base->width & 15 || base->height & 15) {
@@ -2346,7 +2346,7 @@ _fill_picture_parameter (GstVaH264Enc * self, GstVaH264EncFrame * frame,
   GstVaBaseEnc *base = GST_VA_BASE_ENC (self);
   guint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *pic_param = (VAEncPictureParameterBufferH264) {
     .CurrPic = {
       .picture_id =
@@ -2382,7 +2382,7 @@ _fill_picture_parameter (GstVaH264Enc * self, GstVaH264EncFrame * frame,
     .pic_fields.bits.pic_order_present_flag = 0,
     .pic_fields.bits.pic_scaling_matrix_present_flag = 0,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* Non I frame, construct reference list. */
   i = 0;
@@ -2436,7 +2436,7 @@ static void
 _fill_pps (VAEncPictureParameterBufferH264 * pic_param, GstH264SPS * sps,
     GstH264PPS * pps)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *pps = (GstH264PPS) {
     .id = 0,
     .sequence = sps,
@@ -2466,7 +2466,7 @@ _fill_pps (VAEncPictureParameterBufferH264 * pic_param, GstH264SPS * sps,
     .pic_scaling_matrix_present_flag = 0,
     .second_chroma_qp_index_offset = pic_param->second_chroma_qp_index_offset,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gboolean
@@ -2506,7 +2506,7 @@ _add_one_slice (GstVaH264Enc * self, GstVaH264EncFrame * frame,
   int8_t slice_qp_delta = 0;
   gint i;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   if (self->rc.rc_ctrl_mode == VA_RC_CQP) {
     if (frame->type == GST_H264_P_SLICE) {
       slice_qp_delta = self->rc.qp_p - self->rc.qp_i;
@@ -2551,7 +2551,7 @@ _add_one_slice (GstVaH264Enc * self, GstVaH264EncFrame * frame,
     .slice_alpha_c0_offset_div2 = 2,
     .slice_beta_offset_div2 = 2,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   if (frame->type == GST_H264_B_SLICE || frame->type == GST_H264_P_SLICE) {
     slice->num_ref_idx_active_override_flag = (list0_num > 0 || list1_num > 0);
@@ -2753,7 +2753,7 @@ _add_slice_header (GstVaH264Enc * self, GstVaH264EncFrame * frame,
   if (frame->frame_num == 0)
     nal_type = GST_H264_NAL_SLICE_IDR;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   slice_hdr = (GstH264SliceHdr) {
     .first_mb_in_slice = slice->macroblock_address,
     .type = slice->slice_type,
@@ -2794,7 +2794,7 @@ _add_slice_header (GstVaH264Enc * self, GstVaH264EncFrame * frame,
     .slice_alpha_c0_offset_div2 = slice->slice_alpha_c0_offset_div2,
     .slice_beta_offset_div2 = slice->slice_beta_offset_div2,
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   /* Reorder the ref lists if needed. */
   if (total_list0_num > 0) {
@@ -3357,12 +3357,12 @@ gst_va_h264_enc_start (GstVideoEncoder * venc)
   return GST_VIDEO_ENCODER_CLASS (parent_class)->start (venc);
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *sink_caps_str =
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_VA,
         "{ NV12 }") " ;"
     GST_VIDEO_CAPS_MAKE ("{ NV12 }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static const gchar *src_caps_str = "video/x-h264";
 

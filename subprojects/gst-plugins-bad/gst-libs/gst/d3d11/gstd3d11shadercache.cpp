@@ -27,12 +27,12 @@
 #include <mutex>
 #include <map>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::mutex cache_lock_;
 static std::map <gint64, ID3DBlob *> ps_blob_;
 static std::map <gint64, ID3DBlob *> vs_blob_;
 static std::map <gint64, ID3DBlob *> cs_blob_;
-/* *INDENT-ON* */
+/* clang-format on */
 
 HRESULT
 gst_d3d11_shader_cache_get_pixel_shader_blob (gint64 token,

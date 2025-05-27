@@ -1563,10 +1563,10 @@ gst_nv_av1_encoder_create_class_data (GstObject * device, gpointer session,
   cdata->device_caps = dev_caps;
   cdata->device_mode = device_mode;
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   for (const auto &iter: formats)
     cdata->formats = g_list_append (cdata->formats, g_strdup (iter.c_str()));
-  /* *INDENT-ON* */
+  /* clang-format on */
 
 #ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11)

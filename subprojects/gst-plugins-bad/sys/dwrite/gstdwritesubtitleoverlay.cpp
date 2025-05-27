@@ -49,9 +49,9 @@ static GstStaticPadTemplate src_templ = GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS ("video/x-raw(ANY)")
     );
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static std::vector<GParamSpec *> _pspec;
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GstDWriteSubtitleOverlayPrivate
 {

@@ -37,9 +37,9 @@
 #include <string>
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY (gst_webview2_src_debug);
 #define GST_CAT_DEFAULT gst_webview2_src_debug
@@ -68,7 +68,7 @@ enum
 #define DEFAULT_PROCESSING_DEADLINE (20 * GST_MSECOND)
 #define DEFAULT_ADAPTER -1
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstWebView2SrcPrivate
 {
   ~GstWebView2SrcPrivate ()
@@ -122,7 +122,7 @@ struct GstWebView2SrcPrivate
   std::string script;
   std::string user_data_folder;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstWebView2Src
 {

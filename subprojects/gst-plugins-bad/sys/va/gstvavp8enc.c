@@ -731,7 +731,7 @@ _vp8_fill_sequence_param (GstVaVp8Enc * self,
     VAEncSequenceParameterBufferVP8 * sequence)
 {
   GstVaBaseEnc *base = GST_VA_BASE_ENC (self);
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *sequence = (VAEncSequenceParameterBufferVP8) {
     .frame_width = base->width,
     .frame_height = base->height,
@@ -746,7 +746,7 @@ _vp8_fill_sequence_param (GstVaVp8Enc * self,
     .reference_frames = {VA_INVALID_SURFACE, VA_INVALID_SURFACE,
                          VA_INVALID_SURFACE, VA_INVALID_SURFACE},
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 }
 
 static gboolean
@@ -787,7 +787,7 @@ static gboolean
 _vp8_fill_frame_param (GstVaVp8Enc * self, GstVaVp8EncFrame * va_frame,
     VAEncPictureParameterBufferVP8 * pic_param)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   *pic_param = (VAEncPictureParameterBufferVP8) {
     .reconstructed_frame =
         gst_va_encode_picture_get_reconstruct_surface (va_frame->base.picture),
@@ -841,7 +841,7 @@ _vp8_fill_frame_param (GstVaVp8Enc * self, GstVaVp8EncFrame * va_frame,
     .clamp_qindex_low = 0,
     .va_reserved = {0, }
   };
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   for (gint i = 0; i < 4; ++i)
     pic_param->loop_filter_level[i] = self->rc.filter_level;
@@ -983,12 +983,12 @@ gst_va_vp8_enc_prepare_output (GstVaBaseEnc * base,
   return TRUE;
 }
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static const gchar *sink_caps_str =
     GST_VIDEO_CAPS_MAKE_WITH_FEATURES (GST_CAPS_FEATURE_MEMORY_VA,
         "{ NV12 }") " ;"
     GST_VIDEO_CAPS_MAKE ("{ NV12 }");
-/* *INDENT-ON* */
+/* clang-format on */
 
 static const gchar *src_caps_str = "video/x-vp8";
 

@@ -6,7 +6,7 @@
 #define ISO_639_FLAG_2T  (1 << 0)
 #define ISO_639_FLAG_2B  (1 << 1)
 
-/* *INDENT-OFF* */
+/* clang-format off */
 
 static const struct
 {
@@ -1116,4 +1116,4 @@ static const gchar iso_639_names[] =
   "Urdu\000Uzbek\000Venda\000Vietnamese\000Volap\303\274k\000Walloon\000Wolo"
   "f\000Xhosa\000Yiddish\000Yoruba\000Zhuang; Chuang\000Chinese\000Zulu";
 
-/* *INDENT-ON* */
+/* clang-format on */

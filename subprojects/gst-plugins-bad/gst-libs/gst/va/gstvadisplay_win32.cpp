@@ -46,14 +46,14 @@
 #include <string>
 #include <vector>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 extern "C" {
 GST_DEBUG_CATEGORY_EXTERN (gst_va_display_debug);
 #define GST_CAT_DEFAULT gst_va_display_debug
 }
-/* *INDENT-ON* */
+/* clang-format on */
 
 /**
  * GstVaDisplayWin32:
@@ -249,13 +249,13 @@ gst_va_display_win32_new (const gchar * adapter_luid)
 
   g_return_val_if_fail (adapter_luid != nullptr, nullptr);
 
-  /* *INDENT-OFF* */
+  /* clang-format off */
   try {
     adapter_luid_i64 = std::stoll (adapter_luid);
   } catch (...) {
     return nullptr;
   }
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   hr = CreateDXGIFactory1 (IID_PPV_ARGS (&factory));
   if (FAILED (hr))

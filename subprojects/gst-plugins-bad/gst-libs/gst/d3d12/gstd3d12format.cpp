@@ -40,7 +40,7 @@ ensure_debug_category (void)
 }
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 const D3D12_FORMAT_SUPPORT1 kDefaultFormatSupport1 =
     D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE |
     D3D12_FORMAT_SUPPORT1_RENDER_TARGET;
@@ -428,7 +428,7 @@ static const GstD3D12Format g_format_map[] = {
       DXGI_FORMAT_Y416, DXGI_FORMAT_R16G16B16A16_UNORM),
   FormatBuilder::NotSupported(GST_VIDEO_FORMAT_Y416_BE),
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstVideoFormat
 gst_d3d12_dxgi_format_to_gst (DXGI_FORMAT format)
@@ -515,7 +515,7 @@ gst_d3d12_dxgi_format_get_resource_format (DXGI_FORMAT format,
 char *
 gst_d3d12_dump_color_matrix (GstD3D12ColorMatrix * matrix)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static const gchar format[] =
       "[MATRIX]\n"
       "|% .6f, % .6f, % .6f|\n"
@@ -527,7 +527,7 @@ gst_d3d12_dump_color_matrix (GstD3D12ColorMatrix * matrix)
       "|% .6f, % .6f, % .6f|\n"
       "[MAX]\n"
       "|% .6f, % .6f, % .6f|";
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   g_return_val_if_fail (matrix != nullptr, nullptr);
 

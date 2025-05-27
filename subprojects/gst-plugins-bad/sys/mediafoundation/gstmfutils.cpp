@@ -27,7 +27,7 @@
 #include "gstmfutils.h"
 #include <wrl.h>
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 
 GST_DEBUG_CATEGORY_EXTERN (gst_mf_utils_debug);
@@ -89,7 +89,7 @@ static struct
   {MFVideoFormat_VP90, "video/x-vp9"},
   {MFVideoFormat_MJPG, "image/jpeg"},
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 GstVideoFormat
 gst_mf_video_subtype_to_video_format (const GUID * subtype)
@@ -386,7 +386,7 @@ gst_mf_media_type_to_video_caps (IMFMediaType * media_type)
                                          SPEAKER_FRONT_LEFT_OF_CENTER | SPEAKER_FRONT_RIGHT_OF_CENTER)
 #endif
 
-/* *INDENT-OFF* */
+/* clang-format off */
 static struct
 {
   guint64 mf_pos;
@@ -435,7 +435,7 @@ static DWORD default_ch_masks[] = {
   /* 7.1ch */
   KSAUDIO_SPEAKER_7POINT1,
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static void
 gst_mf_media_audio_channel_mask_to_position (guint channels, DWORD mask,

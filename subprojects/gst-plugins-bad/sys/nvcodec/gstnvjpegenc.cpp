@@ -45,7 +45,7 @@
  *
  */
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #ifdef NVCODEC_CUDA_PRECOMPILED
 #include "kernel/jpegenc_ptx.h"
 #else
@@ -55,7 +55,7 @@ static std::unordered_map<std::string, const char *> g_precompiled_ptx_table;
 static std::unordered_map<std::string, const char *> g_cubin_table;
 static std::unordered_map<std::string, const char *> g_ptx_table;
 static std::mutex g_kernel_table_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_nv_jpeg_enc_debug);
 #define GST_CAT_DEFAULT gst_nv_jpeg_enc_debug
@@ -88,7 +88,7 @@ struct nvjpegImage_t
   size_t pitch[4];
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstNvJpegVTable
 {
   gboolean loaded = FALSE;
@@ -117,7 +117,7 @@ struct GstNvJpegVTable
       nvjpegEncoderState_t state, unsigned char *data, size_t *length,
       CUstream stream);
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 static GstNvJpegVTable g_vtable = { };
 
@@ -206,7 +206,7 @@ struct GstNvJpegEncCData
   gboolean autogpu;
 };
 
-/* *INDENT-OFF* */
+/* clang-format off */
 struct GstNvJpegEncPrivate
 {
   GstCudaContext *context = nullptr;
@@ -234,7 +234,7 @@ struct GstNvJpegEncPrivate
   gboolean use_stream_ordered = FALSE;
   guint cuda_device_id = 0;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct GstNvJpegEnc
 {

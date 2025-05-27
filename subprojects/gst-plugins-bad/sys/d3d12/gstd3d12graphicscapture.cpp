@@ -54,7 +54,7 @@ GST_DEBUG_CATEGORY_EXTERN (gst_d3d12_screen_capture_debug);
 
 #define CAPTURE_POOL_SIZE 2
 
-/* *INDENT-OFF* */
+/* clang-format off */
 using namespace Microsoft::WRL;
 using namespace ABI::Windows::System;
 using namespace ABI::Windows::Foundation;
@@ -878,7 +878,7 @@ struct GstD3D12GraphicsCapturePrivate
   std::mutex loop_lock;
   std::condition_variable loop_cond;
 };
-/* *INDENT-ON* */
+/* clang-format on */
 
 struct _GstD3D12GraphicsCapture
 {

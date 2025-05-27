@@ -6,12 +6,12 @@
 
 GST_START_TEST (isoff_box_header_minimal)
 {
-  /* INDENT-OFF */
+  /* clang-format off */
   static const guint8 data[] = {
     16, 32, 64, 128,
     't', 'e', 's', 't'
   };
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (data, sizeof (data));
   guint32 type;
   guint8 extended_type[16];
@@ -29,13 +29,13 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_box_header_long_size)
 {
-  /* INDENT-OFF */
+  /* clang-format off */
   static const guint8 data[] = {
     0, 0, 0, 1,
     't', 'e', 's', 't',
     1, 2, 4, 8, 16, 32, 64, 128
   };
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (data, sizeof (data));
   guint32 type;
   guint8 extended_type[16];
@@ -53,7 +53,7 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_box_header_uuid_type)
 {
-  /* INDENT-OFF */
+  /* clang-format off */
   static const guint8 data[] = {
     16, 32, 64, 128,
     'u', 'u', 'i', 'd',
@@ -62,7 +62,7 @@ GST_START_TEST (isoff_box_header_uuid_type)
     'i', 'j', 'k', 'l',
     'm', 'n', 'o', 'p'
   };
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (data, sizeof (data));
   guint32 type;
   guint8 extended_type[16];
@@ -81,7 +81,7 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_box_header_uuid_type_long_size)
 {
-  /* INDENT-OFF */
+  /* clang-format off */
   static const guint8 data[] = {
     0, 0, 0, 1,
     'u', 'u', 'i', 'd',
@@ -91,7 +91,7 @@ GST_START_TEST (isoff_box_header_uuid_type_long_size)
     'i', 'j', 'k', 'l',
     'm', 'n', 'o', 'p'
   };
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (data, sizeof (data));
   guint32 type;
   guint8 extended_type[16];
@@ -110,7 +110,7 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_moof_parse)
 {
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (moof1, sizeof (moof1));
   guint32 type;
   guint8 extended_type[16];
@@ -182,7 +182,7 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_moof_parse_with_tfdt)
 {
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (seg_2_m4f, sizeof (seg_2_m4f));
   guint32 type;
   guint8 extended_type[16];
@@ -308,7 +308,7 @@ GST_END_TEST;
 
 GST_START_TEST (isoff_moov_parse)
 {
-  /* INDENT-ON */
+  /* clang-format on */
   GstByteReader reader = GST_BYTE_READER_INIT (init_mp4, sizeof (init_mp4));
   guint32 type;
   guint8 extended_type[16];

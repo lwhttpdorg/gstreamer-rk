@@ -31,7 +31,7 @@
 #include "kernel/gstcudaconverter.cu"
 #include "kernel/gstcudaconverter-unpack.cu"
 
-/* *INDENT-OFF* */
+/* clang-format off */
 #ifdef NVCODEC_CUDA_PRECOMPILED
 #include "kernel/converter_ptx.h"
 #else
@@ -41,7 +41,7 @@ static std::unordered_map<std::string, const char *> g_precompiled_ptx_table;
 static std::unordered_map<std::string, const char *> g_cubin_table;
 static std::unordered_map<std::string, const char *> g_ptx_table;
 static std::mutex g_kernel_table_lock;
-/* *INDENT-ON* */
+/* clang-format on */
 
 GST_DEBUG_CATEGORY_STATIC (gst_cuda_converter_debug);
 #define GST_CAT_DEFAULT gst_cuda_converter_debug
@@ -62,7 +62,7 @@ struct GstCudaColorMatrix
 static gchar *
 gst_cuda_dump_color_matrix (GstCudaColorMatrix * matrix)
 {
-  /* *INDENT-OFF* */
+  /* clang-format off */
   static const gchar format[] =
       "[MATRIX]\n"
       "|% .6f, % .6f, % .6f|\n"
@@ -74,7 +74,7 @@ gst_cuda_dump_color_matrix (GstCudaColorMatrix * matrix)
       "|% .6f, % .6f, % .6f|\n"
       "[MAX]\n"
       "|% .6f, % .6f, % .6f|";
-  /* *INDENT-ON* */
+  /* clang-format on */
 
   return g_strdup_printf (format,
       matrix->matrix[0][0], matrix->matrix[0][1], matrix->matrix[0][2],
