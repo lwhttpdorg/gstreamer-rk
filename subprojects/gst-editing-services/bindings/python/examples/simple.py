@@ -42,11 +42,11 @@ class Simple:
 
     def bus_message_cb(self, unused_bus, message):
         if message.type == Gst.MessageType.EOS:
-            print "eos"
+            print("eos")
             self.loop.quit()
         elif message.type == Gst.MessageType.ERROR:
             error = message.parse_error()
-            print "error %s" % error[1]
+            print("error %s" % error[1])
             self.loop.quit()
 
     def start(self):
@@ -57,12 +57,13 @@ class Simple:
         self.pipeline.set_state(Gst.State.PLAYING)
 
     def _error_loading_asset_cb(self, project, error, asset_id, type):
-        print "Could not load asset %s: %s" % (asset_id, error)
+        print("Could not load asset %s: %s" % (asset_id, error))
         self.loop.quit()
+
 
 if __name__ == "__main__":
     if len(os.sys.argv) != 2:
-        print "You must specify a file URI"
+        print("You must specify a file URI")
         exit(-1)
 
     Gst.init(None)

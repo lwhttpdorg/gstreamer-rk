@@ -2,10 +2,10 @@
 import sys
 import gi
 
-gi.require_version('Gst', '1.0')
-gi.require_version('GES', '1.0')
-gi.require_version('GstPlayer', '1.0')
-gi.require_version('GLib', '2.0')
+gi.require_version("Gst", "1.0")
+gi.require_version("GES", "1.0")
+gi.require_version("GstPlayer", "1.0")
+gi.require_version("GLib", "2.0")
 
 from gi.repository import Gst, GES, GLib, GstPlayer
 
@@ -32,10 +32,14 @@ if __name__ == "__main__":
         start += clip.props.duration
 
     player = GstPlayer
-    player = GstPlayer.Player.new(None, GstPlayer.PlayerGMainContextSignalDispatcher.new(None))
+    player = GstPlayer.Player.new(
+        None, GstPlayer.PlayerGMainContextSignalDispatcher.new(None)
+    )
     player.set_uri("ges://")
-    player.get_pipeline().connect("source-setup",
-        lambda playbin, source: source.set_property("timeline", timeline))
+    player.get_pipeline().connect(
+        "source-setup",
+        lambda playbin, source: source.set_property("timeline", timeline),
+    )
 
     loop = GLib.MainLoop()
     player.connect("end-of-stream", lambda x: loop.quit())

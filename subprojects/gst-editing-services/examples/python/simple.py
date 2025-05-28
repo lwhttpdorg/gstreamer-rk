@@ -22,8 +22,8 @@
 import os
 import gi
 
-gi.require_version('Gst', '1.0')
-gi.require_version('GES', '1.0')
+gi.require_version("Gst", "1.0")
+gi.require_version("GES", "1.0")
 
 from gi.repository import Gst, GES, GLib  # noqa
 
@@ -53,6 +53,7 @@ class Simple:
 
     def start(self):
         self.loop.run()
+
 
 if __name__ == "__main__":
     if len(os.sys.argv) != 2:

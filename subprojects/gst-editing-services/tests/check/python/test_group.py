@@ -144,8 +144,15 @@ class TestGroup(common.GESSimpleTimelineTest):
         group = GES.Container.group(clips)
         self.assertIsNotNone(group)
 
-        self.assertTrue(clip1.edit(
-            self.timeline.get_layers(), 1, GES.EditMode.EDIT_NORMAL, GES.Edge.EDGE_NONE, 0))
+        self.assertTrue(
+            clip1.edit(
+                self.timeline.get_layers(),
+                1,
+                GES.EditMode.EDIT_NORMAL,
+                GES.Edge.EDGE_NONE,
+                0,
+            )
+        )
         self.assertEqual(self.layer.get_clips(), [])
 
         clips = layer2.get_clips()
@@ -171,8 +178,8 @@ class TestGroup(common.GESSimpleTimelineTest):
     def test_loaded_project_has_groups(self):
         mainloop = common.create_main_loop()
         timeline = common.create_project(with_group=True, saved=True)
-        layer, = timeline.get_layers()
-        group, = timeline.get_groups()
+        (layer,) = timeline.get_layers()
+        (group,) = timeline.get_groups()
         self.assertEqual(len(layer.get_clips()), 2)
         for clip in layer.get_clips():
             self.assertEqual(clip.get_parent(), group)
@@ -181,10 +188,12 @@ class TestGroup(common.GESSimpleTimelineTest):
         project = GES.Project.new(uri=timeline.get_asset().props.uri)
 
         loaded_called = False
+
         def loaded(unused_project, unused_timeline):
             nonlocal loaded_called
             loaded_called = True
             mainloop.quit()
+
         project.connect("loaded", loaded)
 
         timeline = project.extract()
@@ -192,8 +201,8 @@ class TestGroup(common.GESSimpleTimelineTest):
         mainloop.run()
         self.assertTrue(loaded_called)
 
-        layer, = timeline.get_layers()
-        group, = timeline.get_groups()
+        (layer,) = timeline.get_layers()
+        (group,) = timeline.get_groups()
         self.assertEqual(len(layer.get_clips()), 2)
         for clip in layer.get_clips():
             self.assertEqual(clip.get_parent(), group)
@@ -233,9 +242,15 @@ class TestGroup(common.GESSimpleTimelineTest):
         group = GES.Container.group(clips)
         self.assertIsNotNone(group)
 
-        self.assertTrue(clip2.edit(
-            self.timeline.get_layers(), 0,
-            GES.EditMode.EDIT_NORMAL, GES.Edge.EDGE_NONE, 25))
+        self.assertTrue(
+            clip2.edit(
+                self.timeline.get_layers(),
+                0,
+                GES.EditMode.EDIT_NORMAL,
+                GES.Edge.EDGE_NONE,
+                25,
+            )
+        )
         clip2.props.start = 25
 
         clips = self.layer.get_clips()
@@ -254,13 +269,16 @@ class TestGroup(common.GESSimpleTimelineTest):
         self.track_types = [GES.TrackType.AUDIO]
         super().setUp()
         snapped_positions = []
-        def snapping_started_cb(timeline, first_element, second_element,
-                                position, snapped_positions):
+
+        def snapping_started_cb(
+            timeline, first_element, second_element, position, snapped_positions
+        ):
             snapped_positions.append(position)
 
         self.timeline.props.snapping_distance = 5
-        self.timeline.connect("snapping-started", snapping_started_cb,
-                              snapped_positions)
+        self.timeline.connect(
+            "snapping-started", snapping_started_cb, snapped_positions
+        )
 
         for start in range(0, 20, 5):
             clip = GES.TestClip.new()
@@ -274,28 +292,34 @@ class TestGroup(common.GESSimpleTimelineTest):
         group = GES.Container.group(clips[1:3])
         self.assertIsNotNone(group)
 
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 5),
-                (GES.TestClip, 5, 5),
-                (GES.TestClip, 10, 5),
-                (GES.TestClip, 15, 5),
+                [
+                    (GES.TestClip, 0, 5),
+                    (GES.TestClip, 5, 5),
+                    (GES.TestClip, 10, 5),
+                    (GES.TestClip, 15, 5),
+                ],
             ],
-        ], groups=[clips[1:3]])
+            groups=[clips[1:3]],
+        )
 
         self.assertEqual(clips[1].props.start, 5)
         self.assertEqual(clips[2].props.start, 10)
         clips[2].edit([], 0, GES.EditMode.EDIT_NORMAL, GES.Edge.EDGE_NONE, 11)
 
         self.assertEqual(snapped_positions[0], 5)
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 5),
-                (GES.TestClip, 5, 5),
-                (GES.TestClip, 10, 5),
-                (GES.TestClip, 15, 5),
+                [
+                    (GES.TestClip, 0, 5),
+                    (GES.TestClip, 5, 5),
+                    (GES.TestClip, 10, 5),
+                    (GES.TestClip, 15, 5),
+                ],
             ],
-        ], groups=[clips[1:3]])
+            groups=[clips[1:3]],
+        )
 
     def test_rippling_with_group(self):
         self.track_types = [GES.TrackType.AUDIO]
@@ -304,61 +328,82 @@ class TestGroup(common.GESSimpleTimelineTest):
             self.append_clip()
 
         snapped_positions = []
-        def snapping_started_cb(timeline, first_element, second_element,
-                                position, snapped_positions):
+
+        def snapping_started_cb(
+            timeline, first_element, second_element, position, snapped_positions
+        ):
             snapped_positions.append(position)
 
         self.timeline.props.snapping_distance = 5
-        self.timeline.connect("snapping-started", snapping_started_cb,
-                              snapped_positions)
+        self.timeline.connect(
+            "snapping-started", snapping_started_cb, snapped_positions
+        )
 
         clips = self.layer.get_clips()
         self.assertEqual(len(clips), 4)
 
         group_clips = clips[1:3]
         GES.Container.group(group_clips)
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
-                (GES.TestClip, 10, 10),
-                (GES.TestClip, 20, 10),
-                (GES.TestClip, 30, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                    (GES.TestClip, 10, 10),
+                    (GES.TestClip, 20, 10),
+                    (GES.TestClip, 30, 10),
+                ],
             ],
-        ], groups=[group_clips])
+            groups=[group_clips],
+        )
 
-        self.assertFalse(clips[2].edit([], 0, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 5))
+        self.assertFalse(
+            clips[2].edit([], 0, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 5)
+        )
 
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
-                (GES.TestClip, 10, 10),
-                (GES.TestClip, 20, 10),
-                (GES.TestClip, 30, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                    (GES.TestClip, 10, 10),
+                    (GES.TestClip, 20, 10),
+                    (GES.TestClip, 30, 10),
+                ],
             ],
-        ], groups=[group_clips])
+            groups=[group_clips],
+        )
 
         # Negative start...
-        self.assertFalse(clips[2].edit([], 1, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 1))
-        self.assertTimelineTopology([
+        self.assertFalse(
+            clips[2].edit([], 1, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 1)
+        )
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
-                (GES.TestClip, 10, 10),
-                (GES.TestClip, 20, 10),
-                (GES.TestClip, 30, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                    (GES.TestClip, 10, 10),
+                    (GES.TestClip, 20, 10),
+                    (GES.TestClip, 30, 10),
+                ],
             ],
-        ], groups=[group_clips])
+            groups=[group_clips],
+        )
 
-        self.assertTrue(clips[2].edit([], 1, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 20))
-        self.assertTimelineTopology([
+        self.assertTrue(
+            clips[2].edit([], 1, GES.EditMode.EDIT_RIPPLE, GES.Edge.EDGE_NONE, 20)
+        )
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                ],
+                [
+                    (GES.TestClip, 10, 10),
+                    (GES.TestClip, 20, 10),
+                    (GES.TestClip, 30, 10),
+                ],
             ],
-            [
-                (GES.TestClip, 10, 10),
-                (GES.TestClip, 20, 10),
-                (GES.TestClip, 30, 10),
-            ],
-        ], groups=[group_clips])
+            groups=[group_clips],
+        )
 
     def test_group_priority(self):
         self.track_types = [GES.TrackType.AUDIO]
@@ -372,36 +417,59 @@ class TestGroup(common.GESSimpleTimelineTest):
         group.add(clip0)
         group.add(clip1)
         self.assertEqual(group.get_layer_priority(), 0)
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                ],
+                [
+                    (GES.TestClip, 20, 10),
+                ],
             ],
-            [
-                (GES.TestClip, 20, 10),
-            ]
-        ], groups=[(clip0, clip1)])
+            groups=[(clip0, clip1)],
+        )
         group.remove(clip0)
         self.assertEqual(group.get_layer_priority(), 1)
 
-        clip1.edit(self.timeline.get_layers(), 2, GES.EditMode.EDIT_NORMAL, GES.Edge.EDGE_NONE, clip1.start)
-        self.assertTimelineTopology([
+        clip1.edit(
+            self.timeline.get_layers(),
+            2,
+            GES.EditMode.EDIT_NORMAL,
+            GES.Edge.EDGE_NONE,
+            clip1.start,
+        )
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                ],
+                [],
+                [
+                    (GES.TestClip, 20, 10),
+                ],
             ],
-            [ ],
-            [
-                (GES.TestClip, 20, 10),
-            ]
-        ], groups=[(clip1,)])
+            groups=[(clip1,)],
+        )
 
         self.assertEqual(group.get_layer_priority(), 2)
-        self.assertTrue(clip1.edit(self.timeline.get_layers(), 0, GES.EditMode.EDIT_NORMAL, GES.Edge.EDGE_NONE, clip1.start))
+        self.assertTrue(
+            clip1.edit(
+                self.timeline.get_layers(),
+                0,
+                GES.EditMode.EDIT_NORMAL,
+                GES.Edge.EDGE_NONE,
+                clip1.start,
+            )
+        )
 
-        self.assertTimelineTopology([
+        self.assertTimelineTopology(
             [
-                (GES.TestClip, 0, 10),
-                (GES.TestClip, 20, 10),
+                [
+                    (GES.TestClip, 0, 10),
+                    (GES.TestClip, 20, 10),
+                ],
+                [],
+                [],
             ],
-            [ ],
-            [ ]
-        ], groups=[(clip1,)])
+            groups=[(clip1,)],
+        )

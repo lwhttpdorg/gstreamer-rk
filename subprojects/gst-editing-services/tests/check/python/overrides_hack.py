@@ -13,13 +13,16 @@ if not gi.overrides.__path__[0].endswith(LOCAL_OVERRIDE_PATH):
     if local_overrides:
         gi.overrides.__path__.remove(local_overrides)
     else:
-        local_overrides = os.path.abspath(os.path.join(FILE, "../../../../../", LOCAL_OVERRIDE_PATH))
+        local_overrides = os.path.abspath(
+            os.path.join(FILE, "../../../../../", LOCAL_OVERRIDE_PATH)
+        )
 
     gi.overrides.__path__.insert(0, local_overrides)
 
 # Execute previously set sitecustomize.py script if it existed
 if os.environ.get("GST_ENV"):
-    old_sitecustomize = os.path.join(os.path.dirname(__file__),
-                                    "old.sitecustomize.gstuninstalled.py")
+    old_sitecustomize = os.path.join(
+        os.path.dirname(__file__), "old.sitecustomize.gstuninstalled.py"
+    )
     if os.path.exists(old_sitecustomize):
-        exec(compile(open(old_sitecustomize).read(), old_sitecustomize, 'exec'))
+        exec(compile(open(old_sitecustomize).read(), old_sitecustomize, "exec"))
