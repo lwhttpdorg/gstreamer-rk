@@ -24,23 +24,11 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
-G_BEGIN_DECLS static const guint8 H264_MISP_MICROSECTIME[] = {
-  0x4D, 0x49, 0x53, 0x50, 0x6D, 0x69, 0x63, 0x72,
-  0x6F, 0x73, 0x65, 0x63, 0x74, 0x69, 0x6D, 0x65
-};
+#include "video-sei.h"
 
-static const guint8 H265_MISP_MICROSECONDS[] = {
-  0xA8, 0x68, 0x7D, 0xD4, 0xD7, 0x59, 0x37, 0x58,
-  0xA5, 0xCE, 0xF0, 0x33, 0x8B, 0x65, 0x45, 0xF1
-};
-
-static const guint8 H265_MISP_NANOSECONDS[] = {
-  0xCF, 0x84, 0x82, 0x78, 0xEE, 0x23, 0x30, 0x6C,
-  0x92, 0x65, 0xE8, 0xFE, 0xF2, 0x2F, 0xB8, 0xB8
-};
-
+G_BEGIN_DECLS
 /**
- * GstVideoMisbPrecisionTimestampUnit:
+ * GstVideoMISBPrecisionTimestampUnit:
  * @GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS: Microseconds
  * @GST_VIDEO_MISB_PTS_UNIT_NANOSECONDS: Nanoseconds
  *
@@ -50,14 +38,14 @@ static const guint8 H265_MISP_NANOSECONDS[] = {
 {
   GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS = 0,
   GST_VIDEO_MISB_PTS_UNIT_NANOSECONDS = 1,
-} GstVideoMisbPrecisionTimestampUnit;
+} GstVideoMISBPrecisionTimestampUnit;
 
 /**
- * GstVideoMisbPrecisionTimestampMeta:
+ * GstVideoMISBPrecisionTimestampMeta:
  * @meta: parent #GstMeta
  * @status: ST 0603 Time Status
  * @value: absolute timestamp in @unit
- * @unit: GstVideoMisbPrecisionTimestampUnit
+ * @unit: GstVideoMISBPrecisionTimestampUnit
  *
  * Metadata for MISB Precision Timestamp messages
  *
@@ -69,8 +57,8 @@ typedef struct
 
   guint8 status;
   guint64 value;
-  GstVideoMisbPrecisionTimestampUnit unit;
-} GstVideoMisbPrecisionTimestampMeta;
+  GstVideoMISBPrecisionTimestampUnit unit;
+} GstVideoMISBPrecisionTimestampMeta;
 
 GST_VIDEO_API GType gst_video_misb_precision_timestamp_meta_api_get_type (void);
 /**
@@ -95,15 +83,15 @@ GST_VIDEO_API
  * gst_buffer_get_video_misb_precision_timestamp_meta:
  * @b: A #GstBuffer
  *
- * Gets the GstVideoMisbPrecisionTimestampMeta that might be present on @b.
+ * Gets the GstVideoMISBPrecisionTimestampMeta that might be present on @b.
  *
- * Returns: (nullable): The first #GstVideoMisbPrecisionTimestampMeta present on @b, or %NULL if
- * no #GstVideoMisbPrecisionTimestampMeta are present
+ * Returns: (nullable): The first #GstVideoMISBPrecisionTimestampMeta present on @b, or %NULL if
+ * no #GstVideoMISBPrecisionTimestampMeta are present
  *
  * Since: 1.28
  */
 #define gst_buffer_get_video_misb_precision_timestamp_meta(b) \
-        ((GstVideoMisbPrecisionTimestampMeta*)gst_buffer_get_meta((b),GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_API_TYPE))
+        ((GstVideoMISBPrecisionTimestampMeta*)gst_buffer_get_meta((b),GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_API_TYPE))
 
 /**
  * gst_buffer_add_video_misb_precision_timestamp_meta:
@@ -118,29 +106,30 @@ GST_VIDEO_API
  * Since: 1.28
  */
 GST_VIDEO_API
-    GstVideoMisbPrecisionTimestampMeta *
-gst_buffer_add_video_misb_precision_timestamp_meta (GstBuffer * buffer,
-    guint8 status, guint64 value, GstVideoMisbPrecisionTimestampUnit unit);
+    GstVideoMISBPrecisionTimestampMeta
+    * gst_buffer_add_video_misb_precision_timestamp_meta (GstBuffer * buffer,
+    guint8 status, guint64 value, GstVideoMISBPrecisionTimestampUnit unit);
 
 
-/**
- * gst_video_misb_precision_timestamp_get_value:
- * @meta: A #GstVideoMisbPrecisionTimestampMeta
- * @value: (out): The value of the timestamp in the unit specified by @unit
- * @unit: (out): The #GstVideoMisbPrecisionTimestampUnit of the timestamp
- *
- * Since: 1.28
- */
+  /**
+  * gst_video_misb_precision_timestamp_get_value:
+  * @meta: A #GstVideoMISBPrecisionTimestampMeta
+  * @value: (out): The value of the timestamp in the unit specified by @unit
+  * @unit: (out): The #GstVideoMISBPrecisionTimestampUnit of the timestamp
+  *
+  * Returns: %TRUE if the value was found, %FALSE otherwise
+  * Since: 1.28
+  */
 GST_VIDEO_API
     gboolean
-gst_video_misb_precision_timestamp_get_value (GstVideoMisbPrecisionTimestampMeta
-    * meta, guint64 * value, GstVideoMisbPrecisionTimestampUnit * unit);
+gst_video_misb_precision_timestamp_get_value (GstVideoMISBPrecisionTimestampMeta
+    * meta, guint64 * value, GstVideoMISBPrecisionTimestampUnit * unit);
 
 /**
  * gst_video_misb_identifier_from_caps:
  * @caps: A #GstCaps
- * @unit: The #GstVideoMisbPrecisionTimestampUnit of the timestamp
- * @id16: (out): The 16-byte identifier
+ * @unit: The #GstVideoMISBPrecisionTimestampUnit of the timestamp
+ * @uuid: (out): The 16-byte UUID
  *
  * Generates a 16-byte identifier for the MISB Precision Timestamp message
  * based on the codec and unit.
@@ -150,7 +139,37 @@ gst_video_misb_precision_timestamp_get_value (GstVideoMisbPrecisionTimestampMeta
  */
 GST_VIDEO_API
     gboolean gst_video_misb_identifier_from_caps (const GstCaps * caps,
-    GstVideoMisbPrecisionTimestampUnit unit, guint8 id16[16]);
+    GstVideoMISBPrecisionTimestampUnit unit, guint8 uuid[16]);
+
+/**
+ * gst_video_misb_precision_timestamp_build_payload:
+ * @status: ST 0603 Time Status byte
+ * @value: 64-bit absolute time value in the specified @unit
+ * @unit: a #GstVideoMISBPrecisionTimestampUnit
+ * @payload: (out): 12-byte buffer to fill with the MISB payload
+ *
+ * Builds the 12-byte MISB Precision (or Nano Precision) Time Stamp payload
+ * (status + interleaved 0xFF + big-endian timestamp bytes) as per ST 0604.
+ *
+ * Since: 1.28
+ */
+GST_VIDEO_API
+    void gst_video_misb_precision_timestamp_build_payload (guint8 status,
+    guint64 value, guint8 payload[12]);
+
+/**
+ * gst_video_misb_precision_timestamp_payload_from_meta:
+ * @meta: a #GstVideoMISBPrecisionTimestampMeta
+ * @payload: (out): 12-byte buffer to fill with the MISB payload
+ *
+ * Convenience wrapper around gst_video_misb_precision_timestamp_build_payload()
+ * using the values from @meta.
+ *
+ * Since: 1.28
+ */
+GST_VIDEO_API
+    gboolean gst_video_misb_precision_timestamp_payload_from_meta (const
+    GstVideoMISBPrecisionTimestampMeta * meta, guint8 payload[12]);
 
 G_END_DECLS
 #endif /* __GST_VIDEO_MISB_H__ */

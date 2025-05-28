@@ -47,7 +47,7 @@ gst_video_misb_precision_timestamp_meta_api_get_type (void)
   if (g_once_init_enter (&type)) {
     static const gchar *tags[] = { GST_META_TAG_VIDEO_STR, NULL };
     GType _type =
-        gst_meta_api_type_register ("GstVideoMisbPrecisionTimestampMetaAPI",
+        gst_meta_api_type_register ("GstVideoMISBPrecisionTimestampMetaAPI",
         tags);
 
     GST_DEBUG_CATEGORY_INIT (gst_video_misb_debug, "video-misb", 0,
@@ -62,8 +62,8 @@ static gboolean
 gst_video_misb_precision_timestamp_meta_init (GstMeta * meta, gpointer params,
     GstBuffer * buffer)
 {
-  GstVideoMisbPrecisionTimestampMeta *m =
-      (GstVideoMisbPrecisionTimestampMeta *) meta;
+  GstVideoMISBPrecisionTimestampMeta *m =
+      (GstVideoMISBPrecisionTimestampMeta *) meta;
 
   m->status = 0;
   m->value = 0;
@@ -86,9 +86,9 @@ gst_video_misb_precision_timestamp_meta_transform (GstBuffer * dest,
     GstMeta * meta, GstBuffer * buffer, GQuark type, gpointer data)
 {
   if (GST_META_TRANSFORM_IS_COPY (type)) {
-    const GstVideoMisbPrecisionTimestampMeta *s =
-        (const GstVideoMisbPrecisionTimestampMeta *) meta;
-    GstVideoMisbPrecisionTimestampMeta *d =
+    const GstVideoMISBPrecisionTimestampMeta *s =
+        (const GstVideoMISBPrecisionTimestampMeta *) meta;
+    GstVideoMISBPrecisionTimestampMeta *d =
         gst_buffer_add_video_misb_precision_timestamp_meta (dest, s->status,
         s->value, s->unit);
     return d != NULL;
@@ -105,8 +105,8 @@ gst_video_misb_precision_timestamp_meta_get_info (void)
   if (g_once_init_enter ((GstMetaInfo **) & meta_info)) {
     const GstMetaInfo *mi =
         gst_meta_register (GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_API_TYPE,
-        "GstVideoMisbPrecisionTimestampMeta",
-        sizeof (GstVideoMisbPrecisionTimestampMeta),
+        "GstVideoMISBPrecisionTimestampMeta",
+        sizeof (GstVideoMISBPrecisionTimestampMeta),
         gst_video_misb_precision_timestamp_meta_init,
         gst_video_misb_precision_timestamp_meta_free,
         gst_video_misb_precision_timestamp_meta_transform);
@@ -116,15 +116,27 @@ gst_video_misb_precision_timestamp_meta_get_info (void)
   return meta_info;
 }
 
-GstVideoMisbPrecisionTimestampMeta *
+/**
+ * gst_buffer_add_video_misb_precision_timestamp_meta:
+ * @buffer: A #GstBuffer
+ * @status: ST 0603 Time Status
+ * @value: 64-bit absolute time value in the specified @unit
+ * @unit: a #GstVideoMISBPrecisionTimestampUnit
+ *
+ * Adds a #GstVideoMISBPrecisionTimestampMeta to @buffer.
+ *
+ * Returns: (transfer full): The #GstVideoMISBPrecisionTimestampMeta added to @buffer
+ * Since: 1.28
+ */
+GstVideoMISBPrecisionTimestampMeta *
 gst_buffer_add_video_misb_precision_timestamp_meta (GstBuffer * buffer,
-    guint8 status, guint64 value, GstVideoMisbPrecisionTimestampUnit unit)
+    guint8 status, guint64 value, GstVideoMISBPrecisionTimestampUnit unit)
 {
-  GstVideoMisbPrecisionTimestampMeta *meta;
+  GstVideoMISBPrecisionTimestampMeta *meta;
 
   g_return_val_if_fail (GST_IS_BUFFER (buffer), NULL);
 
-  meta = (GstVideoMisbPrecisionTimestampMeta *) gst_buffer_add_meta (buffer,
+  meta = (GstVideoMISBPrecisionTimestampMeta *) gst_buffer_add_meta (buffer,
       GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_INFO, NULL);
   if (!meta)
     return NULL;
@@ -146,15 +158,15 @@ gst_buffer_add_video_misb_precision_timestamp_meta (GstBuffer * buffer,
   * Since: 1.28
   */
 gboolean
-gst_video_misb_precision_timestamp_get_value (GstVideoMisbPrecisionTimestampMeta
-    * meta, guint64 * value, GstVideoMisbPrecisionTimestampUnit * unit)
+gst_video_misb_precision_timestamp_get_value (GstVideoMISBPrecisionTimestampMeta
+    * meta, guint64 * value, GstVideoMISBPrecisionTimestampUnit * unit)
 {
   g_return_val_if_fail (meta != NULL, FALSE);
   g_return_val_if_fail (value != NULL, FALSE);
   g_return_val_if_fail (unit != NULL, FALSE);
 
   *value = meta->value;
-  *unit = (GstVideoMisbPrecisionTimestampUnit) meta->unit;
+  *unit = (GstVideoMISBPrecisionTimestampUnit) meta->unit;
   return TRUE;
 }
 
@@ -172,7 +184,7 @@ gst_video_misb_precision_timestamp_get_value (GstVideoMisbPrecisionTimestampMeta
  */
 gboolean
 gst_video_misb_identifier_from_caps (const GstCaps * caps,
-    GstVideoMisbPrecisionTimestampUnit unit, guint8 id16[16])
+    GstVideoMISBPrecisionTimestampUnit unit, guint8 uuid[16])
 {
   const GstStructure *s;
 
@@ -204,4 +216,59 @@ gst_video_misb_identifier_from_caps (const GstCaps * caps,
   }
 
   return FALSE;
+}
+
+/**
+ * gst_video_misb_precision_timestamp_build_payload:
+ * @status: ST 0603 Time Status byte
+ * @value: 64-bit absolute time value in the specified @unit
+ * @unit: a #GstVideoMISBPrecisionTimestampUnit
+ * @payload: (out): 12-byte buffer to fill with the MISB payload
+ *
+ * Builds the 12-byte MISB Precision (or Nano Precision) Time Stamp payload
+ * (status + interleaved 0xFF + big-endian timestamp bytes) as per ST 0604.
+ *
+ * Since: 1.28
+ */
+void
+gst_video_misb_precision_timestamp_build_payload (guint8 status,
+    guint64 value, guint8 payload[12])
+{
+  /* Status */
+  payload[0] = status;
+
+  /* 8-byte big-endian timestamp with 0xFF padding per ST 0604 Tables 2/3 */
+  payload[1] = (value >> 56) & 0xFF;
+  payload[2] = (value >> 48) & 0xFF;
+  payload[3] = 0xFF;
+  payload[4] = (value >> 40) & 0xFF;
+  payload[5] = (value >> 32) & 0xFF;
+  payload[6] = 0xFF;
+  payload[7] = (value >> 24) & 0xFF;
+  payload[8] = (value >> 16) & 0xFF;
+  payload[9] = 0xFF;
+  payload[10] = (value >> 8) & 0xFF;
+  payload[11] = value & 0xFF;
+}
+
+/**
+ * gst_video_misb_precision_timestamp_payload_from_meta:
+ * @meta: a #GstVideoMISBPrecisionTimestampMeta
+ * @payload: (out): 12-byte buffer to fill with the MISB payload
+ *
+ * Convenience wrapper around gst_video_misb_precision_timestamp_build_payload()
+ * using the values from @meta.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_video_misb_precision_timestamp_payload_from_meta (const
+    GstVideoMISBPrecisionTimestampMeta * meta, guint8 payload[12])
+{
+  g_return_val_if_fail (meta != NULL, FALSE);
+  g_return_val_if_fail (payload != NULL, FALSE);
+
+  gst_video_misb_precision_timestamp_build_payload (meta->status, meta->value,
+      payload);
+  return TRUE;
 }
