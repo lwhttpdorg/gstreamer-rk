@@ -106,8 +106,10 @@
 #include <gst/video/gstvideopool.h>
 #include <gst/base/gstbytereader.h>
 #include <gst/base/gstbytewriter.h>
+#include <gst/video/video-sei.h>
 
 #include <string.h>
+#include <gst/video/video-misb.h>
 #include <stdlib.h>
 #include <gmodule.h>
 
@@ -424,6 +426,7 @@ enum
   ARG_FRAME_PACKING,
   ARG_INSERT_VUI,
   ARG_NAL_HRD,
+  ARG_WRITE_MISB_PRECISION_TIMESTAMP
 };
 
 #define ARG_THREADS_DEFAULT            0        /* 0 means 'auto' which is 1.5x number of CPU cores */
@@ -467,6 +470,7 @@ static GString *x264enc_defaults;
 #define ARG_FRAME_PACKING_DEFAULT      -1       /* automatic (none, or from input caps) */
 #define ARG_INSERT_VUI_DEFAULT         TRUE
 #define ARG_NAL_HRD_DEFAULT            0
+#define ARG_WRITE_MISB_PRECISION_TIMESTAMP_DEFAULT TRUE
 
 enum
 {
@@ -1053,6 +1057,24 @@ gst_x264_enc_class_init (GstX264EncClass * klass)
           "Insert VUI NAL in stream",
           ARG_INSERT_VUI_DEFAULT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstX264Enc:write-misb-precision-timestamp:
+   *
+   * Enable writing a precision timestamp (MISB ST 0604) to a SEI NAL unit on
+   * the codec header if the #GstVideoMISBPrecisionTimestampMeta is present on
+   * the input buffer.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class,
+      ARG_WRITE_MISB_PRECISION_TIMESTAMP,
+      g_param_spec_boolean ("write-misb-precision-timestamp",
+          "Write MISB Precision Timestamp",
+          "Enable writing a precision timestamp (MISB ST 0604) if the #GstVideoMISBPrecisionTimestampMeta is present on the input buffer",
+          ARG_WRITE_MISB_PRECISION_TIMESTAMP_DEFAULT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
+          GST_PARAM_MUTABLE_PLAYING));
+
   /* options for which we _do_ use string equivalents */
   g_object_class_install_property (gobject_class, ARG_THREADS,
       g_param_spec_uint ("threads", "Threads",
@@ -1383,6 +1405,8 @@ gst_x264_enc_init (GstX264Enc * encoder)
   encoder->frame_packing = ARG_FRAME_PACKING_DEFAULT;
   encoder->insert_vui = ARG_INSERT_VUI_DEFAULT;
   encoder->nal_hrd = ARG_NAL_HRD_DEFAULT;
+  encoder->write_misb_precision_timestamp =
+      ARG_WRITE_MISB_PRECISION_TIMESTAMP_DEFAULT;
 
   encoder->bitrate_manager =
       gst_encoder_bitrate_profile_manager_new (ARG_BITRATE_DEFAULT);
@@ -2644,6 +2668,60 @@ gst_x264_enc_add_cc (GstBuffer * buffer, x264_picture_t * pic_in)
   }
 }
 
+static void
+gst_x264_enc_add_misb_precision_timestamp (GstX264Enc * encoder,
+    GstBuffer * buffer, x264_picture_t * pic_in)
+{
+  gpointer iter = NULL;
+  GstVideoMISBPrecisionTimestampMeta *pt_meta;
+
+  while ((pt_meta = (GstVideoMISBPrecisionTimestampMeta *)
+          gst_buffer_iterate_meta_filtered (buffer, &iter,
+              GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_API_TYPE))) {
+    guint8 uuid[16];
+    guint8 *payload;            /* 16 UUID + 12 payload */
+    guint idx;
+    GstVideoCodecState *state;
+
+    GST_LOG_OBJECT (encoder,
+        "Adding MISB precision timestamp SEI: %" G_GUINT64_FORMAT,
+        pt_meta->value);
+
+    state = gst_video_encoder_get_output_state (GST_VIDEO_ENCODER (encoder));
+    if (!state)
+      return;
+
+    if (!gst_video_misb_identifier_from_caps (state->caps, pt_meta->unit, uuid)) {
+      goto out;
+    }
+
+    payload = (guint8 *) g_malloc (28);
+    memcpy (payload, uuid, 16);
+
+    gst_video_misb_precision_timestamp_build_payload (pt_meta->status,
+        pt_meta->value, payload + sizeof (uuid));
+
+    idx = pic_in->extra_sei.num_payloads;
+    pic_in->extra_sei.num_payloads += 1;
+
+    if (!pic_in->extra_sei.payloads)
+      pic_in->extra_sei.payloads = g_new0 (x264_sei_payload_t, 1);
+    else
+      pic_in->extra_sei.payloads =
+          g_renew (x264_sei_payload_t, pic_in->extra_sei.payloads,
+          pic_in->extra_sei.num_payloads);
+
+    pic_in->extra_sei.sei_free = g_free;
+
+    pic_in->extra_sei.payloads[idx].payload_size = 28;
+    pic_in->extra_sei.payloads[idx].payload_type = 5;   /* user_data_unregistered */
+    pic_in->extra_sei.payloads[idx].payload = payload;
+
+  out:
+    gst_video_codec_state_unref (state);
+  }
+}
+
 /* chain function
  * this function does the actual processing
  */
@@ -2702,6 +2780,11 @@ gst_x264_enc_handle_frame (GstVideoEncoder * video_enc,
   }
 
   gst_x264_enc_add_cc (frame->input_buffer, &pic_in);
+
+  if (encoder->write_misb_precision_timestamp) {
+    gst_x264_enc_add_misb_precision_timestamp (encoder, frame->input_buffer,
+        &pic_in);
+  }
 
   ret = gst_x264_enc_encode_frame (encoder, &pic_in, frame, &i_nal, TRUE);
 
@@ -3079,6 +3162,9 @@ gst_x264_enc_set_property (GObject * object, guint prop_id,
     case ARG_NAL_HRD:
       encoder->nal_hrd = g_value_get_enum (value);
       break;
+    case ARG_WRITE_MISB_PRECISION_TIMESTAMP:
+      encoder->write_misb_precision_timestamp = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -3225,6 +3311,9 @@ gst_x264_enc_get_property (GObject * object, guint prop_id,
       break;
     case ARG_NAL_HRD:
       g_value_set_enum (value, encoder->nal_hrd);
+      break;
+    case ARG_WRITE_MISB_PRECISION_TIMESTAMP:
+      g_value_set_boolean (value, encoder->write_misb_precision_timestamp);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

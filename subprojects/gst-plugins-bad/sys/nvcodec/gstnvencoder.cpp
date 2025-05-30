@@ -2224,7 +2224,7 @@ gst_nv_encoder_precision_timestamp_meta (GstBuffer * buffer, GstCaps * caps,
     return FALSE;
   }
 
-  sei_payload.payloadSize = sizeof (payload_data);
+  sei_payload.payloadSize = 28;
   sei_payload.payloadType = 5;  /* unregistered user data SEI */
   sei_payload.payload = payload_data;
 

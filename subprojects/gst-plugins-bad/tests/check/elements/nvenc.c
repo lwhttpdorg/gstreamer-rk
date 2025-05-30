@@ -152,7 +152,7 @@ GST_START_TEST (test_misp_precision_timestamp)
   GstCaps *caps;
   GstHarness *h;
   gboolean found = FALSE;
-  guint64 hand_of_god_ts = 522439740;   // Corresponds to 22/07/1986 18:09:00 GMT
+  guint64 hand_of_god_ts = 522439740000000;     // Corresponds to 22/07/1986 18:09:00 GMT
 
 
   h = gst_harness_new_parse
@@ -174,7 +174,7 @@ GST_START_TEST (test_misp_precision_timestamp)
   GST_BUFFER_DURATION (in_buf) = gst_util_uint64_scale (1, GST_SECOND, 25);
 
   gst_buffer_add_video_misb_precision_timestamp_meta (in_buf, 0x01,
-      hand_of_god_ts, GST_VIDEO_MISB_PRECISION_TIMESTAMP_UNIT_MICROSECONDS);
+      hand_of_god_ts, GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS);
 
   fail_unless (gst_harness_push (h, gst_buffer_ref (in_buf)) == GST_FLOW_OK);
   fail_unless (gst_harness_push_event (h, gst_event_new_eos ()));

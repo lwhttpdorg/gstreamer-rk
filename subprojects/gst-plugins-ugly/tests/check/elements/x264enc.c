@@ -22,6 +22,7 @@
 
 #include <gst/check/gstcheck.h>
 #include <gst/video/video.h>
+#include <gst/video/video-sei.h>
 
 /* For ease of programming we use globals to keep refs for our floating
  * src and sink pads we create; otherwise we always have to do get_pad,
@@ -399,6 +400,260 @@ GST_START_TEST (test_video_high444)
 
 GST_END_TEST;
 
+static gboolean
+parse_sei_for_precision_timestamp (const guint8 * sei_data, gsize sei_size,
+    guint8 * status, guint64 * parsed_timestamp_ns)
+{
+  gsize sei_offset = 0;
+
+  /* Iterate over all payloads in the SEI RBSP */
+  while (sei_offset + 2 /* type+size at least */  <= sei_size) {
+    guint payload_type = 0;
+    guint payload_size = 0;
+
+    /* payloadType (ff...ff last_byte) */
+    while (sei_offset < sei_size && sei_data[sei_offset] == 0xFF) {
+      payload_type += 255;
+      sei_offset++;
+    }
+    if (sei_offset < sei_size) {
+      payload_type += sei_data[sei_offset++];
+    } else {
+      break;
+    }
+
+    /* payloadSize (ff...ff last_byte) */
+    while (sei_offset < sei_size && sei_data[sei_offset] == 0xFF) {
+      payload_size += 255;
+      sei_offset++;
+    }
+    if (sei_offset < sei_size) {
+      payload_size += sei_data[sei_offset++];
+    } else {
+      break;
+    }
+
+    GST_DEBUG ("SEI payload type: %u, size: %u, offset: %zu", payload_type,
+        payload_size, sei_offset);
+
+    if (payload_size == 0 || sei_offset + payload_size > sei_size) {
+      break;
+    }
+
+    if (payload_type == 5 /* user_data_unregistered */ ) {
+      const guint8 *payload_data = sei_data + sei_offset;
+      if (payload_size >= 28) {
+        if (memcmp (payload_data, H264_MISP_MICROSECTIME, 16) == 0) {
+          GstVideoSEIUserDataUnregisteredMeta meta;
+
+          GST_INFO ("Found MISB precision timestamp SEI");
+          memcpy (meta.uuid, H264_MISP_MICROSECTIME, 16);
+          meta.data = payload_data + 16;
+          meta.size = payload_size - 16;
+
+          return
+              gst_video_sei_user_data_unregistered_parse_precision_time_stamp
+              (&meta, status, parsed_timestamp_ns);
+        } else {
+          GST_ERROR
+              ("Found unknown SEI UUID: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+              payload_data[0], payload_data[1], payload_data[2],
+              payload_data[3], payload_data[4], payload_data[5],
+              payload_data[6], payload_data[7], payload_data[8],
+              payload_data[9], payload_data[10], payload_data[11],
+              payload_data[12], payload_data[13], payload_data[14],
+              payload_data[15]);
+        }
+      }
+    }
+
+    /* Advance to next payload */
+    sei_offset += payload_size;
+  }
+
+  return FALSE;
+}
+
+static void
+test_precision_timestamp (const gchar * profile, const gchar * stream_format)
+{
+  GstElement *x264enc;
+  GstBuffer *inbuffer, *outbuffer;
+  GstVideoInfo vinfo;
+  guint8 status;
+  guint64 parsed_timestamp_ns;
+  gboolean found_timestamp = FALSE;
+  gint nsize, npos, type;
+  GstMapInfo map;
+  const guint8 *data;
+  gsize size;
+  guint64 hand_of_god_ts = 522439740000000;     // Corresponds to 22/07/1986 18:09:00 GMT
+
+  fail_unless (gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_I420, 384,
+          288));
+
+  /* Setup x264enc with precision timestamps enabled */
+  x264enc = setup_x264enc (profile, stream_format, GST_VIDEO_FORMAT_I420);
+  if (x264enc == NULL) {
+    g_printerr ("WARNING: Could not setup x264enc\n");
+    return;
+  }
+
+  g_object_set (x264enc, "precision-timestamp", TRUE, NULL);
+
+  fail_unless (gst_element_set_state (x264enc,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS,
+      "could not set to playing");
+
+  /* Test buffer at or beyond min-PTS to ensure injection */
+  inbuffer = gst_buffer_new_and_alloc (GST_VIDEO_INFO_SIZE (&vinfo));
+  gst_buffer_memset (inbuffer, 0, 0, -1);
+  gst_buffer_add_video_misb_precision_timestamp_meta (inbuffer, 0x01,
+      hand_of_god_ts, GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS);
+  ASSERT_BUFFER_REFCOUNT (inbuffer, "inbuffer", 1);
+  fail_unless (gst_pad_push (mysrcpad, inbuffer) == GST_FLOW_OK);
+
+  /* send eos to have all flushed if needed */
+  fail_unless (gst_pad_push_event (mysrcpad, gst_event_new_eos ()) == TRUE);
+
+  fail_unless (g_list_length (buffers) >= 1,
+      "Expected at least one output buffer");
+
+  /* Search across all produced output buffers */
+  for (GList * l = buffers; l && !found_timestamp; l = l->next) {
+    outbuffer = GST_BUFFER (l->data);
+    fail_if (outbuffer == NULL);
+
+    /* Parse H.264 stream and look for SEI NAL unit */
+    gst_buffer_map (outbuffer, &map, GST_MAP_READ);
+    data = map.data;
+    size = map.size;
+
+    npos = 0;
+
+    GST_DEBUG ("Parsing %s format stream", stream_format);
+
+    /* Parse NALs according to format */
+    if (g_strcmp0 (stream_format, "avc") == 0) {
+      /* AVC format: length-prefixed NAL units */
+      while (npos < size && !found_timestamp) {
+        fail_unless (size - npos >= 4, "Not enough data for NAL size");
+        nsize = GST_READ_UINT32_BE (data + npos);
+        fail_unless (nsize > 0, "NAL size is zero");
+        fail_unless (npos + 4 + nsize <= size, "NAL extends beyond buffer");
+
+        type = data[npos + 4] & 0x1F;
+        GST_DEBUG ("Found NAL type %d at position %d, size %d", type, npos,
+            nsize);
+
+        if (type == 6) {        /* SEI NAL unit */
+          GST_INFO ("Found SEI NAL unit at position %d, size %d", npos, nsize);
+
+          /* Parse SEI message structure */
+          const guint8 *sei_start = data + npos + 5;    /* Skip length + NAL header */
+          gsize sei_remaining = nsize - 1;      /* Subtract NAL header byte */
+
+          if (parse_sei_for_precision_timestamp (sei_start, sei_remaining,
+                  &status, &parsed_timestamp_ns)) {
+            found_timestamp = TRUE;
+            /* keep mapped to unmap below */
+            break;
+          }
+        }
+
+        npos += nsize + 4;
+      }
+    } else {
+      /* Byte-stream format: start code separated NAL units */
+      while (npos < size && !found_timestamp) {
+        /* Find start code (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01) */
+        guint start_code_len = 0;
+        if (npos + 4 <= size &&
+            data[npos] == 0x00 && data[npos + 1] == 0x00 &&
+            data[npos + 2] == 0x00 && data[npos + 3] == 0x01) {
+          start_code_len = 4;
+        } else if (npos + 3 <= size &&
+            data[npos] == 0x00 && data[npos + 1] == 0x00
+            && data[npos + 2] == 0x01) {
+          start_code_len = 3;
+        } else {
+          /* Look for next start code */
+          npos++;
+          continue;
+        }
+
+        /* Found start code, now find the NAL unit end */
+        guint nal_start = npos + start_code_len;
+        guint nal_end = size;   /* Default to end of buffer */
+
+        /* Search for next start code */
+        for (guint i = nal_start + 1; i < size - 2; i++) {
+          if ((data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] == 0x01) ||
+              (i < size - 3 && data[i] == 0x00 && data[i + 1] == 0x00 &&
+                  data[i + 2] == 0x00 && data[i + 3] == 0x01)) {
+            nal_end = i;
+            break;
+          }
+        }
+
+        nsize = nal_end - nal_start;
+        if (nsize == 0) {
+          npos++;
+          continue;
+        }
+
+        type = data[nal_start] & 0x1F;
+        GST_DEBUG ("Found NAL type %d at position %d, size %d", type, nal_start,
+            nsize);
+
+        if (type == 6) {        /* SEI NAL unit */
+          GST_INFO ("Found SEI NAL unit at position %d, size %d", nal_start,
+              nsize);
+
+          /* Parse SEI message structure */
+          const guint8 *sei_start = data + nal_start + 1;       /* Skip NAL header */
+          gsize sei_remaining = nsize - 1;      /* Subtract NAL header byte */
+
+          if (parse_sei_for_precision_timestamp (sei_start, sei_remaining,
+                  &status, &parsed_timestamp_ns)) {
+            found_timestamp = TRUE;
+            break;
+          }
+        }
+
+        npos = nal_end;
+      }
+    }
+
+    gst_buffer_unmap (outbuffer, &map);
+  }
+
+  /* Validate that we found and parsed a MISB precision timestamp */
+  fail_unless (found_timestamp,
+      "Expected MISB precision timestamp SEI not found");
+  /* Status byte: 0x01 means valid timestamp per MISB ST 0604 */
+  fail_unless (status == 0x01);
+  fail_unless_equals_uint64 (parsed_timestamp_ns, hand_of_god_ts);
+
+  cleanup_x264enc (x264enc);
+  g_list_free_full (buffers, (GDestroyNotify) gst_buffer_unref);
+  buffers = NULL;
+}
+
+GST_START_TEST (test_precision_timestamp_avc)
+{
+  test_precision_timestamp ("constrained-baseline", "avc");
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_precision_timestamp_byte_stream)
+{
+  test_precision_timestamp ("constrained-baseline", "byte-stream");
+}
+
+GST_END_TEST;
+
 Suite *
 x264enc_suite (void)
 {
@@ -412,6 +667,8 @@ x264enc_suite (void)
   tcase_add_test (tc_chain, test_video_high10);
   tcase_add_test (tc_chain, test_video_high422);
   tcase_add_test (tc_chain, test_video_high444);
+  tcase_add_test (tc_chain, test_precision_timestamp_avc);
+  tcase_add_test (tc_chain, test_precision_timestamp_byte_stream);
 
   return s;
 }

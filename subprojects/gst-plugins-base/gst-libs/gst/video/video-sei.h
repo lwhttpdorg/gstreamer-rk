@@ -105,16 +105,6 @@ gboolean gst_video_sei_user_data_unregistered_parse_precision_time_stamp (GstVid
                                                                           guint8 * status,
                                                                           guint64 * precision_time_stamp);
 
-GST_VIDEO_API
-gboolean gst_video_sei_parse_precision_timestamp_from_payload (const guint8 * payload,
-                                                               gsize payload_size,
-                                                               guint8 * status,
-                                                               guint64 * precision_time_stamp);
-
-GST_VIDEO_API
-void gst_video_sei_user_data_unregistered_create_precision_time_stamp (guint64 timestamp_us,
-                                                                        guint8 payload[12]);
-
 G_END_DECLS
 
 #endif /* __GST_VIDEO_SEI_USER_DATA_UNREGISTERED_H__ */

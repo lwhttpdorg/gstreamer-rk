@@ -1303,6 +1303,18 @@
                         "readable": true,
                         "type": "gboolean",
                         "writable": true
+                    },
+                    "write-misb-precision-timestamp": {
+                        "blurb": "Enable writing a precision timestamp (MISB ST 0604) if the #GstVideoMISBPrecisionTimestampMeta is present on the input buffer",
+                        "conditionally-available": false,
+                        "construct": false,
+                        "construct-only": false,
+                        "controllable": false,
+                        "default": "true",
+                        "mutable": "playing",
+                        "readable": true,
+                        "type": "gboolean",
+                        "writable": true
                     }
                 },
                 "rank": "primary"
