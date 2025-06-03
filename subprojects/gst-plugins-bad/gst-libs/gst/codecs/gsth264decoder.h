@@ -22,6 +22,7 @@
 
 #include <gst/codecs/codecs-prelude.h>
 
+#include <gst/codecs/gstcodecdecoder.h>
 #include <gst/video/video.h>
 #include <gst/codecparsers/gsth264parser.h>
 #include <gst/codecs/gsth264picture.h>
@@ -91,7 +92,7 @@ typedef struct _GstH264DecoderPrivate GstH264DecoderPrivate;
 struct _GstH264Decoder
 {
   /*< private >*/
-  GstVideoDecoder parent;
+  GstCodecDecoder parent;
 
   /*< protected >*/
   GstVideoCodecState * input_state;
@@ -109,7 +110,7 @@ struct _GstH264Decoder
 struct _GstH264DecoderClass
 {
   /*< private >*/
-  GstVideoDecoderClass parent_class;
+  GstCodecDecoderClass parent_class;
 
   /**
    * GstH264DecoderClass::new_sequence:

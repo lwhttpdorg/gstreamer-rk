@@ -61,6 +61,7 @@
 #include <gst/base/base.h>
 #include "gsth264decoder.h"
 #include "gsth264picture-private.h"
+#include "gstcodecdecoder.h"
 
 #include "gst/glib-compat-private.h"
 
@@ -182,7 +183,7 @@ typedef struct
 
 #define parent_class gst_h264_decoder_parent_class
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GstH264Decoder, gst_h264_decoder,
-    GST_TYPE_VIDEO_DECODER,
+    GST_TYPE_CODEC_DECODER,
     G_ADD_PRIVATE (GstH264Decoder);
     GST_DEBUG_CATEGORY_INIT (gst_h264_decoder_debug, "h264decoder", 0,
         "H.264 Video Decoder"));
