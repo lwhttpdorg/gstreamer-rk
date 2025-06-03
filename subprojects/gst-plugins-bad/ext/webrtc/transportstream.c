@@ -215,6 +215,8 @@ transport_stream_finalize (GObject * object)
 
   gst_clear_object (&stream->rtxsend_stream_id);
   gst_clear_object (&stream->rtxsend_repaired_stream_id);
+  gst_clear_object (&stream->rtxsend_twcc);
+
   gst_clear_object (&stream->rtxreceive_stream_id);
   gst_clear_object (&stream->rtxreceive_repaired_stream_id);
 

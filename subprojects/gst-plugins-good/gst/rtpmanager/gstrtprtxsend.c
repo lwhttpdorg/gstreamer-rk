@@ -78,6 +78,7 @@ static guint gst_rtp_rtx_send_signals[LAST_SIGNAL] = { 0, };
 #define RTPHDREXT_BUNDLE_MID GST_RTP_HDREXT_BASE "sdes:mid"
 #define RTPHDREXT_STREAM_ID GST_RTP_HDREXT_BASE "sdes:rtp-stream-id"
 #define RTPHDREXT_REPAIRED_STREAM_ID GST_RTP_HDREXT_BASE "sdes:repaired-rtp-stream-id"
+#define RTPHDREXT_TWCC_EXT "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -132,6 +133,10 @@ gst_rtp_rtx_send_add_extension (GstRtpRtxSend * rtx,
           RTPHDREXT_REPAIRED_STREAM_ID) == 0) {
     gst_clear_object (&rtx->rid_repaired);
     rtx->rid_repaired = gst_object_ref (ext);
+  } else if (g_strcmp0 (gst_rtp_header_extension_get_uri (ext),
+          RTPHDREXT_TWCC_EXT) == 0) {
+    gst_clear_object (&rtx->twcc_ext);
+    rtx->twcc_ext = gst_object_ref (ext);
   } else {
     g_warning ("rtprtxsend (%s) doesn't know how to deal with the "
         "RTP Header Extension with URI \'%s\'", GST_OBJECT_NAME (rtx),
@@ -147,6 +152,7 @@ gst_rtp_rtx_send_clear_extensions (GstRtpRtxSend * rtx)
   GST_OBJECT_LOCK (rtx);
   gst_clear_object (&rtx->rid_stream);
   gst_clear_object (&rtx->rid_repaired);
+  gst_clear_object (&rtx->twcc_ext);
   GST_OBJECT_UNLOCK (rtx);
 }
 
@@ -156,7 +162,7 @@ G_DEFINE_TYPE_WITH_CODE (GstRtpRtxSend, gst_rtp_rtx_send, GST_TYPE_ELEMENT,
 GST_ELEMENT_REGISTER_DEFINE (rtprtxsend, "rtprtxsend", GST_RANK_NONE,
     GST_TYPE_RTP_RTX_SEND);
 
-#define IS_RTX_ENABLED(rtx) (g_hash_table_size ((rtx)->rtx_pt_map) > 0)
+#define IS_RTX_ENABLED(rtx) ((rtx)->rtx_pt_map && g_hash_table_size ((rtx)->rtx_pt_map) > 0)
 
 typedef struct
 {
@@ -192,6 +198,16 @@ ssrc_rtx_data_new (guint32 rtx_ssrc)
   data->queue = g_sequence_new ((GDestroyNotify) buffer_queue_item_free);
 
   return data;
+}
+
+static gboolean
+buffer_is_rtx (GstRtpRtxSend * rtx, GstBuffer * buf)
+{
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  gst_rtp_buffer_map (buf, GST_MAP_READ, &rtp);
+  guint32 ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+  gst_rtp_buffer_unmap (&rtp);
+  return g_hash_table_contains (rtx->rtx_ssrcs, GUINT_TO_POINTER (ssrc));
 }
 
 static void
@@ -379,6 +395,7 @@ gst_rtp_rtx_send_finalize (GObject * object)
   g_object_unref (rtx->queue);
 
   gst_clear_object (&rtx->rid_stream);
+  gst_clear_object (&rtx->twcc_ext);
   gst_clear_object (&rtx->rid_repaired);
 
   gst_clear_buffer (&rtx->dummy_writable);
@@ -427,6 +444,8 @@ gst_rtp_rtx_send_init (GstRtpRtxSend * rtx)
   rtx->max_size_packets = DEFAULT_MAX_SIZE_PACKETS;
 
   rtx->dummy_writable = gst_buffer_new ();
+  rtx->twcc_seqnum = 0;
+  rtx->last_ret = GST_FLOW_OK;
 }
 
 static gboolean
@@ -627,6 +646,12 @@ rewrite_header_extensions (GstRtpRtxSend * rtx, GstRTPBuffer * rtp)
             write_offset += written + hdr_unit_bytes;
           }
         }
+      } else if (rtx->twcc_ext
+          && read_id == gst_rtp_header_extension_get_id (rtx->twcc_ext)) {
+        guint16 seqnum = rtx->twcc_seqnum++;
+        map.data[write_offset] = pdata[read_offset - hdr_unit_bytes];
+        GST_WRITE_UINT16_BE (&map.data[write_offset + 1], seqnum);
+        write_offset += read_len + hdr_unit_bytes;
       } else {
         /* TODO: may need to write mid at different times to the original
          * buffer to account for the difference in timing of acknowledgement
@@ -819,10 +844,10 @@ gst_rtp_rtx_send_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
           }
 #endif
         }
-        GST_OBJECT_UNLOCK (rtx);
 
         if (rtx_buf)
           gst_rtp_rtx_send_push_out (rtx, rtx_buf);
+        GST_OBJECT_UNLOCK (rtx);
 
         gst_event_unref (event);
         res = TRUE;
@@ -1009,6 +1034,29 @@ gst_rtp_rtx_send_get_ts_diff (SSRCRtxData * data)
   return result;
 }
 
+// Writes TWCC sequence number into the buffer, overwriting or adding as
+// necessary.
+static void
+write_buffer_twcc (GstRtpRtxSend * rtx, GstRTPBuffer * rtp)
+{
+  gpointer twcc_data;
+  guint ext_size;
+
+  if (gst_rtp_buffer_get_extension_onebyte_header (rtp,
+          gst_rtp_header_extension_get_id (rtx->twcc_ext), 0, &twcc_data,
+          &ext_size)) {
+    guint16 seqnum = rtx->twcc_seqnum++;
+    GST_WRITE_UINT16_BE (twcc_data, seqnum);
+  } else {
+    guint16 seqnum = rtx->twcc_seqnum++;
+    guint16 to_write;
+    GST_WRITE_UINT16_BE (&to_write, seqnum);
+    gst_rtp_buffer_add_extension_onebyte_header (rtp,
+        gst_rtp_header_extension_get_id (rtx->twcc_ext), &to_write,
+        sizeof (guint16));
+  }
+}
+
 /* Must be called with lock */
 static void
 process_buffer (GstRtpRtxSend * rtx, GstBuffer * buffer)
@@ -1020,8 +1068,17 @@ process_buffer (GstRtpRtxSend * rtx, GstBuffer * buffer)
   guint8 payload_type;
   guint32 ssrc, rtptime;
 
+  // Only map write if necessary to write TWCC.
+  GstMapFlags rtp_map_flags = rtx->twcc_ext ? GST_MAP_READWRITE : GST_MAP_READ;
   /* read the information we want from the buffer */
-  gst_rtp_buffer_map (buffer, GST_MAP_READ, &rtp);
+  gst_rtp_buffer_map (buffer, rtp_map_flags, &rtp);
+  if (rtx->twcc_ext) {
+    write_buffer_twcc (rtx, &rtp);
+  }
+  if (!IS_RTX_ENABLED (rtx)) {
+    gst_rtp_buffer_unmap (&rtp);
+    return;
+  }
   seqnum = gst_rtp_buffer_get_seq (&rtp);
   payload_type = gst_rtp_buffer_get_payload_type (&rtp);
   ssrc = gst_rtp_buffer_get_ssrc (&rtp);
@@ -1064,14 +1121,19 @@ static GstFlowReturn
 gst_rtp_rtx_send_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 {
   GstRtpRtxSend *rtx = GST_RTP_RTX_SEND_CAST (parent);
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_OK;
 
   GST_OBJECT_LOCK (rtx);
-  if (rtx->rtx_pt_map_structure)
-    process_buffer (rtx, buffer);
+  gboolean enabled = IS_RTX_ENABLED (rtx);
+  process_buffer (rtx, buffer);
+  if (enabled) {
+    gst_rtp_rtx_send_push_out (rtx, buffer);
+    ret = rtx->last_ret;
+  }
   GST_OBJECT_UNLOCK (rtx);
-  ret = gst_pad_push (rtx->srcpad, buffer);
-
+  if (!enabled) {
+    ret = gst_pad_push (rtx->srcpad, buffer);
+  }
   return ret;
 }
 
@@ -1087,14 +1149,20 @@ gst_rtp_rtx_send_chain_list (GstPad * pad, GstObject * parent,
     GstBufferList * list)
 {
   GstRtpRtxSend *rtx = GST_RTP_RTX_SEND_CAST (parent);
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_OK;
 
   GST_OBJECT_LOCK (rtx);
+  gboolean enabled = IS_RTX_ENABLED (rtx);
+  // Write twcc regardless.
   gst_buffer_list_foreach (list, process_buffer_from_list, rtx);
+  if (enabled) {
+    gst_rtp_rtx_send_push_out (rtx, list);
+    ret = rtx->last_ret;
+  }
   GST_OBJECT_UNLOCK (rtx);
-
-  ret = gst_pad_push_list (rtx->srcpad, list);
-
+  if (!enabled) {
+    ret = gst_pad_push_list (rtx->srcpad, list);
+  }
   return ret;
 }
 
@@ -1106,13 +1174,24 @@ gst_rtp_rtx_send_src_loop (GstRtpRtxSend * rtx)
   if (gst_data_queue_pop (rtx->queue, &data)) {
     GST_LOG_OBJECT (rtx, "pushing rtx buffer %p", data->object);
 
-    if (G_LIKELY (GST_IS_BUFFER (data->object))) {
+    if (GST_IS_BUFFER (data->object)) {
       GST_OBJECT_LOCK (rtx);
       /* Update statistics just before pushing. */
-      rtx->num_rtx_packets++;
+      if (buffer_is_rtx (rtx, GST_BUFFER (data->object))) {
+        rtx->num_rtx_packets++;
+      }
       GST_OBJECT_UNLOCK (rtx);
-
-      gst_pad_push (rtx->srcpad, GST_BUFFER (data->object));
+      GstFlowReturn ret = gst_pad_push (rtx->srcpad, GST_BUFFER (data->object));
+      GST_OBJECT_LOCK (rtx);
+      rtx->last_ret = ret;
+      GST_OBJECT_UNLOCK (rtx);
+    } else if (GST_IS_BUFFER_LIST (data->object)) {
+      GstBufferList *list = GST_BUFFER_LIST (data->object);
+      // rtxsend does not push rtx packets as buffer lists.
+      GstFlowReturn ret = gst_pad_push_list (rtx->srcpad, list);
+      GST_OBJECT_LOCK (rtx);
+      rtx->last_ret = ret;
+      GST_OBJECT_UNLOCK (rtx);
     } else if (GST_IS_EVENT (data->object)) {
       gst_pad_push_event (rtx->srcpad, GST_EVENT (data->object));
 

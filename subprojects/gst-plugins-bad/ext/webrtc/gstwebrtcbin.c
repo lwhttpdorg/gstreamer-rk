@@ -69,6 +69,7 @@
 #define RTPHDREXT_MID GST_RTP_HDREXT_BASE "sdes:mid"
 #define RTPHDREXT_STREAM_ID GST_RTP_HDREXT_BASE "sdes:rtp-stream-id"
 #define RTPHDREXT_REPAIRED_STREAM_ID GST_RTP_HDREXT_BASE "sdes:repaired-rtp-stream-id"
+#define RTPHDREXT_TWCC_EXT "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
 #if !GLIB_CHECK_VERSION(2, 74, 0)
 #define G_CONNECT_DEFAULT 0
@@ -5560,6 +5561,9 @@ ensure_rtx_hdr_ext (TransportStream * stream)
   stream->rtphdrext_id_repaired_stream_id =
       transport_stream_ptmap_get_rtp_header_extension_id (stream,
       RTPHDREXT_REPAIRED_STREAM_ID);
+  stream->rtphdrext_id_twcc =
+      transport_stream_ptmap_get_rtp_header_extension_id (stream,
+      RTPHDREXT_TWCC_EXT);
 
   /* TODO: removing header extensions usage from rtx on renegotiation */
 
@@ -5578,6 +5582,15 @@ ensure_rtx_hdr_ext (TransportStream * stream)
 
       g_signal_emit_by_name (stream->rtxsend, "add-extension",
           stream->rtxsend_stream_id);
+    }
+
+    if (stream->rtphdrext_id_twcc != -1 && !stream->rtxsend_twcc) {
+      stream->rtxsend_twcc =
+          gst_rtp_header_extension_create_from_uri (RTPHDREXT_TWCC_EXT);
+      gst_rtp_header_extension_set_id (stream->rtxsend_twcc,
+          stream->rtphdrext_id_twcc);
+      g_signal_emit_by_name (stream->rtxsend, "add-extension",
+          stream->rtxsend_twcc);
     }
 
     if (stream->rtphdrext_id_repaired_stream_id != -1
@@ -7730,9 +7743,10 @@ on_rtpbin_request_aux_sender (GstElement * rtpbin, guint session_id,
 
   if (!gst_bin_add (GST_BIN (ret), rtx))
     g_warn_if_reached ();
-  ensure_rtx_hdr_ext (stream);
 
   stream->rtxsend = gst_object_ref (rtx);
+  ensure_rtx_hdr_ext (stream);
+
   _set_internal_rtpbin_element_props_from_stream (webrtc, stream);
 
   name = g_strdup_printf ("src_%u", session_id);

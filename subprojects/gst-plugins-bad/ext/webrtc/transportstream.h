@@ -68,9 +68,11 @@ struct _TransportStream
 
   guint                     rtphdrext_id_stream_id;
   guint                     rtphdrext_id_repaired_stream_id;
+  guint                     rtphdrext_id_twcc;
   GstElement               *rtxsend;
   GstRTPHeaderExtension    *rtxsend_stream_id;
   GstRTPHeaderExtension    *rtxsend_repaired_stream_id;
+  GstRTPHeaderExtension    *rtxsend_twcc;
   GstElement               *rtxreceive;
   GstRTPHeaderExtension    *rtxreceive_stream_id;
   GstRTPHeaderExtension    *rtxreceive_repaired_stream_id;

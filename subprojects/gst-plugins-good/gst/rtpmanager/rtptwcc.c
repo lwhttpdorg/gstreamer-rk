@@ -79,6 +79,7 @@ struct _RTPTWCCManager
   guint8 send_ext_id;
   guint8 recv_ext_id;
   guint16 send_seqnum;
+  gboolean have_initial_send_seqnum;
 
   guint mtu;
   guint max_packets_per_rtcp;
@@ -129,6 +130,7 @@ rtp_twcc_manager_init (RTPTWCCManager * twcc)
   twcc->next_feedback_send_time = GST_CLOCK_TIME_NONE;
 
   twcc->remote_ts_base = -1;
+  twcc->have_initial_send_seqnum = FALSE;
 }
 
 static void
@@ -203,8 +205,8 @@ rtp_twcc_manager_set_mtu (RTPTWCCManager * twcc, guint mtu)
   twcc->mtu = mtu;
 
   /* the absolute worst case is that 7 packets uses
-     header (4 * 4 * 4) 32 bytes) and 
-     packet_chunk 2 bytes +  
+     header (4 * 4 * 4) 32 bytes) and
+     packet_chunk 2 bytes +
      recv_deltas (2 * 7) 14 bytes */
   twcc->max_packets_per_rtcp = ((twcc->mtu - 32) * 7) / (2 + 14);
 }
@@ -250,20 +252,53 @@ sent_packet_init (SentPacket * packet, guint16 seqnum, RTPPacketInfo * pinfo,
   packet->lost = FALSE;
 }
 
+// Verify that incoming packets contain a monotonically increasing TWCC
+// sequence. Returns TRUE if the sequence is correct and no updating is necessary.
+static gboolean
+_check_twcc_seqnum_data (RTPTWCCManager * twcc, RTPPacketInfo * pinfo,
+    GstBuffer * buf, guint8 ext_id)
+{
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  gpointer data;
+  gboolean ret = FALSE;
+  if (gst_rtp_buffer_map (buf, GST_MAP_READ, &rtp)) {
+    if (gst_rtp_buffer_get_extension_onebyte_header (&rtp,
+            ext_id, 0, &data, NULL)) {
+      guint16 seqnum = GST_READ_UINT16_BE (data);
+      if (!twcc->have_initial_send_seqnum) {
+        twcc->have_initial_send_seqnum = TRUE;
+        twcc->send_seqnum = seqnum;
+        ret = TRUE;
+        // The correct case.
+      } else if (seqnum == twcc->send_seqnum + 1) {
+        ret = TRUE;
+        twcc->send_seqnum = seqnum;
+      }
+    }
+    gst_rtp_buffer_unmap (&rtp);
+  }
+  return ret;
+}
+
 static void
 _set_twcc_seqnum_data (RTPTWCCManager * twcc, RTPPacketInfo * pinfo,
-    GstBuffer * buf, guint8 ext_id)
+    GstBuffer * buf, guint8 ext_id, gboolean write_twcc)
 {
   SentPacket packet;
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
   gpointer data;
+  GstMapFlags flags = write_twcc ? GST_MAP_READWRITE : GST_MAP_READ;
 
-  if (gst_rtp_buffer_map (buf, GST_MAP_READWRITE, &rtp)) {
+  if (gst_rtp_buffer_map (buf, flags, &rtp)) {
     if (gst_rtp_buffer_get_extension_onebyte_header (&rtp,
             ext_id, 0, &data, NULL)) {
-      guint16 seqnum = twcc->send_seqnum++;
-
-      GST_WRITE_UINT16_BE (data, seqnum);
+      guint16 seqnum;
+      if (write_twcc) {
+        seqnum = ++twcc->send_seqnum;
+        GST_WRITE_UINT16_BE (data, seqnum);
+      } else {
+        seqnum = GST_READ_UINT16_BE (data);
+      }
       sent_packet_init (&packet, seqnum, pinfo, &rtp);
       g_array_append_val (twcc->sent_packets, packet);
 
@@ -282,19 +317,36 @@ rtp_twcc_manager_set_send_twcc_seqnum (RTPTWCCManager * twcc,
   if (GST_IS_BUFFER_LIST (pinfo->data)) {
     GstBufferList *list;
     guint i = 0;
-
-    pinfo->data = gst_buffer_list_make_writable (pinfo->data);
+    // To update the list mutability when writing
+    // is required.
+    gboolean needs_writable = TRUE;
 
     list = GST_BUFFER_LIST (pinfo->data);
 
     for (i = 0; i < gst_buffer_list_length (list); i++) {
-      GstBuffer *buffer = gst_buffer_list_get_writable (list, i);
+      GstBuffer *buffer;
 
-      _set_twcc_seqnum_data (twcc, pinfo, buffer, twcc->send_ext_id);
+      if (!_check_twcc_seqnum_data (twcc, pinfo, gst_buffer_list_get (list, i),
+              twcc->send_ext_id)) {
+        if (needs_writable) {
+          pinfo->data = gst_buffer_list_make_writable (pinfo->data);
+          needs_writable = FALSE;
+        }
+        buffer = gst_buffer_list_get_writable (list, i);
+        _set_twcc_seqnum_data (twcc, pinfo, buffer, twcc->send_ext_id, TRUE);
+      } else {
+        _set_twcc_seqnum_data (twcc, pinfo, gst_buffer_list_get (list, i),
+            twcc->send_ext_id, FALSE);
+      }
     }
   } else {
-    pinfo->data = gst_buffer_make_writable (pinfo->data);
-    _set_twcc_seqnum_data (twcc, pinfo, pinfo->data, twcc->send_ext_id);
+    if (!_check_twcc_seqnum_data (twcc, pinfo, pinfo->data, twcc->send_ext_id)) {
+      pinfo->data = gst_buffer_make_writable (pinfo->data);
+      _set_twcc_seqnum_data (twcc, pinfo, pinfo->data, twcc->send_ext_id, TRUE);
+    } else {
+      _set_twcc_seqnum_data (twcc, pinfo, pinfo->data, twcc->send_ext_id,
+          FALSE);
+    }
   }
 }
 
