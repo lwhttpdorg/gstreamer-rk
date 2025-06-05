@@ -432,6 +432,9 @@ G_BEGIN_DECLS
 /* Chapters reference */
 #define FOURCC_chap     GST_MAKE_FOURCC('c','h','a','p')
 
+/* Subsegment association */
+#define FOURCC_sbas     GST_MAKE_FOURCC('s','b','a','s')
+
 /* For Microsoft Wave formats embedded in quicktime, the FOURCC is
    'm', 's', then the 16 bit wave codec id */
 #define MS_WAVE_FOURCC(codecid)  GST_MAKE_FOURCC( \
@@ -490,6 +493,9 @@ G_BEGIN_DECLS
 #define FOURCC_rinf     GST_MAKE_FOURCC('r','i','n','f')
 #define FOURCC_cmpC     GST_MAKE_FOURCC('c','m','p','C')
 #define FOURCC_gcmp     GST_MAKE_FOURCC('g','c','m','p')
+
+/* Low Complexity Enhancement Video Coding */
+#define FOURCC_lvc1     GST_MAKE_FOURCC ('l','v','c','1')
 
 G_END_DECLS
 

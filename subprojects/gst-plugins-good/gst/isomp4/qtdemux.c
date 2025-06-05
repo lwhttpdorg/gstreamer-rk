@@ -59,6 +59,7 @@
 #include <gst/audio/audio.h>
 #include <gst/riff/riff.h>
 #include <gst/pbutils/pbutils.h>
+#include <gst/video/gstvideoenhancementmeta.h>
 
 #include "gstisomp4elements.h"
 #include "qtatomparser.h"
@@ -147,7 +148,10 @@ typedef struct _QtDemuxAavdEncryptionInfo QtDemuxAavdEncryptionInfo;
     g_mutex_unlock (QTDEMUX_EXPOSE_GET_LOCK (demux)); \
  } G_STMT_END
 
- /* properties */
+
+GstStaticCaps LCEVC_CAPS = GST_STATIC_CAPS ("video/x-lcevc");
+
+/* properties */
 
 #define DEFAULT_PROP_MAX_ATOM_SIZE (32*1024*1024)
 
@@ -214,6 +218,33 @@ enum
  *
  * This is a good usecase for the GStreamer accumulated SEGMENT events.
  */
+
+typedef struct _QtDemuxVideoBufferData QtDemuxVideoBufferData;
+struct _QtDemuxVideoBufferData
+{
+  QtDemuxStream *stream;
+  GstBuffer *buffer;
+  gboolean round_up_duration;
+  gboolean keyframe;
+};
+
+static QtDemuxVideoBufferData *
+gst_qtdemux_video_buffer_data_new (QtDemuxStream * stream, GstBuffer * buffer,
+    gboolean round_up_duration, gboolean keyframe)
+{
+  QtDemuxVideoBufferData *data = g_new0 (QtDemuxVideoBufferData, 1);
+  data->stream = stream;
+  data->buffer = buffer;
+  data->round_up_duration = round_up_duration;
+  data->keyframe = keyframe;
+  return data;
+}
+
+static void
+gst_qtdemux_video_buffer_data_free (QtDemuxVideoBufferData * data)
+{
+  g_free (data);
+}
 
 struct _QtDemuxSegment
 {
@@ -1983,11 +2014,15 @@ _create_stream (GstQTDemux * demux, guint32 track_id)
   stream->needs_row_alignment = FALSE;
   stream->need_reorder = FALSE;
   g_queue_init (&stream->reorder_queue);
+  stream->subsegment_association_track_id = 0;
+  stream->subsegment_association_ref_track_id = 0;
   stream->stream_tags = gst_tag_list_new_empty ();
   gst_tag_list_set_scope (stream->stream_tags, GST_TAG_SCOPE_STREAM);
   g_queue_init (&stream->protection_scheme_event_queue);
   gst_video_info_init (&stream->info);
   gst_video_info_init (&stream->pre_info);
+  stream->internal = FALSE;
+  stream->cached_buffer_datas = g_queue_new ();
   stream->ref_count = 1;
   /* consistent default for push based mode */
   gst_segment_init (&stream->segment, GST_FORMAT_TIME);
@@ -2755,6 +2790,8 @@ gst_qtdemux_stream_unref (QtDemuxStream * stream)
       GST_OBJECT_UNLOCK (demux);
     }
     g_free (stream->stream_id);
+    g_queue_free_full (stream->cached_buffer_datas,
+        (GDestroyNotify) gst_qtdemux_video_buffer_data_free);
     g_free (stream);
   }
 }
@@ -7322,6 +7359,344 @@ gst_qtdemux_do_fragmented_seek (GstQTDemux * qtdemux)
   return TRUE;
 }
 
+static void
+gst_qtdemux_catch_up_streams (GstQTDemux * qtdemux,
+    QtDemuxStream * target_stream)
+{
+  QtDemuxStream *stream;
+  gint i;
+
+  for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux) &&
+      qtdemux->segment.rate >= 0; i++) {
+    stream = QTDEMUX_NTH_STREAM (qtdemux, i);
+
+    if (stream == target_stream ||
+        !GST_CLOCK_TIME_IS_VALID (stream->segment.stop) ||
+        !GST_CLOCK_TIME_IS_VALID (stream->segment.position))
+      continue;
+
+    if (stream->pad) {
+      GstClockTime gap_threshold;
+      /* kind of running time with offset segment.base and segment.start */
+      GstClockTime pseudo_target_time = target_stream->segment.base;
+      GstClockTime pseudo_cur_time = stream->segment.base;
+
+      /* make sure positive offset, segment.position can be smallr than
+       * segment.start for some reasons */
+      if (target_stream->segment.position >= target_stream->segment.start) {
+        pseudo_target_time +=
+            (target_stream->segment.position - target_stream->segment.start);
+      }
+
+      if (stream->segment.position >= stream->segment.start)
+        pseudo_cur_time += (stream->segment.position - stream->segment.start);
+
+      /* Only send gap events on non-subtitle streams if lagging way behind. */
+      if (stream->subtype == FOURCC_subp
+          || stream->subtype == FOURCC_text || stream->subtype == FOURCC_sbtl ||
+          stream->subtype == FOURCC_wvtt)
+        gap_threshold = 1 * GST_SECOND;
+      else
+        gap_threshold = 3 * GST_SECOND;
+
+      /* send gap events until the stream catches up */
+      /* gaps can only be sent after segment is activated (segment.stop is no longer -1) */
+      while (GST_CLOCK_TIME_IS_VALID (stream->segment.position) &&
+          pseudo_cur_time < (G_MAXUINT64 - gap_threshold) &&
+          pseudo_cur_time + gap_threshold < pseudo_target_time) {
+        GstEvent *gap =
+            gst_event_new_gap (stream->segment.position, gap_threshold);
+        GST_LOG_OBJECT (stream->pad, "Sending %" GST_PTR_FORMAT, gap);
+
+        if (stream->segment.rate < 0.0 && stream->need_reorder) {
+          g_queue_push_head (&stream->reorder_queue, gap);
+        } else {
+          gst_pad_push_event (stream->pad, gap);
+        }
+        stream->segment.position += gap_threshold;
+        pseudo_cur_time += gap_threshold;
+      }
+    }
+  }
+}
+
+static gboolean
+gst_qtdemux_skip_sample (GstQTDemux * qtdemux, QtDemuxStream * stream,
+    gboolean keyframe, gboolean empty, GstClockTime pts, GstClockTime duration,
+    guint sample_size)
+{
+  /* If we're doing a keyframe-only trickmode, only push keyframes on video streams */
+  if (G_UNLIKELY (qtdemux->segment.
+          flags & GST_SEGMENT_FLAG_TRICKMODE_KEY_UNITS)) {
+    if (stream->subtype == FOURCC_vide || stream->subtype == FOURCC_pict) {
+      if (!keyframe) {
+        GST_LOG_OBJECT (qtdemux, "Skipping non-keyframe on track-id %u",
+            stream->track_id);
+        return TRUE;
+      } else if (qtdemux->trickmode_interval > 0) {
+        GstClockTimeDiff interval;
+
+        if (qtdemux->segment.rate > 0)
+          interval = stream->cur_global_pts - stream->last_keyframe_pts;
+        else
+          interval = stream->last_keyframe_pts - stream->cur_global_pts;
+
+        if (GST_CLOCK_TIME_IS_VALID (stream->last_keyframe_pts)
+            && interval < qtdemux->trickmode_interval) {
+          GST_LOG_OBJECT (qtdemux,
+              "Skipping keyframe within interval on track-id %u",
+              stream->track_id);
+          return TRUE;
+        } else {
+          stream->last_keyframe_pts = stream->cur_global_pts;
+        }
+      }
+    }
+  }
+
+  if (G_UNLIKELY (empty)) {
+    GstClockTime gst_pts = QTSTREAMTIME_TO_GSTTIME (stream, pts);
+    GstClockTime gst_dur = QTSTREAMTIME_TO_GSTTIME (stream, duration);
+
+    /* empty segment, push a gap if there's a second or more
+     * difference and move to the next one */
+    if ((gst_pts + gst_dur - stream->segment.position) >= GST_SECOND) {
+      GstEvent *gap = gst_event_new_gap (gst_pts, gst_dur);
+
+      if (stream->segment.rate < 0.0 && stream->need_reorder) {
+        g_queue_push_head (&stream->reorder_queue, gap);
+      } else {
+        gst_pad_push_event (stream->pad, gap);
+      }
+    }
+    stream->segment.position = gst_pts + gst_dur;
+    return TRUE;
+  }
+
+  /* hmm, empty sample, skip and move to next sample */
+  if (G_UNLIKELY (sample_size <= 0))
+    return TRUE;
+
+  /* last pushed sample was out of boundary, goto next sample */
+  if (stream->pad &&
+      G_UNLIKELY (GST_PAD_LAST_FLOW_RETURN (stream->pad) == GST_FLOW_EOS))
+    return TRUE;
+
+  return FALSE;
+}
+
+static GstFlowReturn
+gst_qtdemux_get_sample_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
+    guint sample_size, guint64 offset, guint * out_size,
+    guint * out_num_samples, GstBuffer ** buf)
+{
+  GstFlowReturn ret = GST_FLOW_OK;
+  guint size = 0;
+  guint num_samples = 1;
+
+  if (stream->max_buffer_size != 0 && sample_size > stream->max_buffer_size) {
+    GST_DEBUG_OBJECT (qtdemux,
+        "size %d larger than stream max_buffer_size %d, trimming",
+        sample_size, stream->max_buffer_size);
+    size =
+        MIN (sample_size - stream->offset_in_sample, stream->max_buffer_size);
+  } else if (stream->min_buffer_size != 0 && stream->offset_in_sample == 0
+      && sample_size < stream->min_buffer_size) {
+    guint start_sample_index = stream->sample_index;
+    guint accumulated_size = sample_size;
+    guint64 expected_next_offset = offset + sample_size;
+
+    GST_DEBUG_OBJECT (qtdemux,
+        "size %d smaller than stream min_buffer_size %d, combining with the next",
+        sample_size, stream->min_buffer_size);
+
+    while (stream->sample_index < stream->to_sample
+        && stream->sample_index + 1 < stream->n_samples) {
+      const QtDemuxSample *next_sample;
+
+      /* Increment temporarily */
+      stream->sample_index++;
+
+      /* Failed to parse sample so let's go back to the previous one that was
+       * still successful */
+      if (!qtdemux_parse_samples (qtdemux, stream, stream->sample_index)) {
+        stream->sample_index--;
+        break;
+      }
+
+      next_sample = &stream->samples[stream->sample_index];
+
+      /* Not contiguous with the previous sample so let's go back to the
+       * previous one that was still successful */
+      if (next_sample->offset != expected_next_offset) {
+        stream->sample_index--;
+        break;
+      }
+
+      accumulated_size += next_sample->size;
+      expected_next_offset += next_sample->size;
+      if (accumulated_size >= stream->min_buffer_size)
+        break;
+    }
+
+    num_samples = stream->sample_index + 1 - start_sample_index;
+    stream->sample_index = start_sample_index;
+    GST_DEBUG_OBJECT (qtdemux, "Pulling %u samples of size %u at once",
+        num_samples, accumulated_size);
+    size = accumulated_size;
+  } else {
+    size = sample_size;
+  }
+
+  if (qtdemux->cenc_aux_info_offset > 0) {
+    GstMapInfo map;
+    GstByteReader br;
+    GstBuffer *aux_info = NULL;
+
+    /* pull the data stored before the sample */
+    ret = gst_qtdemux_pull_atom (qtdemux, qtdemux->offset,
+        offset + stream->offset_in_sample - qtdemux->offset, &aux_info);
+    if (G_UNLIKELY (ret != GST_FLOW_OK))
+      return ret;
+    gst_buffer_map (aux_info, &map, GST_MAP_READ);
+    GST_DEBUG_OBJECT (qtdemux, "parsing cenc auxiliary info");
+    gst_byte_reader_init (&br, map.data + 8, map.size);
+    if (!qtdemux_parse_cenc_aux_info (qtdemux, stream, &br,
+            qtdemux->cenc_aux_info_sizes, qtdemux->cenc_aux_sample_count)) {
+      GST_ERROR_OBJECT (qtdemux, "failed to parse cenc auxiliary info");
+      gst_buffer_unmap (aux_info, &map);
+      gst_buffer_unref (aux_info);
+      return GST_FLOW_ERROR;
+    }
+    gst_buffer_unmap (aux_info, &map);
+    gst_buffer_unref (aux_info);
+  }
+
+  GST_LOG_OBJECT (qtdemux, "reading %d bytes @ %" G_GUINT64_FORMAT, size,
+      offset);
+
+  if (stream->use_allocator) {
+    /* if we have a per-stream allocator, use it */
+    *buf = gst_buffer_new_allocate (stream->allocator, size, &stream->params);
+  }
+
+  ret = gst_qtdemux_pull_atom (qtdemux, offset + stream->offset_in_sample,
+      size, buf);
+  if (G_UNLIKELY (ret != GST_FLOW_OK))
+    return ret;
+
+  if (out_size)
+    *out_size = size;
+  if (out_num_samples)
+    *out_num_samples = num_samples;
+
+  return GST_FLOW_OK;
+}
+
+static GstBuffer *
+convert_lcevc_buffer_to_annex_b (guint32 prefix_size, GstBuffer * lcevc_buf)
+{
+  GstMapInfo src_map, dst_map;
+  GstBuffer *dst;
+
+  gst_buffer_map (lcevc_buf, &src_map, GST_MAP_READ);
+
+  dst = gst_buffer_new_allocate (NULL, 4 + src_map.size - prefix_size, NULL);
+  gst_buffer_map (dst, &dst_map, GST_MAP_WRITE);
+
+  GST_WRITE_UINT32_BE (dst_map.data, 1);
+  memcpy (dst_map.data + 4, src_map.data + prefix_size,
+      src_map.size - prefix_size);
+
+  gst_buffer_unmap (dst, &dst_map);
+  gst_buffer_unmap (lcevc_buf, &src_map);
+  return dst;
+}
+
+static GstFlowReturn
+gst_qtdemux_attach_buffer_lcevc_metadata (GstQTDemux * qtdemux,
+    GstBuffer * buf, QtDemuxStream * lcevc_stream)
+{
+  GstFlowReturn ret = GST_FLOW_OK;
+  gboolean empty = 0;
+  guint64 offset = 0;
+  guint sample_size = 0;
+  guint64 dts = -1;
+  guint64 pts = -1;
+  GstClockTime duration = 0;
+  gboolean round_up_duration = FALSE;
+  gboolean keyframe = FALSE;
+  guint size;
+  guint num_samples = 1;
+  GstBuffer *lcevc_buf = NULL;
+  GstBuffer *lcevc_annexb = NULL;
+  GstCaps *lcevc_caps;
+
+  /* fetch info for the current sample of this stream */
+  if (G_UNLIKELY (!gst_qtdemux_prepare_current_sample (qtdemux, lcevc_stream,
+              &empty, &offset, &sample_size, &dts, &pts, &duration,
+              &round_up_duration, &keyframe)))
+    return GST_FLOW_ERROR;
+
+  /* Skip the sample if needed */
+  if (gst_qtdemux_skip_sample (qtdemux, lcevc_stream, keyframe, empty, pts,
+          duration, sample_size))
+    goto next;
+
+  /* Get the sample buffer */
+  ret = gst_qtdemux_get_sample_buffer (qtdemux, lcevc_stream, sample_size,
+      offset, &size, &num_samples, &lcevc_buf);
+  if (G_UNLIKELY (ret != GST_FLOW_OK))
+    return ret;
+
+  /* Update for both splitting and combining of samples */
+  if (size != sample_size) {
+    pts += lcevc_stream->offset_in_sample /
+        CUR_STREAM (lcevc_stream)->bytes_per_frame;
+    dts += lcevc_stream->offset_in_sample /
+        CUR_STREAM (lcevc_stream)->bytes_per_frame;
+    duration = size / CUR_STREAM (lcevc_stream)->bytes_per_frame;
+  }
+
+  /* Convert LCEVC data from Length-Prefix to Annex-B format as LCEVC decoder
+   * only works with Annex-B format */
+  lcevc_annexb = convert_lcevc_buffer_to_annex_b (4, lcevc_buf);
+  gst_buffer_unref (lcevc_buf);
+
+  /* Set LCEVC buffer timestamps and duration */
+  GST_BUFFER_DTS (lcevc_annexb) = (dts == -1) ? GST_CLOCK_TIME_NONE :
+      QTSTREAMTIME_TO_GSTTIME (lcevc_stream, dts);
+  GST_BUFFER_PTS (lcevc_annexb) = (pts == -1) ? GST_CLOCK_TIME_NONE :
+      QTSTREAMTIME_TO_GSTTIME (lcevc_stream, pts);
+  GST_BUFFER_DURATION (lcevc_annexb) = (duration == -1) ? GST_CLOCK_TIME_NONE :
+      QTSTREAMTIME_TO_GSTTIME (lcevc_stream, duration) + round_up_duration;
+
+  GST_DEBUG_OBJECT (qtdemux,
+      "adding LCEVC data from track-id %u, empty %d offset %" G_GUINT64_FORMAT
+      ", size %d, dts=%" GST_TIME_FORMAT ", pts=%" GST_TIME_FORMAT
+      ", duration %" GST_TIME_FORMAT, lcevc_stream->track_id, empty, offset,
+      sample_size, GST_TIME_ARGS (GST_BUFFER_DTS (lcevc_annexb)),
+      GST_TIME_ARGS (GST_BUFFER_PTS (lcevc_annexb)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (lcevc_annexb)));
+
+  /* Add LCEVC metadata */
+  lcevc_caps = gst_static_caps_get (&LCEVC_CAPS);
+  gst_buffer_add_video_enhancement_meta (buf, lcevc_caps, lcevc_annexb);
+  gst_caps_unref (lcevc_caps);
+  gst_buffer_unref (lcevc_annexb);
+
+  /* Advance */
+  lcevc_stream->offset_in_sample += sample_size;
+  if (lcevc_stream->offset_in_sample >= sample_size)
+    gst_qtdemux_advance_sample (qtdemux, lcevc_stream);
+
+  return ret;
+
+next:
+  gst_qtdemux_advance_sample (qtdemux, lcevc_stream);
+  return ret;
+}
+
 static GstFlowReturn
 gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
 {
@@ -7407,58 +7782,7 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
 
   /* Send catche-up GAP event for each other stream if required.
    * This logic will be applied only for positive rate */
-  for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux) &&
-      qtdemux->segment.rate >= 0; i++) {
-    stream = QTDEMUX_NTH_STREAM (qtdemux, i);
-
-    if (stream == target_stream ||
-        !GST_CLOCK_TIME_IS_VALID (stream->segment.stop) ||
-        !GST_CLOCK_TIME_IS_VALID (stream->segment.position))
-      continue;
-
-    if (stream->pad) {
-      GstClockTime gap_threshold;
-      /* kind of running time with offset segment.base and segment.start */
-      GstClockTime pseudo_target_time = target_stream->segment.base;
-      GstClockTime pseudo_cur_time = stream->segment.base;
-
-      /* make sure positive offset, segment.position can be smallr than
-       * segment.start for some reasons */
-      if (target_stream->segment.position >= target_stream->segment.start) {
-        pseudo_target_time +=
-            (target_stream->segment.position - target_stream->segment.start);
-      }
-
-      if (stream->segment.position >= stream->segment.start)
-        pseudo_cur_time += (stream->segment.position - stream->segment.start);
-
-      /* Only send gap events on non-subtitle streams if lagging way behind. */
-      if (stream->subtype == FOURCC_subp
-          || stream->subtype == FOURCC_text || stream->subtype == FOURCC_sbtl ||
-          stream->subtype == FOURCC_wvtt)
-        gap_threshold = 1 * GST_SECOND;
-      else
-        gap_threshold = 3 * GST_SECOND;
-
-      /* send gap events until the stream catches up */
-      /* gaps can only be sent after segment is activated (segment.stop is no longer -1) */
-      while (GST_CLOCK_TIME_IS_VALID (stream->segment.position) &&
-          pseudo_cur_time < (G_MAXUINT64 - gap_threshold) &&
-          pseudo_cur_time + gap_threshold < pseudo_target_time) {
-        GstEvent *gap =
-            gst_event_new_gap (stream->segment.position, gap_threshold);
-        GST_LOG_OBJECT (stream->pad, "Sending %" GST_PTR_FORMAT, gap);
-
-        if (stream->segment.rate < 0.0 && stream->need_reorder) {
-          g_queue_push_head (&stream->reorder_queue, gap);
-        } else {
-          gst_pad_push_event (stream->pad, gap);
-        }
-        stream->segment.position += gap_threshold;
-        pseudo_cur_time += gap_threshold;
-      }
-    }
-  }
+  gst_qtdemux_catch_up_streams (qtdemux, target_stream);
 
   stream = target_stream;
 
@@ -7468,33 +7792,22 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
     qtdemux_do_allocation (stream, qtdemux);
   }
 
-  /* If we're doing a keyframe-only trickmode, only push keyframes on video streams */
-  if (G_UNLIKELY (qtdemux->segment.
-          flags & GST_SEGMENT_FLAG_TRICKMODE_KEY_UNITS)) {
-    if (stream->subtype == FOURCC_vide || stream->subtype == FOURCC_pict) {
-      if (!keyframe) {
-        GST_LOG_OBJECT (qtdemux, "Skipping non-keyframe on track-id %u",
-            stream->track_id);
-        goto next;
-      } else if (qtdemux->trickmode_interval > 0) {
-        GstClockTimeDiff interval;
+  /* Skip the sample if needed */
+  if (gst_qtdemux_skip_sample (qtdemux, stream, keyframe, empty, pts, duration,
+          sample_size))
+    goto next;
 
-        if (qtdemux->segment.rate > 0)
-          interval = stream->cur_global_pts - stream->last_keyframe_pts;
-        else
-          interval = stream->last_keyframe_pts - stream->cur_global_pts;
+  /* Get the sample buffer */
+  ret = gst_qtdemux_get_sample_buffer (qtdemux, stream, sample_size, offset,
+      &size, &num_samples, &buf);
+  if (G_UNLIKELY (ret != GST_FLOW_OK))
+    goto beach;
 
-        if (GST_CLOCK_TIME_IS_VALID (stream->last_keyframe_pts)
-            && interval < qtdemux->trickmode_interval) {
-          GST_LOG_OBJECT (qtdemux,
-              "Skipping keyframe within interval on track-id %u",
-              stream->track_id);
-          goto next;
-        } else {
-          stream->last_keyframe_pts = stream->cur_global_pts;
-        }
-      }
-    }
+  /* Update for both splitting and combining of samples */
+  if (size != sample_size) {
+    pts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
+    dts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
+    duration = size / CUR_STREAM (stream)->bytes_per_frame;
   }
 
   GST_DEBUG_OBJECT (qtdemux,
@@ -7506,131 +7819,16 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
       GST_TIME_ARGS (QTSTREAMTIME_TO_GSTTIME (stream, pts)),
       GST_TIME_ARGS (QTSTREAMTIME_TO_GSTTIME (stream, duration)));
 
-  if (G_UNLIKELY (empty)) {
-    GstClockTime gst_pts = QTSTREAMTIME_TO_GSTTIME (stream, pts);
-    GstClockTime gst_dur = QTSTREAMTIME_TO_GSTTIME (stream, duration);
-
-    /* empty segment, push a gap if there's a second or more
-     * difference and move to the next one */
-    if ((gst_pts + gst_dur - stream->segment.position) >= GST_SECOND) {
-      GstEvent *gap = gst_event_new_gap (gst_pts, gst_dur);
-
-      if (stream->segment.rate < 0.0 && stream->need_reorder) {
-        g_queue_push_head (&stream->reorder_queue, gap);
-      } else {
-        gst_pad_push_event (stream->pad, gap);
-      }
+  /* Attach LCEVC metadata to video buffers if present */
+  if (stream->subtype == FOURCC_vide &&
+      stream->subsegment_association_ref_track_id > 0) {
+    QtDemuxStream *lcevc_s = qtdemux_find_stream (qtdemux,
+        stream->subsegment_association_ref_track_id);
+    if (lcevc_s && CUR_STREAM (lcevc_s)->is_lcevc) {
+      ret = gst_qtdemux_attach_buffer_lcevc_metadata (qtdemux, buf, lcevc_s);
+      if (G_UNLIKELY (ret != GST_FLOW_OK))
+        goto beach;
     }
-    stream->segment.position = gst_pts + gst_dur;
-    goto next;
-  }
-
-  /* hmm, empty sample, skip and move to next sample */
-  if (G_UNLIKELY (sample_size <= 0))
-    goto next;
-
-  /* last pushed sample was out of boundary, goto next sample */
-  if (G_UNLIKELY (GST_PAD_LAST_FLOW_RETURN (stream->pad) == GST_FLOW_EOS))
-    goto next;
-
-  if (stream->max_buffer_size != 0 && sample_size > stream->max_buffer_size) {
-    GST_DEBUG_OBJECT (qtdemux,
-        "size %d larger than stream max_buffer_size %d, trimming",
-        sample_size, stream->max_buffer_size);
-    size =
-        MIN (sample_size - stream->offset_in_sample, stream->max_buffer_size);
-  } else if (stream->min_buffer_size != 0 && stream->offset_in_sample == 0
-      && sample_size < stream->min_buffer_size) {
-    guint start_sample_index = stream->sample_index;
-    guint accumulated_size = sample_size;
-    guint64 expected_next_offset = offset + sample_size;
-
-    GST_DEBUG_OBJECT (qtdemux,
-        "size %d smaller than stream min_buffer_size %d, combining with the next",
-        sample_size, stream->min_buffer_size);
-
-    while (stream->sample_index < stream->to_sample
-        && stream->sample_index + 1 < stream->n_samples) {
-      const QtDemuxSample *next_sample;
-
-      /* Increment temporarily */
-      stream->sample_index++;
-
-      /* Failed to parse sample so let's go back to the previous one that was
-       * still successful */
-      if (!qtdemux_parse_samples (qtdemux, stream, stream->sample_index)) {
-        stream->sample_index--;
-        break;
-      }
-
-      next_sample = &stream->samples[stream->sample_index];
-
-      /* Not contiguous with the previous sample so let's go back to the
-       * previous one that was still successful */
-      if (next_sample->offset != expected_next_offset) {
-        stream->sample_index--;
-        break;
-      }
-
-      accumulated_size += next_sample->size;
-      expected_next_offset += next_sample->size;
-      if (accumulated_size >= stream->min_buffer_size)
-        break;
-    }
-
-    num_samples = stream->sample_index + 1 - start_sample_index;
-    stream->sample_index = start_sample_index;
-    GST_DEBUG_OBJECT (qtdemux, "Pulling %u samples of size %u at once",
-        num_samples, accumulated_size);
-    size = accumulated_size;
-  } else {
-    size = sample_size;
-  }
-
-  if (qtdemux->cenc_aux_info_offset > 0) {
-    GstMapInfo map;
-    GstByteReader br;
-    GstBuffer *aux_info = NULL;
-
-    /* pull the data stored before the sample */
-    ret =
-        gst_qtdemux_pull_atom (qtdemux, qtdemux->offset,
-        offset + stream->offset_in_sample - qtdemux->offset, &aux_info);
-    if (G_UNLIKELY (ret != GST_FLOW_OK))
-      goto beach;
-    gst_buffer_map (aux_info, &map, GST_MAP_READ);
-    GST_DEBUG_OBJECT (qtdemux, "parsing cenc auxiliary info");
-    gst_byte_reader_init (&br, map.data + 8, map.size);
-    if (!qtdemux_parse_cenc_aux_info (qtdemux, stream, &br,
-            qtdemux->cenc_aux_info_sizes, qtdemux->cenc_aux_sample_count)) {
-      GST_ERROR_OBJECT (qtdemux, "failed to parse cenc auxiliary info");
-      gst_buffer_unmap (aux_info, &map);
-      gst_buffer_unref (aux_info);
-      ret = GST_FLOW_ERROR;
-      goto beach;
-    }
-    gst_buffer_unmap (aux_info, &map);
-    gst_buffer_unref (aux_info);
-  }
-
-  GST_LOG_OBJECT (qtdemux, "reading %d bytes @ %" G_GUINT64_FORMAT, size,
-      offset);
-
-  if (stream->use_allocator) {
-    /* if we have a per-stream allocator, use it */
-    buf = gst_buffer_new_allocate (stream->allocator, size, &stream->params);
-  }
-
-  ret = gst_qtdemux_pull_atom (qtdemux, offset + stream->offset_in_sample,
-      size, &buf);
-  if (G_UNLIKELY (ret != GST_FLOW_OK))
-    goto beach;
-
-  /* Update for both splitting and combining of samples */
-  if (size != sample_size) {
-    pts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
-    dts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
-    duration = size / CUR_STREAM (stream)->bytes_per_frame;
   }
 
   ret = gst_qtdemux_decorate_and_push_buffer (qtdemux, stream, buf,
@@ -8896,6 +9094,7 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             ret = GST_FLOW_OK;
           } else {
             GstBuffer *outbuf;
+            gboolean cached;
 
             outbuf =
                 gst_adapter_take_buffer (demux->adapter, demux->neededbytes);
@@ -8903,9 +9102,131 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             /* FIXME: should either be an assert or a plain check */
             g_return_val_if_fail (outbuf != NULL, GST_FLOW_ERROR);
 
-            ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
-                dts, pts, duration, round_up_duration, keyframe, dts,
-                demux->offset);
+            /* Cache the buffer if it has an associated stream.
+             * If the LCEVC stream is processed first, we cache the LCEVC
+             * buffers so they are attached later as metadata when processing
+             * the associated video stream. On the other hand, if the video
+             * stream is processed first, we cache the video buffers so they
+             * are pushed later when the LCEVC stream is processed.
+             */
+            cached = FALSE;
+            if (g_queue_get_length (stream->cached_buffer_datas) == 0) {
+              if (stream->internal &&
+                  CUR_STREAM (stream)->is_lcevc &&
+                  stream->subsegment_association_track_id > 0) {
+                QtDemuxStream *video_s = qtdemux_find_stream (demux,
+                    stream->subsegment_association_track_id);
+                if (video_s && video_s->subtype == FOURCC_vide) {
+                  QtDemuxVideoBufferData *data;
+                  GST_BUFFER_DTS (outbuf) = dts;
+                  GST_BUFFER_PTS (outbuf) = pts;
+                  GST_BUFFER_DURATION (outbuf) = duration;
+                  GST_BUFFER_OFFSET (outbuf) = demux->offset;
+                  data = gst_qtdemux_video_buffer_data_new (stream, outbuf,
+                      round_up_duration, keyframe);
+                  g_queue_push_tail (video_s->cached_buffer_datas, data);
+                  cached = TRUE;
+                  ret = GST_FLOW_OK;
+                }
+              } else if (stream->subtype == FOURCC_vide &&
+                  stream->subsegment_association_ref_track_id > 0) {
+                QtDemuxStream *lcevc_s = qtdemux_find_stream (demux,
+                    stream->subsegment_association_ref_track_id);
+                if (lcevc_s && lcevc_s->internal &&
+                    CUR_STREAM (lcevc_s)->is_lcevc) {
+                  QtDemuxVideoBufferData *data;
+                  GST_BUFFER_DTS (outbuf) = dts;
+                  GST_BUFFER_PTS (outbuf) = pts;
+                  GST_BUFFER_DURATION (outbuf) = duration;
+                  GST_BUFFER_OFFSET (outbuf) = demux->offset;
+                  data = gst_qtdemux_video_buffer_data_new (stream, outbuf,
+                      round_up_duration, keyframe);
+                  g_queue_push_tail (lcevc_s->cached_buffer_datas, data);
+                  cached = TRUE;
+                  ret = GST_FLOW_OK;
+                }
+              }
+            }
+
+            /* Push buffer if it was not cached */
+            if (!cached) {
+              QtDemuxVideoBufferData *data;
+
+              /* Attach LCEVC metadata if we have cached buffer data */
+              data = g_queue_pop_head (stream->cached_buffer_datas);
+              if (data) {
+                QtDemuxStream *video_stream = stream;
+                QtDemuxStream *lcevc_stream = data->stream;
+                GstBuffer *video_buf = outbuf;
+                GstBuffer *lcevc_buf = data->buffer;
+                GstClockTime video_dts = dts;
+                GstClockTime video_pts = pts;
+                GstClockTime video_dur = duration;
+                gboolean video_round_up_duration = round_up_duration;
+                GstClockTime lcevc_dts = GST_BUFFER_DTS (data->buffer);
+                GstClockTime lcevc_pts = GST_BUFFER_PTS (data->buffer);
+                GstClockTime lcevc_dur = GST_BUFFER_DURATION (data->buffer);
+                gboolean lcevc_round_up_duration = data->round_up_duration;
+                gboolean video_keyframe = keyframe;
+                guint64 video_offset = demux->offset;
+                GstBuffer *lcevc_annexb;
+                GstCaps *lcevc_caps;
+
+                /* Switch values if this stream is LCEVC */
+                if (CUR_STREAM (stream)->is_lcevc) {
+                  video_stream = data->stream;
+                  lcevc_stream = stream;
+                  video_buf = data->buffer;
+                  lcevc_buf = outbuf;
+                  video_dts = GST_BUFFER_DTS (data->buffer);
+                  video_pts = GST_BUFFER_PTS (data->buffer);
+                  video_dur = GST_BUFFER_DURATION (data->buffer);
+                  video_round_up_duration = data->round_up_duration;
+                  lcevc_dts = dts;
+                  lcevc_pts = pts;
+                  lcevc_dur = duration;
+                  lcevc_round_up_duration = round_up_duration;
+                  video_keyframe = data->keyframe;
+                  video_offset = GST_BUFFER_OFFSET (data->buffer);
+                }
+
+                /* Convert LCEVC data from Length-Prefix to Annex-B format as
+                 * LCEVC decoder only works with Annex-B format */
+                lcevc_annexb = convert_lcevc_buffer_to_annex_b (4, lcevc_buf);
+                gst_buffer_unref (lcevc_buf);
+
+                /* Set LCEVC buffer timestamps and duration */
+                GST_BUFFER_DTS (lcevc_annexb) =
+                    (lcevc_dts == -1) ? GST_CLOCK_TIME_NONE :
+                    QTSTREAMTIME_TO_GSTTIME (lcevc_stream, lcevc_dts);
+                GST_BUFFER_PTS (lcevc_annexb) =
+                    (lcevc_pts == -1) ? GST_CLOCK_TIME_NONE :
+                    QTSTREAMTIME_TO_GSTTIME (lcevc_stream, lcevc_pts);
+                GST_BUFFER_DURATION (lcevc_annexb) =
+                    (lcevc_dur == -1) ? GST_CLOCK_TIME_NONE :
+                    QTSTREAMTIME_TO_GSTTIME (lcevc_stream, lcevc_dur) +
+                    lcevc_round_up_duration;
+
+                /* Attach LCEVC metadata to video buffer */
+                lcevc_caps = gst_static_caps_get (&LCEVC_CAPS);
+                gst_buffer_add_video_enhancement_meta (video_buf, lcevc_caps,
+                    lcevc_annexb);
+                gst_caps_unref (lcevc_caps);
+                gst_buffer_unref (lcevc_annexb);
+
+                ret = gst_qtdemux_decorate_and_push_buffer (demux, video_stream,
+                    video_buf, video_dts, video_pts, video_dur,
+                    video_round_up_duration, video_keyframe, video_dts,
+                    video_offset);
+
+                gst_qtdemux_video_buffer_data_free (data);
+              } else {
+                ret =
+                    gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
+                    dts, pts, duration, round_up_duration, keyframe, dts,
+                    demux->offset);
+              }
+            }
           }
 
           /* combine flows */
@@ -10355,6 +10676,12 @@ gst_qtdemux_add_stream (GstQTDemux * qtdemux,
     QtDemuxStream * stream, GstTagList * list)
 {
   gboolean ret = TRUE;
+
+  if (stream->internal) {
+    GST_INFO_OBJECT (qtdemux, "Stream %d is internal, not exposing pad",
+        stream->track_id);
+    goto done;
+  }
 
   if (stream->subtype == FOURCC_vide) {
     gchar *name = g_strdup_printf ("video_%u", qtdemux->n_video_streams);
@@ -15280,8 +15607,11 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
     goto corrupt_file;
 
   if ((tref = qtdemux_tree_get_child_by_type (trak, FOURCC_tref))) {
+    GNode *chap;
+    GNode *sbas;
+
     /* chapters track reference */
-    GNode *chap = qtdemux_tree_get_child_by_type (tref, FOURCC_chap);
+    chap = qtdemux_tree_get_child_by_type (tref, FOURCC_chap);
     if (chap) {
       gsize length = GST_READ_UINT32_BE (chap->data);
       if (qtdemux->chapters_track_id)
@@ -15290,6 +15620,16 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       if (length >= 12) {
         qtdemux->chapters_track_id =
             GST_READ_UINT32_BE ((gint8 *) chap->data + 8);
+      }
+    }
+
+    /* subsegment association */
+    sbas = qtdemux_tree_get_child_by_type (tref, FOURCC_sbas);
+    if (sbas) {
+      gsize length = GST_READ_UINT32_BE (sbas->data);
+      if (length >= 12) {
+        stream->subsegment_association_track_id =
+            GST_READ_UINT32_BE ((gint8 *) sbas->data + 8);
       }
     }
   }
@@ -16473,6 +16813,9 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
             }
             break;
           }
+          case FOURCC_lvc1:
+            entry->is_lcevc = TRUE;
+            break;
           default:
             break;
         }
@@ -18481,6 +18824,7 @@ qtdemux_parse_tree (GstQTDemux * qtdemux)
   guint8 version;
   GstByteReader mvhd_reader;
   guint32 matrix[9];
+  guint i, j;
 
   /* make sure we have a usable taglist */
   qtdemux->tag_list = gst_tag_list_make_writable (qtdemux->tag_list);
@@ -18604,6 +18948,38 @@ qtdemux_parse_tree (GstQTDemux * qtdemux)
     qtdemux_parse_trak (qtdemux, trak, matrix);
     /* iterate all siblings */
     trak = qtdemux_tree_get_sibling_by_type (trak, FOURCC_trak);
+  }
+
+  /* Update subsequent association reference track ID in all streams if any */
+  for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+    QtDemuxStream *stream = QTDEMUX_NTH_STREAM (qtdemux, i);
+    for (j = 0; j < QTDEMUX_N_STREAMS (qtdemux); j++) {
+      QtDemuxStream *other_stream = QTDEMUX_NTH_STREAM (qtdemux, j);
+      if (other_stream != stream &&
+          other_stream->subsegment_association_track_id == stream->track_id) {
+        if (stream->subsegment_association_ref_track_id > 0)
+          GST_FIXME_OBJECT (qtdemux,
+              "Multiple subsegment association tracks for stream %d",
+              stream->track_id);
+        stream->subsegment_association_ref_track_id = other_stream->track_id;
+        other_stream->internal = TRUE;
+      }
+    }
+  }
+
+  /* Set LCEVC caps in the video streams */
+  for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+    QtDemuxStream *video_stream = QTDEMUX_NTH_STREAM (qtdemux, i);
+    if (video_stream->subtype == FOURCC_vide &&
+        !CUR_STREAM (video_stream)->is_lcevc) {
+      if (video_stream->subsegment_association_ref_track_id > 0) {
+        QtDemuxStream *lcevc_stream = qtdemux_find_stream (qtdemux,
+            video_stream->subsegment_association_ref_track_id);
+        if (lcevc_stream && CUR_STREAM (lcevc_stream)->is_lcevc)
+          gst_caps_set_simple (CUR_STREAM (video_stream)->caps, "lcevc",
+              G_TYPE_BOOLEAN, TRUE, NULL);
+      }
+    }
   }
 
   qtdemux->tag_list = gst_tag_list_make_writable (qtdemux->tag_list);
@@ -19988,6 +20364,11 @@ qtdemux_video_caps (GstQTDemux * qtdemux, QtDemuxStream * stream,
       caps = gst_caps_new_simple ("video/x-tscc",
           "tsccversion", G_TYPE_INT, 2, NULL);
       break;
+    case FOURCC_lvc1:
+    {
+      caps = gst_caps_new_empty_simple ("video/x-lvc1");
+      break;
+    }
     case GST_MAKE_FOURCC ('k', 'p', 'c', 'd'):
     default:
     {
