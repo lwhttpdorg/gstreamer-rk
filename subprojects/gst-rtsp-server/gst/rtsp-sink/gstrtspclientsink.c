@@ -421,11 +421,18 @@ static GObject *
 gst_rtsp_client_sink_child_proxy_get_child_by_index (GstChildProxy *
     child_proxy, guint index)
 {
-  GObject *obj;
+  GObject *obj = NULL;
   GstRTSPClientSink *cs = GST_RTSP_CLIENT_SINK (child_proxy);
 
   GST_OBJECT_LOCK (cs);
-  if ((obj = g_list_nth_data (GST_ELEMENT (cs)->sinkpads, index)))
+
+  GstElement *element = GST_ELEMENT (cs);
+  if (index < element->numsinkpads) {
+    obj = g_list_nth_data (element->sinkpads, index);
+  } else {
+    obj = g_list_nth_data (GST_BIN_CHILDREN (cs), index - element->numsinkpads);
+  }
+  if (obj != NULL)
     g_object_ref (obj);
   GST_OBJECT_UNLOCK (cs);
 
@@ -439,7 +446,9 @@ gst_rtsp_client_sink_child_proxy_get_children_count (GstChildProxy *
   guint count = 0;
 
   GST_OBJECT_LOCK (child_proxy);
-  count = GST_ELEMENT (child_proxy)->numsinkpads;
+  count =
+      GST_ELEMENT (child_proxy)->numsinkpads +
+      GST_BIN_NUMCHILDREN (GST_BIN (child_proxy));
   GST_OBJECT_UNLOCK (child_proxy);
 
   GST_INFO_OBJECT (child_proxy, "Children Count: %d", count);
@@ -549,6 +558,12 @@ gst_rtsp_client_sink_class_init (GstRTSPClientSinkClass * klass)
           0, G_MAXUINT64, DEFAULT_TCP_TIMEOUT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstRTSPClientSink:latency:
+   *
+   * @deprecated: Since 1.XX, use the child-propertry rtspbin::rtpbin0::latency instead.
+   *
+   */
   g_object_class_install_property (gobject_class, PROP_LATENCY,
       g_param_spec_uint ("latency", "Buffer latency in ms",
           "Amount of ms to buffer", 0, G_MAXUINT, DEFAULT_LATENCY_MS,
@@ -659,6 +674,12 @@ gst_rtsp_client_sink_class_init (GstRTSPClientSinkClass * klass)
           "The network interface on which to join the multicast group",
           DEFAULT_MULTICAST_IFACE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstRTSPClientSink:sdes:
+   *
+   * @deprecated: Since 1.XX, use the child-propertry rtspbin::rtpbin0::sdes instead.
+   *
+   */
   g_object_class_install_property (gobject_class, PROP_SDES,
       g_param_spec_boxed ("sdes", "SDES",
           "The SDES items of this session",
@@ -715,8 +736,7 @@ gst_rtsp_client_sink_class_init (GstRTSPClientSinkClass * klass)
   /**
    * GstRTSPClientSink:ntp-time-source:
    *
-   * allows to select the time source that should be used
-   * for the NTP time in outgoing packets
+   * @deprecated: Since 1.XX, use the child-propertry rtspbin::rtpbin0::ntp-time-source instead.
    *
    */
   g_object_class_install_property (gobject_class, PROP_NTP_TIME_SOURCE,
@@ -871,6 +891,16 @@ gst_rtsp_client_sink_class_init (GstRTSPClientSinkClass * klass)
   gst_type_mark_as_plugin_api (GST_TYPE_RTSP_CLIENT_SINK_NTP_TIME_SOURCE, 0);
 }
 
+static gboolean gst_rtsp_client_sink_create_manager (GstRTSPClientSink * sink);
+
+/* FIXME: Remove for backwards compatibility after deprecation removal */
+static void gst_rtsp_client_sink_set_bin_latency (GstRTSPClientSink * sink);
+
+static void gst_rtsp_client_sink_set_bin_sdes (GstRTSPClientSink * sink);
+
+static void
+gst_rtsp_client_sink_set_bin_ntp_time_source (GstRTSPClientSink * sink);
+
 static void
 gst_rtsp_client_sink_init (GstRTSPClientSink * sink)
 {
@@ -937,6 +967,18 @@ gst_rtsp_client_sink_init (GstRTSPClientSink * sink)
   gst_sdp_message_init (&sink->cursdp);
 
   GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_FLAG_SINK);
+
+  if (!gst_rtsp_client_sink_create_manager (sink)) {
+    GST_WARNING_OBJECT (sink, "Failed to create manager");
+    g_warning ("Failed to create manager for RTSP client sink, "
+        "this will likely cause problems with the element");
+  } else {
+    /* FIXME: Remove for backwards compatibility after deprecation removal */
+    gst_rtsp_client_sink_set_bin_latency (sink);
+    gst_rtsp_client_sink_set_bin_sdes (sink);
+    gst_rtsp_client_sink_set_bin_ntp_time_source (sink);
+  }
+
 }
 
 static void
@@ -1614,6 +1656,75 @@ gst_rtsp_client_sink_set_tcp_timeout (GstRTSPClientSink * rtsp_client_sink,
   rtsp_client_sink->tcp_timeout = timeout;
 }
 
+/* FIXME: Remove for backwards compatibility after deprecation removal */
+static void
+gst_rtsp_client_sink_set_bin_latency (GstRTSPClientSink * sink)
+{
+  if (sink->rtpbin != NULL)
+    g_object_set (sink->rtpbin, "latency", sink->latency, NULL);
+}
+
+static void
+gst_rtsp_client_sink_set_bin_sdes (GstRTSPClientSink * sink)
+{
+  GObjectClass *klass = NULL;
+
+  if (sink->rtpbin != NULL)
+    klass = G_OBJECT_GET_CLASS (G_OBJECT (sink->rtpbin));
+
+  if (klass != NULL && g_object_class_find_property (klass, "sdes"))
+    g_object_set (sink->rtpbin, "sdes", sink->sdes, NULL);
+}
+
+static void
+gst_rtsp_client_sink_set_bin_ntp_time_source (GstRTSPClientSink * sink)
+{
+  GObjectClass *klass = NULL;
+
+  if (sink->rtpbin != NULL)
+    klass = G_OBJECT_GET_CLASS (G_OBJECT (sink->rtpbin));
+
+  if (klass != NULL && g_object_class_find_property (klass, "ntp-time-source"))
+    g_object_set (sink->rtpbin, "ntp-time-source", sink->ntp_time_source, NULL);
+}
+
+static void
+gst_rtsp_client_sink_get_bin_latency (GstRTSPClientSink * sink)
+{
+  g_object_get (sink->rtpbin, "latency", &sink->latency, NULL);
+}
+
+static void
+gst_rtsp_client_sink_get_bin_sdes (GstRTSPClientSink * sink)
+{
+  GObjectClass *klass = NULL;
+
+  if (sink->rtpbin != NULL)
+    klass = G_OBJECT_GET_CLASS (G_OBJECT (sink->rtpbin));
+
+  if (klass != NULL && g_object_class_find_property (klass, "sdes")) {
+    if (sink->sdes)
+      gst_structure_free (sink->sdes);
+    g_object_get (sink->rtpbin, "sdes", &sink->sdes, NULL);
+
+    if (sink->sdes)
+      sink->sdes = gst_structure_copy (sink->sdes);
+  }
+}
+
+static void
+gst_rtsp_client_sink_get_bin_ntp_time_source (GstRTSPClientSink * sink)
+{
+  GObjectClass *klass = NULL;
+
+  if (sink->rtpbin != NULL)
+    klass = G_OBJECT_GET_CLASS (G_OBJECT (sink->rtpbin));
+
+  if (klass != NULL && g_object_class_find_property (klass, "ntp-time-source"))
+    g_object_get (sink->rtpbin, "ntp-time-source", &sink->ntp_time_source,
+        NULL);
+}
+
 static void
 gst_rtsp_client_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
@@ -1648,6 +1759,7 @@ gst_rtsp_client_sink_set_property (GObject * object, guint prop_id,
       break;
     case PROP_LATENCY:
       rtsp_client_sink->latency = g_value_get_uint (value);
+      gst_rtsp_client_sink_set_bin_latency (rtsp_client_sink);
       break;
     case PROP_RTX_TIME:
       rtsp_client_sink->rtx_time = g_value_get_uint (value);
@@ -1713,6 +1825,7 @@ gst_rtsp_client_sink_set_property (GObject * object, guint prop_id,
       if (rtsp_client_sink->sdes)
         gst_structure_free (rtsp_client_sink->sdes);
       rtsp_client_sink->sdes = g_value_dup_boxed (value);
+      gst_rtsp_client_sink_set_bin_sdes (rtsp_client_sink);
       break;
     case PROP_TLS_VALIDATION_FLAGS:
       rtsp_client_sink->tls_validation_flags = g_value_get_flags (value);
@@ -1727,6 +1840,7 @@ gst_rtsp_client_sink_set_property (GObject * object, guint prop_id,
       break;
     case PROP_NTP_TIME_SOURCE:
       rtsp_client_sink->ntp_time_source = g_value_get_enum (value);
+      gst_rtsp_client_sink_set_bin_ntp_time_source (rtsp_client_sink);
       break;
     case PROP_USER_AGENT:
       g_free (rtsp_client_sink->user_agent);
@@ -1772,6 +1886,7 @@ gst_rtsp_client_sink_get_property (GObject * object, guint prop_id,
       g_value_set_uint64 (value, rtsp_client_sink->tcp_timeout);
       break;
     case PROP_LATENCY:
+      gst_rtsp_client_sink_get_bin_latency (rtsp_client_sink);
       g_value_set_uint (value, rtsp_client_sink->latency);
       break;
     case PROP_RTX_TIME:
@@ -1832,6 +1947,7 @@ gst_rtsp_client_sink_get_property (GObject * object, guint prop_id,
       g_value_set_string (value, rtsp_client_sink->multi_iface);
       break;
     case PROP_SDES:
+      gst_rtsp_client_sink_get_bin_sdes (rtsp_client_sink);
       g_value_set_boxed (value, rtsp_client_sink->sdes);
       break;
     case PROP_TLS_VALIDATION_FLAGS:
@@ -1844,6 +1960,7 @@ gst_rtsp_client_sink_get_property (GObject * object, guint prop_id,
       g_value_set_object (value, rtsp_client_sink->tls_interaction);
       break;
     case PROP_NTP_TIME_SOURCE:
+      gst_rtsp_client_sink_get_bin_ntp_time_source (rtsp_client_sink);
       g_value_set_enum (value, rtsp_client_sink->ntp_time_source);
       break;
     case PROP_USER_AGENT:
@@ -1913,8 +2030,6 @@ gst_rtsp_client_sink_cleanup (GstRTSPClientSink * sink)
 
   if (sink->rtpbin) {
     gst_element_set_state (sink->rtpbin, GST_STATE_NULL);
-    gst_bin_remove (GST_BIN_CAST (sink->internal_bin), sink->rtpbin);
-    sink->rtpbin = NULL;
   }
 
   g_free (sink->content_base);
@@ -3544,45 +3659,20 @@ not_supported:
 }
 
 static gboolean
-gst_rtsp_client_sink_configure_manager (GstRTSPClientSink * sink)
+gst_rtsp_client_sink_create_manager (GstRTSPClientSink * sink)
 {
-  GstElement *rtpbin;
-  GstStateChangeReturn ret;
-
-  rtpbin = sink->rtpbin;
+  GstElement *rtpbin = sink->rtpbin;
 
   if (rtpbin == NULL) {
-    GObjectClass *klass;
-
     rtpbin = gst_element_factory_make ("rtpbin", NULL);
     if (rtpbin == NULL)
       goto no_rtpbin;
 
-    gst_bin_add (GST_BIN_CAST (sink->internal_bin), rtpbin);
+    if (!gst_bin_add (sink->internal_bin, rtpbin))
+      goto no_add_rtpbin;
 
     sink->rtpbin = rtpbin;
-
-    /* Any more settings we should configure on rtpbin here? */
-    g_object_set (sink->rtpbin, "latency", sink->latency, NULL);
-
-    klass = G_OBJECT_GET_CLASS (G_OBJECT (rtpbin));
-
-    if (g_object_class_find_property (klass, "ntp-time-source")) {
-      g_object_set (sink->rtpbin, "ntp-time-source", sink->ntp_time_source,
-          NULL);
-    }
-
-    if (sink->sdes && g_object_class_find_property (klass, "sdes")) {
-      g_object_set (sink->rtpbin, "sdes", sink->sdes, NULL);
-    }
-
-    g_signal_emit (sink, gst_rtsp_client_sink_signals[SIGNAL_NEW_MANAGER], 0,
-        sink->rtpbin);
   }
-
-  ret = gst_element_set_state (rtpbin, GST_STATE_PAUSED);
-  if (ret == GST_STATE_CHANGE_FAILURE)
-    goto start_manager_failure;
 
   return TRUE;
 
@@ -3592,10 +3682,56 @@ no_rtpbin:
     g_warning ("failed to create element 'rtpbin', check your installation");
     return FALSE;
   }
+no_add_rtpbin:
+  {
+    gst_object_ref_sink (rtpbin);
+    g_object_unref (rtpbin);
+    GST_WARNING_OBJECT (sink, "could not add rtpbin to internal bin");
+    g_warning
+        ("failed to add element 'rtpbin' to internal bin, check your installation");
+    return FALSE;
+  }
+}
+
+static gboolean
+gst_rtsp_client_sink_configure_manager (GstRTSPClientSink * sink)
+{
+  GstElement *rtpbin;
+  GstStateChangeReturn ret;
+  GstState state, pending;
+  gboolean not_configured;
+
+  rtpbin = sink->rtpbin;
+
+  if (rtpbin == NULL) {
+    if (!gst_rtsp_client_sink_create_manager (sink))
+      goto failed;
+    rtpbin = sink->rtpbin;
+  }
+  ret = gst_element_get_state (rtpbin, &state, &pending, 0);
+
+  not_configured = (pending == GST_STATE_VOID_PENDING
+      && state <= GST_STATE_NULL)
+      || (pending != GST_STATE_VOID_PENDING && pending <= GST_STATE_NULL);
+
+  if (not_configured) {
+    g_signal_emit (sink, gst_rtsp_client_sink_signals[SIGNAL_NEW_MANAGER], 0,
+        sink->rtpbin);
+    ret = gst_element_set_state (rtpbin, GST_STATE_PAUSED);
+    if (ret == GST_STATE_CHANGE_FAILURE)
+      goto start_manager_failure;
+  }
+
+  return TRUE;
+
 start_manager_failure:
   {
     GST_DEBUG_OBJECT (sink, "could not start session manager");
-    gst_bin_remove (GST_BIN_CAST (sink->internal_bin), rtpbin);
+    if (rtpbin != NULL)
+      gst_element_set_state (rtpbin, GST_STATE_NULL);
+  }
+failed:
+  {
     return FALSE;
   }
 }
