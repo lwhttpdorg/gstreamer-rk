@@ -3593,7 +3593,19 @@ gst_h264_parse_pre_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
       if (tim->nuit_field_based_flag)
         scale_n *= 2;
 
-      n_frames = gst_util_uint64_scale (tim->n_frames, scale_n, scale_d);
+
+      /* From ITU-T Rec. H.264 (05/2003) 
+       * If counting_type:
+       * 0: no dropping of n_frames count values and no use of time_offset
+       * 1: no dropping of n_frames count values
+       * This fixes case 0, probably needs more work for counting_type=1 
+       */
+      if (tim->counting_type ==0 || tim->counting_type==1) {
+        n_frames = tim->n_frames;
+      }
+      else {
+        n_frames = gst_util_uint64_scale (tim->n_frames, scale_n, scale_d);
+      }
 
       if (n_frames <= G_MAXUINT32) {
         GST_LOG_OBJECT (h264parse,
