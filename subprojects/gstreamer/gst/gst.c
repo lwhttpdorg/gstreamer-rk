@@ -641,6 +641,100 @@ init_static_plugins (void)
 #endif
 }
 
+static void
+init_enumtypes (void)
+{
+  gst_object_flags_get_type ();
+  gst_bin_flags_get_type ();
+  gst_buffer_flags_get_type ();
+  gst_buffer_copy_flags_get_type ();
+  gst_bus_flags_get_type ();
+  gst_bus_sync_reply_get_type ();
+  gst_caps_flags_get_type ();
+  gst_clock_return_get_type ();
+  gst_clock_entry_type_get_type ();
+  gst_clock_flags_get_type ();
+  gst_clock_type_get_type ();
+  gst_state_get_type ();
+  gst_state_change_return_get_type ();
+  gst_state_change_get_type ();
+  gst_element_flags_get_type ();
+#ifndef GST_DISABLE_GST_TRACER_HOOKS
+  gst_tracer_value_scope_get_type ();
+  gst_tracer_value_flags_get_type ();
+#endif
+  gst_core_error_get_type ();
+  gst_library_error_get_type ();
+  gst_resource_error_get_type ();
+  gst_stream_error_get_type ();
+  gst_event_type_flags_get_type ();
+  gst_event_type_get_type ();
+  gst_seek_type_get_type ();
+  gst_seek_flags_get_type ();
+  gst_qos_type_get_type ();
+  gst_format_get_type ();
+#ifndef GST_DISABLE_GST_DEBUG
+  gst_debug_level_get_type ();
+  gst_debug_color_flags_get_type ();
+  gst_debug_graph_details_get_type ();
+#endif
+  gst_iterator_result_get_type ();
+  gst_iterator_item_get_type ();
+  gst_message_type_get_type ();
+  gst_mini_object_flags_get_type ();
+  gst_pad_link_return_get_type ();
+  gst_pad_link_check_get_type ();
+  gst_flow_return_get_type ();
+  gst_pad_mode_get_type ();
+  gst_pad_direction_get_type ();
+  gst_pad_flags_get_type ();
+  gst_pad_presence_get_type ();
+  gst_pad_template_flags_get_type ();
+  gst_pipeline_flags_get_type ();
+  gst_plugin_error_get_type ();
+  gst_plugin_flags_get_type ();
+  gst_plugin_dependency_flags_get_type ();
+  gst_rank_get_type ();
+  gst_query_type_flags_get_type ();
+  gst_query_type_get_type ();
+  gst_buffering_mode_get_type ();
+  gst_stream_status_type_get_type ();
+  gst_structure_change_type_get_type ();
+  gst_tag_merge_mode_get_type ();
+  gst_tag_flag_get_type ();
+  gst_tag_scope_get_type ();
+  gst_task_pool_get_type ();
+  gst_task_state_get_type ();
+  gst_toc_entry_type_get_type ();
+  gst_type_find_probability_get_type ();
+  gst_uri_error_get_type ();
+  gst_uri_type_get_type ();
+  gst_parse_error_get_type ();
+  gst_parse_flags_get_type ();
+  gst_search_mode_get_type ();
+  gst_progress_type_get_type ();
+  gst_buffer_pool_acquire_flags_get_type ();
+  gst_memory_flags_get_type ();
+  gst_map_flags_get_type ();
+  gst_caps_intersect_mode_get_type ();
+  gst_pad_probe_type_get_type ();
+  gst_pad_probe_return_get_type ();
+  gst_segment_flags_get_type ();
+  gst_scheduling_flags_get_type ();
+  gst_meta_flags_get_type ();
+  gst_toc_entry_type_get_type ();
+  gst_toc_scope_get_type ();
+  gst_toc_loop_type_get_type ();
+  gst_control_binding_get_type ();
+  gst_control_source_get_type ();
+  gst_lock_flags_get_type ();
+  gst_allocator_flags_get_type ();
+  gst_stream_flags_get_type ();
+  gst_stream_type_get_type ();
+  gst_stack_trace_flags_get_type ();
+  gst_promise_result_get_type ();
+}
+
 /*
  * this bit handles:
  * - initialization of threads if we use them
@@ -672,105 +766,10 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   _priv_gst_meta_initialize ();
   _priv_gst_message_initialize ();
 
-  g_type_class_ref (gst_object_get_type ());
-  g_type_class_ref (gst_pad_get_type ());
-  g_type_class_ref (gst_element_factory_get_type ());
-  g_type_class_ref (gst_element_get_type ());
-  g_type_class_ref (gst_tracer_factory_get_type ());
-  g_type_class_ref (gst_type_find_factory_get_type ());
-  g_type_class_ref (gst_bin_get_type ());
-  g_type_class_ref (gst_bus_get_type ());
-  g_type_class_ref (gst_task_get_type ());
-  g_type_class_ref (gst_clock_get_type ());
-  g_type_class_ref (gst_debug_color_mode_get_type ());
-
-  gst_uri_handler_get_type ();
-
-  g_type_class_ref (gst_object_flags_get_type ());
-  g_type_class_ref (gst_bin_flags_get_type ());
-  g_type_class_ref (gst_buffer_flags_get_type ());
-  g_type_class_ref (gst_buffer_copy_flags_get_type ());
-  g_type_class_ref (gst_bus_flags_get_type ());
-  g_type_class_ref (gst_bus_sync_reply_get_type ());
-  g_type_class_ref (gst_caps_flags_get_type ());
-  g_type_class_ref (gst_clock_return_get_type ());
-  g_type_class_ref (gst_clock_entry_type_get_type ());
-  g_type_class_ref (gst_clock_flags_get_type ());
-  g_type_class_ref (gst_clock_type_get_type ());
-  g_type_class_ref (gst_debug_graph_details_get_type ());
-  g_type_class_ref (gst_state_get_type ());
-  g_type_class_ref (gst_state_change_return_get_type ());
-  g_type_class_ref (gst_state_change_get_type ());
-  g_type_class_ref (gst_element_flags_get_type ());
-  g_type_class_ref (gst_tracer_value_scope_get_type ());
-  g_type_class_ref (gst_tracer_value_flags_get_type ());
-  g_type_class_ref (gst_core_error_get_type ());
-  g_type_class_ref (gst_library_error_get_type ());
-  g_type_class_ref (gst_resource_error_get_type ());
-  g_type_class_ref (gst_stream_error_get_type ());
-  g_type_class_ref (gst_event_type_flags_get_type ());
-  g_type_class_ref (gst_event_type_get_type ());
-  g_type_class_ref (gst_seek_type_get_type ());
-  g_type_class_ref (gst_seek_flags_get_type ());
-  g_type_class_ref (gst_qos_type_get_type ());
-  g_type_class_ref (gst_format_get_type ());
-  g_type_class_ref (gst_debug_level_get_type ());
-  g_type_class_ref (gst_debug_color_flags_get_type ());
-  g_type_class_ref (gst_iterator_result_get_type ());
-  g_type_class_ref (gst_iterator_item_get_type ());
-  g_type_class_ref (gst_message_type_get_type ());
-  g_type_class_ref (gst_mini_object_flags_get_type ());
-  g_type_class_ref (gst_pad_link_return_get_type ());
-  g_type_class_ref (gst_pad_link_check_get_type ());
-  g_type_class_ref (gst_flow_return_get_type ());
-  g_type_class_ref (gst_pad_mode_get_type ());
-  g_type_class_ref (gst_pad_direction_get_type ());
-  g_type_class_ref (gst_pad_flags_get_type ());
-  g_type_class_ref (gst_pad_presence_get_type ());
-  g_type_class_ref (gst_pad_template_flags_get_type ());
-  g_type_class_ref (gst_pipeline_flags_get_type ());
-  g_type_class_ref (gst_plugin_error_get_type ());
-  g_type_class_ref (gst_plugin_flags_get_type ());
-  g_type_class_ref (gst_plugin_dependency_flags_get_type ());
-  g_type_class_ref (gst_rank_get_type ());
-  g_type_class_ref (gst_query_type_flags_get_type ());
-  g_type_class_ref (gst_query_type_get_type ());
-  g_type_class_ref (gst_buffering_mode_get_type ());
-  g_type_class_ref (gst_stream_status_type_get_type ());
-  g_type_class_ref (gst_structure_change_type_get_type ());
-  g_type_class_ref (gst_tag_merge_mode_get_type ());
-  g_type_class_ref (gst_tag_flag_get_type ());
-  g_type_class_ref (gst_tag_scope_get_type ());
-  g_type_class_ref (gst_task_pool_get_type ());
-  g_type_class_ref (gst_task_state_get_type ());
-  g_type_class_ref (gst_toc_entry_type_get_type ());
-  g_type_class_ref (gst_type_find_probability_get_type ());
-  g_type_class_ref (gst_uri_error_get_type ());
-  g_type_class_ref (gst_uri_type_get_type ());
-  g_type_class_ref (gst_parse_error_get_type ());
-  g_type_class_ref (gst_parse_flags_get_type ());
-  g_type_class_ref (gst_search_mode_get_type ());
-  g_type_class_ref (gst_progress_type_get_type ());
-  g_type_class_ref (gst_buffer_pool_acquire_flags_get_type ());
-  g_type_class_ref (gst_memory_flags_get_type ());
-  g_type_class_ref (gst_map_flags_get_type ());
-  g_type_class_ref (gst_caps_intersect_mode_get_type ());
-  g_type_class_ref (gst_pad_probe_type_get_type ());
-  g_type_class_ref (gst_pad_probe_return_get_type ());
-  g_type_class_ref (gst_segment_flags_get_type ());
-  g_type_class_ref (gst_scheduling_flags_get_type ());
-  g_type_class_ref (gst_meta_flags_get_type ());
-  g_type_class_ref (gst_toc_entry_type_get_type ());
-  g_type_class_ref (gst_toc_scope_get_type ());
-  g_type_class_ref (gst_toc_loop_type_get_type ());
-  g_type_class_ref (gst_control_binding_get_type ());
-  g_type_class_ref (gst_control_source_get_type ());
-  g_type_class_ref (gst_lock_flags_get_type ());
-  g_type_class_ref (gst_allocator_flags_get_type ());
-  g_type_class_ref (gst_stream_flags_get_type ());
-  g_type_class_ref (gst_stream_type_get_type ());
-  g_type_class_ref (gst_stack_trace_flags_get_type ());
-  g_type_class_ref (gst_promise_result_get_type ());
+#ifndef GST_DISABLE_GST_TRACER_HOOKS
+  gst_tracer_factory_get_type ();
+#endif
+  init_enumtypes ();
 
   _priv_gst_event_initialize ();
   _priv_gst_buffer_initialize ();
@@ -782,7 +781,7 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   _priv_gst_tag_initialize ();
   _priv_gst_toc_initialize ();
 
-  g_type_class_ref (gst_param_spec_fraction_get_type ());
+  gst_param_spec_fraction_get_type ();
   gst_parse_context_get_type ();
 
   _priv_gst_plugin_initialize ();
@@ -1137,107 +1136,6 @@ gst_deinit (void)
   _priv_gst_caps_features_cleanup ();
   _priv_gst_caps_cleanup ();
   _priv_gst_meta_cleanup ();
-
-  g_type_class_unref (g_type_class_peek (gst_object_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_element_factory_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_element_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tracer_factory_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_type_find_factory_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_bin_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_bus_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_task_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_object_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_bin_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_buffer_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_buffer_copy_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_bus_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_bus_sync_reply_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_caps_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_clock_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_clock_return_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_clock_entry_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_clock_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_debug_graph_details_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_state_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_state_change_return_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_state_change_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_element_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tracer_value_scope_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tracer_value_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_core_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_library_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_plugin_dependency_flags_get_type
-          ()));
-  g_type_class_unref (g_type_class_peek (gst_parse_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_resource_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_search_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_stream_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_stream_status_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_structure_change_type_get_type
-          ()));
-  g_type_class_unref (g_type_class_peek (gst_event_type_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_event_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_seek_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_seek_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_qos_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_format_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_debug_level_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_debug_color_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_iterator_result_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_iterator_item_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_message_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_meta_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_mini_object_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_link_return_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_link_check_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_flow_return_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_direction_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_presence_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_template_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pipeline_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_plugin_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_plugin_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_rank_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_query_type_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_query_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_buffering_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tag_merge_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tag_flag_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_tag_scope_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_task_state_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_toc_entry_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_toc_scope_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_type_find_probability_get_type
-          ()));
-  g_type_class_unref (g_type_class_peek (gst_uri_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_uri_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_parse_error_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_param_spec_fraction_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_progress_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_buffer_pool_acquire_flags_get_type
-          ()));
-  g_type_class_unref (g_type_class_peek (gst_memory_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_map_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_caps_intersect_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_probe_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_pad_probe_return_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_segment_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_scheduling_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_stream_type_get_type ()));
-
-  g_type_class_unref (g_type_class_peek (gst_control_binding_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_control_source_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_toc_entry_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_toc_loop_type_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_lock_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_allocator_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_stream_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_debug_color_mode_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_stack_trace_flags_get_type ()));
-  g_type_class_unref (g_type_class_peek (gst_promise_result_get_type ()));
 
   gst_deinitialized = TRUE;
   GST_INFO ("deinitialized GStreamer");

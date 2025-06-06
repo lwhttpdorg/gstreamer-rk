@@ -146,9 +146,6 @@ _priv_gst_event_initialize (void)
 
   _gst_event_type = gst_event_get_type ();
 
-  g_type_class_ref (gst_seek_flags_get_type ());
-  g_type_class_ref (gst_seek_type_get_type ());
-
   for (i = 0; event_quarks[i].name; i++) {
     event_quarks[i].quark = g_quark_from_static_string (event_quarks[i].name);
   }
