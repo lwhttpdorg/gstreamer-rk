@@ -84,6 +84,7 @@ libs_sources += {
   'vulkan': pathsep.join(doc_sources)
 }
 
+vulkan_headers_version = '>=1.4.317'
 vulkan_priv_sources = []
 vulkan_xcb_sources = []
 vulkan_xcb_headers = []
@@ -96,7 +97,6 @@ vulkan_defines = []
 optional_deps = []
 has_vulkan_header = false
 vulkan_dep = dependency('', required: false)
-vulkan_inc_dir = ''
 enabled_vulkan_winsys = []
 
 vulkan_conf = configuration_data()
@@ -115,6 +115,15 @@ foreach option : vulkan_conf_options
 endforeach
 
 vulkan_plugin_kwargs = {}
+
+# the vulkan-headers wrap aims to provide headers with sufficient declaration
+# to support vulkan video latest supported extensions. On MacOS, with older
+# versions of MoltenVK, there might have dedicated headers, so better to rely on
+# system exclusively. Vulkan video is not supported on MacOS.
+if host_system != 'darwin'
+  vulkan_headers_dep = dependency('vulkan-headers', required: true, version: vulkan_headers_version)
+endif
+
 if host_system == 'darwin'
   vulkan_dep = dependency('vulkan', method: 'pkg-config', required : false)
   if not vulkan_dep.found()
@@ -145,20 +154,17 @@ elif host_system == 'windows'
     vulkan_lib = cc.find_library('vulkan-1', dirs: vulkan_lib_dir,
                                  required : vulkan_opt)
 
-    vulkan_inc_dir = join_paths(vulkan_root, 'Include')
-    has_vulkan_header = cc.has_header('vulkan/vulkan_core.h',
-                                      args: '-I' + vulkan_inc_dir,
-                                      required: vulkan_opt)
-
-    if vulkan_lib.found() and has_vulkan_header
-      vulkan_dep = declare_dependency(include_directories: include_directories(vulkan_inc_dir),
-                                      dependencies: vulkan_lib)
+    if vulkan_lib.found()
+      vulkan_dep = declare_dependency(dependencies: [vulkan_headers_dep, vulkan_lib])
     endif
   endif
 else
-  vulkan_dep = dependency('vulkan', method: 'pkg-config', required: false)
+  vulkan_dep = dependency('vulkan', method: 'pkg-config', required : false, version: vulkan_headers_version)
   if not vulkan_dep.found()
-    vulkan_dep = cc.find_library('vulkan', required: vulkan_opt)
+    vulkan_lib = cc.find_library('vulkan', required: vulkan_opt)
+    if vulkan_lib.found()
+      vulkan_dep = declare_dependency(dependencies: [vulkan_headers_dep, vulkan_lib])
+    endif
   endif
 endif
 
@@ -286,8 +292,7 @@ endif
 if host_system == 'windows'
   gdi_dep = cc.find_library('gdi32', required : vulkan_opt)
 
-  # Cannot use internal dependency object with cc.has_header()
-  if gdi_dep.found() and cc.has_header('vulkan/vulkan_win32.h', args: '-I' + vulkan_inc_dir, required: vulkan_opt)
+  if gdi_dep.found() and cc.has_header('vulkan/vulkan_win32.h', dependencies: vulkan_dep, required: vulkan_opt)
     vulkan_priv_sources += ['win32/gstvkwindow_win32.c']
     optional_deps += [gdi_dep]
     vulkan_windowing = true
@@ -340,11 +345,7 @@ static VkVideoEncodeH264ProfileInfoKHR h264_profile;
 static VkVideoEncodeH265ProfileInfoKHR h265_profile;
 '''
 
-  if vulkan_inc_dir != ''
-    have_vk_video = cc.compiles(video_test, dependencies : vulkan_dep,  args: '-I' + vulkan_inc_dir)
-  else
-    have_vk_video = cc.compiles(video_test, dependencies : vulkan_dep)
-  endif
+  have_vk_video = cc.compiles(video_test, dependencies : vulkan_dep)
   if have_vk_video
     vulkan_conf.set('GST_VULKAN_HAVE_VIDEO_EXTENSIONS', 1)
     vulkan_priv_sources += files(
