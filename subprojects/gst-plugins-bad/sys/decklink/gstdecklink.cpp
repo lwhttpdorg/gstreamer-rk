@@ -1259,6 +1259,9 @@ public:
     if (formatFlags & bmdDetectedVideoInputRGB444) {
       if (formatFlags & bmdDetectedVideoInput10BitDepth) {
         pixelFormat = bmdFormat10BitRGB;
+        if (m_input->force_8_bit) {
+          pixelFormat = bmdFormat8BitBGRA;
+        }
       } else if (formatFlags & bmdDetectedVideoInput8BitDepth) {
         /* Cannot detect ARGB vs BGRA, so assume ARGB unless user sets BGRA */
         if (m_input->format == bmdFormat8BitBGRA) {
@@ -1272,6 +1275,9 @@ public:
     } else if (formatFlags & bmdDetectedVideoInputYCbCr422) {
       if (formatFlags & bmdDetectedVideoInput10BitDepth) {
         pixelFormat = bmdFormat10BitYUV;
+        if (m_input->force_8_bit) {
+          pixelFormat = bmdFormat8BitYUV;
+        }
       } else if (formatFlags & bmdDetectedVideoInput8BitDepth) {
         pixelFormat = bmdFormat8BitYUV;
       }
