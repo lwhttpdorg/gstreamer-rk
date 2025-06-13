@@ -1285,8 +1285,8 @@ gst_image_freeze_change_state (GstElement * element, GstStateChange transition)
       self->blocked = FALSE;
       g_cond_signal (&self->blocked_cond);
       g_mutex_unlock (&self->lock);
-      gst_image_freeze_reset (self);
       gst_pad_stop_task (self->srcpad);
+      gst_image_freeze_reset (self);
       break;
     default:
       break;
