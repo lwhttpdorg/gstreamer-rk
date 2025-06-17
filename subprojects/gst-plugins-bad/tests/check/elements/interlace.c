@@ -194,6 +194,89 @@ GST_START_TEST (test_framerate_empty_not_negotiated)
 
 GST_END_TEST;
 
+GST_START_TEST (test_alternate)
+{
+  GstHarness *h = gst_harness_new ("interlace");
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,interlace-mode=progressive,format=AYUV,width=1,height=4,framerate=24/1");
+  gst_harness_set_sink_caps_str (h,
+      "video/x-raw(format:Interlaced),interlace-mode=alternate,format=AYUV,width=1,height=4,framerate=24/1");
+  gst_harness_play (h);
+
+  /* 4 lines, 1px each.
+   * - First buffer is interlaced with itself: Even lines in top buffer and odd
+   *   lines in bottom buffer.
+   * - Second buffer is interlaced with the first: Even lines of first buffer in
+   *   top buffer and odd lines from 2nd buffer in bottom buffer.
+   */
+  guint8 data1[] = {
+    0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x00, 0x00,
+    0x03, 0x00, 0x00, 0x00
+  };
+  guint8 data2[] = {
+    0x04, 0x00, 0x00, 0x00,
+    0x05, 0x00, 0x00, 0x00,
+    0x06, 0x00, 0x00, 0x00,
+    0x07, 0x00, 0x00, 0x00
+  };
+
+  /* Expected output */
+  guint8 data1_top[] = {
+    0x00, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x00, 0x00
+  };
+  guint8 data1_bottom[] = {
+    0x01, 0x00, 0x00, 0x00,
+    0x03, 0x00, 0x00, 0x00
+  };
+  guint8 data2_top[] = {
+    0x00, 0x00, 0x00, 0x00,
+    0x02, 0x00, 0x00, 0x00
+  };
+  guint8 data2_bottom[] = {
+    0x05, 0x00, 0x00, 0x00,
+    0x07, 0x00, 0x00, 0x00
+  };
+
+  /* 1st buffer */
+  GstBuffer *buffer = gst_buffer_new_memdup (data1, sizeof (data1));
+  fail_unless_equals_int (gst_harness_push (h, buffer), GST_FLOW_OK);
+  fail_unless_equals_int (gst_harness_buffers_in_queue (h), 2);
+  GstBuffer *buf1 = gst_harness_pull (h);
+  GstBuffer *buf2 = gst_harness_pull (h);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (buf1, GST_VIDEO_BUFFER_FLAG_TOP_FIELD));
+  fail_unless (gst_buffer_memcmp (buf1, 0, data1_top, sizeof (data1_top)) == 0);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (buf2,
+          GST_VIDEO_BUFFER_FLAG_BOTTOM_FIELD));
+  fail_unless (gst_buffer_memcmp (buf2, 0, data1_bottom,
+          sizeof (data1_bottom)) == 0);
+  gst_buffer_unref (buf1);
+  gst_buffer_unref (buf2);
+  gst_buffer_unref (buffer);
+
+  /* 2nd buffer */
+  buffer = gst_buffer_new_memdup (data2, sizeof (data2));
+  fail_unless_equals_int (gst_harness_push (h, buffer), GST_FLOW_OK);
+  fail_unless_equals_int (gst_harness_buffers_in_queue (h), 2);
+  buf1 = gst_harness_pull (h);
+  buf2 = gst_harness_pull (h);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (buf1, GST_VIDEO_BUFFER_FLAG_TOP_FIELD));
+  fail_unless (gst_buffer_memcmp (buf1, 0, data2_top, sizeof (data2_top)) == 0);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (buf2,
+          GST_VIDEO_BUFFER_FLAG_BOTTOM_FIELD));
+  fail_unless (gst_buffer_memcmp (buf2, 0, data2_bottom,
+          sizeof (data2_bottom)) == 0);
+  gst_buffer_unref (buf1);
+  gst_buffer_unref (buf2);
+  gst_buffer_unref (buffer);
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 static Suite *
 interlace_suite (void)
 {
@@ -209,6 +292,7 @@ interlace_suite (void)
   tcase_add_test (tc_chain, test_framerate_1_1);
   tcase_add_test (tc_chain, test_framerate_3_2);
   tcase_add_test (tc_chain, test_framerate_empty_not_negotiated);
+  tcase_add_test (tc_chain, test_alternate);
 
   return s;
 }
