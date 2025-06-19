@@ -158,6 +158,10 @@ _gst_getpid (void)
 }
 #endif
 
+#ifdef G_PLATFORM_ANDROID
+#include <glib-android.h>
+#endif
+
 #ifdef HAVE_UNWIND
 /* No need for remote debugging so turn on the 'local only' optimizations in
  * libunwind */
@@ -424,6 +428,13 @@ _priv_gst_debug_file_name (const gchar * env)
 void
 _priv_gst_debug_init (void)
 {
+#ifdef G_PLATFORM_ANDROID
+  if (g_android_get_context ()) {
+    _priv_gst_android_init_logcat_logger ();
+    goto debug_init;
+  }
+#endif
+
   const gchar *env;
   FILE *log_file;
 
@@ -449,6 +460,7 @@ _priv_gst_debug_init (void)
     gst_debug_add_log_function (gst_debug_log_default, log_file, NULL);
   }
 
+debug_init:
   __gst_printf_pointer_extension_set_func
       (gst_info_printf_pointer_extension_func);
 

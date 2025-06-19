@@ -38,12 +38,10 @@
 #endif
 
 #include <glib.h>
-#include <gmodule.h>
+#include <glib-android.h>
 
 #include "gstjniutils.h"
 #include "gst-android-hardware-sensor.h"
-
-static jobject (*gst_android_get_application_context) (void) = NULL;
 
 GST_DEBUG_CATEGORY_STATIC (ahs_debug);
 #define GST_CAT_DEFAULT ahs_debug
@@ -209,22 +207,7 @@ _init_classes (void)
   GError *err = NULL;
   jclass klass;
   jfieldID fieldID;
-  GModule *module;
-  gboolean success;
   gint32 type;
-
-  /*
-   * Lookup the Android function to get an Android context. This function will
-   * be provided when the plugin is built via ndk-build.
-   */
-  module = g_module_open (NULL, G_MODULE_BIND_LOCAL);
-  if (!module)
-    goto failed;
-  success = g_module_symbol (module, "gst_android_get_application_context",
-      (gpointer *) & gst_android_get_application_context);
-  if (!success || !gst_android_get_application_context)
-    goto failed;
-  g_module_close (module);
 
   /* android.content.Context */
   klass = android_content_context.klass = gst_amc_jni_get_class (env, &err,
@@ -671,7 +654,7 @@ gst_ah_sensor_get_manager (void)
   jobject object;
   gboolean success;
 
-  context = gst_android_get_application_context ();
+  context = g_android_get_context ();
   success = gst_amc_jni_call_object_method (env, &err, context,
       android_content_context.getSystemService,
       &object, android_content_context.SENSOR_SERVICE);

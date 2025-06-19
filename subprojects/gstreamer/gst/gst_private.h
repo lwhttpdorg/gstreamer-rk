@@ -137,6 +137,10 @@ G_GNUC_INTERNAL  void  _priv_gst_toc_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_date_time_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_plugin_feature_rank_initialize (void);
 
+#ifdef __ANDROID__
+G_GNUC_INTERNAL  void  _priv_gst_android_init_logcat_logger (void);
+#endif
+
 /* cleanup functions called from gst_deinit(). */
 G_GNUC_INTERNAL  void  _priv_gst_allocator_cleanup (void);
 G_GNUC_INTERNAL  void  _priv_gst_caps_features_cleanup (void);
