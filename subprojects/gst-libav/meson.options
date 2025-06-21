@@ -6,3 +6,5 @@ option('package-origin', type : 'string',
 option('doc', type : 'feature', value : 'auto', yield: true,
        description: 'Enable documentation.')
 option('tests', type : 'feature', value : 'auto', yield : true)
+option('glib_assert', type : 'boolean', value : true, yield : true,
+       description : 'Enable GLib assertion (see docs/macros.txt)')
