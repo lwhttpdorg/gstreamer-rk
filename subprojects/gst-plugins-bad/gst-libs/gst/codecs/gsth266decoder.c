@@ -91,7 +91,7 @@ struct _GstH266DecoderPrivate
   GstH266FrameFieldInfo ff_info;
 
   GArray *slices;
-
+  GArray *split_nalu;
   gboolean aps_added[GST_H266_APS_TYPE_MAX][8];
 
   /* For delayed output */
@@ -163,6 +163,7 @@ gst_h266_decoder_start (GstVideoDecoder * decoder)
   priv->dpb = gst_h266_dpb_new ();
   priv->new_bitstream_or_got_eos = TRUE;
   priv->last_flow = GST_FLOW_OK;
+  priv->split_nalu = g_array_new (FALSE, FALSE, sizeof (GstH266NalUnit));
 
   return TRUE;
 }
@@ -254,6 +255,72 @@ gst_h266_decoder_format_from_caps (GstH266Decoder * self, GstCaps * caps,
   }
 }
 
+static GstFlowReturn
+gst_h266_decoder_parse_codec_data (GstH266Decoder * self, const guint8 * data,
+    gsize size)
+{
+  GstH266DecoderPrivate *priv = self->priv;
+  GstH266Parser *parser = priv->parser;
+  GstH266ParserResult pres;
+  GstFlowReturn ret = GST_FLOW_ERROR;
+  GstH266VPS vps;
+  GstH266SPS sps;
+  GstH266PPS pps;
+  GstH266DecoderConfigRecord *config = NULL;
+  guint i, j;
+
+  pres = gst_h266_parser_parse_decoder_config_record (parser,
+      data, size, &config);
+  if (pres != GST_H266_PARSER_OK) {
+    GST_WARNING_OBJECT (self, "Failed to parse hvcC data");
+    return GST_FLOW_ERROR;
+  }
+  priv->nal_length_size = config->length_size_minus_one + 1;
+  GST_DEBUG_OBJECT (self, "nal length size %u", priv->nal_length_size);
+
+  for (i = 0; i < config->nalu_array->len; i++) {
+    GstH266DecoderConfigRecordNalUnitArray *array =
+        &g_array_index (config->nalu_array,
+        GstH266DecoderConfigRecordNalUnitArray, i);
+
+    for (j = 0; j < array->nalu->len; j++) {
+      GstH266NalUnit *nalu = &g_array_index (array->nalu, GstH266NalUnit, j);
+
+      switch (nalu->type) {
+        case GST_H266_NAL_VPS:
+          pres = gst_h266_parser_parse_vps (parser, nalu, &vps);
+          if (pres != GST_H266_PARSER_OK) {
+            GST_WARNING_OBJECT (self, "Failed to parse VPS");
+            goto out;
+          }
+          break;
+        case GST_H266_NAL_SPS:
+          pres = gst_h266_parser_parse_sps (parser, nalu, &sps);
+          if (pres != GST_H266_PARSER_OK) {
+            GST_WARNING_OBJECT (self, "Failed to parse SPS");
+            goto out;
+          }
+          break;
+        case GST_H266_NAL_PPS:
+          pres = gst_h266_parser_parse_pps (parser, nalu, &pps);
+          if (pres != GST_H266_PARSER_OK) {
+            GST_WARNING_OBJECT (self, "Failed to parse PPS");
+            goto out;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  ret = GST_FLOW_OK;
+out:
+  gst_h266_decoder_config_record_free (config);
+  return ret;
+}
+
+
 static gboolean
 gst_h266_decoder_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state)
@@ -319,9 +386,16 @@ gst_h266_decoder_set_format (GstVideoDecoder * decoder,
   }
 
   if (state->codec_data) {
-    /* TODO: */
-    GST_WARNING_OBJECT (self, "vvc1 or vvi1 mode is not supported now.");
-    return FALSE;
+    GstMapInfo map;
+
+    gst_buffer_map (state->codec_data, &map, GST_MAP_READ);
+    if (gst_h266_decoder_parse_codec_data (self, map.data, map.size) !=
+        GST_FLOW_OK) {
+      /* keep going without error.
+       * Probably inband SPS/PPS might be valid data */
+      GST_WARNING_OBJECT (self, "Failed to handle codec data");
+    }
+    gst_buffer_unmap (state->codec_data, &map);
   }
 
   return TRUE;
@@ -1514,11 +1588,37 @@ gst_h266_decoder_handle_frame (GstVideoDecoder * decoder,
     return GST_FLOW_ERROR;
   }
 
+  priv->current_frame = frame;
+  priv->last_flow = GST_FLOW_OK;
+
+  gst_buffer_map (in_buf, &map, GST_MAP_READ);
+
   if (priv->in_format == GST_H266_DECODER_FORMAT_VVC1 ||
       priv->in_format == GST_H266_DECODER_FORMAT_VVI1) {
-    gst_buffer_unmap (in_buf, &map);
-    gst_h266_decoder_reset_frame_state (self);
-    return GST_FLOW_NOT_SUPPORTED;
+    guint offset = 0;
+    gsize consumed = 0;
+    guint i;
+
+    do {
+      pres = gst_h266_parser_identify_and_split_nalu_vvc (priv->parser,
+          map.data, offset, map.size, priv->nal_length_size, priv->split_nalu,
+          &consumed);
+      if (pres != GST_H266_PARSER_OK)
+        break;
+
+      for (i = 0; i < priv->split_nalu->len; i++) {
+        GstH266NalUnit *nl =
+            &g_array_index (priv->split_nalu, GstH266NalUnit, i);
+        pres = gst_h266_decoder_parse_nalu (self, nl);
+        if (pres != GST_H266_PARSER_OK)
+          break;
+      }
+
+      if (pres != GST_H266_PARSER_OK)
+        break;
+
+      offset += consumed;
+    } while (pres == GST_H266_PARSER_OK);
   } else {
     pres = gst_h266_parser_identify_nalu (priv->parser,
         map.data, 0, map.size, &nalu);
@@ -1598,6 +1698,7 @@ gst_h266_decoder_finalize (GObject * object)
   gint i;
 
   g_array_unref (priv->slices);
+  g_array_unref (priv->split_nalu);
 
   for (i = 0; i < GST_H266_APS_TYPE_MAX; i++)
     g_array_unref (self->aps_list[i]);
