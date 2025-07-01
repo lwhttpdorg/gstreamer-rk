@@ -81,6 +81,7 @@
 #endif
 
 #include "gstwlbuffer.h"
+#include "gstwlbuffer_private.h"
 
 #define GST_CAT_DEFAULT gst_wl_buffer_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
@@ -302,4 +303,13 @@ gst_wl_buffer_get_display (GstWlBuffer * self)
   GstWlBufferPrivate *priv = gst_wl_buffer_get_instance_private (self);
 
   return priv->display;
+}
+
+void
+gst_wl_buffer_set_used_by_compositor (GstWlBuffer * self,
+    gboolean used_by_compositor)
+{
+  GstWlBufferPrivate *priv = gst_wl_buffer_get_instance_private (self);
+
+  priv->used_by_compositor = used_by_compositor;
 }
