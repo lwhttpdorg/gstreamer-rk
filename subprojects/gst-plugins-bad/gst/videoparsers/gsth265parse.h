@@ -72,6 +72,7 @@ struct _GstH265Parse
   guint align;
   guint format;
   gint current_off;
+  gboolean invalid_bs;
 
   GstClockTime last_report;
   gboolean push_codec;
