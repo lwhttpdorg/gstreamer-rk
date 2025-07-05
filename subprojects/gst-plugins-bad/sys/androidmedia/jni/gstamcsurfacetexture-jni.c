@@ -26,8 +26,12 @@
 #endif
 
 #include "gstjniutils.h"
+#include "gstamcsurface.h"
 #include "gstamcsurfacetexture-jni.h"
 #include "gstamc-jni.h"
+
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
 
 struct _GstAmcSurfaceTextureJNI
 {
@@ -357,6 +361,32 @@ static gboolean
   return TRUE;
 }
 
+static ANativeWindow *
+gst_amc_surface_texture_jni_acquire_a_native_window (GstAmcSurfaceTexture *
+    base, GError ** err)
+{
+  GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  JNIEnv *env;
+  ANativeWindow *native_window;
+
+  GstAmcSurface *surface = gst_amc_surface_new (self, err);
+  if (!surface)
+    return NULL;
+
+  env = gst_amc_jni_get_env ();
+  native_window = ANativeWindow_fromSurface (env, surface->jobject);
+
+  g_object_unref (surface);
+
+  if (!native_window) {
+    g_set_error (err, GST_LIBRARY_ERROR,
+        GST_LIBRARY_ERROR_FAILED,
+        "Failed to obtain ANativeWindow from Surface");
+  }
+
+  return native_window;
+}
+
 static void
 gst_amc_surface_texture_jni_dispose (GObject * object)
 {
@@ -403,6 +433,8 @@ gst_amc_surface_texture_jni_class_init (GstAmcSurfaceTextureJNIClass * klass)
   surface_texture_class->release = gst_amc_surface_texture_jni_release;
   surface_texture_class->set_on_frame_available_callback =
       gst_amc_surface_texture_jni_set_on_frame_available_callback;
+  surface_texture_class->acquire_a_native_window =
+      gst_amc_surface_texture_jni_acquire_a_native_window;
 }
 
 static void

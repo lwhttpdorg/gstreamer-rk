@@ -30,10 +30,9 @@
 #include "../gstamc-constants.h"
 
 #include "gstjniutils.h"
-#include "../jni/gstamcsurface.h"
+#include "../jni/gstamcsurfacetexture-jni.h"
 
 #include <android/native_window.h>
-#include <android/native_window_jni.h>
 #include <media/NdkMediaError.h>
 #include <media/NdkMediaCodec.h>
 
@@ -211,27 +210,13 @@ gst_amc_codec_ndk_configure (GstAmcCodec * codec, GstAmcFormat * format,
   g_return_val_if_fail (codec != NULL, FALSE);
   g_return_val_if_fail (format != NULL, FALSE);
   g_return_val_if_fail (surface_texture == NULL
-      || GST_IS_AMC_SURFACE_TEXTURE_JNI (surface_texture), FALSE);
+      || GST_IS_AMC_SURFACE_TEXTURE (surface_texture), FALSE);
 
   if (surface_texture) {
-    if (GST_IS_AMC_SURFACE_TEXTURE_JNI (surface_texture)) {
-      JNIEnv *env;
-      GstAmcSurface *surface = gst_amc_surface_new (
-          (GstAmcSurfaceTextureJNI *) surface_texture, err);
-      if (!surface)
-        return FALSE;
-
-      env = gst_amc_jni_get_env ();
-      native_window = ANativeWindow_fromSurface (env, surface->jobject);
-
-      g_object_unref (surface);
-
-      if (!native_window)
-        return FALSE;
-      /* TODO: support NDK-based ASurfaceTexture. */
-    } else {
-      g_assert_not_reached ();
-    }
+    native_window =
+        gst_amc_surface_texture_acquire_a_native_window (surface_texture, err);
+    if (!native_window)
+      return FALSE;
   }
 
   if (codec->is_encoder)
