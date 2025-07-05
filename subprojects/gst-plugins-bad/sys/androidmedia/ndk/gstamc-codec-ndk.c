@@ -43,9 +43,6 @@ struct _GstAmcCodec
 {
   AMediaCodec *ndk_media_codec;
   gboolean is_encoder;
-
-  /* For JNI-based SurfaceTexture. */
-  GstAmcSurface *surface;
 };
 
 /* The defines are from NdkMediaCodec.h. See the reasoning in the same file. */
@@ -199,9 +196,6 @@ gst_amc_codec_ndk_free (GstAmcCodec * codec)
         result);
   }
 
-  if (codec->surface)
-    g_object_unref (codec->surface);
-
   g_free (codec);
 }
 
@@ -220,19 +214,17 @@ gst_amc_codec_ndk_configure (GstAmcCodec * codec, GstAmcFormat * format,
       || GST_IS_AMC_SURFACE_TEXTURE_JNI (surface_texture), FALSE);
 
   if (surface_texture) {
-    if (codec->surface)
-      g_object_unref (codec->surface);
-
     if (GST_IS_AMC_SURFACE_TEXTURE_JNI (surface_texture)) {
       JNIEnv *env;
-
-      codec->surface = gst_amc_surface_new (
+      GstAmcSurface *surface = gst_amc_surface_new (
           (GstAmcSurfaceTextureJNI *) surface_texture, err);
-      if (!codec->surface)
+      if (!surface)
         return FALSE;
 
       env = gst_amc_jni_get_env ();
-      native_window = ANativeWindow_fromSurface (env, codec->surface->jobject);
+      native_window = ANativeWindow_fromSurface (env, surface->jobject);
+
+      g_object_unref (surface);
 
       if (!native_window)
         return FALSE;
