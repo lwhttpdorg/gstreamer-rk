@@ -627,7 +627,7 @@ rtp_twcc_manager_add_fci (RTPTWCCManager * twcc, GstRTCPPacket * packet)
 
   packet_count = last->seqnum - first->seqnum + 1;
   base_time = first->ts / REF_TIME_UNIT;
-  fb_pkt_count = (guint8) (twcc->fb_pkt_count % G_MAXUINT8);
+  fb_pkt_count = (guint8) (twcc->fb_pkt_count & G_MAXUINT8);
 
   GST_WRITE_UINT16_BE (header.base_seqnum, first->seqnum);
   GST_WRITE_UINT16_BE (header.packet_count, packet_count);
