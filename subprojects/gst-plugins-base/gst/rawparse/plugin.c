@@ -33,6 +33,7 @@ plugin_init (GstPlugin * plugin)
   ret |= GST_ELEMENT_REGISTER (unalignedvideoparse, plugin);
   ret |= GST_ELEMENT_REGISTER (rawaudioparse, plugin);
   ret |= GST_ELEMENT_REGISTER (rawvideoparse, plugin);
+  ret |= GST_ELEMENT_REGISTER (rawbayerparse, plugin);
 
   return ret;
 }
