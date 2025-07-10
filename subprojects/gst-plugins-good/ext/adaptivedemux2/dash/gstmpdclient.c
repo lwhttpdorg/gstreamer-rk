@@ -1676,7 +1676,7 @@ gst_mpd_client2_setup_streaming (GstMPDClient2 * client,
   return TRUE;
 }
 
-gboolean
+GstFlowReturn
 gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
     gboolean forward, GstSeekFlags flags, GstClockTime ts,
     GstClockTime * final_ts)
@@ -1685,7 +1685,7 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
   gint repeat_index = 0;
   GstMediaSegment *selectedChunk = NULL;
 
-  g_return_val_if_fail (stream != NULL, 0);
+  g_return_val_if_fail (stream != NULL, GST_FLOW_ERROR);
 
   if (stream->segments) {
     for (index = 0; index < stream->segments->len; index++) {
@@ -1764,8 +1764,9 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
     if (selectedChunk == NULL) {
       stream->segment_index = stream->segments->len;
       stream->segment_repeat_index = 0;
-      GST_DEBUG ("Seek to after last segment");
-      return FALSE;
+      GST_DEBUG_OBJECT (client,
+          "Seek to after last segment for stream %p - returning EOS", stream);
+      return GST_FLOW_EOS;
     }
 
     if (final_ts)
@@ -1778,9 +1779,9 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
     GstClockTime index_time;
 
     g_return_val_if_fail (GST_MPD_MULT_SEGMENT_BASE_NODE
-        (stream->cur_seg_template)->SegmentTimeline == NULL, FALSE);
+        (stream->cur_seg_template)->SegmentTimeline == NULL, GST_FLOW_ERROR);
     if (!GST_CLOCK_TIME_IS_VALID (duration) || duration == 0) {
-      return FALSE;
+      return GST_FLOW_ERROR;
     }
 
     if (ts > stream_period->start)
@@ -1808,8 +1809,9 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
     if (segments_count > 0 && index >= segments_count) {
       stream->segment_index = segments_count;
       stream->segment_repeat_index = 0;
-      GST_DEBUG ("Seek to after last segment");
-      return FALSE;
+      GST_DEBUG_OBJECT (client,
+          "Seek to after last segment for stream %p - returning EOS", stream);
+      return GST_FLOW_EOS;
     }
     if (final_ts)
       *final_ts = index * duration;
@@ -1818,7 +1820,7 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
   stream->segment_repeat_index = repeat_index;
   stream->segment_index = index;
 
-  return TRUE;
+  return GST_FLOW_OK;
 }
 
 GstClockTimeDiff
@@ -3076,9 +3078,11 @@ gst_mpd_client2_seek_to_time (GstMPDClient2 * client, GDateTime * time)
 
   ts = ts_microseconds * GST_USECOND;
   for (stream = client->active_streams; stream; stream = g_list_next (stream)) {
-    ret =
-        ret & gst_mpd_client2_stream_seek (client, stream->data, TRUE, 0, ts,
-        NULL);
+    GstFlowReturn seek_ret =
+        gst_mpd_client2_stream_seek (client, stream->data, TRUE, 0, ts, NULL);
+    if (seek_ret != GST_FLOW_OK) {
+      ret = FALSE;
+    }
   }
   return ret;
 }
