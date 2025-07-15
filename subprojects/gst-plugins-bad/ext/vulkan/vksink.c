@@ -119,6 +119,11 @@ enum
 
 #define gst_vulkan_sink_parent_class parent_class
 
+/**
+ * GstVulkanSink:
+ *
+ * Since: 1.8
+ */
 static void
 gst_vulkan_sink_class_init (gpointer g_klass, gpointer class_data)
 {
@@ -150,17 +155,32 @@ gst_vulkan_sink_class_init (gpointer g_klass, gpointer class_data)
   gobject_class->set_property = gst_vulkan_sink_set_property;
   gobject_class->get_property = gst_vulkan_sink_get_property;
 
+  /**
+   * GstVulkanSink:force-aspect-ratio:
+   *
+   * Since: 1.8
+   */
   g_object_class_install_property (gobject_class, PROP_FORCE_ASPECT_RATIO,
       g_param_spec_boolean ("force-aspect-ratio", "Force aspect ratio",
           "When enabled, scaling will respect original aspect ratio",
           DEFAULT_FORCE_ASPECT_RATIO,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstVulkanSink:pixel-aspect-ratio:
+   *
+   * Since: 1.8
+   */
   g_object_class_install_property (gobject_class, PROP_PIXEL_ASPECT_RATIO,
       gst_param_spec_fraction ("pixel-aspect-ratio", "Pixel Aspect Ratio",
           "The pixel aspect ratio of the device", 0, 1, G_MAXINT, 1, 1, 1,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstVulkanSink:device:
+   *
+   * Since: 1.18
+   */
   g_object_class_install_property (gobject_class, PROP_DEVICE,
       g_param_spec_object ("device", "Device", "Vulkan device",
           GST_TYPE_VULKAN_DEVICE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
