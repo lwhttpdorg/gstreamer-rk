@@ -352,6 +352,9 @@ struct _GstQTMux
 
   /* for request pad naming */
   guint video_pads, audio_pads, subtitle_pads, caption_pads;
+
+  /* protects againt removing a pad while aggregating */
+  GMutex pads_mutex;
 };
 
 struct _GstQTMuxClass
