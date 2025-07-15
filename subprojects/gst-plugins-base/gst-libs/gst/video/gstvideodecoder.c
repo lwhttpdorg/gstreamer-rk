@@ -469,7 +469,8 @@ static gint private_offset = 0;
 #define META_TAG_VIDEO meta_tag_video_quark
 static GQuark meta_tag_video_quark;
 
-static void gst_video_decoder_class_init (GstVideoDecoderClass * klass);
+static void gst_video_decoder_class_init (GstVideoDecoderClass * klass,
+    gpointer klass_data);
 static void gst_video_decoder_init (GstVideoDecoder * dec,
     GstVideoDecoderClass * klass);
 
@@ -585,7 +586,7 @@ gst_video_decoder_get_instance_private (GstVideoDecoder * self)
 }
 
 static void
-gst_video_decoder_class_init (GstVideoDecoderClass * klass)
+gst_video_decoder_class_init (GstVideoDecoderClass * klass, gpointer klass_data)
 {
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
@@ -4193,6 +4194,12 @@ gst_video_decoder_get_frame (GstVideoDecoder * decoder, int frame_number)
   return frame;
 }
 
+static GstVideoCodecFrame *
+gst_video_codec_frame_ref_with_data (GstVideoCodecFrame * frame, gpointer data)
+{
+  return gst_video_codec_frame_ref (frame);
+}
+
 /**
  * gst_video_decoder_get_frames:
  * @decoder: a #GstVideoDecoder
@@ -4209,7 +4216,7 @@ gst_video_decoder_get_frames (GstVideoDecoder * decoder)
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
   frames =
       g_list_copy_deep (decoder->priv->frames.head,
-      (GCopyFunc) gst_video_codec_frame_ref, NULL);
+      (GCopyFunc) gst_video_codec_frame_ref_with_data, NULL);
   GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
 
   return frames;
