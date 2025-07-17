@@ -603,8 +603,7 @@ nle_source_prepare (NleObject * object)
   GstPad *pad;
   NleSource *source = NLE_SOURCE (object);
   NleSourcePrivate *priv = source->priv;
-  GstElement *parent =
-      (GstElement *) gst_element_get_parent ((GstElement *) object);
+  GstElement *parent = gst_element_get_parent ((GstElement *) object);
 
   if (!source->element) {
     GST_WARNING_OBJECT (source,

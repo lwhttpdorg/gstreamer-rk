@@ -4734,7 +4734,7 @@ change_source_blocked (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
   FAIL_UNLESS (gst_pad_unlink (pad, peer));
   gst_object_unref (peer);
 
-  source = GST_ELEMENT (gst_element_get_parent (pad));
+  source = gst_element_get_parent (pad);
   FAIL_UNLESS (source);
   g_object_set_qdata (G_OBJECT (source), to_be_removed_quark (),
       GINT_TO_POINTER (1));
@@ -5005,7 +5005,7 @@ dynamic_pipeline_change_stress_source_blocked_switch_av (GstPad * pad,
   FAIL_UNLESS (gst_pad_unlink (pad, peer));
   gst_object_unref (peer);
 
-  source = GST_ELEMENT (gst_element_get_parent (pad));
+  source = gst_element_get_parent (pad);
   FAIL_UNLESS (source);
   g_object_set_qdata (G_OBJECT (source), to_be_removed_quark (),
       GINT_TO_POINTER (1));
@@ -5078,7 +5078,7 @@ dynamic_pipeline_change_stress_source_blocked_change_audio_channel (GstPad *
   FAIL_UNLESS (gst_pad_unlink (pad, peer));
   gst_object_unref (peer);
 
-  source = GST_ELEMENT (gst_element_get_parent (pad));
+  source = gst_element_get_parent (pad);
   FAIL_UNLESS (source);
   g_object_set_qdata (G_OBJECT (source), to_be_removed_quark (),
       GINT_TO_POINTER (1));

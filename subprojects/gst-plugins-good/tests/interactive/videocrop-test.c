@@ -79,7 +79,7 @@ test_with_caps (GstElement * src, GstElement * videocrop, GstCaps * caps)
   vcrop = 0;
   hcrop = 0;
 
-  pipeline = GST_ELEMENT (gst_element_get_parent (videocrop));
+  pipeline = gst_element_get_parent (videocrop);
   g_assert (GST_IS_PIPELINE (pipeline));
 
   /* at this point the pipeline is in PLAYING state; we only want to capture

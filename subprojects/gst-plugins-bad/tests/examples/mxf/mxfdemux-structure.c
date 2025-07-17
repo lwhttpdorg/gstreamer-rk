@@ -180,7 +180,7 @@ on_pad_added (GstElement * src, GstPad * pad, gpointer data)
 {
   GstElement *fakesink = gst_element_factory_make ("fakesink", NULL);
   GstPad *sinkpad = gst_element_get_static_pad (fakesink, "sink");
-  GstElement *bin = (GstElement *) gst_element_get_parent (src);
+  GstElement *bin = gst_element_get_parent (src);
 
   gst_bin_add (GST_BIN (bin), fakesink);
   gst_element_sync_state_with_parent (fakesink);

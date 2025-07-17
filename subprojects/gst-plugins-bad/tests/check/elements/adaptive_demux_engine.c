@@ -378,7 +378,7 @@ on_demuxNewPad (GstElement * demux, GstPad * pad, gpointer user_data)
 
   GST_TEST_UNLOCK (priv);
 
-  pipeline = GST_ELEMENT (gst_element_get_parent (demux));
+  pipeline = gst_element_get_parent (demux);
   fail_unless (pipeline != NULL);
   ret = gst_bin_add (GST_BIN (pipeline), sink);
   fail_unless_equals_int (ret, TRUE);
