@@ -1883,7 +1883,6 @@ gst_aggregator_default_sink_event (GstAggregator * self,
        * and may interfere with the time_level calculation
        */
       aggpad->priv->tail_position = GST_CLOCK_TIME_NONE;
-      update_time_level (aggpad, FALSE);
       GST_OBJECT_UNLOCK (aggpad);
       PAD_UNLOCK (aggpad);
 
@@ -2016,8 +2015,10 @@ gst_aggregator_default_sink_event_pre_queue (GstAggregator * self,
     if (GST_EVENT_TYPE (event) == GST_EVENT_SEGMENT) {
       GST_OBJECT_LOCK (aggpad);
       gst_event_copy_segment (event, &aggpad->priv->head_segment);
-      aggpad->priv->head_position = aggpad->priv->head_segment.position;
-      update_time_level (aggpad, TRUE);
+      /* We've got a new segment, head_position is now meaningless
+       * and may interfere with the time_level calculation
+       */
+      aggpad->priv->head_position = GST_CLOCK_TIME_NONE;
       GST_OBJECT_UNLOCK (aggpad);
     }
 
@@ -3299,10 +3300,15 @@ apply_buffer (GstAggregatorPad * aggpad, GstBuffer * buffer, gboolean head)
 
   if (timestamp == GST_CLOCK_TIME_NONE) {
     if (head)
-      timestamp = aggpad->priv->head_position;
+      timestamp =
+          GST_CLOCK_TIME_IS_VALID (aggpad->priv->head_position) ? aggpad->
+          priv->head_position : aggpad->priv->head_segment.position;
     else
       timestamp = aggpad->priv->tail_position;
   }
+
+  /* We should always fall back to a valid timestamp for timestamp-less buffers */
+  g_warn_if_fail (GST_CLOCK_TIME_IS_VALID (timestamp));
 
   /* add duration */
   if (GST_BUFFER_DURATION_IS_VALID (buffer))
