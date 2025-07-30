@@ -2266,6 +2266,14 @@ gst_qtdemux_map_and_push_segments (GstQTDemux * qtdemux, GstSegment * segment)
         }
 
         g_assert (i == stream->n_segments - 1);
+      } else {
+        /* For streams that end before the seek position, send segment and gap
+         * events to avoid sending EOS before segment, which would cause warnings */
+        GST_DEBUG_OBJECT (stream->pad,
+            "Stream ends before seek position, sending gap event");
+        gst_pad_push_event (stream->pad, gst_event_new_segment (segment));
+        gst_pad_push_event (stream->pad,
+            gst_event_new_gap (segment->start, segment->stop - segment->start));
       }
     }
   }
