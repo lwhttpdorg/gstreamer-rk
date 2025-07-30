@@ -1085,7 +1085,7 @@ gst_av1_parse_set_sink_caps (GstBaseParse * parse, GstCaps * caps)
   self->in_align = align;
 
   if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
-      || self->in_align == GST_AV1_PARSE_ALIGN_ANNEX_B)
+      || self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B)
     self->detect_annex_b = TRUE;
 
   if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B
