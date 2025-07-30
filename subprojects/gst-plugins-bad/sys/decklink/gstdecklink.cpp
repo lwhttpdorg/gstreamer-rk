@@ -1294,8 +1294,16 @@ public:
     }
 
     g_mutex_lock (&m_input->lock);
+    BMDDisplayMode new_mode_id = mode->GetDisplayMode();
+    /* Do not restart if nothing has changed. In the case of force_8_bit=true. */
+    if (m_input->mode && m_input->mode->mode == new_mode_id &&
+    m_input->format == pixelFormat) {
+      GST_INFO("Format and resolution unchanged — skipping stream reset");
+      g_mutex_unlock (&m_input->lock);
+      return S_OK;
+    }
     m_input->input->PauseStreams ();
-    m_input->input->EnableVideoInput (mode->GetDisplayMode (),
+    m_input->input->EnableVideoInput (new_mode_id,
         pixelFormat, bmdVideoInputEnableFormatDetection);
     m_input->input->FlushStreams ();
 
