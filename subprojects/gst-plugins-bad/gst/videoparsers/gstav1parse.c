@@ -92,11 +92,11 @@ typedef enum
   GST_AV1_PARSE_ALIGN_ERROR = -1,
   GST_AV1_PARSE_ALIGN_NONE = 0,
   GST_AV1_PARSE_ALIGN_BYTE,
+  GST_AV1_PARSE_ALIGN_ANNEX_B,
   GST_AV1_PARSE_ALIGN_OBU,
   GST_AV1_PARSE_ALIGN_FRAME,
   GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT,
   GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B,
-  GST_AV1_PARSE_ALIGN_ANNEX_B,
 } GstAV1ParseAligment;
 
 struct _GstAV1Parse
@@ -599,7 +599,7 @@ gst_av1_parse_alignment_from_string (const gchar * align,
     if (g_strcmp0 (stream_format, "annexb") == 0) {
       if (align && g_strcmp0 (align, "tu") == 0) {
         return GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B;
-      } else if (align && g_strcmp0 (align, "none") == 0) {
+      } else if (align && g_strcmp0 (align, "byte") == 0) {
         return GST_AV1_PARSE_ALIGN_ANNEX_B;
       } else {
         return GST_AV1_PARSE_ALIGN_ERROR;
