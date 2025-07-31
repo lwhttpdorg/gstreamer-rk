@@ -668,6 +668,7 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
   GstAV1ParserResult ret = GST_AV1_PARSER_OK;
   GstBitReader br;
   guint obu_length = 0;
+  guint last_pos = 0;
   guint32 used;
 
   g_return_val_if_fail (parser != NULL, GST_AV1_PARSER_INVALID_OPERATION);
@@ -690,29 +691,16 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
     goto error;
   }
 
+  gst_bit_reader_init (&br, data, size);
+
   /* parse the data size if annex_b */
   if (parser->annex_b) {
-    guint last_pos;
   annex_b_again:
     last_pos = 0;
-
-    if (*consumed > size)
-      goto error;
-    if (*consumed == size) {
-      ret = GST_AV1_PARSER_NO_MORE_DATA;
-      goto error;
-    }
-    gst_bit_reader_init (&br, data + *consumed, size - *consumed);
 
     if (parser->temporal_unit_consumed > parser->temporal_unit_size)
       goto error;
 
-    if (parser->temporal_unit_consumed &&
-        parser->temporal_unit_consumed == parser->temporal_unit_size) {
-      GST_LOG ("Complete a temporal unit of size %d",
-          parser->temporal_unit_size);
-      parser->temporal_unit_consumed = parser->temporal_unit_size = 0;
-    }
 
     if (parser->temporal_unit_size == 0) {
       parser->temporal_unit_size = av1_bitstreamfn_leb128 (&br, &ret);
@@ -729,15 +717,6 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
            hold a temporal_unit_size = 0 */
         goto annex_b_again;
       }
-    }
-
-    if (parser->frame_unit_consumed > parser->frame_unit_size)
-      goto error;
-
-    if (parser->frame_unit_consumed &&
-        parser->frame_unit_consumed == parser->frame_unit_size) {
-      GST_LOG ("Complete a frame unit of size %d", parser->frame_unit_size);
-      parser->frame_unit_size = parser->frame_unit_consumed = 0;
     }
 
     if (parser->frame_unit_size == 0) {
@@ -769,6 +748,7 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
     }
 
     obu_length = av1_bitstreamfn_leb128 (&br, &ret);
+    GST_DEBUG ("obu_length: %u", obu_length);
     if (ret != GST_AV1_PARSER_OK)
       goto error;
 
@@ -779,6 +759,12 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
       ret = GST_AV1_PARSER_BITSTREAM_ERROR;
       goto error;
     }
+
+    if (AV1_REMAINING_BYTES (&br) < obu_length) {
+      ret = GST_AV1_PARSER_NO_MORE_DATA;
+      goto error;
+    }
+
     /* update the consumed */
     used = gst_bit_reader_get_pos (&br) / 8 - last_pos;
     last_pos = gst_bit_reader_get_pos (&br) / 8;
@@ -792,13 +778,10 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
     }
   }
 
-  if (*consumed > size)
-    goto error;
   if (*consumed == size) {
     ret = GST_AV1_PARSER_NO_MORE_DATA;
     goto error;
   }
-  gst_bit_reader_init (&br, data + *consumed, size - *consumed);
 
   ret = gst_av1_parse_obu_header (parser, &br, &obu->header);
   if (ret != GST_AV1_PARSER_OK)
@@ -808,16 +791,13 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
   GST_LOG ("identify obu type is %d", obu->obu_type);
 
   if (obu->header.obu_has_size_field) {
-    guint size_sz = gst_bit_reader_get_pos (&br) / 8;
-
     obu->obu_size = av1_bitstreamfn_leb128 (&br, &ret);
     if (ret != GST_AV1_PARSER_OK)
       goto error;
 
-    size_sz = gst_bit_reader_get_pos (&br) / 8 - size_sz;
-    if (obu_length
-        && obu_length - 1 - obu->header.obu_extention_flag - size_sz !=
-        obu->obu_size) {
+    g_assert (gst_bit_reader_get_pos (&br) % 8 == 0);
+    guint size_sz = gst_bit_reader_get_pos (&br) / 8 - last_pos;
+    if (obu_length && obu_length - size_sz != obu->obu_size) {
       /* If obu_size and obu_length are both present, but inconsistent,
          then the packed bitstream is deemed invalid. */
       ret = GST_AV1_PARSER_BITSTREAM_ERROR;
@@ -838,7 +818,8 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
   }
 
   g_assert (gst_bit_reader_get_pos (&br) % 8 == 0);
-  used = gst_bit_reader_get_pos (&br) / 8;
+  used = gst_bit_reader_get_pos (&br) / 8 - last_pos;
+  last_pos = gst_bit_reader_get_pos (&br) / 8;
   /* fail if not a complete obu */
   if (size - *consumed - used < obu->obu_size) {
     ret = GST_AV1_PARSER_NO_MORE_DATA;
@@ -858,6 +839,17 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
   if (parser->annex_b) {
     parser->temporal_unit_consumed += obu->obu_size;
     parser->frame_unit_consumed += obu->obu_size;
+
+    if (parser->frame_unit_consumed == parser->frame_unit_size) {
+      GST_LOG ("Complete a frame unit of size %d", parser->frame_unit_size);
+      parser->frame_unit_size = parser->frame_unit_consumed = 0;
+    }
+
+    if (parser->temporal_unit_consumed == parser->temporal_unit_size) {
+      GST_LOG ("Complete a temporal unit of size %d",
+          parser->temporal_unit_size);
+      parser->temporal_unit_consumed = parser->temporal_unit_size = 0;
+    }
   }
 
   if (obu->obu_type != GST_AV1_OBU_SEQUENCE_HEADER
@@ -876,7 +868,10 @@ gst_av1_parser_identify_one_obu (GstAV1Parser * parser, const guint8 * data,
   return GST_AV1_PARSER_OK;
 
 error:
-  GST_WARNING ("can not identify obu, error %d", ret);
+  if (ret == GST_AV1_PARSER_NO_MORE_DATA)
+    GST_DEBUG ("can not identify obu, no enough data.");
+  else
+    GST_WARNING ("can not identify obu, error %d", ret);
   return ret;
 }
 
