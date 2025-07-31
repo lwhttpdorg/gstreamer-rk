@@ -2202,7 +2202,8 @@ gst_av1_parse_detect_stream_format (GstBaseParse * parse,
   guint32 tu_sz;
   gboolean ret = FALSE;
 
-  g_assert (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT);
+  g_assert (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT ||
+      self->in_align == GST_AV1_PARSE_ALIGN_BYTE);
   g_assert (self->detect_annex_b == TRUE);
 
   if (!gst_buffer_map (buffer, &map_info, GST_MAP_READ)) {
@@ -2271,14 +2272,19 @@ again:
     goto out;
   }
 
-  if (tu_sz + consumed != map_info.size) {
-    GST_DEBUG_OBJECT (self, "Buffer size %" G_GSSIZE_FORMAT ", TU size %d,"
-        " do not match.", map_info.size, tu_sz);
-    goto out;
+  if (self->in_align != GST_AV1_PARSE_ALIGN_BYTE) {
+    if (tu_sz + consumed != map_info.size) {
+      GST_DEBUG_OBJECT (self, "Buffer size %" G_GSSIZE_FORMAT ", TU size %d,"
+          " do not match.", map_info.size, tu_sz);
+      goto out;
+    }
   }
 
   GST_INFO_OBJECT (self, "Detect the annex-b format");
-  self->in_align = GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B;
+  if (self->in_align == GST_AV1_PARSE_ALIGN_BYTE)
+    self->in_align = GST_AV1_PARSE_ALIGN_ANNEX_B;
+  else
+    self->in_align = GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B;
   self->detect_annex_b = FALSE;
   gst_av1_parser_reset (self->parser, TRUE);
   ret = TRUE;
@@ -2369,18 +2375,21 @@ gst_av1_parse_handle_frame (GstBaseParse * parse,
           gst_av1_parse_alignment_to_string (self->in_align));
     } else {
       self->in_align = GST_AV1_PARSE_ALIGN_BYTE;
+      self->detect_annex_b = TRUE;
       GST_DEBUG_OBJECT (self, "alignment set to default %s",
           gst_av1_parse_alignment_to_string (GST_AV1_PARSE_ALIGN_BYTE));
     }
   }
 
-  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
-      && self->detect_annex_b) {
+  if (self->detect_annex_b) {
     /* Only happend at the first time of handle_frame, try to
        recognize the annex b stream format. */
     if (gst_av1_parse_detect_stream_format (parse, frame)) {
       GST_INFO_OBJECT (self, "Input alignment %s",
           gst_av1_parse_alignment_to_string (self->in_align));
+    } else if (self->in_align == GST_AV1_PARSE_ALIGN_BYTE) {
+      GST_ERROR_OBJECT (self, "Failed to detect the strean format.");
+      return GST_FLOW_ERROR;
     } else {
       /* Because the input is already TU aligned, we should skip
          the whole problematic TU and check the next one. */
