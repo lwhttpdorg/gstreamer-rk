@@ -144,6 +144,39 @@ const gchar *fisheye_fragment_source_gles2 =
   "  gl_FragColor = texture2D (tex, texturecoord);"
   "}";
 
+const gchar *dewarp_fragment_source_gles2 =
+  "varying vec2 v_texcoord;"
+  "uniform sampler2D tex;"
+  "void main () {"
+    /* split screen into 2x2 grid */
+  "  vec2 cell = floor(v_texcoord * vec2(2.0,2.0));"
+  "  vec2 local_uv = fract(v_texcoord * vec2(2.0,2.0));"
+    /* cell.y=0 is bottom, cell.y=1 is top */
+  "  float cell_index = cell.x + cell.y * 2.0;"
+  "  float center_phi = 0.0;"
+  "  if (cell_index == 0.0) center_phi = 0.0;"         /* top-left: front (0°) */
+  "  else if (cell_index == 1.0) center_phi = 4.7124;" /* bottom-right: left (270°) */
+  "  else if (cell_index == 2.0) center_phi = 3.1416;" /* bottom-left: back (180°) */
+  "  else center_phi = 1.5708;"                        /* top-right: right (90°) */
+    /* horizontal fov in each cell: ±45° = [-0.7854, +0.7854] */
+  "  vec2 ndc = local_uv * 2.0 - 1.0;"
+  "  vec3 ray = normalize(vec3(ndc, 1.0));"
+
+  "  float pitch = -0.7854;"
+  "  ray = vec3(ray.x, ray.y * cos(pitch) + ray.z * -sin(pitch), ray.y * sin(pitch) + ray.z * cos(pitch));"
+
+  "  float phi_offset = atan(ray.x, ray.y);"
+  "  float theta = acos(ray.z);"
+
+  "  float phi = center_phi + phi_offset;"
+    /* vertical maps to radius: top=0, bottom=0.5 */
+  "  float r = theta / 3.1416;"
+  "  vec2 center = vec2(0.5, 0.5);"
+  "  vec2 fisheye_uv = center + r * vec2(-cos(phi), sin(phi));"
+  "  if (distance(fisheye_uv, center) > 0.5) discard;"
+  "  gl_FragColor = texture2D(tex, fisheye_uv);"
+  "}";
+
 const gchar *twirl_fragment_source_gles2 =
   "varying vec2 v_texcoord;"
   "uniform sampler2D tex;"

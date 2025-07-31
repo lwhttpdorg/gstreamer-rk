@@ -100,6 +100,7 @@ void gst_gl_effects_squeeze (GstGLEffects *effects);
 void gst_gl_effects_stretch (GstGLEffects *effects);
 void gst_gl_effects_tunnel (GstGLEffects *effects);
 void gst_gl_effects_fisheye (GstGLEffects *effects);
+void gst_gl_effects_dewarp (GstGLEffects *effects);
 void gst_gl_effects_twirl (GstGLEffects *effects);
 void gst_gl_effects_bulge (GstGLEffects *effects);
 void gst_gl_effects_square (GstGLEffects *effects);

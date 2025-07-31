@@ -303,6 +303,7 @@ main (gint argc, gchar * argv[])
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "squeeze");
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "stretch");
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "fisheye");
+  gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "dewarp");
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "twirl");
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "bulge");
   gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (combo), "tunnel");

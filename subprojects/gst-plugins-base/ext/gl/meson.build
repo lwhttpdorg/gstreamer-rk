@@ -18,6 +18,7 @@ opengl_sources = [
   'effects/gstgleffectsqueeze.c',
   'effects/gstgleffectstretch.c',
   'effects/gstgleffectfisheye.c',
+  'effects/gstgleffectdewarp.c',
   'effects/gstgleffecttwirl.c',
   'effects/gstgleffectbulge.c',
   'effects/gstgleffecttunnel.c',
