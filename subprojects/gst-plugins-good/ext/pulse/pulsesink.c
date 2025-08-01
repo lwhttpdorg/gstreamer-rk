@@ -525,6 +525,9 @@ gst_pulseringbuffer_open_device (GstAudioRingBuffer * buf)
         psink->server);
   else
     pbuf->context_name = g_strdup (psink->client_name);
+  
+  /* Make a local copy of server for connection to avoid holding the lock during connection */
+  gchar *server = g_strdup (psink->server);
   g_mutex_unlock (&psink->prop_lock);
 
   pa_threaded_mainloop_lock (mainloop);
@@ -554,10 +557,8 @@ gst_pulseringbuffer_open_device (GstAudioRingBuffer * buf)
 
     /* try to connect to the server and wait for completion, we don't want to
      * autospawn a daemon */
-    GST_LOG_OBJECT (psink, "connect to server %s",
-        GST_STR_NULL (psink->server));
-    if (pa_context_connect (pctx->context, psink->server,
-            PA_CONTEXT_NOAUTOSPAWN, NULL) < 0)
+    GST_LOG_OBJECT (psink, "connect to server %s", GST_STR_NULL (server));
+    if (pa_context_connect (pctx->context, server, PA_CONTEXT_NOAUTOSPAWN, NULL) < 0)
       goto connect_failed;
   } else {
     GST_INFO_OBJECT (psink,
@@ -598,6 +599,7 @@ gst_pulseringbuffer_open_device (GstAudioRingBuffer * buf)
   GST_LOG_OBJECT (psink, "opened the device");
 
   pa_threaded_mainloop_unlock (mainloop);
+  g_free (server);
 
   return TRUE;
 
@@ -608,6 +610,7 @@ unlock_and_fail:
       g_mutex_unlock (&pa_shared_resource_mutex);
     gst_pulsering_destroy_context (pbuf);
     pa_threaded_mainloop_unlock (mainloop);
+    g_free (server);
     return FALSE;
   }
 create_failed:
@@ -899,6 +902,7 @@ gst_pulseringbuffer_acquire (GstAudioRingBuffer * buf,
   const gchar *name;
   GstAudioClock *clock;
   pa_format_info *formats[1];
+  gchar *device = NULL;
 #ifndef GST_DISABLE_GST_DEBUG
   gchar print_buf[PA_FORMAT_INFO_SNPRINT_MAX];
 #endif
@@ -994,19 +998,20 @@ gst_pulseringbuffer_acquire (GstAudioRingBuffer * buf,
   } else {
     pv = NULL;
   }
-  g_mutex_unlock (&psink->prop_lock);
 
   /* construct the flags */
   flags = PA_STREAM_INTERPOLATE_TIMING | PA_STREAM_AUTO_TIMING_UPDATE |
       PA_STREAM_ADJUST_LATENCY | PA_STREAM_START_CORKED;
 
-  g_mutex_lock (&psink->prop_lock);
   if (psink->mute_set) {
     if (psink->mute)
       flags |= PA_STREAM_START_MUTED;
     else
       flags |= PA_STREAM_START_UNMUTED;
   }
+
+  /* Make a local copy of device to avoid holding lock during connection */
+  device = g_strdup (psink->device);
   g_mutex_unlock (&psink->prop_lock);
 
   /* we always start corked (see flags above) */
@@ -1014,8 +1019,8 @@ gst_pulseringbuffer_acquire (GstAudioRingBuffer * buf,
 
   /* try to connect now */
   GST_LOG_OBJECT (psink, "connect for playback to device %s",
-      GST_STR_NULL (psink->device));
-  if (pa_stream_connect_playback (pbuf->stream, psink->device,
+      GST_STR_NULL (device));
+  if (pa_stream_connect_playback (pbuf->stream, device,
           &wanted, flags, pv, NULL) < 0)
     goto connect_failed;
 
@@ -1060,6 +1065,7 @@ gst_pulseringbuffer_acquire (GstAudioRingBuffer * buf,
   spec->segtotal = actual->tlength / spec->segsize;
 
   pa_threaded_mainloop_unlock (mainloop);
+  g_free (device);
 
   return TRUE;
 
@@ -1068,6 +1074,7 @@ unlock_and_fail:
   {
     gst_pulsering_destroy_stream (pbuf);
     pa_threaded_mainloop_unlock (mainloop);
+    g_free (device);
 
     return FALSE;
   }
@@ -2086,6 +2093,7 @@ gst_pulsesink_create_probe_stream (GstPulseSink * psink,
   pa_format_info *formats[1] = { format };
   pa_stream *stream;
   pa_stream_flags_t flags;
+  gchar *device = NULL;
 
   GST_LOG_OBJECT (psink, "Creating probe stream");
 
@@ -2099,18 +2107,24 @@ gst_pulsesink_create_probe_stream (GstPulseSink * psink,
 
   pa_stream_set_state_callback (stream, gst_pulsering_stream_state_cb, pbuf);
 
-  if (pa_stream_connect_playback (stream, psink->device, NULL, flags, NULL,
+  g_mutex_lock (&psink->prop_lock);
+  device = g_strdup (psink->device);
+  g_mutex_unlock (&psink->prop_lock);
+
+  if (pa_stream_connect_playback (stream, device, NULL, flags, NULL,
           NULL) < 0)
     goto error;
 
   if (!gst_pulsering_wait_for_stream_ready (psink, stream))
     goto error;
 
+  g_free (device);
   return stream;
 
 error:
   if (stream)
     pa_stream_unref (stream);
+  g_free (device);
   return NULL;
 }
 
@@ -2727,6 +2741,7 @@ gst_pulsesink_get_current_device (GstPulseSink * pulsesink)
   gst_pulsesink_get_sink_input_info (pulsesink, NULL, NULL);
 
   pa_threaded_mainloop_lock (mainloop);
+
   if (!(o = pa_context_get_sink_info_by_index (pbuf->context,
               pulsesink->current_sink_idx, gst_pulsesink_current_sink_info_cb,
               pulsesink)))
@@ -2777,19 +2792,23 @@ gst_pulsesink_device_description (GstPulseSink * psink)
   GstPulseRingBuffer *pbuf;
   pa_operation *o = NULL;
   gchar *t;
+  gchar *device = NULL;
 
   if (!mainloop)
     goto no_mainloop;
 
+  g_mutex_lock (&psink->prop_lock);
+  device = g_strdup (psink->device);
+  g_mutex_unlock (&psink->prop_lock);
+
   pa_threaded_mainloop_lock (mainloop);
   pbuf = GST_PULSERING_BUFFER_CAST (GST_AUDIO_BASE_SINK (psink)->ringbuffer);
-
   if (pbuf == NULL)
     goto no_buffer;
 
   free_device_info (&psink->device_info);
   if (!(o = pa_context_get_sink_info_by_name (pbuf->context,
-              psink->device, gst_pulsesink_sink_info_cb, &psink->device_info)))
+              device, gst_pulsesink_sink_info_cb, &psink->device_info)))
     goto info_failed;
 
   while (pa_operation_get_state (o) == PA_OPERATION_RUNNING) {
@@ -2807,6 +2826,7 @@ unlock:
   g_mutex_unlock (&psink->prop_lock);
 
   pa_threaded_mainloop_unlock (mainloop);
+  g_free (device);
 
   return t;
 
@@ -2814,6 +2834,7 @@ unlock:
 no_mainloop:
   {
     GST_DEBUG_OBJECT (psink, "we have no mainloop");
+    g_free (device);
     return NULL;
   }
 no_buffer:
@@ -2826,7 +2847,15 @@ info_failed:
     GST_ELEMENT_ERROR (psink, RESOURCE, FAILED,
         ("pa_context_get_sink_info_by_index() failed: %s",
             pa_strerror (pa_context_errno (pbuf->context))), (NULL));
-    goto unlock;
+    goto unlock_and_fail;
+  }
+unlock_and_fail:
+  {
+    if (o)
+      pa_operation_unref (o);
+    pa_threaded_mainloop_unlock (mainloop);
+    g_free (device);
+    return NULL;
   }
 }
 
