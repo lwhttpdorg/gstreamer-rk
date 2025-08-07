@@ -1467,8 +1467,8 @@ _negotiated_caps (GstAggregator * agg, GstCaps * caps)
     GstTaskPool *pool = gst_video_aggregator_get_execution_task_pool (vagg);
 
     if (pool && n_threads > 1) {
-      config = gst_structure_new_empty ("GstVideoConverterConfig");
-      gst_structure_set (config, GST_VIDEO_CONVERTER_OPT_THREADS,
+      config = gst_structure_new_static_str_empty ("GstVideoConverterConfig");
+      gst_structure_set_static_str (config, GST_VIDEO_CONVERTER_OPT_THREADS,
           G_TYPE_UINT, n_threads, NULL);
     }
 
@@ -1815,14 +1815,20 @@ gst_compositor_release_pad (GstElement * element, GstPad * pad)
   GST_ELEMENT_CLASS (parent_class)->release_pad (element, pad);
 }
 
+typedef struct
+{
+  GstEvent *event;
+  gboolean res;
+} SrcPadMouseEventData;
+
 static gboolean
 src_pad_mouse_event (GstElement * element, GstPad * pad, gpointer user_data)
 {
   GstVideoAggregator *vagg = GST_VIDEO_AGGREGATOR_CAST (element);
   GstCompositor *comp = GST_COMPOSITOR (element);
   GstCompositorPad *cpad = GST_COMPOSITOR_PAD (pad);
-  GstStructure *st =
-      gst_structure_copy (gst_event_get_structure (GST_EVENT_CAST (user_data)));
+  SrcPadMouseEventData *data = user_data;
+  GstStructure *st = gst_structure_copy (gst_event_get_structure (data->event));
   gdouble event_x, event_y;
   gint offset_x, offset_y;
   GstVideoRectangle rect;
@@ -1848,9 +1854,9 @@ src_pad_mouse_event (GstElement * element, GstPad * pad, gpointer user_data)
     x = (event_x - (gdouble) rect.x) * (w / (gdouble) rect.w);
     y = (event_y - (gdouble) rect.y) * (h / (gdouble) rect.h);
 
-    gst_structure_set (st, "pointer_x", G_TYPE_DOUBLE, x,
+    gst_structure_set_static_str (st, "pointer_x", G_TYPE_DOUBLE, x,
         "pointer_y", G_TYPE_DOUBLE, y, NULL);
-    gst_pad_push_event (pad, gst_event_new_navigation (st));
+    data->res |= gst_pad_push_event (pad, gst_event_new_navigation (st));
   } else {
     gst_structure_free (st);
   }
@@ -1872,10 +1878,18 @@ _src_event (GstAggregator * agg, GstEvent * event)
         case GST_NAVIGATION_EVENT_MOUSE_BUTTON_RELEASE:
         case GST_NAVIGATION_EVENT_MOUSE_MOVE:
         case GST_NAVIGATION_EVENT_MOUSE_SCROLL:
+        {
+          SrcPadMouseEventData d = {
+            .event = event,
+            .res = FALSE
+          };
+
           gst_element_foreach_sink_pad (GST_ELEMENT_CAST (agg),
-              src_pad_mouse_event, event);
+              src_pad_mouse_event, &d);
           gst_event_unref (event);
-          return TRUE;
+
+          return d.res;
+        }
 
         default:
           break;
@@ -1910,6 +1924,11 @@ _sink_query (GstAggregator * agg, GstAggregatorPad * bpad, GstQuery * query)
       size = GST_VIDEO_INFO_SIZE (&info);
 
       pool = gst_video_buffer_pool_new ();
+      {
+        gchar *name = g_strdup_printf ("%s-pool", GST_OBJECT_NAME (agg));
+        g_object_set (pool, "name", name, NULL);
+        g_free (name);
+      }
 
       structure = gst_buffer_pool_get_config (pool);
       gst_buffer_pool_config_set_params (structure, caps, size, 0, 0);

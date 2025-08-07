@@ -26,6 +26,10 @@
 #include <gst/check/gstcheck.h>
 #include <gst/vulkan/vulkan.h>
 
+#if GST_VULKAN_HAVE_VIDEO_EXTENSIONS
+#include "gst/vulkan/gstvkvideoutils-private.h"
+#endif
+
 static GstVulkanInstance *instance;
 static GstVulkanDevice *device;
 static GstVulkanQueue *queue = NULL;
@@ -68,7 +72,8 @@ create_buffer_pool (const char *format, VkImageUsageFlags usage,
   caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING, format,
       "width", G_TYPE_INT, 1024, "height", G_TYPE_INT, 780, NULL);
   gst_caps_set_features_simple (caps,
-      gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_VULKAN_IMAGE, NULL));
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_VULKAN_IMAGE,
+          NULL));
 
   pool = gst_vulkan_image_buffer_pool_new (device);
 
@@ -205,7 +210,7 @@ GST_START_TEST (test_decoding_image)
 }
 
 GST_END_TEST;
-#endif
+#endif /* GST_VULKAN_HAVE_VIDEO_EXTENSIONS */
 
 static Suite *
 vkimagebufferpool_suite (void)

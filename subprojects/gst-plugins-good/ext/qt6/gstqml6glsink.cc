@@ -115,7 +115,8 @@ GST_STATIC_PAD_TEMPLATE ("sink",
     "width = " GST_VIDEO_SIZE_RANGE ", "
     "height = " GST_VIDEO_SIZE_RANGE ", "
     "framerate = " GST_VIDEO_FPS_RANGE ", "
-    "texture-target = (string) 2D"));
+    "texture-target = (string) { " GST_GL_TEXTURE_TARGET_2D_STR ", "
+                                   GST_GL_TEXTURE_TARGET_EXTERNAL_OES_STR " } "));
 
 #define DEFAULT_FORCE_ASPECT_RATIO  TRUE
 #define DEFAULT_PAR_N               0
@@ -160,7 +161,7 @@ gst_qml6_gl_sink_class_init (GstQml6GLSinkClass * klass)
   gobject_class->set_property = gst_qml6_gl_sink_set_property;
   gobject_class->get_property = gst_qml6_gl_sink_get_property;
 
-  gst_element_class_set_metadata (gstelement_class, "Qt6 Video Sink",
+  gst_element_class_set_static_metadata (gstelement_class, "Qt6 Video Sink",
       "Sink/Video", "A video sink that renders to a QQuickItem for Qt6",
       "Matthew Waters <matthew@centricular.com>");
 
@@ -318,9 +319,8 @@ gst_qml6_gl_sink_query (GstBaseSink * bsink, GstQuery * query)
       if (gst_gl_handle_context_query ((GstElement *) qt_sink, query,
           qt_sink->display, qt_sink->context, qt_sink->qt_context))
         return TRUE;
-
-      /* fallthrough */
     }
+    /* FALLTHROUGH */
     default:
       res = GST_BASE_SINK_CLASS (parent_class)->query (bsink, query);
       break;

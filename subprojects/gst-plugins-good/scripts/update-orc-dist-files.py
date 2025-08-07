@@ -26,14 +26,14 @@ import shutil
 import subprocess
 import sys
 
-assert(len(sys.argv) == 4)
+assert (len(sys.argv) == 4)
 
 orc_file = sys.argv[1]
 gen_header = sys.argv[2]
 gen_source = sys.argv[3]
 
 # split off .orc suffix
-assert(orc_file.endswith('.orc'))
+assert (orc_file.endswith('.orc'))
 orc_src_base = sys.argv[1][:-4]
 
 # figure out names of disted backup files
@@ -43,7 +43,3 @@ dist_c = orc_src_base + "-dist.c"
 # copy generated files from build dir into source dir
 shutil.copyfile(gen_header, dist_h)
 shutil.copyfile(gen_source, dist_c)
-
-# run gst-indent on the .c files (twice, because gnu indent)
-subprocess.run(['gst-indent', dist_c])
-subprocess.run(['gst-indent', dist_c])

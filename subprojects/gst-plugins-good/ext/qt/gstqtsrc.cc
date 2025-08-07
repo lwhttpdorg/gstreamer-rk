@@ -101,7 +101,7 @@ gst_qt_src_class_init (GstQtSrcClass * klass)
   gobject_class->get_property = gst_qt_src_get_property;
   gobject_class->finalize = gst_qt_src_finalize;
 
-  gst_element_class_set_metadata (gstelement_class, "Qt Video Source",
+  gst_element_class_set_static_metadata (gstelement_class, "Qt Video Source",
       "Source/Video", "A video src that captures a window from a QML view",
       "Multimedia Team <shmmmw@freescale.com>");
 
@@ -305,8 +305,8 @@ gst_qt_src_query (GstBaseSrc * bsrc, GstQuery * query)
           qt_src->display, qt_src->context, qt_src->qt_context))
         return TRUE;
 
-      /* fallthrough */
     }
+    /* FALLTHROUGH */
     default:
       res = GST_BASE_SRC_CLASS (parent_class)->query (bsrc, query);
       break;

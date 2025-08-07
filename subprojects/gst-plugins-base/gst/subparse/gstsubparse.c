@@ -668,6 +668,12 @@ subrip_unescape_formatting (gchar * txt, gconstpointer allowed_tags_ptr,
   res = g_regex_replace (tag_regex, txt, strlen (txt), 0,
       replace_pattern, 0, NULL);
 
+  /* Replacing can fail. Return an empty string in that case. */
+  if (!res) {
+    strcpy (txt, "");
+    return;
+  }
+
   /* res will always be shorter than the input or identical, so this
    * copy is OK */
   strcpy (txt, res);
@@ -852,11 +858,20 @@ parse_subrip_time (const gchar * ts_string, GstClockTime * t)
   g_strdelimit (s, " ", '0');
   g_strdelimit (s, ".", ',');
 
-  /* make sure we have exactly three digits after he comma */
+  /* make sure we have exactly three digits after the comma */
   p = strchr (s, ',');
   if (p == NULL) {
     /* If there isn't a ',' the timestamp is broken */
     /* https://gitlab.freedesktop.org/gstreamer/gst-plugins-base/issues/532#note_100179 */
+    GST_WARNING ("failed to parse subrip timestamp string '%s'", s);
+    return FALSE;
+  }
+
+  /* Check if the comma is too far into the string to avoid
+   * stack overflow when zero-padding the sub-second part.
+   *
+   * Allow for 3 digits of hours just in case. */
+  if ((p - s) > sizeof ("hhh:mm:ss,")) {
     GST_WARNING ("failed to parse subrip timestamp string '%s'", s);
     return FALSE;
   }
@@ -1039,6 +1054,10 @@ parse_subrip (ParserState * state, const gchar * line)
         g_string_append_c (state->buf, '\n');
       g_string_append (state->buf, line);
       if (strlen (line) == 0) {
+        if (!g_utf8_validate (state->buf->str, state->buf->len, NULL)) {
+          g_string_truncate (state->buf, 0);
+          return NULL;
+        }
         ret = g_markup_escape_text (state->buf->str, state->buf->len);
         g_string_truncate (state->buf, 0);
         state->state = 0;
@@ -1070,6 +1089,11 @@ parse_lrc (ParserState * state, const gchar * line)
     return NULL;
 
   start = strchr (line, ']');
+  // sscanf() does not check for the trailing ] but only up to the last
+  // placeholder, so there might be no ] at the end.
+  if (!start)
+    return NULL;
+
   if (start - line == 9)
     milli = 10;
   else

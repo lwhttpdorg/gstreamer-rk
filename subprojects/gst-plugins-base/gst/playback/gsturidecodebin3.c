@@ -167,9 +167,6 @@ struct _GstSourcePad
   /* Decodebin3 pad to which src_pad is linked to */
   GstPad *db3_sink_pad;
 
-  /* TRUE if db3_sink_pad is a request pad */
-  gboolean db3_pad_is_request;
-
   /* TRUE if EOS went through the source pad. Marked as TRUE if decodebin3
    * notified `about-to-finish` for pull mode */
   gboolean saw_eos;
@@ -220,7 +217,6 @@ struct _GstURIDecodeBin3
   GstBin parent_instance;
 
   /* Properties */
-  GstElement *source;
   guint64 connection_speed;     /* In bits/sec (0 = unknown) */
   GstCaps *caps;
   guint64 buffer_duration;      /* When buffering, buffer duration (ns) */
@@ -312,7 +308,6 @@ enum
   PROP_CURRENT_URI,
   PROP_SUBURI,
   PROP_CURRENT_SUBURI,
-  PROP_SOURCE,
   PROP_CONNECTION_SPEED,
   PROP_BUFFER_SIZE,
   PROP_BUFFER_DURATION,
@@ -443,10 +438,6 @@ gst_uri_decode_bin3_class_init (GstURIDecodeBin3Class * klass)
       g_param_spec_string ("current-suburi", "Current .sub-URI",
           "The currently playing URI of a subtitle",
           NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_property (gobject_class, PROP_SOURCE,
-      g_param_spec_object ("source", "Source", "Source object used",
-          GST_TYPE_ELEMENT, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_CONNECTION_SPEED,
       g_param_spec_uint64 ("connection-speed", "Connection Speed",
@@ -675,10 +666,19 @@ db_src_probe (GstPad * pad, GstPadProbeInfo * info, OutputPad * output)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_EOS:
     {
+      gboolean drop_event = FALSE;
+      GstPlayItem *last;
+
+      PLAY_ITEMS_LOCK (uridecodebin);
+      last = g_list_last (uridecodebin->play_items)->data;
+
       /* If there is a next input, drop the EOS event */
       if (uridecodebin->input_item != uridecodebin->output_item ||
-          uridecodebin->input_item !=
-          g_list_last (uridecodebin->play_items)->data) {
+          uridecodebin->input_item != last) {
+        drop_event = TRUE;
+      }
+      PLAY_ITEMS_UNLOCK (uridecodebin);
+      if (drop_event) {
         GST_DEBUG_OBJECT (uridecodebin,
             "Dropping EOS event because in gapless mode");
         return GST_PAD_PROBE_DROP;
@@ -972,26 +972,14 @@ activate_source_item (GstSourceItem * item)
   return GST_STATE_CHANGE_SUCCESS;
 }
 
+/* PLAY_ITEMS_LOCK held */
 static void
 link_src_pad_to_db3 (GstURIDecodeBin3 * uridecodebin, GstSourcePad * spad)
 {
   GstSourceHandler *handler = spad->handler;
   GstPad *sinkpad = NULL;
 
-  /* Try to link to main sink pad only if it's from a main handler */
-  if (handler->is_main_source) {
-    sinkpad = gst_element_get_static_pad (uridecodebin->decodebin, "sink");
-    if (gst_pad_is_linked (sinkpad)) {
-      gst_object_unref (sinkpad);
-      sinkpad = NULL;
-    }
-  }
-
-  if (sinkpad == NULL) {
-    sinkpad =
-        gst_element_request_pad_simple (uridecodebin->decodebin, "sink_%u");
-    spad->db3_pad_is_request = TRUE;
-  }
+  sinkpad = gst_element_request_pad_simple (uridecodebin->decodebin, "sink_%u");
 
   if (sinkpad) {
     GstPadLinkReturn res;
@@ -1018,6 +1006,10 @@ link_src_pad_to_db3 (GstURIDecodeBin3 * uridecodebin, GstSourcePad * spad)
       && !handler->play_item->sub_item->handler) {
     GstStateChangeReturn ret;
 
+    /* Temporarily release play items lock to avoid deadlock if activating the
+     * source item causes a message that calls back into our message handler */
+    PLAY_ITEMS_UNLOCK (uridecodebin);
+
     /* The state lock is taken to ensure we can atomically change the
      * urisourcebin back to NULL in case of failures */
     GST_STATE_LOCK (uridecodebin);
@@ -1029,9 +1021,11 @@ link_src_pad_to_db3 (GstURIDecodeBin3 * uridecodebin, GstSourcePad * spad)
           FALSE);
       handler->play_item->sub_item->handler = NULL;
       GST_STATE_UNLOCK (uridecodebin);
+      PLAY_ITEMS_LOCK (uridecodebin);
       goto sub_item_activation_failed;
     }
     GST_STATE_UNLOCK (uridecodebin);
+    PLAY_ITEMS_LOCK (uridecodebin);
   }
 
   return;
@@ -1119,7 +1113,6 @@ switch_and_activate_input_locked (GstURIDecodeBin3 * uridecodebin,
           GST_DEBUG_PAD_NAME (new_spad->src_pad));
       gst_pad_unlink (old_spad->src_pad, old_spad->db3_sink_pad);
       new_spad->db3_sink_pad = old_spad->db3_sink_pad;
-      new_spad->db3_pad_is_request = old_spad->db3_pad_is_request;
       old_spad->db3_sink_pad = NULL;
 
       /* NOTE : Pad will be linked further down */
@@ -1130,40 +1123,17 @@ switch_and_activate_input_locked (GstURIDecodeBin3 * uridecodebin,
     }
   }
 
-  /* If the old pads contains the static decodebin3 sinkpad *and* we have a new
-   *  pad to activate, we re-use it */
-  if (to_activate) {
-    /* Remove unmatched old source pads */
-    for (iterold = old_pads; iterold; iterold = iterold->next) {
-      GstSourcePad *old_spad = iterold->data;
-      if (old_spad->db3_sink_pad && !old_spad->db3_pad_is_request) {
-        GstSourcePad *new_spad = to_activate->data;
-
-        GST_DEBUG_OBJECT (uridecodebin, "Static sinkpad can be re-used");
-        GST_DEBUG_OBJECT (uridecodebin, "Relinking %s:%s from %s:%s to %s:%s",
-            GST_DEBUG_PAD_NAME (old_spad->db3_sink_pad),
-            GST_DEBUG_PAD_NAME (old_spad->src_pad),
-            GST_DEBUG_PAD_NAME (new_spad->src_pad));
-        gst_pad_unlink (old_spad->src_pad, old_spad->db3_sink_pad);
-        new_spad->db3_sink_pad = old_spad->db3_sink_pad;
-        new_spad->db3_pad_is_request = old_spad->db3_pad_is_request;
-        old_spad->db3_sink_pad = NULL;
-
-        /* NOTE : Pad will be linked further down */
-        old_pads = g_list_remove (old_pads, old_spad);
-        to_activate = g_list_remove (to_activate, new_spad);
-        break;
-      }
-    }
-  }
-
   /* Remove unmatched old source pads */
   for (iterold = old_pads; iterold; iterold = iterold->next) {
     GstSourcePad *old_spad = iterold->data;
-    if (old_spad->db3_sink_pad && old_spad->db3_pad_is_request) {
+    if (old_spad->db3_sink_pad) {
       GST_DEBUG_OBJECT (uridecodebin, "Releasing no longer used db3 pad");
+      /* Temporarily release play items lock to avoid deadlock if releasing the
+       * pad causes a message that calls back into our message handler. */
+      PLAY_ITEMS_UNLOCK (uridecodebin);
       gst_element_release_request_pad (uridecodebin->decodebin,
           old_spad->db3_sink_pad);
+      PLAY_ITEMS_LOCK (uridecodebin);
       old_spad->db3_sink_pad = NULL;
     }
   }
@@ -1496,7 +1466,7 @@ src_pad_removed_cb (GstElement * element, GstPad * pad,
       "Source %" GST_PTR_FORMAT " removed pad %" GST_PTR_FORMAT " peer %"
       GST_PTR_FORMAT, element, pad, spad->db3_sink_pad);
 
-  if (spad->db3_sink_pad && spad->db3_pad_is_request)
+  if (spad->db3_sink_pad)
     gst_element_release_request_pad (uridecodebin->decodebin,
         spad->db3_sink_pad);
 
@@ -1600,9 +1570,7 @@ gst_uri_decode_bin3_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_URI:
-      PLAY_ITEMS_LOCK (dec);
       gst_uri_decode_bin3_set_uri (dec, g_value_get_string (value));
-      PLAY_ITEMS_UNLOCK (dec);
       break;
     case PROP_SUBURI:
       gst_uri_decode_bin3_set_suburi (dec, g_value_get_string (value));
@@ -1622,6 +1590,7 @@ gst_uri_decode_bin3_set_property (GObject * object, guint prop_id,
       dec->download = g_value_get_boolean (value);
       break;
     case PROP_DOWNLOAD_DIR:
+      g_free (dec->download_dir);
       dec->download_dir = g_value_dup_string (value);
       break;
     case PROP_USE_BUFFERING:
@@ -1691,13 +1660,6 @@ gst_uri_decode_bin3_get_property (GObject * object, guint prop_id,
       } else {
         g_value_set_string (value, NULL);
       }
-      break;
-    }
-    case PROP_SOURCE:
-    {
-      GST_OBJECT_LOCK (dec);
-      g_value_set_object (value, dec->source);
-      GST_OBJECT_UNLOCK (dec);
       break;
     }
     case PROP_CONNECTION_SPEED:
@@ -1934,7 +1896,6 @@ uri_src_ignore_block_probe (GstPad * pad, GstPadProbeInfo * info,
   return GST_PAD_PROBE_OK;
 }
 
-/* PLAY_ITEMS_LOCK held */
 static void
 gst_uri_decode_bin3_set_uri (GstURIDecodeBin3 * dec, const gchar * uri)
 {
@@ -1943,6 +1904,7 @@ gst_uri_decode_bin3_set_uri (GstURIDecodeBin3 * dec, const gchar * uri)
 
   GST_DEBUG_OBJECT (dec, "uri: %s", uri);
 
+  PLAY_ITEMS_LOCK (dec);
   item = next_inactive_play_item (dec);
   play_item_set_uri (item, uri);
 
@@ -1985,6 +1947,7 @@ gst_uri_decode_bin3_set_uri (GstURIDecodeBin3 * dec, const gchar * uri)
     }
   }
 
+  PLAY_ITEMS_UNLOCK (dec);
   if (start_item) {
     /* Start new item */
     activate_play_item (item);
@@ -2185,18 +2148,21 @@ gst_uri_decode_bin3_handle_redirection (GstURIDecodeBin3 * uridecodebin,
     goto beach;
 
   if (g_strcmp0 (current_uri, uri)) {
-    gboolean was_instant = uridecodebin->instant_uri;
+    gst_message_unref (message);
+    message = NULL;
+
     /* We only want to handle the redirection once */
     if (!handler->saw_redirection) {
+      gboolean was_instant = uridecodebin->instant_uri;
       handler->saw_redirection = TRUE;
       GST_DEBUG_OBJECT (uridecodebin, "Doing instant switch to '%s'", uri);
       uridecodebin->instant_uri = TRUE;
       /* Force instant switch */
+      PLAY_ITEMS_UNLOCK (uridecodebin);
       gst_uri_decode_bin3_set_uri (uridecodebin, uri);
+      PLAY_ITEMS_LOCK (uridecodebin);
       uridecodebin->instant_uri = was_instant;
     }
-    gst_message_unref (message);
-    message = NULL;
   }
   g_free (uri);
 
@@ -2209,17 +2175,19 @@ static GstMessage *
 update_message_with_uri (GstURIDecodeBin3 * uridecodebin, GstMessage * msg)
 {
   gchar *uri = NULL;
-  gboolean unlock_after = FALSE;
+
+  PLAY_ITEMS_LOCK (uridecodebin);
+
   if (gst_object_has_as_ancestor (GST_MESSAGE_SRC (msg),
           (GstObject *) uridecodebin->decodebin)) {
-    uri = uridecodebin->output_item->main_item->uri;
+    if (uridecodebin->output_item->main_item)
+      uri = uridecodebin->output_item->main_item->uri;
   } else {
     GstSourceHandler *handler;
-    PLAY_ITEMS_LOCK (uridecodebin);
-    unlock_after = TRUE;
     /* Find the matching handler (if any) */
     if ((handler = find_source_handler_for_element (uridecodebin, msg->src))) {
-      uri = handler->play_item->main_item->uri;
+      if (handler->play_item->main_item)
+        uri = handler->play_item->main_item->uri;
     }
   }
 
@@ -2227,13 +2195,10 @@ update_message_with_uri (GstURIDecodeBin3 * uridecodebin, GstMessage * msg)
     GstStructure *details;
     msg = gst_message_make_writable (msg);
     details = gst_message_writable_details (msg);
-    if (details) {
-      gst_structure_set (details, "uri", G_TYPE_STRING, uri, NULL);
-    }
+    gst_structure_set (details, "uri", G_TYPE_STRING, uri, NULL);
   }
 
-  if (unlock_after)
-    PLAY_ITEMS_UNLOCK (uridecodebin);
+  PLAY_ITEMS_UNLOCK (uridecodebin);
 
   return msg;
 }
@@ -2244,6 +2209,35 @@ gst_uri_decode_bin3_handle_message (GstBin * bin, GstMessage * msg)
   GstURIDecodeBin3 *uridecodebin = (GstURIDecodeBin3 *) bin;
 
   switch (GST_MESSAGE_TYPE (msg)) {
+    case GST_MESSAGE_STREAM_COLLECTION:
+    {
+      GstSourceHandler *handler;
+      GST_DEBUG_OBJECT (uridecodebin, "Handle stream collection");
+      PLAY_ITEMS_LOCK (uridecodebin);
+      /* Find the matching handler (if any) */
+      if ((handler = find_source_handler_for_element (uridecodebin, msg->src))) {
+        gboolean selectable = FALSE;
+        GstQuery *query = gst_query_new_selectable ();
+        /* We only want to forward this message if the source is selectable,
+         * else we will let decodebin3 do its emission. */
+        if (gst_element_query ((GstElement *) msg->src, query)) {
+          gst_query_parse_selectable (query, &selectable);
+          GST_DEBUG_OBJECT (uridecodebin,
+              "%s is selectable : %d",
+              GST_ELEMENT_NAME (handler->urisourcebin), selectable);
+        }
+        gst_query_unref (query);
+        if (!selectable) {
+          GST_DEBUG_OBJECT (uridecodebin,
+              "%s doesn't handle selection, dropping stream-collection message",
+              GST_ELEMENT_NAME (handler->urisourcebin));
+          gst_message_unref (msg);
+          msg = NULL;
+        }
+      }
+      PLAY_ITEMS_UNLOCK (uridecodebin);
+      break;
+    }
     case GST_MESSAGE_STREAMS_SELECTED:
     {
       GstSourceHandler *handler;

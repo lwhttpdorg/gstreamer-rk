@@ -66,6 +66,7 @@ typedef struct _GstMatroskaDemux {
   gboolean                 streaming;
   guint64                  seek_block;
   gboolean                 seek_first;
+  gboolean                 seek_block_is_offset;
 
   /* did we parse cues/tracks/segmentinfo already? */
   GList                   *seek_parsed;
@@ -87,10 +88,12 @@ typedef struct _GstMatroskaDemux {
   /* some state saving */
   GstClockTime             cluster_time;
   guint64                  cluster_offset;
+  guint                    cluster_prefix;
   guint64                  cluster_prevsize;       /* 0 if unknown */
   guint64                  first_cluster_offset;
   guint64                  next_cluster_offset;
   GstClockTime             requested_seek_time;
+  GstClockTime             requested_seek_duration;
   guint64                  seek_offset;
   GstClockTime             audio_lead_in_ts;
 

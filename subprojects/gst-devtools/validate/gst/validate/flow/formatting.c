@@ -148,9 +148,10 @@ typedef struct
 } StructureValues;
 
 static gboolean
-structure_set_fields (GQuark field_id, GValue * value, StructureValues * data)
+structure_set_fields (const GstIdStr * fieldname, GValue * value,
+    StructureValues * data)
 {
-  const gchar *field = g_quark_to_string (field_id);
+  const gchar *field = gst_id_str_as_str (fieldname);
 
   if (data->ignored_fields
       && g_strv_contains ((const gchar **) data->ignored_fields, field))
@@ -176,8 +177,8 @@ validate_flow_structure_cleanup (const GstStructure * structure,
     .ignored_fields = ignored_fields,
   };
 
-  gst_structure_foreach (structure,
-      (GstStructureForeachFunc) structure_set_fields, &d);
+  gst_structure_foreach_id_str (structure,
+      (GstStructureForeachIdStrFunc) structure_set_fields, &d);
   d.fields = g_list_sort (d.fields, (GCompareFunc) g_ascii_strcasecmp);
   nstructure = gst_structure_new_empty (gst_structure_get_name (structure));
   for (GList * tmp = d.fields; tmp; tmp = tmp->next) {
@@ -366,6 +367,7 @@ validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
           g_string_append_c (content, ' ');
         g_string_append_printf (content, "0x%02x", map.data[i]);
       }
+      gst_buffer_unmap (buffer, &map);
 
       buffer_parts[buffer_parts_index++] = g_string_free (content, FALSE);
     } else {
@@ -435,6 +437,7 @@ validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
       buffer_parts_index > 0 ? g_strjoinv (", ",
       buffer_parts) : g_strdup ("(empty)");
 
+  g_strfreev (logged_fields);
   g_strfreev (ignored_fields);
   g_free (meta_str);
   g_free (flags_str);
@@ -450,7 +453,8 @@ validate_flow_format_event (GstEvent * event,
     GstStructure * logged_fields_struct,
     GstStructure * ignored_fields_struct,
     const gchar * const *ignored_event_types,
-    const gchar * const *logged_event_types)
+    const gchar * const *logged_event_types,
+    const gchar * const *logged_upstream_event_types)
 {
   const gchar *event_type;
   gchar *structure_string;
@@ -460,8 +464,18 @@ validate_flow_format_event (GstEvent * event,
 
   event_type = gst_event_type_get_name (GST_EVENT_TYPE (event));
 
-  if (logged_event_types && !g_strv_contains (logged_event_types, event_type))
+  if (GST_EVENT_IS_UPSTREAM (event) && !GST_EVENT_IS_DOWNSTREAM (event)) {
+    /* For backward compatibility reason, only logged requested upstream event
+     * types */
+    if (!logged_upstream_event_types)
+      return NULL;
+
+    if (!g_strv_contains (logged_upstream_event_types, event_type))
+      return NULL;
+  } else if (logged_event_types
+      && !g_strv_contains (logged_event_types, event_type)) {
     return NULL;
+  }
 
   if (ignored_event_types && g_strv_contains (ignored_event_types, event_type))
     return NULL;

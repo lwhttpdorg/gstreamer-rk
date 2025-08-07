@@ -256,6 +256,11 @@ gst_mpeg2dec_create_generic_pool (GstAllocator * allocator,
   GstStructure *config;
 
   pool = gst_video_buffer_pool_new ();
+  {
+    gchar *name = g_strdup_printf ("mpeg2dec-%p-pool", pool);
+    g_object_set (pool, "name", name, NULL);
+    g_free (name);
+  }
   config = gst_buffer_pool_get_config (pool);
 
   gst_buffer_pool_config_set_allocator (config, allocator, params);
@@ -1120,8 +1125,10 @@ gst_mpeg2dec_handle_frame (GstVideoDecoder * decoder,
         break;
       case STATE_INVALID_END:
         GST_DEBUG_OBJECT (mpeg2dec, "invalid end");
+        /* FALLTHROUGH */
       case STATE_END:
         GST_DEBUG_OBJECT (mpeg2dec, "end");
+        /* FALLTHROUGH */
       case STATE_SLICE:
         GST_DEBUG_OBJECT (mpeg2dec, "display_fbuf:%p, discard_fbuf:%p",
             info->display_fbuf, info->discard_fbuf);

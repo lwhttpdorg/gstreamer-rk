@@ -2304,15 +2304,15 @@ gst_asf_demux_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
         GST_INFO_OBJECT (demux, "Chained asf starting");
         /* cleanup and get ready for a chained asf */
         gst_asf_demux_reset (demux, TRUE);
-        /* fall through */
       }
     }
+      /* FALLTHROUGH */
     case GST_ASF_DEMUX_STATE_HEADER:{
       ret = gst_asf_demux_chain_headers (demux);
       if (demux->state != GST_ASF_DEMUX_STATE_DATA)
         break;
-      /* otherwise fall through */
     }
+      /* FALLTHROUGH */
     case GST_ASF_DEMUX_STATE_DATA:
     {
       guint64 data_size;
@@ -3712,6 +3712,16 @@ gst_asf_demux_process_header (GstASFDemux * demux, guint8 * data, guint64 size)
   demux->saw_file_header = FALSE;
   /* Loop through the header's objects, processing those */
   for (i = 0; i < num_objects; ++i) {
+
+    /* Do not try to process non existent header and accept the num_objects was
+     * too high (as VLC counts METADATA object even if it shouldn't) and proceed
+     * normally */
+    if (size == 0) {
+      GST_WARNING_OBJECT (demux, "No bytes left for header part %u: Skipping",
+          i);
+      break;
+    }
+
     GST_INFO_OBJECT (demux, "reading header part %u", i);
     ret = gst_asf_demux_process_object (demux, &data, &size);
     if (ret != GST_FLOW_OK) {

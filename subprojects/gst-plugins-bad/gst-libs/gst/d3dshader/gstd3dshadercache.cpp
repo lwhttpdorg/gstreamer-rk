@@ -41,16 +41,19 @@ using namespace Microsoft::WRL;
 #include "converter_hlsl_cs.h"
 #include "plugin_hlsl_ps.h"
 #include "plugin_hlsl_vs.h"
+#include "plugin_hlsl_cs.h"
 #else
 static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_converter_ps_table;
 static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_converter_vs_table;
 static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_converter_cs_table;
 static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_plugin_ps_table;
 static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_plugin_vs_table;
+static std::unordered_map<std::string, std::pair<const BYTE *, SIZE_T>> g_plugin_cs_table;
 #endif
 
 static std::vector<std::pair<std::string, ID3DBlob *>> g_compiled_blobs;
 static std::mutex g_blob_lock;
+static std::mutex g_ps_cache_lock;
 
 /* *INDENT-ON* */
 
@@ -72,6 +75,8 @@ static const ShaderItem g_ps_map[] = {
   {GST_D3D_PLUGIN_PS_COLOR, BUILD_SOURCE (PSMain_color)},
   {GST_D3D_PLUGIN_PS_SAMPLE_PREMULT, BUILD_SOURCE (PSMain_sample_premul)},
   {GST_D3D_PLUGIN_PS_SAMPLE, BUILD_SOURCE (PSMain_sample)},
+  {GST_D3D_PLUGIN_PS_SAMPLE_SCRGB_TONEMAP, BUILD_SOURCE (PSMain_sample_scrgb_tonemap)},
+  {GST_D3D_PLUGIN_PS_SAMPLE_SCRGB, BUILD_SOURCE (PSMain_sample_scrgb)},
   {GST_D3D_PLUGIN_PS_SNOW, BUILD_SOURCE (PSMain_snow)},
 };
 
@@ -79,6 +84,21 @@ static const ShaderItem g_vs_map[] = {
   {GST_D3D_PLUGIN_VS_COLOR, BUILD_SOURCE (VSMain_color)},
   {GST_D3D_PLUGIN_VS_COORD, BUILD_SOURCE (VSMain_coord)},
   {GST_D3D_PLUGIN_VS_POS, BUILD_SOURCE (VSMain_pos)},
+};
+
+static const ShaderItem g_cs_map[] = {
+  {GST_D3D_PLUGIN_CS_MIP_GEN, BUILD_SOURCE (CSMain_mipgen)},
+  {GST_D3D_PLUGIN_CS_MIP_GEN_VUYA, BUILD_SOURCE (CSMain_mipgen_vuya)},
+  {GST_D3D_PLUGIN_CS_MIP_GEN_AYUV, BUILD_SOURCE (CSMain_mipgen_ayuv)},
+  {GST_D3D_PLUGIN_CS_MIP_GEN_GRAY, BUILD_SOURCE (CSMain_mipgen_gray)},
+  {GST_D3D_PLUGIN_CS_YADIF_1, BUILD_SOURCE (CSMain_yadif_1)},
+  {GST_D3D_PLUGIN_CS_YADIF_1_10, BUILD_SOURCE (CSMain_yadif_1_10)},
+  {GST_D3D_PLUGIN_CS_YADIF_1_12, BUILD_SOURCE (CSMain_yadif_1_12)},
+  {GST_D3D_PLUGIN_CS_YADIF_2, BUILD_SOURCE (CSMain_yadif_2)},
+  {GST_D3D_PLUGIN_CS_YADIF_4, BUILD_SOURCE (CSMain_yadif_4)},
+  {GST_D3D_PLUGIN_CS_FISHEYE_EQUIRECT, BUILD_SOURCE (CSMain_fisheye_equirect)},
+  {GST_D3D_PLUGIN_CS_FISHEYE_PANORAMA, BUILD_SOURCE (CSMain_fisheye_panorama)},
+  {GST_D3D_PLUGIN_CS_FISHEYE_PERSPECTIVE, BUILD_SOURCE (CSMain_fisheye_perspective)},
 };
 
 #undef BUILD_SOURCE
@@ -187,6 +207,59 @@ gst_d3d_plugin_shader_get_ps_blob (GstD3DPluginPS type,
   byte_code->byte_code_len = blob->GetBufferSize ();
 
   g_plugin_ps_table[shader_name] = { (const BYTE *) blob->GetBufferPointer (),
+      blob->GetBufferSize ()};
+
+  std::lock_guard <std::mutex> blk (g_blob_lock);
+  g_compiled_blobs.push_back ({ shader_name, blob });
+
+  return TRUE;
+}
+
+gboolean
+gst_d3d_plugin_shader_get_cs_blob (GstD3DPluginCS type,
+    GstD3DShaderModel shader_model, GstD3DShaderByteCode * byte_code)
+{
+  g_return_val_if_fail (type < GST_D3D_PLUGIN_CS_LAST, FALSE);
+  g_return_val_if_fail (shader_model < GST_D3D_SM_LAST, FALSE);
+  g_return_val_if_fail (byte_code, FALSE);
+
+  static std::mutex cache_lock;
+
+  auto shader_name = std::string (g_cs_map[type].name) + "_" +
+      std::string (g_sm_map[shader_model]);
+
+  std::lock_guard <std::mutex> lk (cache_lock);
+  auto it = g_plugin_cs_table.find (shader_name);
+  if (it != g_plugin_cs_table.end ()) {
+    byte_code->byte_code = it->second.first;
+    byte_code->byte_code_len = it->second.second;
+
+    return TRUE;
+  }
+
+  auto target = std::string ("cs_") + g_sm_map[shader_model];
+
+  ID3DBlob *blob = nullptr;
+  ComPtr<ID3DBlob> error_msg;
+
+  auto hr = gst_d3d_compile (g_cs_map[type].source, g_cs_map[type].source_size,
+      nullptr, nullptr, nullptr, "ENTRY_POINT", target.c_str (), 0, 0,
+      &blob, &error_msg);
+  if (FAILED (hr)) {
+    const gchar *err = nullptr;
+    if (error_msg)
+      err = (const gchar *) error_msg->GetBufferPointer ();
+
+    GST_ERROR ("Couldn't compile code, hr: 0x%x, error detail: %s, "
+        "source code: \n%s", (guint) hr, GST_STR_NULL (err),
+        g_cs_map[type].source);
+    return FALSE;
+  }
+
+  byte_code->byte_code = blob->GetBufferPointer ();
+  byte_code->byte_code_len = blob->GetBufferSize ();
+
+  g_plugin_cs_table[shader_name] = { (const BYTE *) blob->GetBufferPointer (),
       blob->GetBufferSize ()};
 
   std::lock_guard <std::mutex> blk (g_blob_lock);
@@ -560,6 +633,7 @@ enum class PS_OUTPUT
   LUMA,
   CHROMA,
   CHROMA_PLANAR,
+  LUMA_ALPHA,
   PLANAR,
   PLANAR_FULL,
 };
@@ -576,6 +650,8 @@ ps_output_to_string (PS_OUTPUT output)
       return "PS_OUTPUT_CHROMA";
     case PS_OUTPUT::CHROMA_PLANAR:
       return "PS_OUTPUT_CHROMA_PLANAR";
+    case PS_OUTPUT::LUMA_ALPHA:
+      return "PS_OUTPUT_LUMA_ALPHA";
     case PS_OUTPUT::PLANAR:
       return "PS_OUTPUT_PLANAR";
     case PS_OUTPUT::PLANAR_FULL:
@@ -597,6 +673,7 @@ ps_output_get_num_rtv (PS_OUTPUT output)
     case PS_OUTPUT::CHROMA:
       return 1;
     case PS_OUTPUT::CHROMA_PLANAR:
+    case PS_OUTPUT::LUMA_ALPHA:
       return 2;
     case PS_OUTPUT::PLANAR:
       return 3;
@@ -625,6 +702,7 @@ conv_ps_make_input (GstVideoFormat format, gboolean premul)
     case GST_VIDEO_FORMAT_BGRx:
       return "RGBx";
     case GST_VIDEO_FORMAT_ARGB:
+    case GST_VIDEO_FORMAT_ARGB64_LE:
       if (premul)
         return "ARGBPremul";
       return "ARGB";
@@ -647,15 +725,23 @@ conv_ps_make_input (GstVideoFormat format, gboolean premul)
     case GST_VIDEO_FORMAT_P010_10LE:
     case GST_VIDEO_FORMAT_P012_LE:
     case GST_VIDEO_FORMAT_P016_LE:
+    case GST_VIDEO_FORMAT_NV16:
+    case GST_VIDEO_FORMAT_NV24:
       return "NV12";
     case GST_VIDEO_FORMAT_NV21:
+    case GST_VIDEO_FORMAT_NV61:
       return "NV21";
+    case GST_VIDEO_FORMAT_AV12:
+      return "AV12";
+    case GST_VIDEO_FORMAT_YUV9:
+    case GST_VIDEO_FORMAT_Y41B:
     case GST_VIDEO_FORMAT_I420:
     case GST_VIDEO_FORMAT_Y42B:
     case GST_VIDEO_FORMAT_Y444:
     case GST_VIDEO_FORMAT_Y444_16LE:
       return "I420";
     case GST_VIDEO_FORMAT_YV12:
+    case GST_VIDEO_FORMAT_YVU9:
       return "YV12";
     case GST_VIDEO_FORMAT_I420_10LE:
     case GST_VIDEO_FORMAT_I422_10LE:
@@ -708,6 +794,29 @@ conv_ps_make_input (GstVideoFormat format, gboolean premul)
       if (premul)
         return "RBGAPremul";
       return "RBGA";
+    case GST_VIDEO_FORMAT_RGB16:
+      return "RGB16";
+    case GST_VIDEO_FORMAT_BGR16:
+      return "BGR16";
+    case GST_VIDEO_FORMAT_RGB15:
+      return "RGB15";
+    case GST_VIDEO_FORMAT_BGR15:
+      return "BGR15";
+    case GST_VIDEO_FORMAT_A420:
+    case GST_VIDEO_FORMAT_A420_16LE:
+    case GST_VIDEO_FORMAT_A422:
+    case GST_VIDEO_FORMAT_A422_16LE:
+    case GST_VIDEO_FORMAT_A444:
+    case GST_VIDEO_FORMAT_A444_16LE:
+      return "A420";
+    case GST_VIDEO_FORMAT_A420_10LE:
+    case GST_VIDEO_FORMAT_A422_10LE:
+    case GST_VIDEO_FORMAT_A444_10LE:
+      return "A420_10";
+    case GST_VIDEO_FORMAT_A420_12LE:
+    case GST_VIDEO_FORMAT_A422_12LE:
+    case GST_VIDEO_FORMAT_A444_12LE:
+      return "A420_12";
     default:
       g_assert_not_reached ();
       break;
@@ -736,6 +845,7 @@ conv_ps_make_output (GstVideoFormat format, gboolean premul)
       ret.push_back({PS_OUTPUT::PACKED, "RGBx"});
       break;
     case GST_VIDEO_FORMAT_ARGB:
+    case GST_VIDEO_FORMAT_ARGB64_LE:
       if (premul)
         ret.push_back({PS_OUTPUT::PACKED, "ARGBPremul"});
       else
@@ -767,13 +877,22 @@ conv_ps_make_output (GstVideoFormat format, gboolean premul)
     case GST_VIDEO_FORMAT_P010_10LE:
     case GST_VIDEO_FORMAT_P012_LE:
     case GST_VIDEO_FORMAT_P016_LE:
+    case GST_VIDEO_FORMAT_NV16:
+    case GST_VIDEO_FORMAT_NV24:
       ret.push_back({PS_OUTPUT::LUMA, "Luma"});
       ret.push_back({PS_OUTPUT::CHROMA, "ChromaNV12"});
       break;
     case GST_VIDEO_FORMAT_NV21:
+    case GST_VIDEO_FORMAT_NV61:
       ret.push_back({PS_OUTPUT::LUMA, "Luma"});
       ret.push_back({PS_OUTPUT::CHROMA, "ChromaNV21"});
       break;
+    case GST_VIDEO_FORMAT_AV12:
+      ret.push_back({PS_OUTPUT::LUMA_ALPHA, "LumaAlphaA420"});
+      ret.push_back({PS_OUTPUT::CHROMA, "ChromaNV12"});
+      break;
+    case GST_VIDEO_FORMAT_YUV9:
+    case GST_VIDEO_FORMAT_Y41B:
     case GST_VIDEO_FORMAT_I420:
     case GST_VIDEO_FORMAT_Y42B:
       ret.push_back({PS_OUTPUT::LUMA, "Luma"});
@@ -784,6 +903,7 @@ conv_ps_make_output (GstVideoFormat format, gboolean premul)
       ret.push_back({PS_OUTPUT::PLANAR, "Y444"});
       break;
     case GST_VIDEO_FORMAT_YV12:
+    case GST_VIDEO_FORMAT_YVU9:
       ret.push_back({PS_OUTPUT::LUMA, "Luma"});
       ret.push_back({PS_OUTPUT::CHROMA_PLANAR, "ChromaYV12"});
       break;
@@ -791,6 +911,23 @@ conv_ps_make_output (GstVideoFormat format, gboolean premul)
     case GST_VIDEO_FORMAT_I422_10LE:
       ret.push_back({PS_OUTPUT::LUMA, "Luma_10"});
       ret.push_back({PS_OUTPUT::CHROMA_PLANAR, "ChromaI420_10"});
+      break;
+    case GST_VIDEO_FORMAT_A420:
+    case GST_VIDEO_FORMAT_A420_16LE:
+    case GST_VIDEO_FORMAT_A422:
+    case GST_VIDEO_FORMAT_A422_16LE:
+      ret.push_back({PS_OUTPUT::LUMA_ALPHA, "LumaAlphaA420"});
+      ret.push_back({PS_OUTPUT::CHROMA_PLANAR, "ChromaI420"});
+      break;
+    case GST_VIDEO_FORMAT_A420_10LE:
+    case GST_VIDEO_FORMAT_A422_10LE:
+      ret.push_back({PS_OUTPUT::LUMA_ALPHA, "LumaAlphaA420_10"});
+      ret.push_back({PS_OUTPUT::CHROMA_PLANAR, "ChromaI420_10"});
+      break;
+    case GST_VIDEO_FORMAT_A420_12LE:
+    case GST_VIDEO_FORMAT_A422_12LE:
+      ret.push_back({PS_OUTPUT::LUMA_ALPHA, "LumaAlphaA420_12"});
+      ret.push_back({PS_OUTPUT::CHROMA_PLANAR, "ChromaI420_12"});
       break;
     case GST_VIDEO_FORMAT_Y444_10LE:
       ret.push_back({PS_OUTPUT::PLANAR, "Y444_10"});
@@ -841,11 +978,33 @@ conv_ps_make_output (GstVideoFormat format, gboolean premul)
       else
         ret.push_back({PS_OUTPUT::PLANAR_FULL, "GBRA_12"});
       break;
+    case GST_VIDEO_FORMAT_A444:
+    case GST_VIDEO_FORMAT_A444_16LE:
+      ret.push_back({PS_OUTPUT::PLANAR_FULL, "A444"});
+      break;
+    case GST_VIDEO_FORMAT_A444_10LE:
+      ret.push_back({PS_OUTPUT::PLANAR_FULL, "A444_10"});
+      break;
+    case GST_VIDEO_FORMAT_A444_12LE:
+      ret.push_back({PS_OUTPUT::PLANAR_FULL, "A444_12"});
+      break;
     case GST_VIDEO_FORMAT_RBGA:
       if (premul)
         ret.push_back({PS_OUTPUT::PACKED, "RBGAPremul"});
       else
         ret.push_back({PS_OUTPUT::PACKED, "RBGA"});
+      break;
+    case GST_VIDEO_FORMAT_RGB16:
+      ret.push_back({PS_OUTPUT::PACKED, "RGB16"});
+      break;
+    case GST_VIDEO_FORMAT_BGR16:
+      ret.push_back({PS_OUTPUT::PACKED, "BGR16"});
+      break;
+    case GST_VIDEO_FORMAT_RGB15:
+      ret.push_back({PS_OUTPUT::PACKED, "RGB15"});
+      break;
+    case GST_VIDEO_FORMAT_BGR15:
+      ret.push_back({PS_OUTPUT::PACKED, "BGR15"});
       break;
     default:
       g_assert_not_reached ();
@@ -861,8 +1020,6 @@ gst_d3d_converter_shader_get_ps_blob (GstVideoFormat in_format,
     GstD3DConverterType conv_type, GstD3DShaderModel shader_model,
     GstD3DConverterPSByteCode byte_code[4])
 {
-  static std::mutex cache_lock;
-
   auto input = conv_ps_make_input (in_format, in_premul);
   auto output = conv_ps_make_output (out_format, out_premul);
   std::string conv_type_str;
@@ -885,6 +1042,12 @@ gst_d3d_converter_shader_get_ps_blob (GstVideoFormat in_format,
     case GST_D3D_CONVERTER_PRIMARY:
       conv_type_str = "Primary";
       break;
+    case GST_D3D_CONVERTER_COLOR_BALANCE:
+      conv_type_str = "ColorBalance";
+      break;
+    case GST_D3D_CONVERTER_PRIMARY_AND_COLOR_BALANCE:
+      conv_type_str = "PrimaryAndColorBalance";
+      break;
     default:
       g_assert_not_reached ();
       return 0;
@@ -892,7 +1055,7 @@ gst_d3d_converter_shader_get_ps_blob (GstVideoFormat in_format,
 
   sm_target = std::string ("ps_") + g_sm_map[shader_model];
 
-  std::lock_guard <std::mutex> lk (cache_lock);
+  std::lock_guard <std::mutex> lk (g_ps_cache_lock);
   for (const auto & it : output) {
     auto output_builder = it.second;
     std::string shader_name = "PSMain_" + input + "_" + conv_type_str + "_" +
@@ -951,4 +1114,64 @@ gst_d3d_converter_shader_get_ps_blob (GstVideoFormat in_format,
   }
 
   return ret;
+}
+
+gboolean
+gst_d3d12_shader_cache_get_gamma_lut_blob (GstD3DShaderByteCode * vs_blob,
+    GstD3DShaderByteCode * ps_blob)
+{
+  if (vs_blob && !gst_d3d_plugin_shader_get_vs_blob (GST_D3D_PLUGIN_VS_COORD,
+        GST_D3D_SM_5_0, vs_blob)) {
+    GST_ERROR ("Couldn't get vertext shader blob");
+    return FALSE;
+  }
+
+  if (ps_blob) {
+    std::lock_guard <std::mutex> lk (g_ps_cache_lock);
+    std::string shader_name = "PSMain_Gamma_LUT_5_0";
+
+    auto cached = g_converter_ps_table.find (shader_name);
+    if (cached != g_converter_ps_table.end ()) {
+      ps_blob->byte_code = cached->second.first;
+      ps_blob->byte_code_len = cached->second.second;
+    } else {
+      std::vector<std::pair<std::string,std::string>> macro_str_pairs;
+      std::vector<D3D_SHADER_MACRO> macros;
+
+      macro_str_pairs.push_back ({"ENTRY_POINT", shader_name});
+
+      for (const auto & def : macro_str_pairs)
+        macros.push_back({def.first.c_str (), def.second.c_str ()});
+
+      macros.push_back({nullptr, nullptr});
+
+      ID3DBlob *blob = nullptr;
+      ComPtr<ID3DBlob> error_msg;
+
+      auto hr = gst_d3d_compile (str_PSMain_gamma_lut,
+          sizeof (str_PSMain_gamma_lut), nullptr, macros.data (), nullptr,
+          shader_name.c_str (), "ps_5_0", 0, 0, &blob, &error_msg);
+      if (FAILED (hr)) {
+        const gchar *err = nullptr;
+        if (error_msg)
+          err = (const gchar *) error_msg->GetBufferPointer ();
+
+        GST_ERROR ("Couldn't compile code, hr: 0x%x, error detail: %s",
+            (guint) hr, GST_STR_NULL (err));
+        return FALSE;
+      }
+
+      ps_blob->byte_code = blob->GetBufferPointer ();
+      ps_blob->byte_code_len = blob->GetBufferSize ();
+
+      g_converter_ps_table[shader_name] = {
+          (const BYTE *) blob->GetBufferPointer (),
+          blob->GetBufferSize () };
+
+      std::lock_guard <std::mutex> blk (g_blob_lock);
+      g_compiled_blobs.push_back ({ shader_name, blob });
+    }
+  }
+
+  return TRUE;
 }

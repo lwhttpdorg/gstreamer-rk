@@ -64,7 +64,7 @@ G_BEGIN_DECLS
 #define GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY "memory:D3D12Memory"
 
 /**
- * GST_MAP_D3D12:
+ * GST_MAP_D3D12: (value 131072) (type GstMapFlags)
  *
  * Flag indicating that we should map the D3D12 resource instead of to system memory.
  *
@@ -73,7 +73,7 @@ G_BEGIN_DECLS
 #define GST_MAP_D3D12 ((GstMapFlags) (GST_MAP_FLAG_LAST << 1))
 
 /**
- * GST_MAP_READ_D3D12:
+ * GST_MAP_READ_D3D12: (value 131073) (type GstMapFlags)
  *
  * GstMapFlags value alias for GST_MAP_READ | GST_MAP_D3D12
  *
@@ -82,7 +82,7 @@ G_BEGIN_DECLS
 #define GST_MAP_READ_D3D12 ((GstMapFlags) (GST_MAP_READ | GST_MAP_D3D12))
 
 /**
- * GST_MAP_WRITE_D3D12:
+ * GST_MAP_WRITE_D3D12: (value 131074) (type GstMapFlags)
  *
  * GstMapFlags value alias for GST_MAP_WRITE | GST_MAP_D3D12
  *
@@ -150,6 +150,10 @@ GST_D3D12_API
 gboolean                   gst_d3d12_allocation_params_set_array_size (GstD3D12AllocationParams * params,
                                                                        guint size);
 
+GST_D3D12_API
+gboolean                   gst_d3d12_allocation_params_set_mip_levels (GstD3D12AllocationParams * params,
+                                                                       guint mip_levels);
+
 /**
  * GstD3D12Memory:
  *
@@ -162,7 +166,6 @@ struct _GstD3D12Memory
   GstMemory mem;
 
   GstD3D12Device *device;
-  guint64 fence_value;
 
   /*< private >*/
   GstD3D12MemoryPrivate *priv;
@@ -201,6 +204,9 @@ GST_D3D12_API
 ID3D12DescriptorHeap * gst_d3d12_memory_get_shader_resource_view_heap (GstD3D12Memory * mem);
 
 GST_D3D12_API
+ID3D12DescriptorHeap * gst_d3d12_memory_get_unordered_access_view_heap (GstD3D12Memory * mem);
+
+GST_D3D12_API
 ID3D12DescriptorHeap * gst_d3d12_memory_get_render_target_view_heap (GstD3D12Memory * mem);
 
 GST_D3D12_API
@@ -218,14 +224,15 @@ gpointer          gst_d3d12_memory_get_token_data (GstD3D12Memory * mem,
                                                    gint64 token);
 
 GST_D3D12_API
-void              gst_d3d12_memory_set_external_fence (GstD3D12Memory * mem,
-                                                       ID3D12Fence * fence,
-                                                       guint64 fence_val);
+void              gst_d3d12_memory_set_fence (GstD3D12Memory * mem,
+                                              ID3D12Fence * fence,
+                                              guint64 fence_value,
+                                              gboolean wait);
 
 GST_D3D12_API
-gboolean          gst_d3d12_memory_get_external_fence (GstD3D12Memory * mem,
-                                                       ID3D12Fence ** fence,
-                                                       guint64 * fence_val);
+gboolean          gst_d3d12_memory_get_fence (GstD3D12Memory * mem,
+                                              ID3D12Fence ** fence,
+                                              guint64 * fence_value);
 
 GST_D3D12_API
 ID3D11Texture2D * gst_d3d12_memory_get_d3d11_texture (GstD3D12Memory * mem,

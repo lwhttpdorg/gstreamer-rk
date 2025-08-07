@@ -90,6 +90,7 @@ gst_validate_reporter_get_priv (GstValidateReporter * reporter)
         g_direct_equal, NULL, (GDestroyNotify) gst_validate_report_unref);
 
     g_mutex_init (&priv->reports_lock);
+    g_weak_ref_init (&priv->runner, NULL);
     g_object_set_data_full (G_OBJECT (reporter), REPORTER_PRIVATE, priv,
         (GDestroyNotify) _free_priv);
   }
@@ -291,7 +292,6 @@ gst_validate_reporter_g_log_func (const gchar * log_domain,
 {
   GstValidateReporter *reporter = g_weak_ref_get (&log_reporter);
 
-  g_printerr ("G_LOG: %s\n", message);
   if (!reporter) {
     gst_validate_default_log_hanlder (log_domain, log_level, message, NULL);
     return;

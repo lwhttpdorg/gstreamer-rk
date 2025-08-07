@@ -312,16 +312,20 @@ gst_adaptive_demux2_stream_finish_download (GstAdaptiveDemux2Stream *
       GST_ADAPTIVE_DEMUX2_STREAM_GET_CLASS (stream);
 
   GST_DEBUG_OBJECT (stream,
-      "%s download finish: %d %s - err: %p", uritype (stream), ret,
-      gst_flow_get_name (ret), err);
+      "%s download finish: %d %s - err: %p, segment rate: %f", uritype (stream),
+      ret, gst_flow_get_name (ret), err, stream->demux->segment.rate);
 
   stream->download_finished = TRUE;
 
   /* finish_fragment might call gst_adaptive_demux2_stream_advance_fragment,
    * which can look at the last_ret - so make sure it's stored before calling that.
    * Also, for not-linked or other errors passed in that are going to make
-   * this stream stop, we'll need to store it */
-  stream->last_ret = ret;
+   * this stream stop, we'll need to store it.
+   * BUT: Don't set last_ret to EOS yet if we're in reverse playback, as we need
+   * to try advancing to the previous fragment first. */
+  if (ret != GST_FLOW_EOS || stream->demux->segment.rate >= 0.0) {
+    stream->last_ret = ret;
+  }
 
   if (err) {
     g_clear_error (&stream->last_error);
@@ -360,6 +364,9 @@ gst_adaptive_demux2_stream_finish_download (GstAdaptiveDemux2Stream *
   } else if (!klass->need_another_chunk || stream->fragment.chunk_size == -1
       || !klass->need_another_chunk (stream)
       || stream->fragment.chunk_size == 0) {
+    GST_DEBUG_OBJECT (stream,
+        "Fragment download complete, calling finish_fragment (segment rate: %f)",
+        stream->demux->segment.rate);
     stream->fragment.finished = TRUE;
     ret = klass->finish_fragment (stream);
 
@@ -397,7 +404,6 @@ gst_adaptive_demux2_stream_finish_download (GstAdaptiveDemux2Stream *
    * to load */
   if (ret == GST_FLOW_EOS) {
     stream->last_ret = ret;
-
     gst_adaptive_demux2_stream_handle_playlist_eos (stream);
     return;
   }
@@ -1154,6 +1160,9 @@ gst_adaptive_demux2_stream_create_parser (GstAdaptiveDemux2Stream * stream)
     }
 
     stream->parsebin = gst_element_factory_make ("parsebin", NULL);
+    if (stream->parsebin == NULL) {
+      return FALSE;
+    }
     if (tsdemux_type)
       g_signal_connect (stream->parsebin, "deep-element-added",
           (GCallback) parsebin_deep_element_added_cb, demux);
@@ -1209,6 +1218,7 @@ on_download_error (DownloadRequest * request, DownloadRequestState state,
       request->state, last_status_code,
       stream->download_error_count, live, stream->download_error_retry);
 
+  gint max_retries = gst_adaptive_demux_max_retries (demux);
   if (!stream->download_error_retry && ((last_status_code / 100 == 4 && live)
           || last_status_code / 100 == 5)) {
     /* 4xx/5xx */
@@ -1237,8 +1247,8 @@ on_download_error (DownloadRequest * request, DownloadRequestState state,
             GST_LOG_OBJECT (stream,
                 "Scheduling delayed load_a_fragment() call");
             stream->pending_cb_id =
-                gst_adaptive_demux_loop_call_delayed (demux->
-                priv->scheduler_task, wait_time,
+                gst_adaptive_demux_loop_call_delayed (demux->priv->
+                scheduler_task, wait_time,
                 (GSourceFunc) gst_adaptive_demux2_stream_load_a_fragment,
                 gst_object_ref (stream), (GDestroyNotify) gst_object_unref);
             return;
@@ -1252,7 +1262,7 @@ on_download_error (DownloadRequest * request, DownloadRequestState state,
       }
     }
 
-    if (stream->download_error_count >= MAX_DOWNLOAD_ERROR_COUNT) {
+    if (max_retries >= 0 && ++stream->download_error_count >= max_retries) {
       /* looks like there is no way of knowing when a live stream has ended
        * Have to assume we are falling behind and cause a manifest reload */
       GST_DEBUG_OBJECT (stream, "Converting error of live stream to EOS");
@@ -1268,7 +1278,7 @@ on_download_error (DownloadRequest * request, DownloadRequestState state,
     return;
   } else {
     /* retry same segment */
-    if (++stream->download_error_count > MAX_DOWNLOAD_ERROR_COUNT) {
+    if (max_retries >= 0 && ++stream->download_error_count > max_retries) {
       gst_adaptive_demux2_stream_error (stream);
       return;
     }
@@ -1277,10 +1287,16 @@ on_download_error (DownloadRequest * request, DownloadRequestState state,
 
 again:
   /* wait a short time in case the server needs a bit to recover */
-  GST_LOG_OBJECT (stream,
-      "Scheduling delayed load_a_fragment() call to retry in 10 milliseconds");
   g_assert (stream->pending_cb_id == 0);
-  stream->pending_cb_id = gst_adaptive_demux_loop_call_delayed (demux->priv->scheduler_task, 10 * GST_MSECOND,  /* Retry in 10 ms */
+
+  GstClockTime delay =
+      gst_adaptive_demux_retry_delay (demux, stream->download_error_count,
+      10 * GST_MSECOND);
+  GST_DEBUG_OBJECT (stream,
+      "Scheduling delayed reload_manifest_cb() %d call in %" GST_TIMEP_FORMAT,
+      stream->download_error_count, &delay);
+  stream->pending_cb_id =
+      gst_adaptive_demux_loop_call_delayed (demux->priv->scheduler_task, delay,
       (GSourceFunc) gst_adaptive_demux2_stream_load_a_fragment,
       gst_object_ref (stream), (GDestroyNotify) gst_object_unref);
 }
@@ -1969,6 +1985,9 @@ gst_adaptive_demux2_stream_load_a_fragment (GstAdaptiveDemux2Stream * stream)
       if (gst_adaptive_demux2_stream_download_fragment (stream) != GST_FLOW_OK) {
         GST_ERROR_OBJECT (demux,
             "Failed to begin fragment download for stream %p", stream);
+        GST_ELEMENT_ERROR (demux, STREAM, DEMUX,
+            (_("Failed to initiate fragment download.")),
+            ("An error happened when getting fragment URL"));
         return FALSE;
       }
       break;
@@ -2001,7 +2020,8 @@ gst_adaptive_demux2_stream_load_a_fragment (GstAdaptiveDemux2Stream * stream)
     default:
       if (ret <= GST_FLOW_ERROR) {
         GST_WARNING_OBJECT (demux, "Error while downloading fragment");
-        if (++stream->download_error_count > MAX_DOWNLOAD_ERROR_COUNT) {
+        gint max_retries = gst_adaptive_demux_max_retries (demux);
+        if (max_retries >= 0 && ++stream->download_error_count > max_retries) {
           gst_adaptive_demux2_stream_error (stream);
           return FALSE;
         }
@@ -2022,12 +2042,15 @@ gst_adaptive_demux2_stream_load_a_fragment (GstAdaptiveDemux2Stream * stream)
           }
         }
 
-        /* Wait half the fragment duration before retrying */
-        GST_LOG_OBJECT (stream, "Scheduling delayed reload_manifest_cb() call");
+        GstClockTime delay = gst_adaptive_demux_retry_delay (stream->demux,
+            stream->download_error_count, stream->fragment.duration / 2);
+        GST_DEBUG_OBJECT (stream,
+            "Scheduling delayed reload_manifest_cb() call in %"
+            GST_TIMEP_FORMAT, &delay);
         g_assert (stream->pending_cb_id == 0);
         stream->pending_cb_id =
             gst_adaptive_demux_loop_call_delayed (demux->priv->scheduler_task,
-            stream->fragment.duration / 2,
+            delay,
             (GSourceFunc) gst_adaptive_demux2_stream_reload_manifest_cb,
             gst_object_ref (stream), (GDestroyNotify) gst_object_unref);
         return FALSE;
@@ -2076,8 +2099,8 @@ gst_adaptive_demux2_stream_next_download (GstAdaptiveDemux2Stream * stream)
 
       GST_DEBUG_OBJECT (stream,
           "stream_time after restart seek: %" GST_STIME_FORMAT
-          " position %" GST_STIME_FORMAT, GST_STIME_ARGS (stream_time),
-          GST_STIME_ARGS (stream->current_position));
+          " position %" GST_TIME_FORMAT, GST_STIME_ARGS (stream_time),
+          GST_TIME_ARGS (stream->current_position));
     }
 
     /* Trigger (re)computation of the parsebin input segment */
@@ -2709,7 +2732,7 @@ gst_adaptive_demux2_stream_update_current_bitrate (GstAdaptiveDemux2Stream *
   /* No explicit connection_speed, so choose the new variant to use as a
    * fraction of the measured download rate */
   target_download_rate =
-      CLAMP (stream->current_download_rate, 0,
+      MIN (stream->current_download_rate,
       G_MAXUINT) * (gdouble) demux->bandwidth_target_ratio;
 
   GST_DEBUG_OBJECT (stream, "Bitrate after target ratio limit (%0.2f): %u",

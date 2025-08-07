@@ -37,10 +37,25 @@ GST_START_TEST (test_expression_parser)
   fail_unless_equals_uint64 (start, 50 * GST_SECOND);
   gst_validate_action_unref (action);
 
+  gst_mini_object_unref (GST_MINI_OBJECT (seek_type));
+  gst_mini_object_unref (GST_MINI_OBJECT (set_vars));
+  gst_object_unref (scenario);
   gst_object_unref (runner);
 }
 
 GST_END_TEST;
+
+static void
+setup (void)
+{
+  gst_validate_init ();
+}
+
+static void
+teardown (void)
+{
+  gst_validate_deinit ();
+}
 
 static Suite *
 gst_validate_suite (void)
@@ -48,15 +63,11 @@ gst_validate_suite (void)
   Suite *s = suite_create ("registry");
   TCase *tc_chain = tcase_create ("registry");
   suite_add_tcase (s, tc_chain);
+  tcase_add_checked_fixture (tc_chain, setup, teardown);
 
-  if (atexit (gst_validate_deinit) != 0) {
-    GST_ERROR ("failed to set gst_validate_deinit as exit function");
-  }
+  tcase_add_test (tc_chain, test_expression_parser);
 
   g_setenv ("GST_VALIDATE_REPORTING_DETAILS", "all", TRUE);
-  gst_validate_init ();
-  tcase_add_test (tc_chain, test_expression_parser);
-  gst_validate_deinit ();
 
   return s;
 }

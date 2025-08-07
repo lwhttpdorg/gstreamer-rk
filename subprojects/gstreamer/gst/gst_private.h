@@ -114,7 +114,6 @@ G_GNUC_INTERNAL  gboolean _priv_plugin_deps_env_vars_changed (GstPlugin * plugin
 G_GNUC_INTERNAL  gboolean _priv_plugin_deps_files_changed (GstPlugin * plugin);
 
 /* init functions called from gst_init(). */
-G_GNUC_INTERNAL  void  _priv_gst_quarks_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_mini_object_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_memory_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_allocator_initialize (void);
@@ -183,7 +182,7 @@ gboolean  priv_gst_structure_append_to_gstring (const GstStructure * structure,
                                                 GString            * s,
                                                 GstSerializeFlags flags);
 G_GNUC_INTERNAL
-gboolean priv__gst_structure_append_template_to_gstring (GQuark field_id,
+gboolean priv__gst_structure_append_template_to_gstring (const gchar * field,
                                                         const GValue *value,
                                                         gpointer user_data);
 
@@ -243,6 +242,13 @@ GST_API gboolean _gst_disable_registry_cache;
 /* Secret variable to let the plugin scanner use the same base path
  * as the main application in order to determine dependencies */
 GST_API gchar *_gst_executable_path;
+
+/* Internal variables used in gstutils.c and initialized in
+ * _priv_gst_plugin_initialize(). */
+G_GNUC_INTERNAL
+extern GQuark _priv_gst_plugin_api_quark;
+G_GNUC_INTERNAL
+extern GQuark _priv_gst_plugin_api_flags_quark;
 
 /* provide inline gst_g_value_get_foo_unchecked(), used in gststructure.c */
 #define DEFINE_INLINE_G_VALUE_GET_UNCHECKED(ret_type,name_type,v_field) \
@@ -526,6 +532,9 @@ gint   priv_gst_count_directories (const char *filepath);
 void priv_gst_clock_init (void);
 GstClockTime priv_gst_get_monotonic_time (void);
 GstClockTime priv_gst_get_real_time (void);
+
+/* Needed for hashing in gstvalue.c */
+G_GNUC_INTERNAL const GstStructure * _gst_tag_list_structure (const GstTagList * list);
 
 G_END_DECLS
 #endif /* __GST_PRIVATE_H__ */

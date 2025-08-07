@@ -67,7 +67,22 @@ gst_sctp_association_state_get_type (void)
   return id;
 }
 
-G_DEFINE_TYPE (GstSctpAssociation, gst_sctp_association, G_TYPE_OBJECT);
+static void
+_init_debug (void)
+{
+  static gsize _init = 0;
+
+  if (g_once_init_enter (&_init)) {
+    GST_DEBUG_CATEGORY_INIT (gst_sctp_association_debug_category,
+        "sctpassociation", 0, "debug category for sctpassociation");
+    GST_DEBUG_CATEGORY_INIT (gst_sctp_debug_category, "sctplib", 0,
+        "debug category for messages from usrsctp");
+    g_once_init_leave (&_init, 1);
+  }
+}
+
+G_DEFINE_TYPE_WITH_CODE (GstSctpAssociation, gst_sctp_association,
+    G_TYPE_OBJECT, _init_debug ());
 
 enum
 {
@@ -110,8 +125,8 @@ static void gst_sctp_association_get_property (GObject * object, guint prop_id,
 
 static struct socket *create_sctp_socket (GstSctpAssociation *
     gst_sctp_association);
-static struct sockaddr_conn get_sctp_socket_address (GstSctpAssociation *
-    gst_sctp_association, guint16 port);
+static void fill_sctp_socket_address (GstSctpAssociation * gst_sctp_association,
+    guint16 port, struct sockaddr_conn *addr);
 static gboolean client_role_connect (GstSctpAssociation * self);
 static int sctp_packet_out (void *addr, void *buffer, size_t length, guint8 tos,
     guint8 set_df);
@@ -361,11 +376,6 @@ gst_sctp_association_get (guint32 association_id)
   GstSctpAssociation *association;
 
   G_LOCK (associations_lock);
-  GST_DEBUG_CATEGORY_INIT (gst_sctp_association_debug_category,
-      "sctpassociation", 0, "debug category for sctpassociation");
-  GST_DEBUG_CATEGORY_INIT (gst_sctp_debug_category,
-      "sctplib", 0, "debug category for messages from usrsctp");
-
   if (!associations) {
     associations =
         g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, NULL);
@@ -382,6 +392,40 @@ gst_sctp_association_get (guint32 association_id)
   } else {
     g_object_ref (association);
   }
+  G_UNLOCK (associations_lock);
+  return association;
+}
+
+GstSctpAssociation *
+gst_sctp_association_create (void)
+{
+  GstSctpAssociation *association;
+  guint association_id = 0;
+
+  G_LOCK (associations_lock);
+  if (!associations) {
+    associations =
+        g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, NULL);
+  }
+
+  while (association_id < G_MAXUINT16) {
+    association =
+        g_hash_table_lookup (associations, GUINT_TO_POINTER (association_id));
+    if (!association)
+      break;
+    association_id++;
+  }
+
+  if (association) {
+    G_UNLOCK (associations_lock);
+    return NULL;
+  }
+
+  association =
+      g_object_new (GST_SCTP_TYPE_ASSOCIATION, "association-id", association_id,
+      NULL);
+  g_hash_table_insert (associations, GUINT_TO_POINTER (association_id),
+      association);
   G_UNLOCK (associations_lock);
   return association;
 }
@@ -486,7 +530,7 @@ gst_sctp_association_send_data (GstSctpAssociation * self, const guint8 * buf,
       goto end;
     }
   }
-  remote_addr = get_sctp_socket_address (self, self->remote_port);
+  fill_sctp_socket_address (self, self->remote_port, &remote_addr);
   g_mutex_unlock (&self->association_mutex);
 
   /* TODO: We probably want to split too large chunks into multiple packets
@@ -688,21 +732,17 @@ error:
   return NULL;
 }
 
-static struct sockaddr_conn
-get_sctp_socket_address (GstSctpAssociation * gst_sctp_association,
-    guint16 port)
+static void
+fill_sctp_socket_address (GstSctpAssociation * gst_sctp_association,
+    guint16 port, struct sockaddr_conn *addr)
 {
-  struct sockaddr_conn addr;
-
-  memset ((void *) &addr, 0, sizeof (struct sockaddr_conn));
+  memset ((void *) addr, 0, sizeof (struct sockaddr_conn));
 #ifdef __APPLE__
-  addr.sconn_len = sizeof (struct sockaddr_conn);
+  addr->sconn_len = sizeof (struct sockaddr_conn);
 #endif
-  addr.sconn_family = AF_CONN;
-  addr.sconn_port = g_htons (port);
-  addr.sconn_addr = (void *) gst_sctp_association;
-
-  return addr;
+  addr->sconn_family = AF_CONN;
+  addr->sconn_port = g_htons (port);
+  addr->sconn_addr = (void *) gst_sctp_association;
 }
 
 static gboolean
@@ -714,8 +754,8 @@ client_role_connect (GstSctpAssociation * self)
   gint ret;
 
   g_mutex_lock (&self->association_mutex);
-  local_addr = get_sctp_socket_address (self, self->local_port);
-  remote_addr = get_sctp_socket_address (self, self->remote_port);
+  fill_sctp_socket_address (self, self->local_port, &local_addr);
+  fill_sctp_socket_address (self, self->remote_port, &remote_addr);
   g_mutex_unlock (&self->association_mutex);
 
   ret =

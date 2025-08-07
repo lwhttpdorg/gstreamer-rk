@@ -28,8 +28,8 @@
  *
  * ## Example launch lines
  * |[
- * gst-launch-1.0 -v videotestsrc ! unixfdsink socket-path=/tmp/blah
- * gst-launch-1.0 -v unixfdsrc socket-path=/tmp/blah ! autovideosink
+ * gst-launch-1.0 -v videotestsrc ! video/x-raw,format=RGBx,width=1920,height=1080 ! timeoverlay ! unixfdsink socket-path=/tmp/blah
+ * gst-launch-1.0 -v unixfdsrc socket-path=/tmp/blah ! videoconvert ! autovideosink
  * ]|
  *
  * Since: 1.24
@@ -405,10 +405,10 @@ again:
         ctx->id = new_buffer->id;
         ctx->n_memory = new_buffer->n_memory;
         for (int i = 0; i < new_buffer->n_memory; i++) {
-          GstMemory *mem = gst_fd_allocator_alloc (allocator, fds_arr[i],
-              new_buffer->memories[i].size, GST_FD_MEMORY_FLAG_NONE);
-          gst_memory_resize (mem, new_buffer->memories[i].offset,
-              new_buffer->memories[i].size);
+          GstMemory *mem = gst_fd_allocator_alloc_full (allocator, fds_arr[i],
+              new_buffer->memories[i].offset + new_buffer->memories[i].size,
+              new_buffer->memories[i].offset, new_buffer->memories[i].size,
+              GST_FD_MEMORY_FLAG_NONE);
           GST_MINI_OBJECT_FLAG_SET (mem, GST_MEMORY_FLAG_READONLY);
 
           g_hash_table_insert (self->memories, mem, ctx);

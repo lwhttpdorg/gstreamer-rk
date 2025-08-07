@@ -239,7 +239,7 @@ update_gaps (GESTrack * track)
       if (layer_prio != GES_TIMELINE_ELEMENT_NO_LAYER_PRIORITY) {
         GESLayer *layer = g_list_nth_data (priv->timeline->layers, layer_prio);
 
-        if (!ges_layer_get_active_for_track (layer, track))
+        if (!layer || !ges_layer_get_active_for_track (layer, track))
           continue;
       }
     }
@@ -305,9 +305,10 @@ track_resort_and_fill_gaps (GESTrack * track)
 }
 
 static gboolean
-update_field (GQuark field_id, const GValue * value, GstStructure * original)
+update_field (const GstIdStr * fieldname, const GValue * value,
+    GstStructure * original)
 {
-  gst_structure_id_set_value (original, field_id, value);
+  gst_structure_id_str_set_value (original, fieldname, value);
   return TRUE;
 }
 
@@ -626,6 +627,8 @@ ges_track_constructed (GObject * object)
   gchar *componame = NULL;
   gchar *capsfiltername = NULL;
 
+  G_OBJECT_CLASS (ges_track_parent_class)->constructed (object);
+
   if (self->type == GES_TRACK_TYPE_VIDEO) {
     componame =
         g_strdup_printf ("video_%s", GST_OBJECT_NAME (self->priv->composition));
@@ -731,7 +734,8 @@ ges_track_class_init (GESTrackClass * klass)
    */
   properties[ARG_CAPS] = g_param_spec_boxed ("caps", "Caps",
       "Caps used to choose the output stream",
-      GST_TYPE_CAPS, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+      GST_TYPE_CAPS,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, ARG_CAPS,
       properties[ARG_CAPS]);
 
@@ -751,7 +755,7 @@ ges_track_class_init (GESTrackClass * klass)
   properties[ARG_RESTRICTION_CAPS] =
       g_param_spec_boxed ("restriction-caps", "Restriction caps",
       "Caps used as a final filter on the output stream", GST_TYPE_CAPS,
-      G_PARAM_READWRITE);
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, ARG_RESTRICTION_CAPS,
       properties[ARG_RESTRICTION_CAPS]);
 
@@ -766,7 +770,7 @@ ges_track_class_init (GESTrackClass * klass)
    * the underlying composition? */
   properties[ARG_DURATION] = g_param_spec_uint64 ("duration", "Duration",
       "The current duration of the track", 0, G_MAXUINT64, GST_SECOND,
-      G_PARAM_READABLE);
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, ARG_DURATION,
       properties[ARG_DURATION]);
 
@@ -783,7 +787,7 @@ ges_track_class_init (GESTrackClass * klass)
   properties[ARG_TYPE] = g_param_spec_flags ("track-type", "TrackType",
       "Type of stream the track outputs",
       GES_TYPE_TRACK_TYPE, GES_TRACK_TYPE_CUSTOM,
-      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, ARG_TYPE,
       properties[ARG_TYPE]);
 
@@ -798,7 +802,9 @@ ges_track_class_init (GESTrackClass * klass)
    */
   properties[ARG_MIXING] = g_param_spec_boolean ("mixing", "Mixing",
       "Whether layer mixing is activated on the track or not",
-      TRUE, G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+      TRUE,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY |
+      G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, ARG_MIXING,
       properties[ARG_MIXING]);
 
@@ -1094,8 +1100,8 @@ ges_track_update_restriction_caps (GESTrack * self, const GstCaps * caps)
 
     if (gst_caps_get_size (new_restriction_caps) > i) {
       GstStructure *original = gst_caps_get_structure (new_restriction_caps, i);
-      gst_structure_foreach (new, (GstStructureForeachFunc) update_field,
-          original);
+      gst_structure_foreach_id_str (new,
+          (GstStructureForeachIdStrFunc) update_field, original);
     } else
       gst_caps_append_structure (new_restriction_caps,
           gst_structure_copy (new));

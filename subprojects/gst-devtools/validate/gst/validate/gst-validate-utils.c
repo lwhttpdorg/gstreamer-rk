@@ -50,10 +50,6 @@
 static GRegex *_variables_regex = NULL;
 static GstStructure *global_vars = NULL;
 
-static GQuark debug_quark = 0;
-static GQuark lineno_quark = 0;
-static GQuark filename_quark = 0;
-
 typedef struct
 {
   const gchar *str;
@@ -563,17 +559,6 @@ skip_spaces (gchar * c)
   return c;
 }
 
-static void
-setup_quarks (void)
-{
-  if (filename_quark)
-    return;
-
-  filename_quark = g_quark_from_static_string ("__filename__");
-  lineno_quark = g_quark_from_static_string ("__lineno__");
-  debug_quark = g_quark_from_static_string ("__debug__");
-}
-
 gboolean
 gst_validate_has_colored_output (void)
 {
@@ -739,17 +724,30 @@ _file_get_structures (GFile * file, gchar ** err,
           GList *tmpstructures;
           gchar **include_dirs = NULL;
 
-          if (!get_include_paths_func
-              && g_str_has_suffix (location, GST_VALIDATE_SCENARIO_SUFFIX)) {
+          if (get_include_paths_func)
+            include_dirs = get_include_paths_func (filename);
+
+          if (g_str_has_suffix (location, GST_VALIDATE_SCENARIO_SUFFIX)) {
             GST_INFO
                 ("Trying to include a scenario, take into account scenario include dir");
 
-            get_include_paths_func = (GstValidateGetIncludePathsFunc)
-                gst_validate_scenario_get_include_paths;
+            gchar **extra_includes =
+                gst_validate_scenario_get_include_paths (filename);
+            if (extra_includes) {
+              gint i = 0;
+              gint existing_len =
+                  include_dirs ? g_strv_length (include_dirs) : 0;
+              gint extra_len = g_strv_length (extra_includes);
+              include_dirs =
+                  g_realloc_n (include_dirs, existing_len + extra_len + 1,
+                  sizeof (gchar *));
+              for (i = 0; extra_includes[i] != NULL; i++) {
+                include_dirs[existing_len + i] = extra_includes[i];
+              }
+              include_dirs[existing_len + i] = NULL;
+              g_free (extra_includes);
+            }
           }
-
-          if (get_include_paths_func)
-            include_dirs = get_include_paths_func (filename);
 
           if (!include_dirs) {
             GFile *dir = g_file_get_parent (file);
@@ -809,11 +807,10 @@ _file_get_structures (GFile * file, gchar ** err,
         }
         gst_structure_free (structure);
       } else {
-        setup_quarks ();
-        gst_structure_id_set (structure,
-            lineno_quark, G_TYPE_INT, current_lineno,
-            filename_quark, G_TYPE_STRING, filename,
-            debug_quark, G_TYPE_STRING, debug_line->str, NULL);
+        gst_structure_set_static_str (structure,
+            "__lineno__", G_TYPE_INT, current_lineno,
+            "__filename__", G_TYPE_STRING, filename,
+            "__debug__", G_TYPE_STRING, debug_line->str, NULL);
         structures = g_list_append (structures, structure);
       }
     }
@@ -1355,11 +1352,25 @@ done:
   g_clear_pointer (&match_info, g_match_info_free);
 }
 
-static gboolean
-_structure_set_variables (GQuark field_id, GValue * value, ReplaceData * data)
+gboolean
+gst_validate_structure_file_field_is_metadata (const GstIdStr * fieldname)
 {
-  if (field_id == filename_quark || field_id == debug_quark
-      || field_id == debug_quark)
+  static const gchar *skip_fields[] = {
+    "__filename__",
+    "__lineno__",
+    "__debug__",
+    NULL,
+  };
+
+  return fieldname
+      && g_strv_contains (skip_fields, gst_id_str_as_str (fieldname));
+}
+
+static gboolean
+_structure_set_variables (const GstIdStr * fieldname, GValue * value,
+    ReplaceData * data)
+{
+  if (gst_validate_structure_file_field_is_metadata (fieldname))
     return TRUE;
 
   if (GST_VALUE_HOLDS_LIST (value)) {
@@ -1415,14 +1426,15 @@ gst_validate_structure_resolve_variables (gpointer source,
 {
   ReplaceData d = { source ? source : structure, local_variables, flags };
 
-  gst_structure_filter_and_map_in_place (structure,
-      (GstStructureFilterMapFunc) _structure_set_variables, &d);
+  gst_structure_filter_and_map_in_place_id_str (structure,
+      (GstStructureFilterMapIdStrFunc) _structure_set_variables, &d);
 }
 
 static gboolean
-_set_vars_func (GQuark field_id, const GValue * value, GstStructure * vars)
+_set_vars_func (const GstIdStr * fieldname, const GValue * value,
+    GstStructure * vars)
 {
-  gst_structure_id_set_value (vars, field_id, value);
+  gst_structure_id_str_set_value (vars, fieldname, value);
 
   return TRUE;
 }
@@ -1462,8 +1474,8 @@ gst_validate_set_globals (GstStructure * structure)
   if (!structure)
     return;
 
-  gst_structure_foreach (structure,
-      (GstStructureForeachFunc) _set_vars_func, global_vars);
+  gst_structure_foreach_id_str (structure,
+      (GstStructureForeachIdStrFunc) _set_vars_func, global_vars);
 }
 
 /**

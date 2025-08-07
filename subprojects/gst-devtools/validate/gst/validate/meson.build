@@ -1,6 +1,7 @@
 runner_file = files('gst-validate-runner.c')
 gstvalidate_sources = files(
     'gst-validate-reporter.c',
+    'gst-validate-http-actions.c',
     'gst-validate-mockdecryptor.c',
     'gst-validate-monitor.c',
     'gst-validate-element-monitor.c',
@@ -65,7 +66,7 @@ validate_resources = gnome.compile_resources(
 
 validate_deps = [gst_check_dep, gst_dep, gst_controller_dep, gstbase_dep, gstapp_dep,
                  gio_dep, gmodule_dep, gst_pbutils_dep, mathlib, json_dep]
-gstvalidate = library('gstvalidate-@0@'.format(apiversion),
+gstvalidate = library('gstvalidate-@0@'.format(api_version),
     sources: gstvalidate_sources + gst_validate_enums + runner_file + validate_resources,
     version : libversion,
     soversion : soversion,
@@ -90,11 +91,19 @@ else
   warning('Statically building GstValidate as a tracer is not supported yet.')
 endif
 
+doc_sources = []
+foreach s: gstvalidate_headers
+  doc_sources += meson.current_source_dir() / s.full_path()
+endforeach
+
+plugin_sources += {
+  'validatetracer': pathsep.join(doc_sources)
+}
 
 pkg_name = 'gstreamer-validate-1.0'
 library_def = {'lib': gstvalidate}
 pkgconfig.generate(gstvalidate,
-  libraries : [gst_dep],
+  libraries : [gst_dep, gst_pbutils_dep, gst_video_dep],
   subdirs : pkgconfig_subdirs,
   name : pkg_name,
   description : 'GStreamer Validate',
@@ -114,8 +123,8 @@ if build_gir
                         'GLib-2.0',
                         'Gio-2.0',
                         'GModule-2.0',
-                        'Gst-' + apiversion,
-                        'GstPbutils-' + apiversion],
+                        'Gst-' + api_version,
+                        'GstPbutils-' + api_version],
             'install' : true,
             'dependencies' : validate_deps,
             'extra_args' : gst_validate_gir_extra_args,

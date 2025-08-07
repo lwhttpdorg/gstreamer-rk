@@ -106,12 +106,12 @@ gst_accurip_class_init (GstAccuripClass * klass)
   g_object_class_install_property (gobject_class, PROP_FIRST_TRACK,
       g_param_spec_boolean ("first-track", "First track",
           "Indicate to the CRC calculation algorithm that this is the first track of a set",
-          FALSE, G_PARAM_READWRITE));
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_LAST_TRACK,
       g_param_spec_boolean ("last-track", "Last track",
           "Indicate to the CRC calculation algorithm that this is the last track of a set",
-          FALSE, G_PARAM_READWRITE));
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_accurip_finalize);
 
@@ -120,7 +120,7 @@ gst_accurip_class_init (GstAccuripClass * klass)
   gstbasetrans_class->sink_event = GST_DEBUG_FUNCPTR (gst_accurip_sink_event);
   gstbasetrans_class->passthrough_on_same_caps = TRUE;
 
-  gst_element_class_set_metadata (GST_ELEMENT_CLASS (klass),
+  gst_element_class_set_static_metadata (GST_ELEMENT_CLASS (klass),
       "AccurateRip(TM) CRC element",
       "Filter/Analyzer/Audio",
       "Computes an AccurateRip CRC", "Christophe Fergeau <teuf@gnome.org>");

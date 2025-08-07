@@ -987,6 +987,11 @@ default_decide_allocation (GstAudioVisualizer * scope, GstQuery * query)
   if (pool == NULL) {
     /* we did not get a pool, make one ourselves then */
     pool = gst_video_buffer_pool_new ();
+    {
+      gchar *name = g_strdup_printf ("%s-pool", GST_OBJECT_NAME (scope));
+      g_object_set (pool, "name", name, NULL);
+      g_free (name);
+    }
   }
 
   config = gst_buffer_pool_get_config (pool);
@@ -1264,7 +1269,7 @@ gst_audio_visualizer_src_event (GstPad * pad, GstObject * parent,
       if (diff >= 0)
         /* we're late, this is a good estimate for next displayable
          * frame (see part-qos.txt) */
-        scope->priv->earliest_time = timestamp + 2 * diff +
+        scope->priv->earliest_time = timestamp + MIN (2 * diff, GST_SECOND) +
             scope->priv->frame_duration;
       else
         scope->priv->earliest_time = timestamp + diff;

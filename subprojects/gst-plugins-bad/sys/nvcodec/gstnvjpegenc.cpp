@@ -27,6 +27,8 @@
 #include <gmodule.h>
 #include <string>
 #include <mutex>
+#include <unordered_map>
+#include "kernel/gstnvjpegenc.cu"
 
 /**
  * SECTION:element-nvjpegenc
@@ -42,6 +44,18 @@
  * Since: 1.24
  *
  */
+
+/* *INDENT-OFF* */
+#ifdef NVCODEC_CUDA_PRECOMPILED
+#include "kernel/jpegenc_ptx.h"
+#else
+static std::unordered_map<std::string, const char *> g_precompiled_ptx_table;
+#endif
+
+static std::unordered_map<std::string, const char *> g_cubin_table;
+static std::unordered_map<std::string, const char *> g_ptx_table;
+static std::mutex g_kernel_table_lock;
+/* *INDENT-ON* */
 
 GST_DEBUG_CATEGORY_STATIC (gst_nv_jpeg_enc_debug);
 #define GST_CAT_DEFAULT gst_nv_jpeg_enc_debug
@@ -189,6 +203,7 @@ struct GstNvJpegEncCData
   guint cuda_device_id;
   GstCaps *sink_caps;
   gboolean have_nvrtc;
+  gboolean autogpu;
 };
 
 /* *INDENT-OFF* */
@@ -213,9 +228,11 @@ struct GstNvJpegEncPrivate
   GstBufferPool *pool = nullptr;
   GstBuffer *fallback_buf = nullptr;
 
-  std::mutex lock;
+  std::recursive_mutex lock;
   guint quality = DEFAULT_JPEG_QUALITY;
   bool quality_updated = false;
+  gboolean use_stream_ordered = FALSE;
+  guint cuda_device_id = 0;
 };
 /* *INDENT-ON* */
 
@@ -232,6 +249,7 @@ struct GstNvJpegEncClass
 
   guint cuda_device_id;
   gboolean have_nvrtc;
+  gboolean autogpu;
 };
 
 static void gst_nv_jpeg_enc_finalize (GObject * object);
@@ -286,10 +304,18 @@ gst_nv_jpeg_enc_class_init (GstNvJpegEncClass * klass, gpointer data)
           "Quality of encoding", 1, 100, DEFAULT_JPEG_QUALITY,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
-  gst_element_class_set_static_metadata (element_class,
-      "NVIDIA JPEG Encoder", "Codec/Encoder/Video/Hardware",
-      "Encode JPEG image using nvJPEG library",
-      "Seungha Yang <seungha@centricular.com>");
+  if (cdata->autogpu) {
+    gst_element_class_set_static_metadata (element_class,
+        "NVIDIA JPEG Encoder Auto GPU Select Mode",
+        "Codec/Encoder/Video/Hardware",
+        "Encode JPEG image using nvJPEG library",
+        "Seungha Yang <seungha@centricular.com>");
+  } else {
+    gst_element_class_set_static_metadata (element_class,
+        "NVIDIA JPEG Encoder", "Codec/Encoder/Video/Hardware",
+        "Encode JPEG image using nvJPEG library",
+        "Seungha Yang <seungha@centricular.com>");
+  }
 
   auto sink_templ = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
       cdata->sink_caps);
@@ -312,6 +338,7 @@ gst_nv_jpeg_enc_class_init (GstNvJpegEncClass * klass, gpointer data)
 
   klass->cuda_device_id = cdata->cuda_device_id;
   klass->have_nvrtc = cdata->have_nvrtc;
+  klass->autogpu = cdata->autogpu;
   gst_caps_unref (cdata->sink_caps);
   g_free (cdata);
 }
@@ -319,7 +346,10 @@ gst_nv_jpeg_enc_class_init (GstNvJpegEncClass * klass, gpointer data)
 static void
 gst_nv_jpeg_enc_init (GstNvJpegEnc * self)
 {
+  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
+
   self->priv = new GstNvJpegEncPrivate ();
+  self->priv->cuda_device_id = klass->cuda_device_id;
 }
 
 static void
@@ -339,7 +369,7 @@ gst_nv_jpeg_enc_set_property (GObject * object, guint prop_id,
   auto self = GST_NV_JPEG_ENC (object);
   auto priv = self->priv;
 
-  std::lock_guard < std::mutex > lk (priv->lock);
+  std::lock_guard < std::recursive_mutex > lk (priv->lock);
   switch (prop_id) {
     case PROP_QUALITY:
     {
@@ -362,12 +392,11 @@ gst_nv_jpeg_enc_get_property (GObject * object, guint prop_id, GValue * value,
 {
   auto self = GST_NV_JPEG_ENC (object);
   auto priv = self->priv;
-  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
 
-  std::lock_guard < std::mutex > lk (priv->lock);
+  std::lock_guard < std::recursive_mutex > lk (priv->lock);
   switch (prop_id) {
     case PROP_CUDA_DEVICE_ID:
-      g_value_set_uint (value, klass->cuda_device_id);
+      g_value_set_uint (value, priv->cuda_device_id);
       break;
     case PROP_QUALITY:
       g_value_set_uint (value, priv->quality);
@@ -383,45 +412,119 @@ gst_nv_jpeg_enc_set_context (GstElement * element, GstContext * context)
 {
   auto self = GST_NV_JPEG_ENC (element);
   auto priv = self->priv;
-  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
 
-  gst_cuda_handle_set_context (element, context, klass->cuda_device_id,
-      &priv->context);
+  {
+    std::lock_guard < std::recursive_mutex > lk (priv->lock);
+    gst_cuda_handle_set_context (element, context, priv->cuda_device_id,
+        &priv->context);
+  }
 
   GST_ELEMENT_CLASS (parent_class)->set_context (element, context);
 }
 
-#define KERNEL_MAIN_FUNC "gst_nv_jpec_enc_kernel"
-/* *INDENT-OFF* */
-const static gchar kernel_source[] =
-"extern \"C\" {\n"
-"__device__ inline unsigned char\n"
-"scale_to_uchar (float val)\n"
-"{\n"
-"  return (unsigned char) __float2int_rz (val * 255.0);\n"
-"}\n"
-"\n"
-"__global__ void\n"
-KERNEL_MAIN_FUNC "(cudaTextureObject_t uv_tex, unsigned char * out_u,\n"
-"    unsigned char * out_v, int width, int height, int stride)\n"
-"{\n"
-"  int x_pos = blockIdx.x * blockDim.x + threadIdx.x;\n"
-"  int y_pos = blockIdx.y * blockDim.y + threadIdx.y;\n"
-"  if (x_pos >= width || y_pos >= height)\n"
-"    return;\n"
-"  float x = 0;\n"
-"  float y = 0;\n"
-"  if (width > 1)\n"
-"    x = (float) x_pos / (width - 1);\n"
-"  if (height > 1)\n"
-"    y = (float) y_pos / (height - 1);\n"
-"  float2 uv = tex2D<float2> (uv_tex, x, y);\n"
-"  unsigned int pos = x_pos + (y_pos * stride);\n"
-"  out_u[pos] = scale_to_uchar (uv.x);\n"
-"  out_v[pos] = scale_to_uchar (uv.y);\n"
-"}\n"
-"}";
-/* *INDENT-ON* */
+static gboolean
+default_stream_ordered_alloc_enabled (void)
+{
+  static gboolean enabled = FALSE;
+  GST_CUDA_CALL_ONCE_BEGIN {
+    if (g_getenv ("GST_CUDA_ENABLE_STREAM_ORDERED_ALLOC"))
+      enabled = TRUE;
+  }
+  GST_CUDA_CALL_ONCE_END;
+
+  return enabled;
+}
+
+/* Caller should push context */
+static gboolean
+gst_nv_jpeg_enc_load_module (GstNvJpegEnc * self)
+{
+  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
+  auto priv = self->priv;
+
+  if (!priv->module && klass->have_nvrtc) {
+    const gchar *program = nullptr;
+    auto precompiled = g_precompiled_ptx_table.find ("GstJpegEnc");
+    CUresult ret;
+    if (precompiled != g_precompiled_ptx_table.end ())
+      program = precompiled->second;
+
+    if (program) {
+      GST_DEBUG_OBJECT (self, "Precompiled PTX available");
+      ret = CuModuleLoadData (&priv->module, program);
+      if (ret != CUDA_SUCCESS) {
+        GST_WARNING_OBJECT (self, "Could not load module from precompiled PTX");
+        priv->module = nullptr;
+        program = nullptr;
+      }
+    }
+
+    if (!program) {
+      std::lock_guard < std::mutex > lk (g_kernel_table_lock);
+      std::string cubin_kernel_name =
+          "GstJpegEnc_device_" + std::to_string (priv->cuda_device_id);
+
+      auto cubin = g_cubin_table.find (cubin_kernel_name);
+      if (cubin == g_cubin_table.end ()) {
+        GST_DEBUG_OBJECT (self, "Building CUBIN");
+        program = gst_cuda_nvrtc_compile_cubin (GstNvJpegEncConvertMain_str,
+            priv->cuda_device_id);
+        if (program)
+          g_cubin_table[cubin_kernel_name] = program;
+      } else {
+        GST_DEBUG_OBJECT (self, "Found cached CUBIN");
+        program = cubin->second;
+      }
+
+      if (program) {
+        GST_DEBUG_OBJECT (self, "Loading CUBIN module");
+        ret = CuModuleLoadData (&priv->module, program);
+        if (ret != CUDA_SUCCESS) {
+          GST_WARNING_OBJECT (self, "Could not load module from cached CUBIN");
+          program = nullptr;
+          priv->module = nullptr;
+        }
+      }
+
+      if (!program) {
+        auto ptx = g_ptx_table.find ("GstJpegEnc");
+        if (ptx == g_ptx_table.end ()) {
+          GST_DEBUG_OBJECT (self, "Building PTX");
+          program = gst_cuda_nvrtc_compile (GstNvJpegEncConvertMain_str);
+          if (program)
+            g_ptx_table["GstJpegEnc"] = program;
+        } else {
+          GST_DEBUG_OBJECT (self, "Found cached PTX");
+          program = ptx->second;
+        }
+      }
+
+      if (program && !priv->module) {
+        GST_DEBUG_OBJECT (self, "Loading PTX module");
+        ret = CuModuleLoadData (&priv->module, program);
+        if (ret != CUDA_SUCCESS) {
+          GST_ERROR_OBJECT (self, "Could not load module from PTX");
+          program = nullptr;
+          priv->module = nullptr;
+        }
+      }
+    }
+
+    if (!priv->module) {
+      GST_ERROR_OBJECT (self, "Couldn't load module");
+      return FALSE;
+    }
+
+    ret = CuModuleGetFunction (&priv->kernel_func, priv->module,
+        "GstNvJpegEncConvertMain");
+    if (!gst_cuda_result (ret)) {
+      GST_ERROR_OBJECT (self, "Couldn't get kernel function");
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
 
 static gboolean
 gst_nv_jpeg_enc_open (GstVideoEncoder * encoder)
@@ -432,56 +535,18 @@ gst_nv_jpeg_enc_open (GstVideoEncoder * encoder)
 
   GST_DEBUG_OBJECT (self, "Open");
 
+  /* Will open GPU later */
+  if (klass->autogpu)
+    return TRUE;
+
   if (!gst_cuda_ensure_element_context (GST_ELEMENT_CAST (encoder),
-          klass->cuda_device_id, &priv->context)) {
+          priv->cuda_device_id, &priv->context)) {
     GST_ERROR_OBJECT (self, "Couldn't create CUDA context");
     return FALSE;
   }
 
-  if (!gst_cuda_context_push (priv->context)) {
-    GST_ERROR_OBJECT (self, "Couldn't push context");
-    return FALSE;
-  }
-
-  if (!priv->module && klass->have_nvrtc) {
-    auto program = gst_cuda_nvrtc_compile_cubin (kernel_source,
-        klass->cuda_device_id);
-    if (!program)
-      program = gst_cuda_nvrtc_compile (kernel_source);
-
-    if (!program) {
-      GST_ERROR_OBJECT (self, "Couldn't compile kernel source");
-      gst_cuda_context_pop (nullptr);
-      return FALSE;
-    }
-
-    auto ret = CuModuleLoadData (&priv->module, program);
-    g_free (program);
-
-    if (!gst_cuda_result (ret)) {
-      GST_ERROR_OBJECT (self, "Couldn't load module");
-      gst_cuda_context_pop (nullptr);
-      return FALSE;
-    }
-
-    ret = CuModuleGetFunction (&priv->kernel_func, priv->module,
-        KERNEL_MAIN_FUNC);
-    if (!gst_cuda_result (ret)) {
-      GST_ERROR_OBJECT (self, "Couldn't get kernel function");
-      gst_cuda_context_pop (nullptr);
-      return FALSE;
-    }
-  }
-
-  auto ret = g_vtable.NvjpegCreateSimple (&priv->handle);
-  gst_cuda_context_pop (nullptr);
-
-  if (ret != NVJPEG_STATUS_SUCCESS) {
-    GST_ERROR_OBJECT (self, "Couldn't create encoder handle");
-    return FALSE;
-  }
-
-  priv->stream = gst_cuda_stream_new (priv->context);
+  if (!priv->stream)
+    priv->stream = gst_cuda_stream_new (priv->context);
 
   return TRUE;
 }
@@ -497,18 +562,32 @@ gst_nv_jpeg_enc_reset (GstNvJpegEnc * self)
     if (priv->params)
       g_vtable.NvjpegEncoderParamsDestroy (priv->params);
 
+    if (priv->handle)
+      g_vtable.NvjpegDestroy (priv->handle);
+
+    gboolean need_sync = FALSE;
+    auto stream = gst_cuda_stream_get_handle (priv->stream);
     for (guint i = 0; i < G_N_ELEMENTS (priv->uv); i++) {
       if (priv->uv[i]) {
-        CuMemFree (priv->uv[i]);
+        if (priv->use_stream_ordered) {
+          CuMemFreeAsync (priv->uv[i], stream);
+          need_sync = TRUE;
+        } else {
+          CuMemFree (priv->uv[i]);
+        }
         priv->uv[i] = 0;
       }
     }
+
+    if (need_sync)
+      CuStreamSynchronize (stream);
 
     gst_cuda_context_pop (nullptr);
   }
 
   priv->state = nullptr;
   priv->params = nullptr;
+  priv->handle = nullptr;
   priv->launch_kernel = false;
 
   gst_clear_buffer (&priv->fallback_buf);
@@ -523,8 +602,26 @@ static gboolean
 gst_nv_jpeg_enc_stop (GstVideoEncoder * encoder)
 {
   auto self = GST_NV_JPEG_ENC (encoder);
+  auto priv = self->priv;
+  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
 
   gst_nv_jpeg_enc_reset (self);
+  if (priv->context && priv->module) {
+    gst_cuda_context_push (priv->context);
+    if (priv->module) {
+      CuModuleUnload (priv->module);
+      priv->module = nullptr;
+    }
+    gst_cuda_context_pop (nullptr);
+  }
+
+  priv->module = nullptr;
+  priv->handle = nullptr;
+
+  if (klass->autogpu) {
+    gst_clear_cuda_stream (&priv->stream);
+    gst_clear_object (&priv->context);
+  }
 
   return TRUE;
 }
@@ -537,19 +634,6 @@ gst_nv_jpeg_enc_close (GstVideoEncoder * encoder)
 
   GST_DEBUG_OBJECT (self, "Close");
 
-  if (priv->context && gst_cuda_context_push (priv->context)) {
-    if (priv->handle)
-      g_vtable.NvjpegDestroy (priv->handle);
-
-    if (priv->module) {
-      CuModuleUnload (priv->module);
-      priv->module = nullptr;
-    }
-
-    gst_cuda_context_pop (nullptr);
-  }
-
-  priv->handle = nullptr;
   gst_clear_cuda_stream (&priv->stream);
   gst_clear_object (&priv->context);
 
@@ -563,8 +647,11 @@ gst_nv_jpeg_enc_handle_query (GstNvJpegEnc * self, GstQuery * query)
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONTEXT:
+    {
+      std::lock_guard < std::recursive_mutex > lk (priv->lock);
       return gst_cuda_handle_context_query (GST_ELEMENT (self), query,
           priv->context);
+    }
     default:
       break;
   }
@@ -599,6 +686,7 @@ gst_nv_jpeg_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
 {
   auto self = GST_NV_JPEG_ENC (encoder);
   auto priv = self->priv;
+  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
   GstVideoInfo info;
   GstBufferPool *pool = nullptr;
   GstCaps *caps;
@@ -608,6 +696,13 @@ gst_nv_jpeg_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
   if (!caps) {
     GST_WARNING_OBJECT (self, "null caps in query");
     return FALSE;
+  }
+
+  if (klass->autogpu) {
+    /* Use upstream pool in case of auto select mode. We don't know which
+     * GPU to use at this moment */
+    gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, nullptr);
+    return TRUE;
   }
 
   if (!gst_video_info_from_caps (&info, caps)) {
@@ -660,20 +755,114 @@ gst_nv_jpeg_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
 }
 
 static gboolean
-gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
-    GstVideoCodecState * state)
+gst_nv_jpeg_enc_prepare_kernel_resource (GstNvJpegEnc * self)
 {
-  auto self = GST_NV_JPEG_ENC (encoder);
   auto priv = self->priv;
 
-  priv->info = state->info;
+  if (!priv->launch_kernel)
+    return TRUE;
 
-  auto caps = gst_caps_new_empty_simple ("image/jpeg");
-  auto output_state = gst_video_encoder_set_output_state (encoder, caps,
-      state);
-  gst_video_codec_state_unref (output_state);
+  if (!gst_nv_jpeg_enc_load_module (self))
+    return FALSE;
+
+  auto stream = gst_cuda_stream_get_handle (priv->stream);
+  auto width = (priv->info.width + 1) / 2;
+  auto height = (priv->info.height + 1) / 2;
+  size_t pitch;
+  CUresult ret = CUDA_SUCCESS;
+
+  if (priv->use_stream_ordered) {
+    gint texture_align = gst_cuda_context_get_texture_alignment (priv->context);
+    pitch = ((width + texture_align - 1) / texture_align) * texture_align;
+
+    ret = CuMemAllocAsync (&priv->uv[0], pitch * height, stream);
+    if (!gst_cuda_result (ret)) {
+      GST_ERROR_OBJECT (self, "Couldn't allocate U plane memory");
+      return FALSE;
+    }
+
+    ret = CuMemAllocAsync (&priv->uv[1], pitch * height, stream);
+    if (!gst_cuda_result (ret)) {
+      GST_ERROR_OBJECT (self, "Couldn't allocate V plane memory");
+      return FALSE;
+    }
+
+    if (!gst_cuda_result (CuStreamSynchronize (stream))) {
+      GST_ERROR_OBJECT (self, "Couldn't synchronize stream");
+      return FALSE;
+    }
+  } else {
+    ret = CuMemAllocPitch (&priv->uv[0], &pitch, width, height, 16);
+    if (!gst_cuda_result (ret)) {
+      GST_ERROR_OBJECT (self, "Couldn't allocate U plane memory");
+      return FALSE;
+    }
+
+    ret = CuMemAllocPitch (&priv->uv[1], &pitch, width, height, 16);
+    if (!gst_cuda_result (ret)) {
+      GST_ERROR_OBJECT (self, "Couldn't allocate V plane memory");
+      return FALSE;
+    }
+  }
+
+  priv->pitch = pitch;
+
+  return TRUE;
+}
+
+static gboolean
+gst_nv_jpeg_enc_init_session (GstNvJpegEnc * self, GstBuffer * in_buf)
+{
+  auto klass = GST_NV_JPEG_ENC_GET_CLASS (self);
+  auto priv = self->priv;
 
   gst_nv_jpeg_enc_reset (self);
+
+  if (klass->autogpu) {
+    if (!in_buf) {
+      GST_DEBUG_OBJECT (self, "Open session later for auto gpu mode");
+      return TRUE;
+    }
+
+    std::lock_guard < std::recursive_mutex > lk (priv->lock);
+    if (priv->module) {
+      gst_cuda_context_push (priv->context);
+      CuModuleUnload (priv->module);
+      priv->module = nullptr;
+      gst_cuda_context_pop (nullptr);
+    }
+
+    gst_clear_cuda_stream (&priv->stream);
+    gst_clear_object (&priv->context);
+
+    auto mem = gst_buffer_peek_memory (in_buf, 0);
+    if (gst_is_cuda_memory (mem)) {
+      auto cmem = GST_CUDA_MEMORY_CAST (mem);
+      priv->context = (GstCudaContext *) gst_object_ref (cmem->context);
+      guint device_id = 0;
+      g_object_get (priv->context, "cuda-device-id", &device_id, nullptr);
+
+      GST_DEBUG_OBJECT (self, "Upstream is CUDA with device id %d", device_id);
+
+      if (device_id != priv->cuda_device_id) {
+        priv->cuda_device_id = device_id;
+        g_object_notify (G_OBJECT (self), "cuda-device-id");
+      }
+
+      priv->stream = gst_cuda_memory_get_stream (cmem);
+      if (priv->stream)
+        gst_cuda_stream_ref (priv->stream);
+    } else {
+      GST_DEBUG_OBJECT (self, "Upstream is not CUDA");
+      if (!gst_cuda_ensure_element_context (GST_ELEMENT_CAST (self),
+              priv->cuda_device_id, &priv->context)) {
+        GST_ERROR_OBJECT (self, "Couldn't create CUDA context");
+        return FALSE;
+      }
+
+      priv->stream = gst_cuda_stream_new (priv->context);
+    }
+  }
 
   switch (GST_VIDEO_INFO_FORMAT (&priv->info)) {
     case GST_VIDEO_FORMAT_I420:
@@ -694,39 +883,38 @@ gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
       return FALSE;
   }
 
-  std::lock_guard < std::mutex > lk (priv->lock);
+  priv->use_stream_ordered = FALSE;
+  g_object_get (priv->context, "prefer-stream-ordered-alloc",
+      &priv->use_stream_ordered, nullptr);
+  if (!priv->use_stream_ordered)
+    priv->use_stream_ordered = default_stream_ordered_alloc_enabled ();
+
+
+  std::lock_guard < std::recursive_mutex > lk (priv->lock);
   priv->quality_updated = false;
 
   if (!gst_cuda_context_push (priv->context)) {
     GST_ERROR_OBJECT (self, "Couldn't push context");
+    gst_nv_jpeg_enc_reset (self);
     return FALSE;
   }
 
-  /* Allocate memory  */
-  if (priv->launch_kernel) {
-    auto width = (priv->info.width + 1) / 2;
-    auto height = (priv->info.height + 1) / 2;
-    size_t pitch;
-    auto ret = CuMemAllocPitch (&priv->uv[0], &pitch, width, height, 16);
-    if (!gst_cuda_result (ret)) {
-      GST_ERROR_OBJECT (self, "Couldn't allocate U plane memory");
-      gst_cuda_context_pop (nullptr);
-      return FALSE;
-    }
+  if (!gst_nv_jpeg_enc_prepare_kernel_resource (self)) {
+    gst_cuda_context_pop (nullptr);
+    gst_nv_jpeg_enc_reset (self);
+    return FALSE;
+  }
 
-    ret = CuMemAllocPitch (&priv->uv[1], &pitch, width, height, 16);
-    if (!gst_cuda_result (ret)) {
-      GST_ERROR_OBJECT (self, "Couldn't allocate V plane memory");
-      gst_cuda_context_pop (nullptr);
-      gst_nv_jpeg_enc_reset (self);
-      return FALSE;
-    }
-
-    priv->pitch = pitch;
+  auto ret = g_vtable.NvjpegCreateSimple (&priv->handle);
+  if (ret != NVJPEG_STATUS_SUCCESS) {
+    GST_ERROR_OBJECT (self, "Couldn't create encoder handle");
+    gst_cuda_context_pop (nullptr);
+    gst_nv_jpeg_enc_reset (self);
+    return FALSE;
   }
 
   auto stream = gst_cuda_stream_get_handle (priv->stream);
-  auto ret = g_vtable.NvjpegEncoderParamsCreate (priv->handle, &priv->params,
+  ret = g_vtable.NvjpegEncoderParamsCreate (priv->handle, &priv->params,
       stream);
   if (ret != NVJPEG_STATUS_SUCCESS) {
     GST_ERROR_OBJECT (self, "Couldn't create param handle, ret %d", ret);
@@ -755,7 +943,6 @@ gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
 
   ret = g_vtable.NvjpegEncoderStateCreate (priv->handle, &priv->state, stream);
   gst_cuda_context_pop (nullptr);
-
   if (ret != NVJPEG_STATUS_SUCCESS) {
     GST_ERROR_OBJECT (self, "Couldn't create state handle, ret %d", ret);
     gst_nv_jpeg_enc_reset (self);
@@ -764,9 +951,11 @@ gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
 
   priv->pool = gst_cuda_buffer_pool_new (priv->context);
   auto config = gst_buffer_pool_get_config (priv->pool);
+  auto caps = gst_video_info_to_caps (&priv->info);
   gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-  gst_buffer_pool_config_set_params (config,
-      state->caps, priv->info.size, 0, 0);
+  gst_buffer_pool_config_set_params (config, caps, priv->info.size, 0, 0);
+  gst_caps_unref (caps);
+
   if (priv->stream)
     gst_buffer_pool_config_set_cuda_stream (config, priv->stream);
 
@@ -783,6 +972,23 @@ gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
   }
 
   return TRUE;
+}
+
+static gboolean
+gst_nv_jpeg_enc_set_format (GstVideoEncoder * encoder,
+    GstVideoCodecState * state)
+{
+  auto self = GST_NV_JPEG_ENC (encoder);
+  auto priv = self->priv;
+
+  priv->info = state->info;
+
+  auto caps = gst_caps_new_empty_simple ("image/jpeg");
+  auto output_state = gst_video_encoder_set_output_state (encoder, caps,
+      state);
+  gst_video_codec_state_unref (output_state);
+
+  return gst_nv_jpeg_enc_init_session (self, nullptr);
 }
 
 static GstBuffer *
@@ -909,6 +1115,12 @@ gst_nv_jpeg_enc_handle_frame (GstVideoEncoder * encoder,
   auto self = GST_NV_JPEG_ENC (encoder);
   auto priv = self->priv;
 
+  if (!priv->handle && !gst_nv_jpeg_enc_init_session (self,
+          frame->input_buffer)) {
+    gst_video_encoder_finish_frame (encoder, frame);
+    return GST_FLOW_ERROR;
+  }
+
   if (!gst_cuda_context_push (priv->context)) {
     GST_ERROR_OBJECT (self, "Couldn't push context");
     gst_video_encoder_finish_frame (encoder, frame);
@@ -918,7 +1130,7 @@ gst_nv_jpeg_enc_handle_frame (GstVideoEncoder * encoder,
   auto stream = gst_cuda_stream_get_handle (priv->stream);
 
   {
-    std::lock_guard < std::mutex > lk (priv->lock);
+    std::lock_guard < std::recursive_mutex > lk (priv->lock);
     if (priv->quality_updated) {
       priv->quality_updated = false;
       auto ret = g_vtable.NvjpegEncoderParamsSetQuality (priv->params,
@@ -986,14 +1198,14 @@ gst_nv_jpeg_enc_handle_frame (GstVideoEncoder * encoder,
   return gst_video_encoder_finish_frame (encoder, frame);
 }
 
-void
+gboolean
 gst_nv_jpeg_enc_register (GstPlugin * plugin, GstCudaContext * context,
     guint rank, gboolean have_nvrtc)
 {
   GST_DEBUG_CATEGORY_INIT (gst_nv_jpeg_enc_debug, "nvjpegenc", 0, "nvjpegenc");
 
   if (!gst_nv_jpeg_enc_load_library ())
-    return;
+    return FALSE;
 
   GType type;
   guint index = 0;
@@ -1009,10 +1221,18 @@ gst_nv_jpeg_enc_register (GstPlugin * plugin, GstCudaContext * context,
     (GInstanceInitFunc) gst_nv_jpeg_enc_init,
   };
 
-  guint cuda_device_id;
-  g_object_get (context, "cuda-device-id", &cuda_device_id, nullptr);
+  guint cuda_device_id = 0;
+  gboolean autogpu = FALSE;
+  if (!context)
+    autogpu = TRUE;
+  else
+    g_object_get (context, "cuda-device-id", &cuda_device_id, nullptr);
 
   std::string format_string;
+#ifdef NVCODEC_CUDA_PRECOMPILED
+  have_nvrtc = TRUE;
+#endif
+
   if (have_nvrtc)
     format_string = "NV12, I420, Y42B, Y444";
   else
@@ -1033,16 +1253,24 @@ gst_nv_jpeg_enc_register (GstPlugin * plugin, GstCudaContext * context,
   cdata->cuda_device_id = cuda_device_id;
   cdata->sink_caps = sink_caps;
   cdata->have_nvrtc = have_nvrtc;
+  cdata->autogpu = autogpu;
   type_info.class_data = cdata;
 
-  auto type_name = g_strdup ("GstNvJpegEnc");
-  auto feature_name = g_strdup ("nvjpegenc");
-  while (g_type_from_name (type_name)) {
-    index++;
-    g_free (type_name);
-    g_free (feature_name);
-    type_name = g_strdup_printf ("GstNvJpegDevice%dEnc", index);
-    feature_name = g_strdup_printf ("nvjpegdevice%denc", index);
+  gchar *type_name = nullptr;
+  gchar *feature_name = nullptr;
+  if (autogpu) {
+    type_name = g_strdup ("GstNvAutoGpuJpegEnc");
+    feature_name = g_strdup ("nvautogpujpegenc");
+  } else {
+    type_name = g_strdup ("GstNvJpegEnc");
+    feature_name = g_strdup ("nvjpegenc");
+    while (g_type_from_name (type_name)) {
+      index++;
+      g_free (type_name);
+      g_free (feature_name);
+      type_name = g_strdup_printf ("GstNvJpegDevice%dEnc", index);
+      feature_name = g_strdup_printf ("nvjpegdevice%denc", index);
+    }
   }
 
   type = g_type_register_static (GST_TYPE_VIDEO_ENCODER,
@@ -1059,4 +1287,6 @@ gst_nv_jpeg_enc_register (GstPlugin * plugin, GstCudaContext * context,
 
   g_free (type_name);
   g_free (feature_name);
+
+  return TRUE;
 }

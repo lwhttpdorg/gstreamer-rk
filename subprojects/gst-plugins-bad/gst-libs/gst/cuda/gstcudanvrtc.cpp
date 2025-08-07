@@ -27,7 +27,9 @@
 #include <nvrtc.h>
 #include <gmodule.h>
 #include "gstcuda-private.h"
+#include "gstcudanvrtc-private.h"
 #include <string>
+#include <vector>
 
 GST_DEBUG_CATEGORY_STATIC (gst_cuda_nvrtc_debug);
 #define GST_CAT_DEFAULT gst_cuda_nvrtc_debug
@@ -45,10 +47,19 @@ GST_DEBUG_CATEGORY_STATIC (gst_cuda_nvrtc_debug);
   } \
 } G_STMT_END;
 
+#define LOAD_OPTIONAL_SYMBOL(name,func) G_STMT_START { \
+  if (!g_module_symbol (module, G_STRINGIFY (name), (gpointer *) &vtable->func)) { \
+    GST_WARNING ("Failed to load '%s', %s", G_STRINGIFY (name), g_module_error()); \
+    return TRUE; \
+  } \
+} G_STMT_END;
+
+
 /* *INDENT-OFF* */
 typedef struct _GstCudaNvrtcVTable
 {
   gboolean loaded;
+  gboolean have_cubin;
 
   nvrtcResult (*NvrtcCompileProgram) (nvrtcProgram prog, int numOptions,
       const char **options);
@@ -154,6 +165,7 @@ gst_cuda_nvrtc_load_library_once (void)
   }
 
   vtable = &gst_cuda_nvrtc_vtable;
+  vtable->have_cubin = FALSE;
 
   LOAD_SYMBOL (nvrtcCompileProgram, NvrtcCompileProgram);
   LOAD_SYMBOL (nvrtcCreateProgram, NvrtcCreateProgram);
@@ -162,10 +174,11 @@ gst_cuda_nvrtc_load_library_once (void)
   LOAD_SYMBOL (nvrtcGetPTXSize, NvrtcGetPTXSize);
   LOAD_SYMBOL (nvrtcGetProgramLog, NvrtcGetProgramLog);
   LOAD_SYMBOL (nvrtcGetProgramLogSize, NvrtcGetProgramLogSize);
-  LOAD_SYMBOL (nvrtcGetCUBINSize, NvrtcGetCUBINSize);
-  LOAD_SYMBOL (nvrtcGetCUBIN, NvrtcGetCUBIN);
-
   vtable->loaded = TRUE;
+
+  LOAD_OPTIONAL_SYMBOL (nvrtcGetCUBINSize, NvrtcGetCUBINSize);
+  LOAD_OPTIONAL_SYMBOL (nvrtcGetCUBIN, NvrtcGetCUBIN);
+  vtable->have_cubin = TRUE;
 
   return TRUE;
 
@@ -274,22 +287,17 @@ NvrtcGetCUBIN (nvrtcProgram prog, char *cubin)
 }
 /* *INDENT-ON* */
 
-/**
- * gst_cuda_nvrtc_compile:
- * @source: Source code to compile
- *
- * Since: 1.22
- */
 gchar *
-gst_cuda_nvrtc_compile (const gchar * source)
+gst_cuda_nvrtc_compile_with_option (const gchar * source,
+    const gchar ** options, guint num_options)
 {
   nvrtcProgram prog;
   nvrtcResult ret;
   CUresult curet;
-  const gchar *opts[] = { "--gpu-architecture=compute_30" };
   gsize ptx_size;
   gchar *ptx = nullptr;
   int driverVersion;
+  std::vector < const gchar *>opts;
 
   g_return_val_if_fail (source != nullptr, nullptr);
 
@@ -310,24 +318,29 @@ gst_cuda_nvrtc_compile (const gchar * source)
 
   ret = NvrtcCreateProgram (&prog, source, nullptr, 0, nullptr, nullptr);
   if (ret != NVRTC_SUCCESS) {
-    GST_ERROR ("couldn't create nvrtc program, ret %d", ret);
+    GST_WARNING ("couldn't create nvrtc program, ret %d", ret);
     return nullptr;
   }
 
   /* Starting from CUDA 11, the lowest supported architecture is 5.2 */
   if (driverVersion >= 11000)
-    opts[0] = "--gpu-architecture=compute_52";
+    opts.push_back ("--gpu-architecture=compute_52");
+  else
+    opts.push_back ("--gpu-architecture=compute_30");
 
-  ret = NvrtcCompileProgram (prog, 1, opts);
+  for (guint i = 0; i < num_options; i++)
+    opts.push_back (options[i]);
+
+  ret = NvrtcCompileProgram (prog, opts.size (), opts.data ());
   if (ret != NVRTC_SUCCESS) {
     gsize log_size;
 
-    GST_ERROR ("couldn't compile nvrtc program, ret %d", ret);
+    GST_WARNING ("couldn't compile nvrtc program, ret %d", ret);
     if (NvrtcGetProgramLogSize (prog, &log_size) == NVRTC_SUCCESS &&
         log_size > 0) {
       gchar *compile_log = (gchar *) g_alloca (log_size);
       if (NvrtcGetProgramLog (prog, compile_log) == NVRTC_SUCCESS) {
-        GST_ERROR ("nvrtc compile log %s", compile_log);
+        GST_INFO ("nvrtc compile log %s", compile_log);
       }
     }
 
@@ -363,17 +376,20 @@ error:
 }
 
 /**
- * gst_cuda_nvrtc_compile_cubin:
+ * gst_cuda_nvrtc_compile:
  * @source: Source code to compile
- * @device: CUDA device
  *
- * Returns: (transfer full): Compiled CUDA assembly code if successful,
- * otherwise %NULL
- *
- * Since: 1.24
+ * Since: 1.22
  */
 gchar *
-gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
+gst_cuda_nvrtc_compile (const gchar * source)
+{
+  return gst_cuda_nvrtc_compile_with_option (source, nullptr, 0);
+}
+
+gchar *
+gst_cuda_nvrtc_compile_cubin_with_option (const gchar * source, gint device,
+    const gchar ** options, guint num_options)
 {
   nvrtcProgram prog;
   nvrtcResult ret;
@@ -381,11 +397,17 @@ gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
   gsize cubin_size;
   gchar *cubin = nullptr;
   gint major, minor;
+  std::vector < const gchar *>opts;
 
   g_return_val_if_fail (source != nullptr, nullptr);
 
   if (!gst_cuda_nvrtc_load_library ())
     return nullptr;
+
+  if (!gst_cuda_nvrtc_vtable.have_cubin) {
+    GST_DEBUG ("CUBIN related symbols are unavailable");
+    return nullptr;
+  }
 
   GST_TRACE ("CUDA kernel source \n%s", source);
 
@@ -406,15 +428,18 @@ gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
   std::string opt_str = "--gpu-architecture=sm_" +
       std::to_string (major) + std::to_string (minor);
 
+  opts.push_back (opt_str.c_str ());
+  for (guint i = 0; i < num_options; i++) {
+    opts.push_back (options[i]);
+  }
+
   ret = NvrtcCreateProgram (&prog, source, nullptr, 0, nullptr, nullptr);
   if (ret != NVRTC_SUCCESS) {
     GST_ERROR ("couldn't create nvrtc program, ret %d", ret);
     return nullptr;
   }
 
-  const char *opts[1] = { opt_str.c_str () };
-
-  ret = NvrtcCompileProgram (prog, 1, opts);
+  ret = NvrtcCompileProgram (prog, opts.size (), opts.data ());
   if (ret != NVRTC_SUCCESS) {
     gsize log_size;
 
@@ -452,4 +477,20 @@ error:
   NvrtcDestroyProgram (&prog);
 
   return nullptr;
+}
+
+/**
+ * gst_cuda_nvrtc_compile_cubin:
+ * @source: Source code to compile
+ * @device: CUDA device
+ *
+ * Returns: (transfer full): Compiled CUDA assembly code if successful,
+ * otherwise %NULL
+ *
+ * Since: 1.24
+ */
+gchar *
+gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
+{
+  return gst_cuda_nvrtc_compile_cubin_with_option (source, device, nullptr, 0);
 }

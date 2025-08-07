@@ -54,7 +54,7 @@
  * to enable users to easily add and remove meta data from json files. It can also dump
  * the names of all output layers, which can then be used to craft the json meta data file.
  *
- *
+ * Since: 1.20
  */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -72,7 +72,6 @@
  * @optimization_level: ONNX session optimization level
  * @execution_provider: ONNX execution provider
  * @onnx_client opaque pointer to ONNX client
- * @onnx_disabled true if inference is disabled
  * @video_info @ref GstVideoInfo of sink caps
  */
 struct _GstOnnxInference
@@ -82,8 +81,8 @@ struct _GstOnnxInference
   GstOnnxOptimizationLevel optimization_level;
   GstOnnxExecutionProvider execution_provider;
   gpointer onnx_client;
-  gboolean onnx_disabled;
   GstVideoInfo video_info;
+  GstStructure *tensors;
 };
 
 GST_DEBUG_CATEGORY (onnx_inference_debug);
@@ -131,12 +130,13 @@ static GstFlowReturn gst_onnx_inference_transform_ip (GstBaseTransform *
     trans, GstBuffer * buf);
 static gboolean gst_onnx_inference_process (GstBaseTransform * trans,
     GstBuffer * buf);
-static gboolean gst_onnx_inference_create_session (GstBaseTransform * trans);
 static GstCaps *gst_onnx_inference_transform_caps (GstBaseTransform *
     trans, GstPadDirection direction, GstCaps * caps, GstCaps * filter_caps);
 static gboolean
 gst_onnx_inference_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     GstCaps * outcaps);
+static gboolean gst_onnx_inference_start (GstBaseTransform * trans);
+static gboolean gst_onnx_inference_stop (GstBaseTransform * trans);
 
 G_DEFINE_TYPE (GstOnnxInference, gst_onnx_inference, GST_TYPE_BASE_TRANSFORM);
 
@@ -187,9 +187,24 @@ gst_onnx_execution_provider_get_type (void)
     static GEnumValue execution_provider_types[] = {
       {GST_ONNX_EXECUTION_PROVIDER_CPU, "CPU execution provider",
           "cpu"},
+#if HAVE_CUDA
       {GST_ONNX_EXECUTION_PROVIDER_CUDA,
             "CUDA execution provider",
           "cuda"},
+#else
+      {GST_ONNX_EXECUTION_PROVIDER_CUDA,
+            "CUDA execution provider (compiled out, will use CPU)",
+          "cuda"},
+#endif
+#ifdef HAVE_VSI_NPU
+      {GST_ONNX_EXECUTION_PROVIDER_VSI,
+       "VeriSilicon NPU execution provider",
+       "vsi"},
+#else
+      {GST_ONNX_EXECUTION_PROVIDER_VSI,
+       "VeriSilicon NPU execution provider (compiled out, will use CPU)",
+       "vsi"},
+#endif
       {0, NULL, NULL},
     };
 
@@ -331,13 +346,26 @@ gst_onnx_inference_class_init (GstOnnxInferenceClass * klass)
       GST_DEBUG_FUNCPTR (gst_onnx_inference_transform_caps);
   basetransform_class->set_caps =
       GST_DEBUG_FUNCPTR (gst_onnx_inference_set_caps);
+  basetransform_class->start =
+    GST_DEBUG_FUNCPTR(gst_onnx_inference_start);
+  basetransform_class->stop =
+    GST_DEBUG_FUNCPTR(gst_onnx_inference_stop);
+
+  gst_type_mark_as_plugin_api (GST_TYPE_ONNX_OPTIMIZATION_LEVEL,
+			       (GstPluginAPIFlags) 0);
+  gst_type_mark_as_plugin_api (GST_TYPE_ONNX_EXECUTION_PROVIDER,
+			       (GstPluginAPIFlags) 0);
+  gst_type_mark_as_plugin_api (GST_TYPE_ML_MODEL_INPUT_IMAGE_FORMAT,
+			       (GstPluginAPIFlags) 0);
 }
 
 static void
 gst_onnx_inference_init (GstOnnxInference * self)
 {
   self->onnx_client = new GstOnnxNamespace::GstOnnxClient (GST_ELEMENT(self));
-  self->onnx_disabled = TRUE;
+  /* TODO: at the moment onnx inference only support video output. We
+   * should revisit this once we generalize this aspect */
+  self->tensors = gst_structure_new_empty ("video/x-raw");
 }
 
 static void
@@ -346,6 +374,7 @@ gst_onnx_inference_finalize (GObject * object)
   GstOnnxInference *self = GST_ONNX_INFERENCE (object);
 
   g_free (self->model_file);
+  gst_structure_free(self->tensors);
   delete GST_ONNX_CLIENT_MEMBER (self);
   G_OBJECT_CLASS (gst_onnx_inference_parent_class)->finalize (object);
 }
@@ -367,7 +396,6 @@ gst_onnx_inference_set_property (GObject * object, guint prop_id,
         if (self->model_file)
           g_free (self->model_file);
         self->model_file = g_strdup (filename);
-        self->onnx_disabled = FALSE;
       } else {
         GST_WARNING_OBJECT (self, "Model file '%s' not found!", filename);
       }
@@ -428,45 +456,6 @@ gst_onnx_inference_get_property (GObject * object, guint prop_id,
   }
 }
 
-static gboolean
-gst_onnx_inference_create_session (GstBaseTransform * trans)
-{
-  GstOnnxInference *self = GST_ONNX_INFERENCE (trans);
-  auto onnxClient = GST_ONNX_CLIENT_MEMBER (self);
-
-  GST_OBJECT_LOCK (self);
-  if (self->onnx_disabled) {
-    GST_OBJECT_UNLOCK (self);
-
-    return FALSE;
-  }
-  if (onnxClient->hasSession ()) {
-    GST_OBJECT_UNLOCK (self);
-
-    return TRUE;
-  }
-  if (self->model_file) {
-    gboolean ret =
-        GST_ONNX_CLIENT_MEMBER (self)->createSession (self->model_file,
-        self->optimization_level,
-        self->execution_provider);
-    if (!ret) {
-      GST_ERROR_OBJECT (self,
-          "Unable to create ONNX session. Model is disabled.");
-      self->onnx_disabled = TRUE;
-    }
-  } else {
-    self->onnx_disabled = TRUE;
-    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL), ("Model file not found"));
-  }
-  GST_OBJECT_UNLOCK (self);
-  if (self->onnx_disabled) {
-    gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (self), TRUE);
-  }
-
-  return TRUE;
-}
-
 static GstCaps *
 gst_onnx_inference_transform_caps (GstBaseTransform *
     trans, GstPadDirection direction, GstCaps * caps, GstCaps * filter_caps)
@@ -475,9 +464,17 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
   auto onnxClient = GST_ONNX_CLIENT_MEMBER (self);
   GstCaps *other_caps;
   GstCaps *restrictions;
+  bool has_session;
 
-  if (!gst_onnx_inference_create_session (trans))
-    return NULL;
+  GST_OBJECT_LOCK (self);
+  has_session = onnxClient->hasSession ();
+  GST_OBJECT_UNLOCK (self);
+
+  if (!has_session) {
+    other_caps = gst_caps_ref (caps);
+    goto done;
+  }
+
   GST_LOG_OBJECT (self, "transforming caps %" GST_PTR_FORMAT, caps);
 
   if (gst_base_transform_is_passthrough (trans))
@@ -489,7 +486,7 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
       onnxClient->getWidth (), "height", G_TYPE_INT,
       onnxClient->getHeight (), NULL);
 
-  if (onnxClient->getInputImageDatatype() == GST_TENSOR_TYPE_UINT8 &&
+  if (onnxClient->getInputImageDatatype() == GST_TENSOR_DATA_TYPE_UINT8 &&
       onnxClient->getInputImageScale() == 1.0 &&
       onnxClient->getInputImageOffset() == 0.0) {
     switch (onnxClient->getChannels()) {
@@ -531,10 +528,20 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
   GST_DEBUG_OBJECT(self, "Applying caps restrictions: %" GST_PTR_FORMAT,
     restrictions);
 
+  if (direction == GST_PAD_SINK) {
+    GstCaps * tensors_caps = gst_caps_new_full (gst_structure_copy (
+          self->tensors), NULL);
+    GstCaps *intersect = gst_caps_intersect (restrictions, tensors_caps);
+    gst_caps_replace (&restrictions, intersect);
+    gst_caps_unref (tensors_caps);
+    gst_caps_unref (intersect);
+  }
+
   other_caps = gst_caps_intersect_full (caps, restrictions,
                                         GST_CAPS_INTERSECT_FIRST);
   gst_caps_unref (restrictions);
 
+ done:
   if (filter_caps) {
     GstCaps *tmp = gst_caps_intersect_full (
         other_caps, filter_caps, GST_CAPS_INTERSECT_FIRST);
@@ -543,6 +550,53 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
   }
 
   return other_caps;
+}
+
+static gboolean
+gst_onnx_inference_start (GstBaseTransform * trans)
+{
+  GstOnnxInference *self = GST_ONNX_INFERENCE (trans);
+  auto onnxClient = GST_ONNX_CLIENT_MEMBER (self);
+  gboolean ret = FALSE;
+
+  GST_OBJECT_LOCK (self);
+  if (onnxClient->hasSession ()) {
+    ret = TRUE;
+    goto done;
+  }
+
+  if (self->model_file == NULL) {
+    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
+		       ("model-file property not set"));
+    goto done;
+  }
+
+  ret = GST_ONNX_CLIENT_MEMBER (self)->createSession (self->model_file,
+						      self->optimization_level,
+						      self->execution_provider,
+						      self->tensors);
+  if (!ret)
+    GST_ERROR_OBJECT (self,
+		      "Unable to create ONNX session. Model is disabled.");
+
+ done:
+  GST_OBJECT_UNLOCK (self);
+
+  return ret;
+}
+
+static gboolean
+gst_onnx_inference_stop (GstBaseTransform * trans)
+{
+  GstOnnxInference *self = GST_ONNX_INFERENCE (trans);
+  auto onnxClient = GST_ONNX_CLIENT_MEMBER (self);
+
+  GST_OBJECT_LOCK (self);
+  if (onnxClient->hasSession ())
+    GST_ONNX_CLIENT_MEMBER (self)->destroySession ();
+  GST_OBJECT_UNLOCK (self);
+
+  return TRUE;
 }
 
 static gboolean
@@ -586,8 +640,7 @@ gst_onnx_inference_process (GstBaseTransform * trans, GstBuffer * buf)
       auto meta = client->copy_tensors_to_meta (outputs, buf);
       if (!meta)
         return FALSE;
-      GST_TRACE_OBJECT (trans, "Num tensors:%d", meta->num_tensors);
-      meta->batch_size = 1;
+      GST_TRACE_OBJECT (trans, "Num tensors:%zu", meta->num_tensors);
     }
     catch (Ort::Exception & ortex) {
       GST_ERROR_OBJECT (self, "%s", ortex.what ());

@@ -56,14 +56,14 @@ struct GstD3D12OverlayRect : public GstMiniObject
     if (overlay_rect)
       gst_video_overlay_rectangle_unref (overlay_rect);
 
-    gst_clear_d3d12_descriptor (&srv_heap);
+    gst_clear_d3d12_desc_heap (&srv_heap);
   }
 
   GstVideoOverlayRectangle *overlay_rect = nullptr;
   ComPtr<ID3D12Resource> texture;
   ComPtr<ID3D12Resource> staging;
   ComPtr<ID3D12Resource> vertex_buf;
-  GstD3D12Descriptor *srv_heap = nullptr;
+  GstD3D12DescHeap *srv_heap = nullptr;
   D3D12_VERTEX_BUFFER_VIEW vbv;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout;
   gboolean premul_alpha = FALSE;
@@ -105,8 +105,8 @@ struct GstD3D12OverlayCompositorPrivate
   D3D12_INDEX_BUFFER_VIEW idv;
   ComPtr<ID3D12Resource> index_buf;
   ComPtr<ID3D12GraphicsCommandList> cl;
-  GstD3D12CommandAllocatorPool *ca_pool = nullptr;
-  GstD3D12DescriptorPool *srv_heap_pool = nullptr;
+  GstD3D12CmdAllocPool *ca_pool = nullptr;
+  GstD3D12DescHeapPool *srv_heap_pool = nullptr;
 
   GList *overlays = nullptr;
 
@@ -167,7 +167,7 @@ gst_d3d12_overlay_rect_free (GstD3D12OverlayRect * rect)
 
 static GstD3D12OverlayRect *
 gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
-    GstVideoOverlayRectangle * overlay_rect, guint64 & fence_val)
+    GstVideoOverlayRectangle * overlay_rect)
 {
   auto priv = self->priv;
   gint x, y;
@@ -177,8 +177,6 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
   gdouble val;
   GstVideoOverlayFormatFlags flags;
   gboolean premul_alpha = FALSE;
-
-  fence_val = 0;
 
   if (!gst_video_overlay_rectangle_get_render_rectangle (overlay_rect, &x, &y,
           &width, &height)) {
@@ -212,12 +210,15 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
         gst_d3d12_memory_get_shader_resource_view_heap (dmem)) {
       texture = gst_d3d12_memory_get_resource_handle (dmem);
       is_d3d12 = true;
-      fence_val = dmem->fence_value;
     }
   }
 
   ComPtr < ID3D12Resource > staging;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout;
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   if (!is_d3d12) {
     auto vmeta = gst_buffer_get_video_meta (buf);
 
@@ -232,8 +233,7 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
         CD3DX12_RESOURCE_DESC::Tex2D (DXGI_FORMAT_B8G8R8A8_UNORM, vmeta->width,
         vmeta->height, 1, 1);
 
-    auto hr = device->CreateCommittedResource (&heap_prop,
-        D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+    auto hr = device->CreateCommittedResource (&heap_prop, heap_flags,
         &desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
         IID_PPV_ARGS (&texture));
     if (!gst_d3d12_result (hr, self->device)) {
@@ -247,8 +247,7 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
 
     heap_prop = CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_UPLOAD);
     desc = CD3DX12_RESOURCE_DESC::Buffer (size);
-    hr = device->CreateCommittedResource (&heap_prop,
-        D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+    hr = device->CreateCommittedResource (&heap_prop, heap_flags,
         &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
         IID_PPV_ARGS (&staging));
     if (!gst_d3d12_result (hr, self->device)) {
@@ -336,8 +335,7 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
       CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_UPLOAD);
   D3D12_RESOURCE_DESC desc =
       CD3DX12_RESOURCE_DESC::Buffer (sizeof (VertexData) * 4);
-  auto hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  auto hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS (&vertex_buf));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -355,13 +353,13 @@ gst_d3d12_overlay_rect_new (GstD3D12OverlayCompositor * self,
   memcpy (map_data, vertex_data, sizeof (VertexData) * 4);
   vertex_buf->Unmap (0, nullptr);
 
-  GstD3D12Descriptor *srv_heap;
-  if (!gst_d3d12_descriptor_pool_acquire (priv->srv_heap_pool, &srv_heap)) {
+  GstD3D12DescHeap *srv_heap;
+  if (!gst_d3d12_desc_heap_pool_acquire (priv->srv_heap_pool, &srv_heap)) {
     GST_ERROR_OBJECT (self, "Couldn't acquire command allocator");
     return nullptr;
   }
 
-  auto srv_heap_handle = gst_d3d12_descriptor_get_handle (srv_heap);
+  auto srv_heap_handle = gst_d3d12_desc_heap_get_handle (srv_heap);
   D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = { };
   srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
   srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -402,9 +400,7 @@ gst_d3d12_overlay_compositor_setup_shader (GstD3D12OverlayCompositor * self)
       D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
       D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
       D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-      D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-      D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
-      D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS;
+      D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
   const D3D12_STATIC_SAMPLER_DESC static_sampler_desc = {
     D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT,
     D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
@@ -550,9 +546,12 @@ gst_d3d12_overlay_compositor_setup_shader (GstD3D12OverlayCompositor * self)
       CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_UPLOAD);
   D3D12_RESOURCE_DESC buffer_desc =
       CD3DX12_RESOURCE_DESC::Buffer (sizeof (indices));
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   ComPtr < ID3D12Resource > index_buf;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS (&index_buf));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -582,8 +581,8 @@ gst_d3d12_overlay_compositor_setup_shader (GstD3D12OverlayCompositor * self)
   priv->idv.SizeInBytes = sizeof (indices);
   priv->idv.Format = DXGI_FORMAT_R16_UINT;
   priv->index_buf = index_buf;
-  priv->srv_heap_pool = gst_d3d12_descriptor_pool_new (device, &heap_desc);
-  priv->ca_pool = gst_d3d12_command_allocator_pool_new (device,
+  priv->srv_heap_pool = gst_d3d12_desc_heap_pool_new (device, &heap_desc);
+  priv->ca_pool = gst_d3d12_cmd_alloc_pool_new (device,
       D3D12_COMMAND_LIST_TYPE_DIRECT);
 
   priv->viewport.TopLeftX = 0;
@@ -651,15 +650,13 @@ gst_d3d12_overlay_compositor_foreach_meta (GstBuffer * buffer, GstMeta ** meta,
 
 gboolean
 gst_d3d12_overlay_compositor_upload (GstD3D12OverlayCompositor * compositor,
-    GstBuffer * buf, guint64 * fence_val)
+    GstBuffer * buf)
 {
   g_return_val_if_fail (compositor != nullptr, FALSE);
   g_return_val_if_fail (GST_IS_BUFFER (buf), FALSE);
 
   auto priv = compositor->priv;
   priv->rects_to_upload.clear ();
-
-  *fence_val = 0;
 
   gst_buffer_foreach_meta (buf,
       (GstBufferForeachMetaFunc) gst_d3d12_overlay_compositor_foreach_meta,
@@ -675,7 +672,6 @@ gst_d3d12_overlay_compositor_upload (GstD3D12OverlayCompositor * compositor,
   GST_LOG_OBJECT (compositor, "Found %" G_GSIZE_FORMAT
       " overlay rectangles", priv->rects_to_upload.size ());
 
-  guint64 max_fence_val = 0;
   for (size_t i = 0; i < priv->rects_to_upload.size (); i++) {
     GList *iter;
     bool found = false;
@@ -688,14 +684,10 @@ gst_d3d12_overlay_compositor_upload (GstD3D12OverlayCompositor * compositor,
     }
 
     if (!found) {
-      guint64 cur_fence_val = 0;
       auto new_rect = gst_d3d12_overlay_rect_new (compositor,
-          priv->rects_to_upload[i], cur_fence_val);
-      if (new_rect) {
+          priv->rects_to_upload[i]);
+      if (new_rect)
         priv->overlays = g_list_append (priv->overlays, new_rect);
-        if (max_fence_val < cur_fence_val)
-          max_fence_val = cur_fence_val;
-      }
     }
   }
 
@@ -715,8 +707,6 @@ gst_d3d12_overlay_compositor_upload (GstD3D12OverlayCompositor * compositor,
       priv->overlays = g_list_delete_link (priv->overlays, iter);
     }
   }
-
-  *fence_val = max_fence_val;
 
   return TRUE;
 }
@@ -798,7 +788,7 @@ gst_d3d12_overlay_compositor_execute (GstD3D12OverlayCompositor * self,
       cl->SetPipelineState (pso.Get ());
     }
 
-    auto srv_heap = gst_d3d12_descriptor_get_handle (rect->srv_heap);
+    auto srv_heap = gst_d3d12_desc_heap_get_handle (rect->srv_heap);
     ID3D12DescriptorHeap *heaps[] = { srv_heap };
     cl->SetDescriptorHeaps (1, heaps);
     cl->SetGraphicsRootDescriptorTable (0,
@@ -807,18 +797,19 @@ gst_d3d12_overlay_compositor_execute (GstD3D12OverlayCompositor * self,
 
     cl->DrawIndexedInstanced (6, 1, 0, 0, 0);
 
-    gst_d3d12_fence_data_add_notify_mini_object (fence_data,
-        gst_mini_object_ref (rect));
+    gst_d3d12_fence_data_push (fence_data,
+        FENCE_NOTIFY_MINI_OBJECT (gst_mini_object_ref (rect)));
 
     prev_pso = nullptr;
     prev_pso = pso;
   }
 
   priv->pso->AddRef ();
-  gst_d3d12_fence_data_add_notify_com (fence_data, priv->pso.Get ());
+  gst_d3d12_fence_data_push (fence_data, FENCE_NOTIFY_COM (priv->pso.Get ()));
 
   priv->pso_premul->AddRef ();
-  gst_d3d12_fence_data_add_notify_com (fence_data, priv->pso_premul.Get ());
+  gst_d3d12_fence_data_push (fence_data,
+      FENCE_NOTIFY_COM (priv->pso_premul.Get ()));
 
   return TRUE;
 }

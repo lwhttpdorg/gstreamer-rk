@@ -1,15 +1,16 @@
 project('gstreamer-full', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : ['buildtype=debugoptimized',
                      # Needed due to https://github.com/mesonbuild/meson/issues/1889,
                      # but this can cause problems in the future. Remove it
                      # when it's no longer necessary.
                      'cpp_std=c++14'])
 
-apiversion = '1.0'
+api_version = '1.0'
 gst_version = '>= @0@'.format(meson.project_version())
 
+host_system = host_machine.system()
 build_system = build_machine.system()
 cc = meson.get_compiler('c')
 
@@ -30,15 +31,31 @@ if cmdres.returncode() != 0
   error('Do not run `ninja reconfigure` or `meson` for gst-build inside the development environment, you will run into problems')
 endif
 
-# Install gst-indent pre-commit hook
-run_command(python3, '-c', 'import shutil; shutil.copy("scripts/git-hooks/multi-pre-commit.hook", ".git/hooks/pre-commit")', check: false)
-
+# pre-commit hooks are not interactive so we use gitlint's hook to check commit messages
 gitlint_req = '>= 0.18'
 gitlint = find_program('gitlint', version: gitlint_req, required: false)
 if gitlint.found()
-  run_command(gitlint, 'install-hook', check: false)
+  git = find_program('git', required: false)
+  if git.found() and fs.is_dir(meson.current_source_dir() / '.git')
+    gitlint_status = run_command(git, 'hook', 'run', 'commit-msg', check: false)
+    # exit code 253 means "wrong invocation" in Gitlint
+    if gitlint_status.returncode() != 253
+      gitlint_status = run_command(gitlint, 'install-hook', check: false)
+      if gitlint_status.returncode() != 0
+        warning(gitlint_status.stderr().strip())
+      endif
+    endif
+  endif
 else
-  message('gitlint not found or too old, please install it with your package manager or `python3 -m pip install gitlint` to enable the commit message hook')
+  warning('gitlint not found or too old, please install it with your package manager or `python3 -m pip install gitlint` to enable the commit message hook')
+endif
+
+pre_commit_req = '>= 3.6.0'
+pre_commit = find_program('pre-commit', version: pre_commit_req, required: false)
+if pre_commit.found()
+  run_command(pre_commit, 'install', '-f', check: true)
+else
+  warning('pre-commit not found or too old, please install it with your package manager or `python3 -m pip install pre-commit`')
 endif
 
 # On macOS, you have to run "Install Certificates.command" otherwise Python
@@ -84,7 +101,7 @@ if not meson.is_subproject() and cc.get_id() == 'msvc'
       language: ['c', 'cpp'])
 endif
 
-building_full = get_option('default_library') == 'static'
+building_full = get_option('default_library') == 'static' and not get_option('gst-full').disabled()
 building_full_static = false
 building_full_options = []
 if building_full
@@ -98,6 +115,18 @@ endif
 libnice_options = []
 if get_option('webrtc').enabled()
   libnice_options += ['gstreamer=enabled']
+endif
+
+gtk_options = [
+  'build-demos=false',
+  'build-examples=false',
+  'build-testsuite=false',
+  'build-tests=false',
+]
+if host_system == 'windows'
+  gtk_options += ['vulkan=disabled']
+elif host_system == 'darwin'
+  gtk_options += ['x11-backend=false']
 endif
 
 # Disable gst-python if we've disabled introspection
@@ -116,11 +145,11 @@ subprojects = [
   ['gst-devtools', { 'option': get_option('devtools'), 'build-hotdoc': true}],
   ['gst-integration-testsuites', { 'option': get_option('devtools') }],
   ['gst-editing-services', { 'option': get_option('ges'), 'build-hotdoc': true}],
-  ['gstreamer-vaapi', { 'option': get_option('vaapi'), 'build-hotdoc': true}],
   ['gstreamer-sharp', { 'option': get_option('sharp') }],
   ['pygobject', { 'option': get_option('python'), 'match_gst_version': false, 'sysdep': 'pygobject-3.0', 'sysdep_version': '>= 3.8' }],
   ['gst-python', { 'option': gst_python_option}],
   ['gst-examples', { 'option': get_option('gst-examples'), 'match_gst_versions': false}],
+  ['gtk', {'option': get_option('gtk'), 'match_gst_version': false, 'subproject_options': gtk_options}],
   ['gst-plugins-rs', { 'option': get_option('rs'), 'build-hotdoc': true, 'match_gst_version': false}],
 ]
 
@@ -143,7 +172,7 @@ endif
 
 orc_option = get_option('orc')
 # There is a check below to keep this in sync with subprojects/gst-plugins-base/meson.build
-orc_req = '>= 0.4.24'
+orc_req = '>= 0.4.34'
 orc_source_option = get_option('orc-source')
 orc_subproject = disabler()
 if orc_option.allowed()
@@ -223,7 +252,7 @@ foreach sp : subprojects
 
     subprojects_names += [project_name]
 
-    if not meson.is_cross_build() and build_infos.get('build-hotdoc', false)
+    if not meson.is_cross_build() and build_infos.get('build-hotdoc', false) and get_option('doc').allowed()
       plugins_doc_caches += [subproj.get_variable('gst_plugins_doc_dep', [])]
       if documented_projects != ''
         documented_projects += ','
@@ -238,18 +267,22 @@ giomodules = []
 glib_dep = dependency('glib-2.0')
 if glib_dep.type_name() == 'internal'
   subp = subproject('glib-networking', required : get_option('tls'),
-             default_options: ['gnutls=auto', 'openssl=auto'])
+             default_options: ['gnutls=auto', 'openssl=auto', 'libproxy=auto', 'gnome_proxy=auto'])
   if subp.found()
     giomodules += subp.get_variable('giomodules', [])
   endif
 endif
 
-gst_plugins_doc_dep = custom_target('plugins-doc-cache',
-  command: [python3, '-c', 'print("Built all doc caches")'],
-  input: plugins_doc_caches,
-  output: 'plugins_doc_caches',
-  capture: true,
-)
+if get_option('doc').allowed()
+  gst_plugins_doc_dep = custom_target('plugins-doc-cache',
+    command: [python3, '-c', 'print("Built all doc caches")'],
+    input: plugins_doc_caches,
+    output: 'plugins_doc_caches',
+    capture: true,
+  )
+else
+  message('doc option is disabled, will not generate targets for building plugins doc caches')
+endif
 
 gir_files = []
 gir_targets = []
@@ -353,7 +386,7 @@ configure_file(
 
 if building_full
   cdata = configuration_data()
-  cdata.set_quoted('GST_API_VERSION', apiversion)
+  cdata.set_quoted('GST_API_VERSION', api_version)
   cdata.set_quoted('GETTEXT_PACKAGE', 'gstreamer-full-1.0')
   cdata.set_quoted('PACKAGE_VERSION', meson.project_version())
   cdata.set_quoted('GST_PACKAGE_ORIGIN', get_option('package-origin'))
@@ -386,12 +419,12 @@ if building_full
   init_static_plugins_c = configure_file(
     output: 'gstinitstaticplugins.c',
     command : [generate_init_static_plugins,
-               '-o ' + '@OUTPUT@',
-               '-p ' + all_plugin_names,
-               '-e ' + get_option('gst-full-elements'),
-               '-t ' + get_option('gst-full-typefind-functions'),
-               '-d ' + get_option('gst-full-device-providers'),
-               '-T ' + get_option('gst-full-dynamic-types'),
+               '-o', '@OUTPUT@',
+               '-p', all_plugin_names,
+               '-e', get_option('gst-full-elements'),
+               '-t', get_option('gst-full-typefind-functions'),
+               '-d', get_option('gst-full-device-providers'),
+               '-T', get_option('gst-full-dynamic-types'),
                '--giomodules', ';'.join(giomodules),
                ]
   )
@@ -529,7 +562,7 @@ if building_full
     # Loop for tools
     foreach tool, data: all_tools
       gst_tools += tool
-      exe_name = '@0@-@1@'.format(tool, apiversion)
+      exe_name = '@0@-@1@'.format(tool, api_version)
 
       deps = []
       foreach d : data.get('deps', [])

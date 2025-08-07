@@ -1,6 +1,6 @@
 project('GStreamer manuals and tutorials', 'c',
-  version: '1.25.0.1',
-  meson_version : '>= 1.1')
+  version: '1.27.1.1',
+  meson_version : '>= 1.4')
 
 hotdoc_p = find_program('hotdoc')
 if not hotdoc_p.found()
@@ -17,7 +17,7 @@ endif
 hotdoc = import('hotdoc')
 hotdoc_subprojects = []
 
-apiversion = '1.0'
+api_version = '1.0'
 if host_machine.system() == 'windows'
   pathsep = ';'
 else
@@ -61,6 +61,8 @@ libs = ''
 plugins_doc = ''
 deps = []
 plugins_sitemap = ''
+plugin_configs = []
+libs_configs = []
 if built_subprojects != ''
     foreach project_name: built_subprojects.split(',')
         sub = subproject(project_name)
@@ -83,12 +85,18 @@ if built_subprojects != ''
             foreach plugin_doc: sub.get_variable('gst_plugins_doc', [])
               plugins_doc += plugin_doc + pathsep
             endforeach
+
+            plugin_configs += sub.get_variable('plugin_hotdoc_configs', [])
+
+            # Handle the GStreamer special case with two custom targets
+            libs_configs += sub.get_variable('lib_hotdoc_config', [])
+            libs_configs += sub.get_variable('libs_hotdoc_configs', [])
         else
             message('@0@ did not build hotdoc documentation, can\'t build API doc'.format(project_name))
         endif
     endforeach
 endif
-deps += [dependency('gstreamer-' + apiversion, fallback: ['gstreamer', 'gst_dep'])]
+deps += [dependency('gstreamer-' + api_version, fallback: ['gstreamer', 'gst_dep'])]
 
 if get_option('use_portal_index')
   index = 'markdown/index.md'
@@ -96,15 +104,23 @@ else
   index = 'markdown/simple-index.md'
 endif
 sitemap_gen = find_program('scripts/generate_sitemap.py')
-sitemap = configure_file(command: [sitemap_gen, '@INPUT@', '@OUTPUT@',
-  'gi-index', libs, plugins_doc],
+sitemap = custom_target(command: [
+  sitemap_gen,
+  '--input-sitemap', '@INPUT@',
+  '--output-sitemap', '@OUTPUT@',
+  '--markdown-index', 'gi-index',
+  '--libs', libs,
+  '--plugins', plugins_doc,
+  '--plugin-configs', plugin_configs,
+  '--lib-configs', libs_configs],
   input: 'sitemap.txt',
   output: 'sitemap.txt')
+deps += [sitemap]
 
 html_theme = 'https://github.com/hotdoc/hotdoc_lumen_theme/releases/download/0.16/hotdoc_lumen_theme-0.16.tar.xz?sha256=b7d7dde51285d1c90836c44ae298754e4cfa957e9a6d14ee5844b8a2cac04b5a'
 
 gstreamer_doc = hotdoc.generate_doc('GStreamer',
-    project_version: apiversion,
+    project_version: api_version,
     sitemap: sitemap,
     index: index,
     gi_index: index,
@@ -137,7 +153,7 @@ meson.add_devenv({'XDG_DATA_DIRS': meson.current_build_dir() / 'GStreamer-doc'},
   method: 'prepend')
 
 cdata = configuration_data()
-cdata.set('GST_API_VERSION', apiversion)
+cdata.set('GST_API_VERSION', api_version)
 readme = configure_file(input: 'scripts/RELEASE_README.md',
                output: 'README.md',
                configuration : cdata)
@@ -150,4 +166,4 @@ run_target('release',
   depends: [gstreamer_doc]
 )
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())

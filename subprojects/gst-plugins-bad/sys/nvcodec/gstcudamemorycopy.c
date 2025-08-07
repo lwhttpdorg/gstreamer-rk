@@ -246,7 +246,7 @@ _set_caps_features (const GstCaps * caps, const gchar * feature_name)
 
   for (i = 0; i < n; i++)
     gst_caps_set_features (tmp, i,
-        gst_caps_features_from_string (feature_name));
+        gst_caps_features_new_single_static_str (feature_name));
 
   return tmp;
 }
@@ -567,6 +567,11 @@ gst_cuda_memory_copy_propose_allocation (GstBaseTransform * trans,
     if (!pool) {
       GST_DEBUG_OBJECT (self, "creating system buffer pool");
       pool = gst_video_buffer_pool_new ();
+      {
+        gchar *name = g_strdup_printf ("cuda-memory-copy-upstream-pool");
+        g_object_set (pool, "name", name, NULL);
+        g_free (name);
+      }
     }
 
     config = gst_buffer_pool_get_config (pool);

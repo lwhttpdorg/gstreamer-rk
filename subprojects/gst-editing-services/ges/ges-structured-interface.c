@@ -30,7 +30,6 @@
 #define LAST_CONTAINER_QDATA g_quark_from_string("ges-structured-last-container")
 #define LAST_CHILD_QDATA g_quark_from_string("ges-structured-last-child")
 
-#ifdef G_HAVE_ISO_VARARGS
 #define REPORT_UNLESS(condition, errpoint, ...)                                \
   G_STMT_START {                                                               \
     if (!(condition)) {                                                        \
@@ -41,20 +40,6 @@
     }                                                                          \
   }                                                                            \
   G_STMT_END
-#else /* G_HAVE_GNUC_VARARGS */
-#ifdef G_HAVE_GNUC_VARARGS
-#define REPORT_UNLESS(condition, errpoint, args...)                            \
-  G_STMT_START {                                                               \
-    if (!(condition)) {                                                        \
-      gchar *tmp = gst_info_strdup_printf(##args);                            \
-      *error = g_error_new_literal (GES_ERROR, 0, tmp);                        \
-      g_free (tmp);                                                            \
-      goto errpoint;                                                           \
-    }                                                                          \
-  }                                                                            \
-  G_STMT_END
-#endif /* G_HAVE_ISO_VARARGS */
-#endif /* G_HAVE_GNUC_VARARGS */
 
 #define GET_AND_CHECK(name,type,var,label) G_STMT_START {\
   gboolean found = FALSE; \
@@ -156,18 +141,17 @@ enum_from_str (GType type, const gchar * str_enum, guint * enum_value)
 }
 
 static gboolean
-_check_field (GQuark field_id, const GValue * value, FieldsError * fields_error)
+_check_field (const GstIdStr * fieldname, const GValue * value,
+    FieldsError * fields_error)
 {
-  guint i;
-  const gchar *field = g_quark_to_string (field_id);
+  const gchar *field = gst_id_str_as_str (fieldname);
 
-  for (i = 0; fields_error->fields[i]; i++) {
-    if (g_strcmp0 (fields_error->fields[i], field) == 0) {
+  if (g_strv_contains (fields_error->fields, gst_id_str_as_str (fieldname)))
+    return TRUE;
 
-      return TRUE;
-    }
-  }
-
+  // The pointers to the field names are only valid for as long as the structure
+  // is, but they're only used in the direct caller while the structure lives
+  // longer.
   fields_error->invalid_fields =
       g_list_append (fields_error->invalid_fields, (gpointer) field);
 
@@ -178,8 +162,8 @@ static gboolean
 _check_fields (GstStructure * structure, FieldsError fields_error,
     GError ** error)
 {
-  gst_structure_foreach (structure,
-      (GstStructureForeachFunc) _check_field, &fields_error);
+  gst_structure_foreach_id_str (structure,
+      (GstStructureForeachIdStrFunc) _check_field, &fields_error);
 
   if (fields_error.invalid_fields) {
     GList *tmp;
@@ -197,7 +181,9 @@ _check_fields (GstStructure * structure, FieldsError fields_error,
     if (error)
       *error = g_error_new_literal (GES_ERROR, 0, msg->str);
 
+    g_list_free (fields_error.invalid_fields);
     g_string_free (msg, TRUE);
+    fields_error.invalid_fields = NULL;
 
     return FALSE;
   }
@@ -350,24 +336,21 @@ value_to_double (const GValue * v)
 }
 
 static gboolean
-un_set_keyframes_foreach (GQuark field_id, const GValue * value,
+un_set_keyframes_foreach (const GstIdStr * fieldname, const GValue * value,
     SetKeyframesData * d)
 {
   GError **error = &d->error;
   gchar *tmp;
-  gint i;
   const gchar *valid_fields[] = {
     "element-name", "property-name", "value", "timestamp", "project-uri",
     "binding-type", "source-type", "interpolation-mode", "interpolation-mode",
     NULL
   };
-  const gchar *field = g_quark_to_string (field_id);
+  const gchar *field = gst_id_str_as_str (fieldname);
   gdouble ts;
 
-  for (i = 0; valid_fields[i]; i++) {
-    if (g_quark_from_string (valid_fields[i]) == field_id)
-      return TRUE;
-  }
+  if (g_strv_contains (valid_fields, gst_id_str_as_str (fieldname)))
+    return TRUE;
 
   errno = 0;
   ts = g_strtod (field, &tmp);
@@ -455,8 +438,8 @@ _ges_add_remove_keyframe_from_struct (GESTimeline * timeline,
     SetKeyframesData d = {
       source, structure, NULL, property_name, TRUE,
     };
-    gst_structure_foreach (structure,
-        (GstStructureForeachFunc) un_set_keyframes_foreach, &d);
+    gst_structure_foreach_id_str (structure,
+        (GstStructureForeachIdStrFunc) un_set_keyframes_foreach, &d);
     if (!d.res)
       g_propagate_error (error, d.error);
 

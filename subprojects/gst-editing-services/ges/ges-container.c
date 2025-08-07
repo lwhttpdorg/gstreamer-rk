@@ -41,6 +41,8 @@
 #include "ges.h"
 #include "ges-internal.h"
 
+#include "glib-compat-private.h"
+
 #include <string.h>
 
 GST_DEBUG_CATEGORY_STATIC (ges_container_debug);
@@ -458,7 +460,7 @@ ges_container_class_init (GESContainerClass * klass)
    */
   properties[PROP_HEIGHT] = g_param_spec_uint ("height", "Height",
       "The span of priorities this container occupies", 0, G_MAXUINT, 1,
-      G_PARAM_READABLE);
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, PROP_HEIGHT,
       properties[PROP_HEIGHT]);
 
@@ -1022,7 +1024,7 @@ ges_container_group (GList * containers)
   /* FIXME: how can user sub-classes interact with this if
    * ->grouping_priority is private? */
   children_types = g_type_children (GES_TYPE_CONTAINER, &n_children);
-  g_qsort_with_data (children_types, n_children, sizeof (GType),
+  g_sort_array (children_types, n_children, sizeof (GType),
       (GCompareDataFunc) compare_grouping_prio, NULL);
 
   for (i = 0; i < n_children; i++) {

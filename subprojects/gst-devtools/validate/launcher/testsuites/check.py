@@ -123,6 +123,8 @@ VALGRIND_BLACKLIST = [
     (r'check.gst-plugins-good.elements_splitmuxsrc.test_splitmuxsrc_sparse_streams', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/739'),
     (r'check.gst-plugins-good.elements_udpsrc.test_udpsrc_empty_packet', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/740'),
     (r'check.gst-plugins-bad.elements_svthevc*', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/3011'),
+    (r'check.gst-plugins-bad.elements_srtp.test_roc', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/3939'),
+    (r'check.gst-plugins-bad.elements_curlhttpsrc.test_range_get', '?'),
 ]
 
 BLACKLIST = [
@@ -154,8 +156,9 @@ BLACKLIST = [
     (r'check.gst-plugins-bad.elements_curlhttpsrc.test_multiple_http_requests$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/788'),
     (r'check.gst-plugins-good.elements_rtpsession.test_multiple_senders_roundrobin_rbs$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/789'),
     (r'check.gst-plugins-bad.elements_shm.test_shm_live$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/790'),
+    (r'check.gst-plugins-bad.validate.autovideoconvert.renegotiate$', ''),
     (r'check.gst-plugins-good.elements_splitmux.test_splitmuxsink_async$', '[FIXME -- SHOULD BE FIXED] https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/791'),
-    (r'check.gst-plugins-bad.elements_netsim.netsim_stress$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/792'),
+    (r'check.gst-plugins-bad.elements_netsim.netsim_stress', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/792'),
     (r'check.gst-editing-services.nle_complex.test_one_expandable_another$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/793'),
     (r'check.gst-editing-services.nle_simple.test_simplest$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/794'),
     (r'check.gst-editing-services.ges_basic.test_ges_pipeline_change_state$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/795'),
@@ -169,7 +172,6 @@ BLACKLIST = [
     (r'check.gstreamer-sharp.SdpTests$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/801'),
     (r'check.gst-devtools.validate.launcher_tests.test_validate.launch_pipeline.not_negotiated.caps_query_failure.play_15s$', '?'),
     (r'check.gst-editing-services.nle_simple.test_one_bin_after_other$', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/802'),
-    (r'check.gstreamer-vaapi.*$', 'only run the tests explicitly'),
     (r'check.gst-rtsp-server.gst_rtspserver.test_multiple_transports', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/767'),
 ]
 

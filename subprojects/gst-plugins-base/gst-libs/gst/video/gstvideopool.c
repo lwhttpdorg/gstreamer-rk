@@ -77,7 +77,7 @@ gst_buffer_pool_config_set_video_alignment (GstStructure * config,
  * Returns: %TRUE if @config could be parsed correctly.
  */
 gboolean
-gst_buffer_pool_config_get_video_alignment (GstStructure * config,
+gst_buffer_pool_config_get_video_alignment (const GstStructure * config,
     GstVideoAlignment * align)
 {
   g_return_val_if_fail (config != NULL, FALSE);
@@ -140,8 +140,19 @@ video_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
     goto no_caps;
 
   /* now parse the caps from the config */
-  if (!gst_video_info_from_caps (&info, caps))
-    goto wrong_caps;
+  if (gst_video_is_dma_drm_caps (caps)) {
+    GstVideoInfoDmaDrm drm_info;
+    if (!gst_video_info_dma_drm_from_caps (&drm_info, caps))
+      goto wrong_caps;
+
+    if (GST_VIDEO_INFO_FORMAT (&drm_info.vinfo) == GST_VIDEO_FORMAT_DMA_DRM)
+      goto wrong_caps;
+
+    info = drm_info.vinfo;
+  } else {
+    if (!gst_video_info_from_caps (&info, caps))
+      goto wrong_caps;
+  }
 
   if (size < info.size)
     goto wrong_size;
@@ -280,7 +291,7 @@ no_memory:
  * Returns: (transfer full): a new #GstBufferPool to allocate video frames
  */
 GstBufferPool *
-gst_video_buffer_pool_new ()
+gst_video_buffer_pool_new (void)
 {
   GstVideoBufferPool *pool;
 

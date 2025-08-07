@@ -496,6 +496,7 @@ gst_jack_ring_buffer_acquire (GstAudioRingBuffer * buf,
         jack_ports = gst_jack_get_ports (client, src->port_pattern, NULL,
             JackPortIsOutput);
       }
+      available_ports = jack_ports;
     }
 
     if (!available_ports) {
@@ -895,6 +896,7 @@ gst_jack_audio_src_dispose (GObject * object)
   }
 
   g_clear_pointer (&src->port_names, g_free);
+  g_clear_pointer (&src->server, g_free);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }

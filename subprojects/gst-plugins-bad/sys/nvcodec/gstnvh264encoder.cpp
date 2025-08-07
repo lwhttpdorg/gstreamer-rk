@@ -48,6 +48,31 @@
 GST_DEBUG_CATEGORY_STATIC (gst_nv_h264_encoder_debug);
 #define GST_CAT_DEFAULT gst_nv_h264_encoder_debug
 
+#define DOC_SINK_CAPS_COMM \
+    "format = (string) { NV12, Y444, VUYA, RGBA, RGBx, BGRA, BGRx }, " \
+    "width = (int) [ 160, 4096 ], height = (int) [ 64, 4096 ]"
+
+#define DOC_SINK_CAPS \
+    "video/x-raw(memory:CUDAMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:D3D12Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:GLMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SINK_CAPS_D3D11 \
+    "video/x-raw(memory:D3D11Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SINK_CAPS_AUTOGPU \
+    "video/x-raw(memory:CUDAMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:D3D11Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:GLMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SRC_CAPS \
+    "video/x-h264, width = (int) [ 160, 4096 ], height = (int) [ 64, 4096 ], " \
+    "profile = (string) { main, high, constrained-baseline, baseline, high-4:4:4 }, " \
+    "stream-format = (string) { byte-stream, avc }, alignment = (string) au"
+
 static GTypeClass *parent_class = nullptr;
 
 enum
@@ -236,6 +261,9 @@ static gboolean gst_nv_h264_encoder_select_device (GstNvEncoder * encoder,
     const GstVideoInfo * info, GstBuffer * buffer,
     GstNvEncoderDeviceData * data);
 static guint gst_nv_h264_encoder_calculate_min_buffers (GstNvEncoder * encoder);
+static NV_ENC_PIC_STRUCT
+gst_nv_h264_encoder_get_pic_struct (GstNvEncoder * encoder,
+    const GstVideoInfo * info, GstBuffer * buffer);
 
 static void
 gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
@@ -357,26 +385,61 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Number of frames between intra frames (-1 = infinite)",
           -1, G_MAXINT, DEFAULT_GOP_SIZE, param_flags));
   if (dev_caps->max_bframes > 0) {
+    /**
+     * GstNvD3D11H264Enc:bframes:
+     *
+     * Since: 1.26
+     */
     g_object_class_install_property (object_class, PROP_B_FRAMES,
         g_param_spec_uint ("bframes", "B Frames",
             "Number of B-frames between I and P", 0, dev_caps->max_bframes,
             DEFAULT_B_FRAMES, conditional_param_flags));
   }
+
+  /**
+   * GstNvD3D11H264Enc:rc-mode:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_RATE_CONTROL,
       g_param_spec_enum ("rc-mode", "RC Mode", "Rate Control Mode",
           GST_TYPE_NV_ENCODER_RC_MODE, DEFAULT_RATE_CONTROL, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-const:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_CONST,
       g_param_spec_int ("qp-const", "QP Const",
           "DEPRECATED, use qp-const-{i,p,b} properties instead", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-const-i:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_CONST_I,
       g_param_spec_int ("qp-const-i", "QP Const I",
           "Constant QP value for I frame (-1 = default)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-const-p:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_CONST_P,
       g_param_spec_int ("qp-const-p", "QP Cost P",
           "Constant QP value for P frame (-1 = default)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-const-b:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_CONST_B,
       g_param_spec_int ("qp-const-b", "QP Const B",
           "Constant QP value for B frame (-1 = default)", -1, 51,
@@ -421,6 +484,12 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
             "Temporal Adaptive Quantization", DEFAULT_TEMPORAL_AQ,
             conditional_param_flags));
   }
+
+  /**
+   * GstNvD3D11H264Enc:zerolatency:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_ZEROLATENCY,
       g_param_spec_boolean ("zerolatency", "Zerolatency",
           "Zero latency operation (no reordering delay)",
@@ -438,34 +507,82 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Adaptive Quantization Strength when spatial-aq is enabled"
           " from 1 (low) to 15 (aggressive), (0 = autoselect)",
           0, 15, DEFAULT_AQ_STRENGTH, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-min:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MIN,
       g_param_spec_int ("qp-min", "QP Min",
           "DEPRECATED, Use qp-min-{i,p,b} properties instead", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-min-i:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MIN_I,
       g_param_spec_int ("qp-min-i", "QP Min I",
           "Minimum QP value for I frame, (-1 = automatic)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-min-p:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MIN_P,
       g_param_spec_int ("qp-min-p", "QP Min P",
           "Minimum QP value for P frame, (-1 = automatic)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-min-b:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MIN_B,
       g_param_spec_int ("qp-min-b", "QP Min B",
           "Minimum QP value for B frame, (-1 = automatic)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-max:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MAX,
       g_param_spec_int ("qp-max", "QP Max",
           "DEPRECATED, Use qp-max-{i,p,b} properties instead", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-max-i:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MAX_I,
       g_param_spec_int ("qp-max-i", "QP Max I",
           "Maximum QP value for I frame, (-1 = automatic)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-max-p:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MAX_P,
       g_param_spec_int ("qp-max-p", "QP Max P",
           "Maximum QP value for P frame, (-1 = automatic)", -1, 51,
           DEFAULT_QP, param_flags));
+
+  /**
+   * GstNvD3D11H264Enc:qp-max-b:
+   *
+   * Since: 1.26
+   */
   g_object_class_install_property (object_class, PROP_QP_MAX_B,
       g_param_spec_int ("qp-max-b", "Max QP B",
           "Maximum QP value for B frame, (-1 = automatic)", -1, 51,
@@ -487,6 +604,9 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Insert sequence headers (SPS/PPS) per IDR",
           DEFAULT_REPEAT_SEQUENCE_HEADER, param_flags));
 
+  GstPadTemplate *pad_templ = gst_pad_template_new ("sink",
+      GST_PAD_SINK, GST_PAD_ALWAYS, cdata->sink_caps);
+  GstCaps *doc_caps = nullptr;
   switch (cdata->device_mode) {
     case GST_NV_ENCODER_DEVICE_CUDA:
       gst_element_class_set_static_metadata (element_class,
@@ -494,6 +614,7 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode H.264 video streams using NVCODEC API CUDA Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS);
       break;
     case GST_NV_ENCODER_DEVICE_D3D11:
       gst_element_class_set_static_metadata (element_class,
@@ -501,6 +622,7 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode H.264 video streams using NVCODEC API Direct3D11 Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS_D3D11);
       break;
     case GST_NV_ENCODER_DEVICE_AUTO_SELECT:
       gst_element_class_set_static_metadata (element_class,
@@ -508,18 +630,23 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode H.264 video streams using NVCODEC API auto GPU select Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS_AUTOGPU);
       break;
     default:
       g_assert_not_reached ();
       break;
   }
 
-  gst_element_class_add_pad_template (element_class,
-      gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
-          cdata->sink_caps));
-  gst_element_class_add_pad_template (element_class,
-      gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-          cdata->src_caps));
+  gst_pad_template_set_documentation_caps (pad_templ, doc_caps);
+  gst_caps_unref (doc_caps);
+  gst_element_class_add_pad_template (element_class, pad_templ);
+
+  pad_templ = gst_pad_template_new ("src",
+      GST_PAD_SRC, GST_PAD_ALWAYS, cdata->src_caps);
+  doc_caps = gst_caps_from_string (DOC_SRC_CAPS);
+  gst_pad_template_set_documentation_caps (pad_templ, doc_caps);
+  gst_caps_unref (doc_caps);
+  gst_element_class_add_pad_template (element_class, pad_templ);
 
   videoenc_class->getcaps = GST_DEBUG_FUNCPTR (gst_nv_h264_encoder_getcaps);
   videoenc_class->stop = GST_DEBUG_FUNCPTR (gst_nv_h264_encoder_stop);
@@ -535,6 +662,8 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
       GST_DEBUG_FUNCPTR (gst_nv_h264_encoder_select_device);
   nvenc_class->calculate_min_buffers =
       GST_DEBUG_FUNCPTR (gst_nv_h264_encoder_calculate_min_buffers);
+  nvenc_class->get_pic_struct =
+      GST_DEBUG_FUNCPTR (gst_nv_h264_encoder_get_pic_struct);
 
   klass->device_caps = cdata->device_caps;
   klass->cuda_device_id = cdata->cuda_device_id;
@@ -1078,14 +1207,12 @@ static GstCaps *
 gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 {
   GstNvH264Encoder *self = GST_NV_H264_ENCODER (encoder);
-  GstNvH264EncoderClass *klass = GST_NV_H264_ENCODER_GET_CLASS (self);
   GstCaps *allowed_caps;
   GstCaps *template_caps;
   GstCaps *filtered_caps;
   GstCaps *supported_caps;
   std::set < std::string > downstream_profiles;
   std::set < std::string > allowed_formats;
-  gboolean profile_support_interlaced = FALSE;
 
   gst_nv_h264_encoder_get_downstream_profiles_and_format (self,
       downstream_profiles, nullptr);
@@ -1098,11 +1225,7 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 
   /* *INDENT-OFF* */
   for (const auto &iter: downstream_profiles) {
-    if (iter == "high" || iter == "main")
-      profile_support_interlaced = TRUE;
-
     if (iter == "high-4:4:4") {
-      profile_support_interlaced = TRUE;
       allowed_formats.insert("Y444");
     } else {
       allowed_formats.insert("NV12");
@@ -1115,16 +1238,8 @@ gst_nv_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
   }
   /* *INDENT-ON* */
 
-  GST_DEBUG_OBJECT (self, "Downstream %s support interlaced format",
-      profile_support_interlaced ? "can" : "cannot");
-
   template_caps = gst_pad_get_pad_template_caps (encoder->sinkpad);
   allowed_caps = gst_caps_copy (template_caps);
-
-  if (klass->device_caps.field_encoding == 0 || !profile_support_interlaced) {
-    gst_caps_set_simple (allowed_caps, "interlace-mode", G_TYPE_STRING,
-        "progressive", nullptr);
-  }
 
   GValue formats = G_VALUE_INIT;
 
@@ -1203,19 +1318,6 @@ gst_nv_h264_encoder_set_format (GstNvEncoder * encoder,
   if (downstream_profiles.empty ()) {
     GST_ERROR_OBJECT (self, "Unable to get downstream profile");
     return FALSE;
-  }
-
-  if (GST_VIDEO_INFO_IS_INTERLACED (info)) {
-    downstream_profiles.erase ("progressive-high");
-    downstream_profiles.erase ("constrained-high");
-    downstream_profiles.erase ("constrained-baseline");
-    downstream_profiles.erase ("baseline");
-
-    if (downstream_profiles.empty ()) {
-      GST_ERROR_OBJECT (self,
-          "None of downstream profile supports interlaced encoding");
-      return FALSE;
-    }
   }
 
   if (GST_VIDEO_INFO_FORMAT (info) == GST_VIDEO_FORMAT_Y444) {
@@ -2031,6 +2133,42 @@ gst_nv_h264_encoder_calculate_min_buffers (GstNvEncoder * encoder)
   return num_buffers;
 }
 
+static NV_ENC_PIC_STRUCT
+gst_nv_h264_encoder_get_pic_struct (GstNvEncoder * encoder,
+    const GstVideoInfo * info, GstBuffer * buffer)
+{
+  auto klass = GST_NV_H264_ENCODER_GET_CLASS (encoder);
+  if (klass->device_caps.field_encoding == 0)
+    return NV_ENC_PIC_STRUCT_FRAME;
+
+  if (GST_VIDEO_INFO_INTERLACE_MODE (info) == GST_VIDEO_INTERLACE_MODE_MIXED) {
+    if (!GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED)) {
+      return NV_ENC_PIC_STRUCT_FRAME;
+    }
+
+    if (GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_TFF))
+      return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
+
+    return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
+  }
+
+  switch (GST_VIDEO_INFO_FIELD_ORDER (info)) {
+    case GST_VIDEO_FIELD_ORDER_TOP_FIELD_FIRST:
+      return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
+      break;
+    case GST_VIDEO_FIELD_ORDER_BOTTOM_FIELD_FIRST:
+      return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
+      break;
+    default:
+      break;
+  }
+
+  if (GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_TFF))
+    return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
+
+  return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
+}
+
 static GstNvEncoderClassData *
 gst_nv_h264_encoder_create_class_data (GstObject * device, gpointer session,
     GstNvEncoderDeviceMode device_mode)
@@ -2181,32 +2319,42 @@ gst_nv_h264_encoder_create_class_data (GstObject * device, gpointer session,
 
   sink_caps_str = "video/x-raw, " + format_str + ", " + resolution_str;
 
-  if (dev_caps.field_encoding > 0) {
-    sink_caps_str +=
-        ", interlace-mode = (string) { progressive, interleaved, mixed }";
-  } else {
-    sink_caps_str += ", interlace-mode = (string) progressive";
-  }
-
   src_caps_str = "video/x-h264, " + resolution_str + ", " + profile_str +
-      ", stream-format = (string) { avc, byte-stream }, alignment = (string) au";
+      ", stream-format = (string) { byte-stream, avc }, alignment = (string) au";
 
   system_caps = gst_caps_from_string (sink_caps_str.c_str ());
   sink_caps = gst_caps_copy (system_caps);
 #ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11) {
     gst_caps_set_features (sink_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY,
+            nullptr));
   }
 #endif
 
   if (device_mode == GST_NV_ENCODER_DEVICE_CUDA) {
     gst_caps_set_features (sink_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY,
+            nullptr));
+#ifdef HAVE_GST_D3D12
+    if (gst_nvcodec_is_windows_10_or_greater ()) {
+      gboolean have_interop = FALSE;
+      g_object_get (device,
+          "external-resource-interop", &have_interop, nullptr);
+      if (have_interop) {
+        auto d3d12_caps = gst_caps_copy (system_caps);
+        gst_caps_set_features_simple (d3d12_caps,
+            gst_caps_features_new_static_str
+            (GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY, nullptr));
+        gst_caps_append (sink_caps, d3d12_caps);
+      }
+    }
+#endif
 #ifdef HAVE_CUDA_GST_GL
     GstCaps *gl_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (gl_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_GL_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_GL_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, gl_caps);
 #endif
   }
@@ -2227,8 +2375,12 @@ gst_nv_h264_encoder_create_class_data (GstObject * device, gpointer session,
     cdata->profiles = g_list_append (cdata->profiles, g_strdup (iter.c_str()));
   /* *INDENT-ON* */
 
+#ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11)
     g_object_get (device, "adapter-luid", &cdata->adapter_luid, nullptr);
+  else
+    g_object_get (device, "dxgi-adapter-luid", &cdata->adapter_luid, nullptr);
+#endif
 
   if (device_mode == GST_NV_ENCODER_DEVICE_CUDA)
     g_object_get (device, "cuda-device-id", &cdata->cuda_device_id, nullptr);
@@ -2510,15 +2662,8 @@ gst_nv_h264_encoder_register_auto_select (GstPlugin * plugin,
 
   sink_caps_str = "video/x-raw, " + format_str + ", " + resolution_str;
 
-  if (dev_caps.field_encoding > 0) {
-    sink_caps_str +=
-        ", interlace-mode = (string) { progressive, interleaved, mixed }";
-  } else {
-    sink_caps_str += ", interlace-mode = (string) progressive";
-  }
-
   src_caps_str = "video/x-h264, " + resolution_str + ", " + profile_str +
-      ", stream-format = (string) { avc, byte-stream }, alignment = (string) au";
+      ", stream-format = (string) { byte-stream, avc }, alignment = (string) au";
 
   system_caps = gst_caps_from_string (sink_caps_str.c_str ());
   sink_caps = gst_caps_new_empty ();
@@ -2526,14 +2671,16 @@ gst_nv_h264_encoder_register_auto_select (GstPlugin * plugin,
   if (cuda_device_id_size > 0) {
     GstCaps *cuda_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (cuda_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, cuda_caps);
   }
 #ifdef G_OS_WIN32
   if (adapter_luid_size > 0) {
     GstCaps *d3d11_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (d3d11_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, d3d11_caps);
   }
 #endif
@@ -2541,7 +2688,8 @@ gst_nv_h264_encoder_register_auto_select (GstPlugin * plugin,
 #ifdef HAVE_CUDA_GST_GL
   GstCaps *gl_caps = gst_caps_copy (system_caps);
   gst_caps_set_features (gl_caps, 0,
-      gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_GL_MEMORY, nullptr));
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_GL_MEMORY,
+          nullptr));
   gst_caps_append (sink_caps, gl_caps);
 #endif
 

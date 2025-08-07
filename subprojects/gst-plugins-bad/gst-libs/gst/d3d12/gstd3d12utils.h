@@ -21,6 +21,7 @@
 
 #include <gst/gst.h>
 #include <gst/d3d12/gstd3d12_fwd.h>
+#include <gst/video/video.h>
 
 G_BEGIN_DECLS
 
@@ -64,6 +65,22 @@ GST_D3D12_API
 gboolean  gst_d3d12_buffer_copy_into (GstBuffer * dest,
                                       GstBuffer * src,
                                       const GstVideoInfo * info);
+
+GST_D3D12_API
+void      gst_d3d12_buffer_set_fence (GstBuffer * buffer,
+                                      ID3D12Fence * fence,
+                                      guint64 fence_value,
+                                      gboolean wait);
+
+GST_D3D12_API
+gboolean  gst_d3d12_get_copyable_footprints (GstD3D12Device * device,
+                                             const GstVideoInfo * info,
+                                             D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout[GST_VIDEO_MAX_PLANES],
+                                             guint64 * size);
+
+
+GST_D3D12_API
+void      gst_d3d12_flush_all_devices (void);
 
 GST_D3D12_API
 gboolean _gst_d3d12_result (HRESULT hr,

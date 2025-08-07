@@ -173,9 +173,11 @@ ges_effect_clip_set_property (GObject * object,
 
   switch (property_id) {
     case PROP_VIDEO_BIN_DESCRIPTION:
+      /* G_PARAM_CONSTRUCT_ONLY */
       self->priv->video_bin_description = g_value_dup_string (value);
       break;
     case PROP_AUDIO_BIN_DESCRIPTION:
+      /* G_PARAM_CONSTRUCT_ONLY */
       self->priv->audio_bin_description = g_value_dup_string (value);
       break;
     default:
@@ -205,7 +207,8 @@ ges_effect_clip_class_init (GESEffectClipClass * klass)
       g_param_spec_string ("video-bin-description",
           "Video bin description",
           "Description of the video track of the effect",
-          NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+          NULL,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   /**
    * GESEffectClip:audio-bin-description:
@@ -219,7 +222,8 @@ ges_effect_clip_class_init (GESEffectClipClass * klass)
       g_param_spec_string ("audio-bin-description",
           "bin description",
           "Bin description of the audio track of the effect",
-          NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+          NULL,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   timobj_class->create_track_element = _create_track_element;
 }

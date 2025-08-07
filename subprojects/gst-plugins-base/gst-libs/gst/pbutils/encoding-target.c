@@ -149,6 +149,8 @@ gst_encoding_target_finalize (GObject * object)
 
   g_list_foreach (target->profiles, (GFunc) g_object_unref, NULL);
   g_list_free (target->profiles);
+
+  G_OBJECT_CLASS (gst_encoding_target_parent_class)->finalize (object);
 }
 
 static void
@@ -1211,8 +1213,10 @@ sub_get_all_targets (gchar * subdir)
     if (target) {
       target->path = fullname;
       res = g_list_append (res, target);
-    } else
+    } else {
       GST_WARNING ("Failed to get a target from %s", fullname);
+      g_free (fullname);
+    }
   }
   g_dir_close (dir);
 

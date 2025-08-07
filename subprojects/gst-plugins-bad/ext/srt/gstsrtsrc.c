@@ -154,7 +154,7 @@ gst_srt_src_fill (GstPushSrc * src, GstBuffer * outbuf)
   GstClockTime capture_time;
   GstClockTimeDiff delay;
   int64_t srt_time;
-  SRT_MSGCTRL mctrl;
+  SRT_MSGCTRL mctrl = { 0, };
 
 retry:
   if (g_cancellable_is_cancelled (self->srtobject->cancellable)) {
@@ -194,7 +194,7 @@ retry:
   gst_buffer_unmap (outbuf, &info);
 
   GST_LOG_OBJECT (src,
-      "recv_len:%" G_GSIZE_FORMAT " pktseq:%d msgno:%d srctime:%"
+      "recv_len:%" G_GSSIZE_FORMAT " pktseq:%d msgno:%d srctime:%"
       G_GINT64_FORMAT, recv_len, mctrl.pktseq, mctrl.msgno, mctrl.srctime);
 
   if (g_cancellable_is_cancelled (self->srtobject->cancellable)) {
@@ -464,7 +464,7 @@ gst_srt_src_class_init (GstSRTSrcClass * klass)
           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_element_class_add_static_pad_template (gstelement_class, &src_template);
-  gst_element_class_set_metadata (gstelement_class,
+  gst_element_class_set_static_metadata (gstelement_class,
       "SRT source", "Source/Network",
       "Receive data over the network via SRT",
       "Justin Kim <justin.joy.9to5@gmail.com>");

@@ -79,7 +79,7 @@ gst_mockdecryptor_class_init (GstMockDecryptorClass * klass)
   gst_element_class_add_static_pad_template (element_class,
       &gst_mockdecryptor_src_template);
 
-  gst_element_class_set_metadata (element_class,
+  gst_element_class_set_static_metadata (element_class,
       "Mock decryptor element for unit tests",
       GST_ELEMENT_FACTORY_KLASS_DECRYPTOR,
       "Use in unit tests", "Charlie Turner <cturner@igalia.com>");
@@ -168,6 +168,7 @@ gst_mockdecryptor_transform_caps (GstBaseTransform * base,
         gst_caps_intersect_full (transformed_caps, filter,
         GST_CAPS_INTERSECT_FIRST);
     gst_caps_replace (&transformed_caps, intersection);
+    gst_caps_unref (intersection);
   }
 
   GST_DEBUG_OBJECT (base, "returning %" GST_PTR_FORMAT, transformed_caps);

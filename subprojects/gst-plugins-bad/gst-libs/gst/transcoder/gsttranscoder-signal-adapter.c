@@ -110,7 +110,8 @@ gst_transcoder_signal_adapter_emit (GstTranscoderSignalAdapter * self,
       GstStructure *details = NULL;
 
       gst_structure_get (message_data, GST_TRANSCODER_MESSAGE_DATA_ERROR,
-          G_TYPE_ERROR, &error, GST_TYPE_STRUCTURE, &details, NULL);
+          G_TYPE_ERROR, &error, GST_TRANSCODER_MESSAGE_DATA_ISSUE_DETAILS,
+          GST_TYPE_STRUCTURE, &details, NULL);
       g_signal_emit (self, signals[SIGNAL_ERROR], 0, error, details);
       g_error_free (error);
       if (details)
@@ -122,7 +123,8 @@ gst_transcoder_signal_adapter_emit (GstTranscoderSignalAdapter * self,
       GError *error = NULL;
 
       gst_structure_get (message_data, GST_TRANSCODER_MESSAGE_DATA_WARNING,
-          G_TYPE_ERROR, &error, GST_TYPE_STRUCTURE, &details, NULL);
+          G_TYPE_ERROR, &error, GST_TRANSCODER_MESSAGE_DATA_ISSUE_DETAILS,
+          GST_TYPE_STRUCTURE, &details, NULL);
       g_signal_emit (self, signals[SIGNAL_WARNING], 0, error, details);
       g_error_free (error);
       if (details)
@@ -321,7 +323,7 @@ gst_transcoder_signal_adapter_class_init (GstTranscoderSignalAdapterClass *
   param_specs[PROP_TRANSCODER] =
       g_param_spec_object ("transcoder", "Transcoder",
       "The GstTranscoder @self is tracking", GST_TYPE_TRANSCODER,
-      G_PARAM_READABLE);
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (gobject_class, PROP_LAST, param_specs);
 }

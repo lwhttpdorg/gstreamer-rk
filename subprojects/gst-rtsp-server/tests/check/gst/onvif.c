@@ -173,6 +173,9 @@ test_src_create (GstPushSrc * psrc, GstBuffer ** buffer)
     case FRAME_TYPE_B:
       buf_size = 5;
       break;
+    default:
+      g_assert_not_reached ();
+      return GST_FLOW_ERROR;
   }
 
   *buffer = gst_buffer_new_allocate (NULL, buf_size, NULL);
@@ -204,6 +207,7 @@ test_src_create (GstPushSrc * psrc, GstBuffer ** buffer)
     onvif_event = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM, s);
 
     gst_element_send_event (GST_ELEMENT (src), onvif_event);
+    gst_object_unref (clock);
   }
 
   if (src->segment->rate < 1.0) {

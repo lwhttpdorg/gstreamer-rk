@@ -4,6 +4,20 @@ webview2_sources = [
   'plugin.cpp',
 ]
 
+webview2_headers = [
+  'gstwebview2object.h',
+  'gstwebview2src.h',
+]
+
+doc_sources = []
+foreach s: webview2_sources + webview2_headers
+  doc_sources += meson.current_source_dir() / s
+endforeach
+
+plugin_sources += {
+  'webview2': pathsep.join(doc_sources)
+}
+
 extra_args = ['-DGST_USE_UNSTABLE_API']
 
 webview2_option = get_option('webview2')
@@ -68,7 +82,7 @@ building_for_win10 = cxx.compiles('''#include <windows.h>
 
 if not building_for_win10
   message('Bumping target Windows version to Windows 10 for building webview2 plugin')
-  extra_args += ['-DWINVER=0x0A00', '-D_WIN32_WINNT=0x0A00', '-DNTDDI_VERSION=WDK_NTDDI_VERSION']
+  extra_args += ['-U_WIN32_WINNT', '-UWINVER', '-DWINVER=0x0A00', '-D_WIN32_WINNT=0x0A00', '-DNTDDI_VERSION=WDK_NTDDI_VERSION']
 endif
 
 dwmapi_lib = cc.find_library('dwmapi', required : webview2_option)

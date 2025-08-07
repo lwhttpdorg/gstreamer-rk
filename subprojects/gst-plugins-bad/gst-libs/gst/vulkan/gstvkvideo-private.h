@@ -22,7 +22,7 @@
 
 #include <gst/gst.h>
 #include <gst/vulkan/gstvkapi.h>
-#include <gst/vulkan/gstvkvideoutils.h>
+#include "gstvkvideoutils-private.h"
 
 G_BEGIN_DECLS
 
@@ -63,7 +63,8 @@ typedef enum {
   V(CmdEndVideoCoding)                                                         \
   V(CmdDecodeVideo)                                                            \
   V(CmdEncodeVideo)                                                            \
-  V(GetEncodedVideoSessionParameters)
+  V(GetEncodedVideoSessionParameters)                                          \
+  V(GetPhysicalDeviceVideoEncodeQualityLevelProperties)
 
 struct _GstVulkanVideoFunctions
 {
@@ -90,5 +91,12 @@ GstBuffer *             gst_vulkan_video_codec_buffer_new       (GstVulkanDevice
                                                                  const GstVulkanVideoProfile *profile,
                                                                  VkBufferUsageFlags usage,
                                                                  gsize size);
+
+GstVulkanImageView *    gst_vulkan_video_image_create_view     (GstBuffer * buf,
+                                                                gboolean layered_dpb,
+                                                                gboolean is_out,
+                                                                GstVulkanHandle * sampler);
+
+gboolean                gst_vulkan_video_has_maintenance1      (GstVulkanDevice * device);
 
 G_END_DECLS

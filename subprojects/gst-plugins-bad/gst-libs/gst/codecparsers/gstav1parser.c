@@ -41,21 +41,21 @@
  * Then, depending on the #GstAV1OBUType of the newly parsed #GstAV1OBU,
  * you should call the differents functions to parse the structure details:
  *
- *   * #GST_AV1_OBU_SEQUENCE_HEADER: gst_av1_parser_parse_sequence_header_obu()
+ *   * %GST_AV1_OBU_SEQUENCE_HEADER: gst_av1_parser_parse_sequence_header_obu()
  *
- *   * #GST_AV1_OBU_TEMPORAL_DELIMITER: gst_av1_parser_parse_temporal_delimiter_obu()
+ *   * %GST_AV1_OBU_TEMPORAL_DELIMITER: gst_av1_parser_parse_temporal_delimiter_obu()
  *
- *   * #GST_AV1_OBU_FRAME: gst_av1_parser_parse_frame_obu()
+ *   * %GST_AV1_OBU_FRAME: gst_av1_parser_parse_frame_obu()
  *
- *   * #GST_AV1_OBU_FRAME_HEADER: gst_av1_parser_parse_frame_header_obu()
+ *   * %GST_AV1_OBU_FRAME_HEADER: gst_av1_parser_parse_frame_header_obu()
  *
- *   * #GST_AV1_OBU_TILE_GROUP: gst_av1_parser_parse_tile_group_obu()
+ *   * %GST_AV1_OBU_TILE_GROUP: gst_av1_parser_parse_tile_group_obu()
  *
- *   * #GST_AV1_OBU_METADATA: gst_av1_parser_parse_metadata_obu()
+ *   * %GST_AV1_OBU_METADATA: gst_av1_parser_parse_metadata_obu()
  *
- *   * #GST_AV1_OBU_REDUNDANT_FRAME_HEADER: gst_av1_parser_parse_frame_header_obu()
+ *   * %GST_AV1_OBU_REDUNDANT_FRAME_HEADER: gst_av1_parser_parse_frame_header_obu()
  *
- *   * #GST_AV1_OBU_TILE_LIST: gst_av1_parser_parse_tile_list_obu()
+ *   * %GST_AV1_OBU_TILE_LIST: gst_av1_parser_parse_tile_list_obu()
  *
  * Note: Some parser functions are dependent on information provided in the sequence
  * header and reference frame's information. It maintains a state inside itself, which
@@ -486,18 +486,7 @@ static gboolean
 av1_seq_level_idx_is_valid (GstAV1SeqLevels seq_level_idx)
 {
   return seq_level_idx == GST_AV1_SEQ_LEVEL_MAX
-      || (seq_level_idx < GST_AV1_SEQ_LEVELS
-      /* The following levels are currently undefined. */
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_2_2
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_2_3
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_3_2
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_3_3
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_4_2
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_4_3
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_7_0
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_7_1
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_7_2
-      && seq_level_idx != GST_AV1_SEQ_LEVEL_7_3);
+      || seq_level_idx < GST_AV1_SEQ_LEVELS;
 }
 
 static void
@@ -2056,7 +2045,7 @@ gst_av1_parse_segmentation_params (GstAV1Parser * parser, GstBitReader * br,
   gint i, j;
   GstAV1ParserResult retval = GST_AV1_PARSER_OK;
   gint clipped_value /* clippedValue */ ;
-  GstAV1SegmenationParams *seg_params;
+  GstAV1SegmentationParams *seg_params;
   gint feature_value = 0;
 
   const guint8 segmentation_feature_bits[GST_AV1_SEG_LVL_MAX] = {
@@ -2130,7 +2119,7 @@ gst_av1_parse_segmentation_params (GstAV1Parser * parser, GstBitReader * br,
       }
     } else {
       gint8 ref_idx;
-      GstAV1SegmenationParams *ref_seg_params;
+      GstAV1SegmentationParams *ref_seg_params;
 
       /* Copy it from prime_ref */
       if (frame_header->primary_ref_frame >= GST_AV1_PRIMARY_REF_NONE) {
@@ -3957,12 +3946,10 @@ gst_av1_parse_uncompressed_frame_header (GstAV1Parser * parser, GstAV1OBU * obu,
         if (expected_frame_id !=
             parser->state.ref_info.entry[frame_header->
                 ref_frame_idx[i]].ref_frame_id) {
-          GST_INFO ("Reference buffer frame ID mismatch, expectedFrameId"
-              " is %d wihle ref frame id is %d", expected_frame_id,
+          GST_DEBUG ("Reference buffer frame ID mismatch, expectedFrameId"
+              " is %d while ref frame id is %d", expected_frame_id,
               parser->state.ref_info.entry[frame_header->
                   ref_frame_idx[i]].ref_frame_id);
-          retval = GST_AV1_PARSER_BITSTREAM_ERROR;
-          goto error;
         }
       }
     }

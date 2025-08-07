@@ -145,6 +145,7 @@ enum
   PROP_WIDGET,
   PROP_QML_SCENE,
   PROP_ROOT_ITEM,
+  PROP_DEPTH_AND_STENCIL_BUFFER,
 };
 
 enum
@@ -185,7 +186,7 @@ gst_qt_overlay_class_init (GstQtOverlayClass * klass)
   gobject_class->get_property = gst_qt_overlay_get_property;
   gobject_class->finalize = gst_qt_overlay_finalize;
 
-  gst_element_class_set_metadata (gstelement_class, "Qt Video Overlay",
+  gst_element_class_set_static_metadata (gstelement_class, "Qt Video Overlay",
       "Filter/QML/Overlay", "A filter that renders a QML scene onto a video stream",
       "Matthew Waters <matthew@centricular.com>");
 
@@ -203,6 +204,23 @@ gst_qt_overlay_class_init (GstQtOverlayClass * klass)
       g_param_spec_pointer ("root-item", "QQuickItem",
           "The root QQuickItem from the qml-scene used to render",
           (GParamFlags) (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS)));
+
+  /**
+   * GstQtOverlay:depth-buffer:
+   *
+   * Instructs QML to not use a depth or stencil buffer when rendering.
+   *
+   * WARNING: Disabling the depth and stencil buffer may cause QML to
+   * incorrectly render the provided scene.
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_DEPTH_AND_STENCIL_BUFFER,
+      g_param_spec_boolean ("depth-buffer", "Depth and Stencil Buffer",
+          "Use depth and stencil buffer for the rendering of the scene. "
+          "Might corrupt the rendering when set to FALSE! "
+          "Only set to FALSE after carefully checking the targeted QML scene.", TRUE,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
   /**
    * GstQmlGLOverlay::qml-scene-initialized
@@ -243,6 +261,7 @@ static void
 gst_qt_overlay_init (GstQtOverlay * qt_overlay)
 {
   qt_overlay->widget = QSharedPointer<QtGLVideoItemInterface>();
+  qt_overlay->depth_buffer = TRUE;
   qt_overlay->qml_scene = NULL;
 }
 
@@ -277,6 +296,9 @@ gst_qt_overlay_set_property (GObject * object, guint prop_id,
     case PROP_QML_SCENE:
       g_free (qt_overlay->qml_scene);
       qt_overlay->qml_scene = g_value_dup_string (value);
+      break;
+    case PROP_DEPTH_AND_STENCIL_BUFFER:
+      qt_overlay->depth_buffer = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -316,6 +338,9 @@ gst_qt_overlay_get_property (GObject * object, guint prop_id,
       }
       GST_OBJECT_UNLOCK (qt_overlay);
       break;
+     case PROP_DEPTH_AND_STENCIL_BUFFER:
+      g_value_set_boolean(value, qt_overlay->depth_buffer);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -341,7 +366,7 @@ gst_qt_overlay_gl_start (GstGLBaseFilter * bfilter)
 
   GST_OBJECT_LOCK (bfilter);
   qt_overlay->renderer = new GstQuickRenderer;
-  if (!qt_overlay->renderer->init (bfilter->context, &error)) {
+  if (!qt_overlay->renderer->init (bfilter->context, qt_overlay->depth_buffer, &error)) {
     GST_ELEMENT_ERROR (GST_ELEMENT (bfilter), RESOURCE, NOT_FOUND,
         ("%s", error->message), (NULL));
     delete qt_overlay->renderer;

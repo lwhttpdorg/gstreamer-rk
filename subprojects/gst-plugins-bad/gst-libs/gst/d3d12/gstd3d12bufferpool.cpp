@@ -172,10 +172,28 @@ gst_d3d12_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
   priv->d3d12_params =
       gst_buffer_pool_config_get_d3d12_allocation_params (config);
   if (!priv->d3d12_params) {
+    GstD3D12Format format;
+    gst_d3d12_device_get_format (self->device, GST_VIDEO_INFO_FORMAT (&info),
+        &format);
+
+    D3D12_RESOURCE_FLAGS resource_flags =
+        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+    if ((format.support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) ==
+        D3D12_FORMAT_SUPPORT1_RENDER_TARGET) {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    }
+
+    if ((format.support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) ==
+        D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW &&
+        (format.format_flags & GST_D3D12_FORMAT_FLAG_OUTPUT_UAV) ==
+        GST_D3D12_FORMAT_FLAG_OUTPUT_UAV) {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
+
     priv->d3d12_params =
         gst_d3d12_allocation_params_new (self->device,
         &info, GST_D3D12_ALLOCATION_FLAG_DEFAULT,
-        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_HEAP_FLAG_NONE);
+        resource_flags, D3D12_HEAP_FLAG_SHARED);
   }
 
   auto device = gst_d3d12_device_get_device_handle (self->device);
@@ -187,7 +205,7 @@ gst_d3d12_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
   if (params->d3d12_format.dxgi_format != DXGI_FORMAT_UNKNOWN) {
     desc[0] = CD3DX12_RESOURCE_DESC::Tex2D (params->d3d12_format.dxgi_format,
         params->aligned_info.width, params->aligned_info.height,
-        params->array_size, 1, 1, 0, params->resource_flags);
+        params->array_size, params->mip_levels, 1, 0, params->resource_flags);
 
     gst_d3d12_buffer_pool_do_align (desc[0]);
 
@@ -200,6 +218,7 @@ gst_d3d12_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
 
     auto single_array_desc = desc[0];
     single_array_desc.DepthOrArraySize = 1;
+    single_array_desc.MipLevels = 1;
 
     UINT64 mem_size;
     device->GetCopyableFootprints (&single_array_desc, 0, num_planes, 0,
@@ -212,15 +231,25 @@ gst_d3d12_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
 
     priv->alloc[0] = alloc;
   } else {
+    auto finfo = params->aligned_info.finfo;
+
     for (guint i = 0; i < GST_VIDEO_MAX_PLANES; i++) {
       if (params->d3d12_format.resource_format[i] == DXGI_FORMAT_UNKNOWN)
         break;
 
+      gint comp[GST_VIDEO_MAX_COMPONENTS];
+      gst_video_format_info_component (finfo, i, comp);
+
+      guint width = GST_VIDEO_INFO_COMP_WIDTH (&params->aligned_info, comp[0]);
+      guint height =
+          GST_VIDEO_INFO_COMP_HEIGHT (&params->aligned_info, comp[0]);
+      width = MAX (width, 1);
+      height = MAX (height, 1);
+
       desc[i] =
           CD3DX12_RESOURCE_DESC::Tex2D (params->d3d12_format.resource_format[i],
-          GST_VIDEO_INFO_COMP_WIDTH (&params->aligned_info, i),
-          GST_VIDEO_INFO_COMP_HEIGHT (&params->aligned_info, i),
-          params->array_size, 1, 1, 0, params->resource_flags);
+          width, height, params->array_size, params->mip_levels, 1, 0,
+          params->resource_flags);
 
       gst_d3d12_buffer_pool_do_align (desc[i]);
 
@@ -230,6 +259,7 @@ gst_d3d12_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
           D3D12_RESOURCE_STATE_COMMON, nullptr);
 
       UINT64 mem_size;
+      desc[i].MipLevels = 1;
       device->GetCopyableFootprints (&desc[i], 0, 1, 0,
           &layout[i], nullptr, nullptr, &mem_size);
 

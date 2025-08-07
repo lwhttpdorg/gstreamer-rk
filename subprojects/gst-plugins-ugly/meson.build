@@ -1,6 +1,6 @@
 project('gst-plugins-ugly', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -32,6 +32,7 @@ api_version = '1.0'
 static_build = get_option('default_library') == 'static'
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 plugins = []
+plugin_sources = {}
 
 cc = meson.get_compiler('c')
 if have_cxx
@@ -97,7 +98,6 @@ if have_cxx and cxx.has_link_argument('-Wl,-z,nodelete')
 endif
 
 cdata = configuration_data()
-cdata.set('ENABLE_NLS', 1)
 
 check_headers = [
   ['HAVE_DLFCN_H', 'dlfcn.h'],
@@ -197,7 +197,7 @@ else
   cdata.set('DISABLE_ORC', 1)
 endif
 
-gmodule_dep = dependency('gmodule-no-export-2.0', version: glib_req)
+gmodule_dep = dependency('gmodule-no-export-2.0', version: glib_req, default_options: {'sysprof': 'disabled'})
 
 if gmodule_dep.version().version_compare('< 2.67.4')
   cdata.set('g_memdup2(ptr,sz)', '(G_LIKELY(((guint64)(sz)) < G_MAXUINT)) ? g_memdup(ptr,sz) : (g_abort(),NULL)')
@@ -244,19 +244,22 @@ else
 endif
 
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wredundant-decls',
-  '-Wwrite-strings',
+  '-Waddress',
+  '-Waggregate-return',
   '-Wformat',
   '-Wformat-nonliteral',
   '-Wformat-security',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
-  '-Waddress',
   '-Wno-multichar',
-  '-Wvla',
   '-Wpointer-arith',
-  '-Waggregate-return',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wvla',
+  '-Wwrite-strings',
   '-fno-strict-aliasing',
   # Symbol visibility
   '-fvisibility=hidden',
@@ -289,20 +292,20 @@ if gst_version_is_dev
   add_project_arguments('-DG_DISABLE_DEPRECATED', language: 'c')
 endif
 
-cast_checks = get_option('gobject-cast-checks')
-if cast_checks.disabled() or (cast_checks.auto() and not gst_version_is_dev)
+# Same logic as in GLib.
+glib_debug = get_option('glib_debug')
+if glib_debug.disabled() or (
+   glib_debug.auto() and (not get_option('debug') or get_option('optimization') not in [ '0', 'g' ]))
   message('Disabling GLib cast checks')
   add_project_arguments('-DG_DISABLE_CAST_CHECKS', language: 'c')
 endif
 
-glib_asserts = get_option('glib-asserts')
-if glib_asserts.disabled() or (glib_asserts.auto() and not gst_version_is_dev)
+if not get_option('glib_assert')
   message('Disabling GLib asserts')
   add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
 endif
 
-glib_checks = get_option('glib-checks')
-if glib_checks.disabled() or (glib_checks.auto() and not gst_version_is_dev)
+if not get_option('glib_checks')
   message('Disabling GLib checks')
   add_project_arguments('-DG_DISABLE_CHECKS', language: 'c')
 endif
@@ -320,12 +323,19 @@ gpl_allowed = get_option('gpl').allowed()
 
 python3 = import('python').find_installation()
 
+if host_machine.system() == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
+
 subdir('gst')
 subdir('ext')
 subdir('tests')
 
 # xgettext is optional (on Windows for instance)
 if find_program('xgettext', required : get_option('nls')).found()
+  cdata.set('ENABLE_NLS', 1)
   subdir('po')
 endif
 subdir('docs')
@@ -342,7 +352,7 @@ endif
 
 configure_file(output : 'config.h', configuration : cdata)
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 plugin_names = []
 gst_plugins = []

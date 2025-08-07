@@ -1,5 +1,5 @@
-project('gstreamer-sharp', ['cs', 'c'], version: '1.25.0.1',
-    meson_version : '>= 1.1', license: 'LGPL')
+project('gstreamer-sharp', ['cs', 'c'], version: '1.27.1.1',
+    meson_version : '>= 1.4', license: 'LGPL')
 
 fs = import ('fs')
 
@@ -56,7 +56,7 @@ diff = find_program('Tests/test_abi.py')
 
 # TODO Handle monodoc
 
-apiversion = '1.0'
+api_version = '1.0'
 gst_required_version = '>=@0@'.format(meson.project_version())
 gst_deps = []
 
@@ -81,11 +81,11 @@ gst_deps_defs = [
 ]
 
 foreach dep: gst_deps_defs
-  gst_deps += [dependency(dep.get(0) + '-' + apiversion, version: gst_required_version,
+  gst_deps += [dependency(dep.get(0) + '-' + api_version, version: gst_required_version,
     fallback: dep.get(1))]
 endforeach
 
-ges_dep = dependency('gst-editing-services-' + apiversion, version: gst_required_version,
+ges_dep = dependency('gst-editing-services-' + api_version, version: gst_required_version,
     fallback: ['gst-editing-services', 'ges_dep'], required: false)
 
 if ges_dep.found()
@@ -168,7 +168,7 @@ girs_dir = join_paths(meson.global_source_root(), 'girs')
 
 codegen_enabled = false
 if not bindinate.found()
-    warning('Bindinator not usable as some required dependencies are not avalaible.')
+    warning('Bindinator not usable as some required dependencies are not available.')
 elif not fs.is_dir(girs_dir)
     message('Code generation disabled, gstreamer-sharp must be a GStreamer subproject.')
 else
@@ -207,4 +207,4 @@ if codegen_enabled
     run_target('update-all', command: [find_program('update_sources.py'), 'bindinate'])
 endif
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())

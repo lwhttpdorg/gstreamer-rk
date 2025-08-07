@@ -36,9 +36,9 @@
  * processing on sink and source pad.
  *
  * You can query how many buffers are queued by reading the
- * #GstQueue:current-level-buffers property. You can track changes
- * by connecting to the notify::current-level-buffers signal (which
- * like all signals will be emitted from the streaming thread). The same
+ * #GstQueue:current-level-buffers property. If you set #queue:notify-levels to TRUE,
+ * you can track changes by connecting to the notify::current-level-buffers signal
+ * (which like all signals will be emitted from the streaming thread). The same
  * applies to the #GstQueue:current-level-time and
  * #GstQueue:current-level-bytes properties.
  *
@@ -122,8 +122,12 @@ enum
   PROP_MIN_THRESHOLD_TIME,
   PROP_LEAKY,
   PROP_SILENT,
-  PROP_FLUSH_ON_EOS
+  PROP_FLUSH_ON_EOS,
+  PROP_NOTIFY_LEVELS,
+  PROP_LAST
 };
+
+GParamSpec *properties[PROP_LAST];
 
 /* default property values */
 #define DEFAULT_MAX_SIZE_BUFFERS  200   /* 200 buffers */
@@ -142,6 +146,12 @@ enum
 
 #define GST_QUEUE_MUTEX_UNLOCK(q) G_STMT_START {                        \
   g_mutex_unlock (&q->qlock);                                            \
+} G_STMT_END
+
+#define GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS(q, prev_level) G_STMT_START { \
+    GstQueueSize new_level = queue->cur_level;                             \
+    g_mutex_unlock (&q->qlock);                                            \
+    gst_queue_notify_levels (queue, &prev_level, &new_level);              \
 } G_STMT_END
 
 #define GST_QUEUE_WAIT_DEL_CHECK(q, label) G_STMT_START {               \
@@ -314,63 +324,62 @@ gst_queue_class_init (GstQueueClass * klass)
       NULL, G_TYPE_NONE, 0);
 
   /* properties */
-  g_object_class_install_property (gobject_class, PROP_CUR_LEVEL_BYTES,
+  properties[PROP_CUR_LEVEL_BYTES] =
       g_param_spec_uint ("current-level-bytes", "Current level (kB)",
-          "Current amount of data in the queue (bytes)",
-          0, G_MAXUINT, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_CUR_LEVEL_BUFFERS,
+      "Current amount of data in the queue (bytes)",
+      0, G_MAXUINT, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_CUR_LEVEL_BUFFERS] =
       g_param_spec_uint ("current-level-buffers", "Current level (buffers)",
-          "Current number of buffers in the queue",
-          0, G_MAXUINT, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_CUR_LEVEL_TIME,
+      "Current number of buffers in the queue",
+      0, G_MAXUINT, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_CUR_LEVEL_TIME] =
       g_param_spec_uint64 ("current-level-time", "Current level (ns)",
-          "Current amount of data in the queue (in ns)",
-          0, G_MAXUINT64, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+      "Current amount of data in the queue (in ns)",
+      0, G_MAXUINT64, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
-  g_object_class_install_property (gobject_class, PROP_MAX_SIZE_BYTES,
+  properties[PROP_MAX_SIZE_BYTES] =
       g_param_spec_uint ("max-size-bytes", "Max. size (kB)",
-          "Max. amount of data in the queue (bytes, 0=disable)",
-          0, G_MAXUINT, DEFAULT_MAX_SIZE_BYTES,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_MAX_SIZE_BUFFERS,
+      "Max. amount of data in the queue (bytes, 0=disable)",
+      0, G_MAXUINT, DEFAULT_MAX_SIZE_BYTES,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_MAX_SIZE_BUFFERS] =
       g_param_spec_uint ("max-size-buffers", "Max. size (buffers)",
-          "Max. number of buffers in the queue (0=disable)", 0, G_MAXUINT,
-          DEFAULT_MAX_SIZE_BUFFERS,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_MAX_SIZE_TIME,
+      "Max. number of buffers in the queue (0=disable)", 0, G_MAXUINT,
+      DEFAULT_MAX_SIZE_BUFFERS,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_MAX_SIZE_TIME] =
       g_param_spec_uint64 ("max-size-time", "Max. size (ns)",
-          "Max. amount of data in the queue (in ns, 0=disable)", 0, G_MAXUINT64,
-          DEFAULT_MAX_SIZE_TIME,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
+      "Max. amount of data in the queue (in ns, 0=disable)", 0, G_MAXUINT64,
+      DEFAULT_MAX_SIZE_TIME,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
 
-  g_object_class_install_property (gobject_class, PROP_MIN_THRESHOLD_BYTES,
+  properties[PROP_MIN_THRESHOLD_BYTES] =
       g_param_spec_uint ("min-threshold-bytes", "Min. threshold (kB)",
-          "Min. amount of data in the queue to allow reading (bytes, 0=disable)",
-          0, G_MAXUINT, 0,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_MIN_THRESHOLD_BUFFERS,
-      g_param_spec_uint ("min-threshold-buffers", "Min. threshold (buffers)",
-          "Min. number of buffers in the queue to allow reading (0=disable)", 0,
-          G_MAXUINT, 0,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_MIN_THRESHOLD_TIME,
-      g_param_spec_uint64 ("min-threshold-time", "Min. threshold (ns)",
-          "Min. amount of data in the queue to allow reading (in ns, 0=disable)",
-          0, G_MAXUINT64, 0,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
+      "Min. amount of data in the queue to allow reading (bytes, 0=disable)",
+      0, G_MAXUINT, 0,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
 
-  g_object_class_install_property (gobject_class, PROP_LEAKY,
+  properties[PROP_MIN_THRESHOLD_BUFFERS] =
+      g_param_spec_uint ("min-threshold-buffers", "Min. threshold (buffers)",
+      "Min. number of buffers in the queue to allow reading (0=disable)", 0,
+      G_MAXUINT, 0,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_MIN_THRESHOLD_TIME] =
+      g_param_spec_uint64 ("min-threshold-time", "Min. threshold (ns)",
+      "Min. amount of data in the queue to allow reading (in ns, 0=disable)",
+      0, G_MAXUINT64, 0,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  properties[PROP_LEAKY] =
       g_param_spec_enum ("leaky", "Leaky",
-          "Where the queue leaks, if at all",
-          GST_TYPE_QUEUE_LEAKY, GST_QUEUE_NO_LEAK,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
+      "Where the queue leaks, if at all",
+      GST_TYPE_QUEUE_LEAKY, GST_QUEUE_NO_LEAK,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstQueue:silent
@@ -378,11 +387,10 @@ gst_queue_class_init (GstQueueClass * klass)
    * Don't emit queue signals. Makes queues more lightweight if no signals are
    * needed.
    */
-  g_object_class_install_property (gobject_class, PROP_SILENT,
+  properties[PROP_SILENT] =
       g_param_spec_boolean ("silent", "Silent",
-          "Don't emit queue signals", FALSE,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
+      "Don't emit queue signals", FALSE,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
 
   /**
    * queue:flush-on-eos:
@@ -399,12 +407,26 @@ gst_queue_class_init (GstQueueClass * klass)
    *
    * Since: 1.2
    */
-  g_object_class_install_property (gobject_class, PROP_FLUSH_ON_EOS,
+  properties[PROP_FLUSH_ON_EOS] =
       g_param_spec_boolean ("flush-on-eos", "Flush on EOS",
-          "Discard all data in the queue when an EOS event is received", FALSE,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
-          G_PARAM_STATIC_STRINGS));
+      "Discard all data in the queue when an EOS event is received", FALSE,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
 
+  /**
+   * GstQueue:notify-levels
+   *
+   * Whether to emit `notify:property-name` signals on levels changes or not
+   *
+   * Default: %FALSE
+   *
+   * Since: 1.26
+   */
+  properties[PROP_NOTIFY_LEVELS] =
+      g_param_spec_boolean ("notify-levels", "Notify-Levels",
+      "Whether to emit `notify` signals on levels changes or not", FALSE,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, PROP_LAST, properties);
   gobject_class->finalize = gst_queue_finalize;
 
   gst_element_class_set_static_metadata (gstelement_class,
@@ -608,27 +630,27 @@ apply_gap (GstQueue * queue, GstEvent * event,
 
   gst_event_parse_gap (event, &timestamp, &duration);
 
-  if (GST_CLOCK_TIME_IS_VALID (timestamp)) {
-    if (is_sink && !GST_CLOCK_STIME_IS_VALID (queue->sink_start_time)) {
-      queue->sink_start_time = my_segment_to_running_time (segment, timestamp);
-      GST_DEBUG_OBJECT (queue, "Start time updated to %" GST_STIME_FORMAT,
-          GST_STIME_ARGS (queue->sink_start_time));
-    }
+  g_return_if_fail (GST_CLOCK_TIME_IS_VALID (timestamp));
 
-    if (GST_CLOCK_TIME_IS_VALID (duration)) {
-      timestamp += duration;
-    }
-
-    segment->position = timestamp;
-
-    if (is_sink)
-      queue->sink_tainted = TRUE;
-    else
-      queue->src_tainted = TRUE;
-
-    /* calc diff with other end */
-    update_time_level (queue);
+  if (is_sink && !GST_CLOCK_STIME_IS_VALID (queue->sink_start_time)) {
+    queue->sink_start_time = my_segment_to_running_time (segment, timestamp);
+    GST_DEBUG_OBJECT (queue, "Start time updated to %" GST_STIME_FORMAT,
+        GST_STIME_ARGS (queue->sink_start_time));
   }
+
+  if (GST_CLOCK_TIME_IS_VALID (duration)) {
+    timestamp += duration;
+  }
+
+  segment->position = timestamp;
+
+  if (is_sink)
+    queue->sink_tainted = TRUE;
+  else
+    queue->src_tainted = TRUE;
+
+  /* calc diff with other end */
+  update_time_level (queue);
 }
 
 
@@ -642,10 +664,10 @@ apply_buffer (GstQueue * queue, GstBuffer * buffer, GstSegment * segment,
   timestamp = GST_BUFFER_DTS_OR_PTS (buffer);
   duration = GST_BUFFER_DURATION (buffer);
 
-  /* if no timestamp is set, assume it's continuous with the previous
-   * time */
+  /* if no timestamp is set, assume it didn't change compared to the previous
+   * buffer and simply return here */
   if (timestamp == GST_CLOCK_TIME_NONE)
-    timestamp = segment->position;
+    return;
 
   if (is_sink && !GST_CLOCK_STIME_IS_VALID (queue->sink_start_time) &&
       GST_CLOCK_TIME_IS_VALID (timestamp)) {
@@ -696,7 +718,8 @@ buffer_list_apply_time (GstBuffer ** buf, guint idx, gpointer user_data)
     data->timestamp = btime;
   }
 
-  if (GST_BUFFER_DURATION_IS_VALID (*buf))
+  if (GST_BUFFER_DURATION_IS_VALID (*buf)
+      && GST_CLOCK_TIME_IS_VALID (data->timestamp))
     data->timestamp += GST_BUFFER_DURATION (*buf);
 
   GST_TRACE ("ts now %" GST_TIME_FORMAT, GST_TIME_ARGS (data->timestamp));
@@ -713,10 +736,14 @@ apply_buffer_list (GstQueue * queue, GstBufferList * buffer_list,
 
   data.first_timestamp = GST_CLOCK_TIME_NONE;
 
-  /* if no timestamp is set, assume it's continuous with the previous time */
-  data.timestamp = segment->position;
+  /* if no timestamp is set, assume it didn't change compared to the previous
+   * buffer and simply return here without updating */
+  data.timestamp = GST_CLOCK_TIME_NONE;
 
   gst_buffer_list_foreach (buffer_list, buffer_list_apply_time, &data);
+
+  if (!GST_CLOCK_TIME_IS_VALID (data.timestamp))
+    return;
 
   if (is_sink && !GST_CLOCK_STIME_IS_VALID (queue->sink_start_time) &&
       GST_CLOCK_TIME_IS_VALID (data.first_timestamp)) {
@@ -738,6 +765,24 @@ apply_buffer_list (GstQueue * queue, GstBufferList * buffer_list,
 
   /* calc diff with other end */
   update_time_level (queue);
+}
+
+static void
+gst_queue_notify_levels (GstQueue * queue, GstQueueSize * prev_level,
+    GstQueueSize * new_level)
+{
+  if (!queue->notify_levels) {
+    return;
+  }
+  if (new_level->buffers != prev_level->buffers)
+    g_object_notify_by_pspec ((GObject *) queue,
+        properties[PROP_CUR_LEVEL_BUFFERS]);
+  if (new_level->bytes != prev_level->bytes)
+    g_object_notify_by_pspec ((GObject *) queue,
+        properties[PROP_CUR_LEVEL_BYTES]);
+  if (new_level->time != prev_level->time)
+    g_object_notify_by_pspec ((GObject *) queue,
+        properties[PROP_CUR_LEVEL_TIME]);
 }
 
 static void
@@ -1011,6 +1056,7 @@ gst_queue_handle_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       if (GST_EVENT_IS_SERIALIZED (event)) {
         /* serialized events go in the queue */
         GST_QUEUE_MUTEX_LOCK (queue);
+        GstQueueSize prev_level = queue->cur_level;
 
         /* STREAM_START and SEGMENT reset the EOS status of a
          * pad. Change the cached sinkpad flow result accordingly */
@@ -1064,7 +1110,7 @@ gst_queue_handle_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
         }
 
         gst_queue_locked_enqueue_event (queue, event);
-        GST_QUEUE_MUTEX_UNLOCK (queue);
+        GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS (queue, prev_level);
       } else {
         /* non-serialized events are forwarded downstream immediately */
         ret = gst_pad_push_event (queue->srcpad, event);
@@ -1231,6 +1277,7 @@ gst_queue_chain_buffer_or_list (GstPad * pad, GstObject * parent,
 
   /* we have to lock the queue since we span threads */
   GST_QUEUE_MUTEX_LOCK_CHECK (queue, out_flushing);
+  GstQueueSize prev_level = queue->cur_level;
   /* when we received EOS, we refuse any more data */
   if (queue->eos)
     goto out_eos;
@@ -1278,8 +1325,15 @@ gst_queue_chain_buffer_or_list (GstPad * pad, GstObject * parent,
         /* now we can clean up and exit right away */
         goto out_unref;
       case GST_QUEUE_LEAK_DOWNSTREAM:
+      {
         gst_queue_leak_downstream (queue);
+
+        if (!queue->silent) {
+          GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS (queue, prev_level);
+          GST_QUEUE_MUTEX_LOCK_CHECK (queue, out_flushing);
+        }
         break;
+      }
       default:
         g_warning ("Unknown leaky type, using default");
         /* fall-through */
@@ -1334,14 +1388,14 @@ gst_queue_chain_buffer_or_list (GstPad * pad, GstObject * parent,
     gst_queue_locked_enqueue_buffer_list (queue, obj);
   else
     gst_queue_locked_enqueue_buffer (queue, obj);
-  GST_QUEUE_MUTEX_UNLOCK (queue);
+  GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS (queue, prev_level);
 
   return GST_FLOW_OK;
 
   /* special conditions */
 out_unref:
   {
-    GST_QUEUE_MUTEX_UNLOCK (queue);
+    GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS (queue, prev_level);
 
     gst_mini_object_unref (obj);
 
@@ -1581,12 +1635,14 @@ gst_queue_loop (GstPad * pad)
     }
   }
 
+  GstQueueSize prev_level = queue->cur_level;
+
   ret = gst_queue_push_one (queue);
   queue->srcresult = ret;
   if (ret != GST_FLOW_OK)
     goto out_flushing;
 
-  GST_QUEUE_MUTEX_UNLOCK (queue);
+  GST_QUEUE_MUTEX_UNLOCK_NOTIFY_LEVELS (queue, prev_level);
 
   return;
 
@@ -1611,6 +1667,7 @@ out_flushing:
       g_cond_signal (&queue->query_handled);
     }
     GST_QUEUE_MUTEX_UNLOCK (queue);
+
     /* let app know about us giving up if upstream is not expected to do so */
     /* EOS is already taken care of elsewhere */
     if (eos && (ret == GST_FLOW_NOT_LINKED || ret < GST_FLOW_EOS)) {
@@ -1891,6 +1948,9 @@ gst_queue_set_property (GObject * object,
     case PROP_FLUSH_ON_EOS:
       queue->flush_on_eos = g_value_get_boolean (value);
       break;
+    case PROP_NOTIFY_LEVELS:
+      queue->notify_levels = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1943,6 +2003,9 @@ gst_queue_get_property (GObject * object,
       break;
     case PROP_FLUSH_ON_EOS:
       g_value_set_boolean (value, queue->flush_on_eos);
+      break;
+    case PROP_NOTIFY_LEVELS:
+      g_value_set_boolean (value, queue->notify_levels);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

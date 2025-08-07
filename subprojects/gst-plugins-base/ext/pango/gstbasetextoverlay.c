@@ -423,7 +423,8 @@ gst_base_text_overlay_class_init (GstBaseTextOverlayClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_TEXT_X,
       g_param_spec_int ("text-x", "horizontal position.",
           "Resulting X position of font rendering.", -G_MAXINT,
-          G_MAXINT, DEFAULT_PROP_TEXT_X, G_PARAM_READABLE));
+          G_MAXINT, DEFAULT_PROP_TEXT_X,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstBaseTextOverlay:text-y:
@@ -433,7 +434,8 @@ gst_base_text_overlay_class_init (GstBaseTextOverlayClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_TEXT_Y,
       g_param_spec_int ("text-y", "vertical position",
           "Resulting Y position of font rendering.", -G_MAXINT,
-          G_MAXINT, DEFAULT_PROP_TEXT_Y, G_PARAM_READABLE));
+          G_MAXINT, DEFAULT_PROP_TEXT_Y,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstBaseTextOverlay:text-width:
@@ -443,7 +445,8 @@ gst_base_text_overlay_class_init (GstBaseTextOverlayClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_TEXT_WIDTH,
       g_param_spec_uint ("text-width", "width",
           "Resulting width of font rendering",
-          0, G_MAXINT, DEFAULT_PROP_TEXT_WIDTH, G_PARAM_READABLE));
+          0, G_MAXINT, DEFAULT_PROP_TEXT_WIDTH,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstBaseTextOverlay:text-height:
@@ -453,7 +456,8 @@ gst_base_text_overlay_class_init (GstBaseTextOverlayClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_TEXT_HEIGHT,
       g_param_spec_uint ("text-height", "height",
           "Resulting height of font rendering", 0,
-          G_MAXINT, DEFAULT_PROP_TEXT_HEIGHT, G_PARAM_READABLE));
+          G_MAXINT, DEFAULT_PROP_TEXT_HEIGHT,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstBaseTextOverlay:xpos:
@@ -2159,14 +2163,16 @@ gst_base_text_overlay_shade_xRGB (GstBaseTextOverlay * overlay,
 {
   gint i, j;
   guint8 *dest_ptr;
+  guint stride;
 
-  dest_ptr = dest->data[0];
+  dest_ptr = GST_VIDEO_FRAME_PLANE_DATA (dest, 0);
+  stride = GST_VIDEO_FRAME_PLANE_STRIDE (dest, 0);
 
   for (i = y0; i < y1; i++) {
     for (j = x0; j < x1; j++) {
       gint y, y_pos, k;
 
-      y_pos = (i * 4 * overlay->width) + j * 4;
+      y_pos = (i * stride) + j * 4;
       for (k = 0; k < 4; k++) {
         y = dest_ptr[y_pos + k] - overlay->shading_value;
         dest_ptr[y_pos + k] = CLAMP (y, 0, 255);
@@ -2236,13 +2242,15 @@ gint x0, gint x1, gint y0, gint y1) \
 { \
   gint i, j;\
   guint8 *dest_ptr;\
+  guint stride;\
   \
-  dest_ptr = dest->data[0];\
+  dest_ptr = GST_VIDEO_FRAME_PLANE_DATA (dest, 0);\
+  stride = GST_VIDEO_FRAME_PLANE_STRIDE (dest, 0);\
   \
   for (i = y0; i < y1; i++) {\
     for (j = x0; j < x1; j++) {\
       gint y, y_pos, k;\
-      y_pos = (i * 4 * overlay->width) + j * 4;\
+      y_pos = (i * stride) + j * 4;\
       for (k = OFFSET; k < 3+OFFSET; k++) {\
         y = dest_ptr[y_pos + k] - overlay->shading_value;\
         dest_ptr[y_pos + k] = CLAMP (y, 0, 255);\

@@ -90,6 +90,15 @@ gl_headers = gir_gl_headers + files([
   'gstglfuncs.h',
 ])
 
+doc_sources = []
+foreach s: gl_sources + gl_headers
+  doc_sources += s.full_path()
+endforeach
+
+libs_sources += {
+  'gl': pathsep.join(doc_sources)
+}
+
 gl_prototype_headers = files([
   'glprototypes/all_functions.h',
   'glprototypes/base.h',
@@ -103,6 +112,7 @@ gl_prototype_headers = files([
   'glprototypes/gles.h',
   'glprototypes/gstgl_compat.h',
   'glprototypes/gstgl_gles2compat.h',
+  'glprototypes/invalidate_subdata.h',
   'glprototypes/opengl.h',
   'glprototypes/query.h',
   'glprototypes/shaders.h',
@@ -550,6 +560,7 @@ if need_platform_egl != 'no'
     gl_egl_sources += files([
       'egl/gstegl.c',
       'egl/gsteglimage.c',
+      'egl/gsteglimagecache.c',
       'egl/gstglcontext_egl.c',
       'egl/gstgldisplay_egl.c',
       'egl/gstglmemoryegl.c',
@@ -563,10 +574,20 @@ if need_platform_egl != 'no'
       'egl/gstglmemoryegl.h',
       'egl/gstgldisplay_egl_device.h',
     ])
+
+    doc_sources = []
+    foreach s: gl_egl_sources + gl_egl_headers
+      doc_sources += s.full_path()
+    endforeach
+
+    libs_sources += {
+      'gl-egl': pathsep.join(doc_sources)
+    }
+
     gl_platform_deps += egl_dep
     glconf.set('GST_GL_HAVE_PLATFORM_EGL', 1)
 
-    if cc.has_header('drm_fourcc.h', dependencies: libdrm_dep)
+    if libdrm_dep.type_name() == 'internal' or cc.has_header('drm_fourcc.h', dependencies: libdrm_dep)
       gl_misc_deps += [allocators_dep, libdrm_dep]
       glconf.set('GST_GL_HAVE_DMABUF', 1)
     endif
@@ -666,6 +687,7 @@ if need_win_wayland != 'no'
         'wayland/wayland.h',
         'wayland/gstgldisplay_wayland.h'
       ])
+
       glconf.set('GST_GL_HAVE_WINDOW_WAYLAND', 1)
       gl_winsys_deps += [wayland_client_dep, wayland_cursor_dep, wayland_egl_dep]
       enabled_gl_winsys += 'wayland'
@@ -705,6 +727,7 @@ if need_win_x11 != 'no'
       'x11/x11.h',
       'x11/gstgldisplay_x11.h',
     ])
+
     glconf.set('GST_GL_HAVE_WINDOW_X11', 1)
     gl_winsys_deps += [x11_dep, xcb_dep]
     enabled_gl_winsys += 'x11'
@@ -1152,10 +1175,10 @@ if build_gstgl
         'dependencies' : [video_dep, gst_dep, gst_base_dep],
     }
     library_def += {'gir': [gir]}
+    gl_gir = ['GstGL-1.0']
     if not static_build
       gl_gir = gnome.generate_gir(gstgl, kwargs: gir)
-      library_def += {'gir_targets':  library_def.get('gir_targets', []) + [gl_gir]}
-      library_def += {'gir': [gir]}
+      library_def += {'gir_targets': [gl_gir]}
       gen_sources += [gl_gir]
     endif
   endif
@@ -1174,6 +1197,7 @@ if build_gstgl
 
   if gl_x11_headers.length() > 0
     install_headers(gl_x11_headers, subdir : 'gstreamer-1.0/gst/gl/x11')
+    library_def = {'lib': gstgl}
     pkg_name = 'gstreamer-gl-x11-1.0'
     pkgconfig.generate(
       libraries : [gstgl],
@@ -1184,6 +1208,16 @@ if build_gstgl
     )
     gl_x11_gir = []
     if build_gir
+
+      doc_sources = []
+      foreach s: gl_x11_sources + gl_x11_headers
+        doc_sources += s.full_path()
+      endforeach
+
+      libs_sources += {
+        'gl-x11': pathsep.join(doc_sources)
+      }
+
       gir = {
         'sources' : gl_x11_sources + gl_x11_headers,
         'namespace' : 'GstGLX11',
@@ -1191,19 +1225,18 @@ if build_gstgl
         'identifier_prefix' : 'Gst',
         'symbol_prefix' : 'gst',
         'export_packages' : 'gstreamer-gl-x11-1.0',
-        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0'],
+        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0', gl_gir[0]],
         'install' : true,
         'extra_args' : gir_init_section + ['--c-include=gst/gl/x11/x11.h'],
         'dependencies' : [video_dep, gst_dep, gst_base_dep]
       }
-      gir_dict = gir + {'includes': gir['includes'] + ['GstGL-1.0']}
-      gst_libraries += [[pkg_name, {'gir': gir_dict}]]
+      library_def += {'gir': [gir]}
       if not static_build
-        gir += {'includes': gir['includes'] + [gl_gir[0]]}
         gl_x11_gir = gnome.generate_gir(gstgl, kwargs: gir)
-        library_def += {'gir_targets':  library_def.get('gir_targets', []) + [gl_x11_gir]}
+        library_def += {'gir_targets':  [gl_x11_gir]}
       endif
     endif
+    gst_libraries += [[pkg_name, library_def]]
     gstglx11_dep = declare_dependency(dependencies : [gstgl_dep, x11_dep, xcb_dep],
       sources : gl_x11_gir)
     meson.override_dependency('gstreamer-gl-x11-1.0', gstglx11_dep)
@@ -1211,6 +1244,7 @@ if build_gstgl
 
   if gl_wayland_headers.length() > 0
     install_headers(gl_wayland_headers, subdir : 'gstreamer-1.0/gst/gl/wayland')
+    library_def = {'lib': gstgl}
     pkg_name = 'gstreamer-gl-wayland-1.0'
     pkgconfig.generate(
       libraries : [gstgl],
@@ -1221,6 +1255,15 @@ if build_gstgl
     )
     gl_wayland_gir = []
     if build_gir
+      doc_sources = []
+      foreach s: gl_wayland_sources + gl_wayland_headers
+        doc_sources += s.full_path()
+      endforeach
+
+      libs_sources += {
+        'gl-wayland': pathsep.join(doc_sources)
+      }
+
       gir = {
         'sources' : gl_wayland_sources + gl_wayland_headers,
         'namespace' : 'GstGLWayland',
@@ -1228,20 +1271,18 @@ if build_gstgl
         'identifier_prefix' : 'Gst',
         'symbol_prefix' : 'gst',
         'export_packages' : 'gstreamer-gl-wayland-1.0',
-        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0'],
+        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0', gl_gir[0]],
         'install' : true,
         'extra_args' : gir_init_section + ['--c-include=gst/gl/wayland/wayland.h'],
         'dependencies' : [video_dep, gst_dep, gst_base_dep]
       }
-
-      gir_dict = gir + {'includes': gir['includes'] + ['GstGL-1.0']}
-      gst_libraries += [[pkg_name, {'gir': gir_dict}]]
+      library_def += {'gir': [gir]}
       if not static_build
-        gir += {'includes': gir['includes'] + [gl_gir[0]]}
         gl_wayland_gir = gnome.generate_gir(gstgl, kwargs: gir)
-        library_def += {'gir_targets':  library_def.get('gir_targets', []) + [gl_wayland_gir]}
+        library_def += {'gir_targets':  [gl_wayland_gir]}
       endif
     endif
+    gst_libraries += [[pkg_name, library_def]]
     gstglwayland_dep = declare_dependency(dependencies : [gstgl_dep],
       sources : gl_wayland_gir)
     meson.override_dependency(pkg_name, gstglwayland_dep)
@@ -1249,6 +1290,7 @@ if build_gstgl
 
   if gl_egl_headers.length() > 0
     install_headers(gl_egl_headers, subdir : 'gstreamer-1.0/gst/gl/egl')
+    library_def = {'lib': gstgl}
     pkg_name = 'gstreamer-gl-egl-1.0'
     pkgconfig.generate(
       libraries : [gstgl, egl_dep],
@@ -1265,19 +1307,18 @@ if build_gstgl
         'identifier_prefix' : 'Gst',
         'symbol_prefix' : 'gst',
         'export_packages' : pkg_name,
-        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0'],
+        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0', gl_gir[0]],
         'install' : true,
         'extra_args' : gir_init_section + ['--c-include=gst/gl/egl/egl.h'],
         'dependencies' : [video_dep, gst_dep, gst_base_dep]
       }
-      gir_dict = gir + {'includes': gir['includes'] + ['GstGL-1.0']}
-      gst_libraries += [[pkg_name, {'gir': gir_dict}]]
+      library_def += {'gir': [gir]}
       if not static_build
-        gir += {'includes': gir['includes'] + [gl_gir[0]]}
         gl_egl_gir = gnome.generate_gir(gstgl, kwargs: gir)
-        library_def += {'gir_targets':  library_def.get('gir_targets', []) + [gl_egl_gir]}
+        library_def += {'gir_targets':  [gl_egl_gir]}
       endif
     endif
+    gst_libraries += [[pkg_name, library_def]]
     gstglegl_dep = declare_dependency(dependencies : [gstgl_dep],
       sources : gl_egl_gir)
     meson.override_dependency(pkg_name, gstglegl_dep)
@@ -1285,6 +1326,7 @@ if build_gstgl
 
   if gl_viv_fb_headers.length() > 0
     install_headers(gl_viv_fb_headers, subdir : 'gstreamer-1.0/gst/gl/viv-fb')
+    library_def = {'lib': gstgl}
     pkg_name = 'gstreamer-gl-viv-fb-1.0'
     pkgconfig.generate(
       libraries : [gstgl],
@@ -1301,19 +1343,18 @@ if build_gstgl
         'identifier_prefix' : 'Gst',
         'symbol_prefix' : 'gst',
         'export_packages' : pkg_name,
-        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0'],
+        'includes' : ['Gst-1.0', 'GstBase-1.0', 'GstVideo-1.0', gl_gir[0]],
         'install' : true,
         'extra_args' : gir_init_section + ['--c-include=gst/gl/viv-fb/gstglviv-fb.h'],
         'dependencies' : [video_dep, gst_dep, gst_base_dep]
       }
-      gir_dict = gir + {'includes': gir['includes'] + ['GstGL-1.0']}
-      gst_libraries += [[pkg_name, {'gir': gir_dict}]]
+      library_def += {'gir': [gir]}
       if not static_build
-        gir += {'includes': gir['includes'] + [gl_gir[0]]}
         gl_viv_fb_gir = gnome.generate_gir(gstgl, kwargs: gir)
-        library_def += {'gir_targets':  library_def.get('gir_targets', []) + [gl_viv_fb_gir]}
+        library_def += {'gir_targets':  [gl_viv_fb_gir]}
       endif
     endif
+    gst_libraries += [[pkg_name, library_def]]
     gstglviv_fb_dep = declare_dependency(dependencies : [gstgl_dep],
       sources : gl_viv_fb_gir)
     meson.override_dependency(pkg_name, gstglviv_fb_dep)

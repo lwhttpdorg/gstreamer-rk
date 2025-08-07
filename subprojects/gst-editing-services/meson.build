@@ -1,6 +1,6 @@
 project('gst-editing-services', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -19,7 +19,7 @@ endif
 gst_version_is_stable = gst_version_minor.is_even()
 gst_version_is_dev = gst_version_minor.is_odd() and gst_version_micro < 90
 
-apiversion = '1.0'
+api_version = '1.0'
 soversion = 0
 # maintaining compatibility with the previous libtool versioning
 # current = minor * 100 + micro
@@ -92,13 +92,13 @@ cdata.set_quoted('GST_PACKAGE_ORIGIN', 'Unknown package origin')
 cdata.set_quoted('GST_LICENSE', 'LGPL')
 
 # Mandatory GST deps
-gst_dep = dependency('gstreamer-' + apiversion, version : gst_req,
+gst_dep = dependency('gstreamer-' + api_version, version : gst_req,
     fallback : ['gstreamer', 'gst_dep'])
-gstpbutils_dep = dependency('gstreamer-pbutils-' + apiversion, version : gst_req,
+gstpbutils_dep = dependency('gstreamer-pbutils-' + api_version, version : gst_req,
     fallback : ['gst-plugins-base', 'pbutils_dep'])
-gstvideo_dep = dependency('gstreamer-video-' + apiversion, version : gst_req,
+gstvideo_dep = dependency('gstreamer-video-' + api_version, version : gst_req,
     fallback : ['gst-plugins-base', 'video_dep'])
-gstaudio_dep = dependency('gstreamer-audio-' + apiversion, version : gst_req,
+gstaudio_dep = dependency('gstreamer-audio-' + api_version, version : gst_req,
     fallback : ['gst-plugins-base', 'audio_dep'])
 gstbase_dep = dependency('gstreamer-base-1.0', version : gst_req,
     fallback : ['gstreamer', 'gst_base_dep'])
@@ -115,7 +115,7 @@ gstvalidate_dep = dependency('gstreamer-validate-1.0', version : gst_req, requir
 gio_dep = dependency('gio-2.0', version: glib_req)
 gmodule_dep = dependency('gmodule-no-export-2.0')
 libdl = cc.find_library('dl', required: false)
-libxml_dep = dependency('libxml-2.0', required: get_option('xptv'))
+libxml_dep = dependency('libxml-2.0', required: get_option('xptv'), default_options: {'python': false})
 cdata.set('DISABLE_XPTV', not libxml_dep.found())
 
 # TODO Properly port to Gtk 3
@@ -141,12 +141,13 @@ gir_init_section = [ '--add-init-section=' + \
     'g_setenv("GST_PLUGIN_PATH_1_0", "", TRUE);' + \
     'g_setenv("GST_PLUGIN_SYSTEM_PATH_1_0", "", TRUE);' + \
     'g_setenv("GST_DEBUG", "0", TRUE);' + \
+    'g_setenv("GST_TRACERS", "", TRUE);' + \
     'gst_init(NULL,NULL);' + \
     'ges_init();', '--quiet']
 
 pymod = import('python')
 python_opt = get_option('python')
-python = pymod.find_installation(required: python_opt)
+python = pymod.find_installation(get_option('python-exe'), required: python_opt)
 has_python = false
 static_build = get_option('default_library') == 'static'
 if static_build
@@ -175,34 +176,52 @@ elif build_gir and python.found()
     fsmod = import('fs')
     pylib_prefix = 'lib'
     pylib_suffix = 'so'
+    pylib_ver = python_dep.version()
+    pylib_locs = []
     if host_system == 'windows'
       if cc.get_argument_syntax() == 'msvc'
         pylib_prefix = ''
       endif
       pylib_suffix = 'dll'
+      pylib_ver = pylib_ver.replace('.', '')
     elif host_system == 'darwin'
       pylib_suffix = 'dylib'
     endif
     pylib_fnames = []
-    # Library name with soversion, non-devel package
-    pylib_fnames += python.get_variable('INSTSONAME', [])
-    # Library name without soversion, devel package, framework, etc.
-    pylib_fnames += python.get_variable('LDLIBRARY', [])
+    if host_system != 'darwin' # Ignore system Python (INSTSONAME points to the Python3 executable and not libpython3.9.dylib)
+      # Library name with soversion, non-devel package
+      if python.has_variable('INSTSONAME')
+        pylib_fnames += python.get_variable('INSTSONAME')
+      endif
+      # Library name without soversion, devel package, framework, etc.
+      if python.has_variable('LDLIBRARY')
+        pylib_fnames += python.get_variable('LDLIBRARY')
+      endif
+    endif
     # Manually construct name as a fallback
     pylib_fnames += [
-      pylib_prefix + 'python' + python_dep.version() + python_abi_flags + '.' + pylib_suffix
+      pylib_prefix + 'python' + pylib_ver + python_abi_flags + '.' + pylib_suffix
     ]
     if pylib_loc != ''
       pylib_locs = [pylib_loc]
     else
-      pylib_locs = [
-        python.get_variable('LIBDIR', ''),
-        python.get_variable('LIBPL', ''),
-      ]
+      if python.has_variable('LIBDIR')
+        pylib_locs += python.get_variable('LIBDIR')
+      endif
+      if python.has_variable('LIBPL')
+        pylib_locs += python.get_variable('LIBPL')
+      endif
+      # On Windows, python312.dll is in the rootdir where Python is installed,
+      # which is configured as the "prefix" in sysconfig.
+      if host_system == 'windows'
+        pylib_locs += python.get_variable('prefix')
+      endif
     endif
     foreach loc: pylib_locs
       foreach fname: pylib_fnames
-        if fsmod.exists(loc / fname)
+        fpath = loc / fname
+        debug(f'Looking for Python library at: @fpath@')
+        if fsmod.exists(fpath)
           libges_deps = libges_deps + [python_dep, gmodule_dep, libdl]
           has_python = true
           cdata.set('HAS_PYTHON', true)
@@ -213,12 +232,7 @@ elif build_gir and python.found()
       endforeach
     endforeach
     if not has_python
-      error_msg = 'Could not find python library to load'
-      if python_opt.enabled()
-        error(error_msg)
-      else
-        message(error_msg)
-      endif
+      message('Could not find python library to load, will try loading at runtime')
     endif
   endif
 endif
@@ -263,20 +277,27 @@ else
   message('GStreamer debug system is enabled')
 endif
 
+# NOTE: Keep entries alphabetically sorted
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wmissing-prototypes',
-  '-Wredundant-decls',
-  '-Wundef',
-  '-Wwrite-strings',
+  '-Waddress',
+  # '-Waggregate-return',
   '-Wformat',
   '-Wformat-security',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
-  '-Waddress',
+  '-Wmissing-parameter-type',
+  '-Wmissing-prototypes',
   '-Wno-multichar',
-  '-Wvla',
+  '-Wold-style-definition',
   '-Wpointer-arith',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wundef',
+  '-Wvla',
+  '-Wwrite-strings',
 ]
 
 foreach extra_arg : warning_flags
@@ -290,6 +311,12 @@ pkgconfig_subdirs = ['gstreamer-1.0']
 
 configinc = include_directories('.')
 gst_libraries = []
+
+if host_system == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
 
 subdir('ges')
 subdir('plugins')
@@ -326,7 +353,7 @@ endif
 
 configure_file(output: 'config.h', configuration: cdata)
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 plugin_names = []
 gst_plugins = []

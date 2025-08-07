@@ -152,19 +152,21 @@ typedef struct
 } MetadataForeachData;
 
 static gboolean
-structure_foreach_wrapper (GQuark field_id, const GValue * value,
+structure_foreach_wrapper (const GstIdStr * fieldname, const GValue * value,
     gpointer user_data)
 {
   MetadataForeachData *data = (MetadataForeachData *) user_data;
 
-  data->func (data->container, g_quark_to_string (field_id), value, data->data);
+  data->func (data->container, gst_id_str_as_str (fieldname), value,
+      data->data);
   return TRUE;
 }
 
 static gboolean
-_append_foreach (GQuark field_id, const GValue * value, GESMetaContainer * self)
+_append_foreach (const GstIdStr * fieldname, const GValue * value,
+    GESMetaContainer * self)
 {
-  ges_meta_container_set_meta (self, g_quark_to_string (field_id), value);
+  ges_meta_container_set_meta (self, gst_id_str_as_str (fieldname), value);
 
   return TRUE;
 }
@@ -172,9 +174,9 @@ _append_foreach (GQuark field_id, const GValue * value, GESMetaContainer * self)
 /**
  * ges_meta_container_foreach:
  * @container: A #GESMetaContainer
- * @func: (scope call): A function to call on each of @container's set
- * metadata fields
- * @user_data: (closure): User data to send to @func
+ * @func: (scope call) (closure user_data): A function to call on each of
+ *    @container's set metadata fields
+* @user_data: User data to send to @func
  *
  * Calls the given function on each of the meta container's set metadata
  * fields.
@@ -195,8 +197,8 @@ ges_meta_container_foreach (GESMetaContainer * container,
   foreach_data.container = container;
   foreach_data.data = user_data;
 
-  gst_structure_foreach (structure,
-      (GstStructureForeachFunc) structure_foreach_wrapper, &foreach_data);
+  gst_structure_foreach_id_str (structure,
+      (GstStructureForeachIdStrFunc) structure_foreach_wrapper, &foreach_data);
 }
 
 static gboolean
@@ -233,11 +235,16 @@ _set_value (GESMetaContainer * container, const gchar * meta_item,
   gchar *val = gst_value_serialize (value);
 
   if (val == NULL) {
-    GST_WARNING_OBJECT (container, "Could not set value on item: %s",
-        meta_item);
+    if (G_VALUE_TYPE (value) == G_TYPE_STRING) {
+      val = g_strdup ("");
+    } else {
+      GST_WARNING_OBJECT (container,
+          "Could not serialize value for: %s of type %s", meta_item,
+          G_VALUE_TYPE_NAME (value));
 
-    g_free (val);
-    return FALSE;
+      g_free (val);
+      return FALSE;
+    }
   }
 
   structure = _meta_container_get_structure (container);
@@ -271,7 +278,8 @@ _can_write_value (GESMetaContainer * container, const gchar * item_name,
     return TRUE;
 
   if ((static_item->flags & GES_META_WRITABLE) == FALSE) {
-    GST_WARNING_OBJECT (container, "Can not write %s", item_name);
+    GST_WARNING_OBJECT (container, "Can not write %s of type %s", item_name,
+        g_type_name (type));
     return FALSE;
   }
 
@@ -563,8 +571,8 @@ ges_meta_container_add_metas_from_string (GESMetaContainer * container,
     return FALSE;
   }
 
-  gst_structure_foreach (n_structure, (GstStructureForeachFunc) _append_foreach,
-      container);
+  gst_structure_foreach_id_str (n_structure,
+      (GstStructureForeachIdStrFunc) _append_foreach, container);
 
   gst_structure_free (n_structure);
   return TRUE;

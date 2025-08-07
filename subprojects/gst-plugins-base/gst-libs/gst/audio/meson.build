@@ -66,6 +66,15 @@ audio_headers = audio_mkenum_headers + files([
 ])
 install_headers(audio_headers, subdir : 'gstreamer-1.0/gst/audio/')
 
+doc_sources = []
+foreach s: audio_src + audio_headers
+  doc_sources += s.full_path()
+endforeach
+
+libs_sources += {
+  'audio': pathsep.join(doc_sources)
+}
+
 audio_enums = gnome.mkenums_simple('audio-enumtypes',
   sources : audio_mkenum_headers,
   body_prefix : '#ifdef HAVE_CONFIG_H\n#include "config.h"\n#endif',
@@ -153,7 +162,7 @@ gstaudio = library('gstaudio-@0@'.format(api_version),
   soversion : soversion,
   darwin_versions : osxversion,
   install : true,
-  dependencies : gstaudio_deps,
+  dependencies : [ gstaudio_deps, base_platform_dep ],
 )
 pkg_name = 'gstreamer-audio-1.0'
 pkgconfig.generate(gstaudio,

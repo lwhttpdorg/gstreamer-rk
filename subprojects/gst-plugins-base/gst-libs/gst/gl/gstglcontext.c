@@ -73,10 +73,10 @@
 #endif
 
 #if GST_GL_HAVE_PLATFORM_GLX
-#include "x11/gstglcontext_glx.h"
+#include "x11/gstglcontext_glx_private.h"
 #endif
 #if GST_GL_HAVE_PLATFORM_EGL
-#include "egl/gstglcontext_egl.h"
+#include "egl/gstglcontext_egl_private.h"
 #endif
 #if GST_GL_HAVE_PLATFORM_CGL
 #include "cocoa/gstglcontext_cocoa.h"
@@ -1643,8 +1643,8 @@ _gst_gl_context_thread_run_generic (RunGenericData * data)
 /**
  * gst_gl_context_thread_add:
  * @context: a #GstGLContext
- * @func: (scope call): a #GstGLContextThreadFunc
- * @data: (closure): user data to call @func with
+ * @func: (scope call) (closure data): a #GstGLContextThreadFunc
+ * @data: user data to call @func with
  *
  * Execute @func in the OpenGL thread of @context with @data
  *
@@ -1675,6 +1675,9 @@ gst_gl_context_thread_add (GstGLContext * context,
   rdata.func = func;
 
   window = gst_gl_context_get_window (context);
+
+  GST_TRACE_OBJECT (context, "schedule function:%p data:%p", rdata.func,
+      rdata.data);
 
   gst_gl_window_send_message (window,
       GST_GL_WINDOW_CB (_gst_gl_context_thread_run_generic), &rdata);

@@ -80,7 +80,6 @@ struct _GstTranscoder
   GMainLoop *loop;
 
   GstElement *transcodebin;
-  GstBus *bus;
   GstState target_state, current_state;
   gboolean is_live, is_eos;
   GSource *tick_source, *ready_timeout_source;
@@ -263,6 +262,7 @@ gst_transcoder_finalize (GObject * object)
   g_free (self->dest_uri);
   g_cond_clear (&self->cond);
   gst_object_unref (self->api_bus);
+  gst_clear_object (&self->profile);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -276,6 +276,7 @@ gst_transcoder_constructed (GObject * object)
 
   self->transcodebin =
       gst_element_factory_make ("uritranscodebin", "uritranscodebin");
+  gst_object_ref_sink (self->transcodebin);
 
   g_object_set (self->transcodebin, "source-uri", self->source_uri,
       "dest-uri", self->dest_uri, "profile", self->profile,
@@ -323,6 +324,7 @@ gst_transcoder_set_property (GObject * object, guint prop_id,
       gst_transcoder_set_position_update_interval_internal (self);
       break;
     case PROP_PROFILE:
+      /* G_PARAM_CONSTRUCT_ONLY */
       GST_OBJECT_LOCK (self);
       self->profile = g_value_dup_object (value);
       GST_OBJECT_UNLOCK (self);
@@ -799,7 +801,7 @@ gst_transcoder_main (gpointer data)
   g_source_attach (source, self->context);
   g_source_unref (source);
 
-  self->bus = bus = gst_element_get_bus (self->transcodebin);
+  bus = gst_element_get_bus (self->transcodebin);
   gst_bus_add_signal_watch (bus);
 
   g_signal_connect (G_OBJECT (bus), "message::error", G_CALLBACK (error_cb),
@@ -841,7 +843,7 @@ gst_transcoder_main (gpointer data)
   self->current_state = GST_STATE_NULL;
   if (self->transcodebin) {
     gst_element_set_state (self->transcodebin, GST_STATE_NULL);
-    g_clear_object (&self->transcodebin);
+    gst_clear_object (&self->transcodebin);
   }
 
   GST_TRACE_OBJECT (self, "Stopped main thread");
@@ -1468,7 +1470,7 @@ gst_transcoder_message_parse_state (GstMessage * msg,
  * Since: 1.20
  */
 void
-gst_transcoder_message_parse_error (GstMessage * msg, GError * error,
+gst_transcoder_message_parse_error (GstMessage * msg, GError ** error,
     GstStructure ** details)
 {
   PARSE_MESSAGE_FIELD (msg, GST_TRANSCODER_MESSAGE_DATA_ERROR, G_TYPE_ERROR,
@@ -1488,7 +1490,7 @@ gst_transcoder_message_parse_error (GstMessage * msg, GError * error,
  * Since: 1.20
  */
 void
-gst_transcoder_message_parse_warning (GstMessage * msg, GError * error,
+gst_transcoder_message_parse_warning (GstMessage * msg, GError ** error,
     GstStructure ** details)
 {
   PARSE_MESSAGE_FIELD (msg, GST_TRANSCODER_MESSAGE_DATA_WARNING, G_TYPE_ERROR,

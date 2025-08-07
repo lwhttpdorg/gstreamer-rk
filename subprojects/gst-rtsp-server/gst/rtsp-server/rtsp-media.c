@@ -422,7 +422,7 @@ gst_rtsp_media_class_init (GstRTSPMediaClass * klass)
   g_object_class_install_property (gobject_class, PROP_ELEMENT,
       g_param_spec_object ("element", "The Element",
           "The GstBin to use for streaming the media", GST_TYPE_ELEMENT,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE));
+          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_TIME_PROVIDER,
       g_param_spec_boolean ("time-provider", "Time Provider",
@@ -1086,6 +1086,7 @@ gst_rtsp_media_take_pipeline (GstRTSPMedia * media, GstPipeline * pipeline)
   g_return_if_fail (GST_IS_PIPELINE (pipeline));
 
   priv = media->priv;
+  GST_DEBUG_OBJECT (media, "Taking pipeline %" GST_PTR_FORMAT, pipeline);
 
   g_mutex_lock (&priv->lock);
   old = priv->pipeline;
@@ -1729,7 +1730,7 @@ gst_rtsp_media_get_dscp_qos (GstRTSPMedia * media)
 
   priv = media->priv;
 
-  g_mutex_unlock (&priv->lock);
+  g_mutex_lock (&priv->lock);
   res = priv->dscp_qos;
   g_mutex_unlock (&priv->lock);
 
@@ -2616,31 +2617,53 @@ gst_rtsp_media_create_stream (GstRTSPMedia * media, GstElement * payloader,
     GstElement *appsink, *appsrc;
     GstPad *sinkpad, *srcpad;
 
-    appsink = gst_element_factory_make ("appsink", NULL);
-    appsrc = gst_element_factory_make ("appsrc", NULL);
+    GST_DEBUG_OBJECT (media,
+        "Using appsrc+appsink to break loops for stream %u", idx);
+
+    gchar *appsink_name = g_strdup_printf ("appsink_stream_%u", idx);
+    appsink = gst_element_factory_make ("appsink", appsink_name);
+    g_free (appsink_name);
+
+    gchar *appsrc_name = g_strdup_printf ("appsrc_stream_%u", idx);
+    appsrc = gst_element_factory_make ("appsrc", appsrc_name);
+    g_free (appsrc_name);
 
     if (GST_PAD_IS_SINK (pad)) {
       srcpad = gst_element_get_static_pad (appsrc, "src");
 
       gst_bin_add (GST_BIN (priv->element), appsrc);
 
-      gst_pad_link (srcpad, pad);
+      GstPadLinkReturn pad_link = gst_pad_link (srcpad, pad);
+      g_assert (pad_link == GST_PAD_LINK_OK);
+
       gst_object_unref (srcpad);
 
       streampad = gst_element_get_static_pad (appsink, "sink");
 
-      priv->pending_pipeline_elements =
-          g_list_prepend (priv->pending_pipeline_elements, appsink);
+      if (priv->pipeline != NULL) {
+        gst_bin_add (GST_BIN_CAST (priv->pipeline), appsink);
+      } else {
+        priv->pending_pipeline_elements =
+            g_list_prepend (priv->pending_pipeline_elements, appsink);
+      }
     } else {
       sinkpad = gst_element_get_static_pad (appsink, "sink");
 
-      gst_pad_link (pad, sinkpad);
+      gst_bin_add (GST_BIN (priv->element), appsink);
+
+      GstPadLinkReturn pad_link = gst_pad_link (pad, sinkpad);
+      g_assert (pad_link == GST_PAD_LINK_OK);
+
       gst_object_unref (sinkpad);
 
       streampad = gst_element_get_static_pad (appsrc, "src");
 
-      priv->pending_pipeline_elements =
-          g_list_prepend (priv->pending_pipeline_elements, appsrc);
+      if (priv->pipeline != NULL) {
+        gst_bin_add (GST_BIN_CAST (priv->pipeline), appsrc);
+      } else {
+        priv->pending_pipeline_elements =
+            g_list_prepend (priv->pending_pipeline_elements, appsrc);
+      }
     }
 
     g_object_set (appsrc, "block", TRUE, "format", GST_FORMAT_TIME, "is-live",
@@ -2720,6 +2743,35 @@ gst_rtsp_media_create_stream (GstRTSPMedia * media, GstElement * payloader,
 
   g_signal_emit (media, gst_rtsp_media_signals[SIGNAL_NEW_STREAM], 0, stream,
       NULL);
+
+  return stream;
+}
+
+GstRTSPStream *
+gst_rtsp_media_create_and_join_stream (GstRTSPMedia * media,
+    GstElement * payloader, GstPad * pad)
+{
+  GstRTSPStream *stream = gst_rtsp_media_create_stream (media, payloader, pad);
+  GstRTSPMediaPrivate *priv = media->priv;
+
+  if (stream == NULL) {
+    return NULL;
+  }
+
+  g_rec_mutex_lock (&priv->state_lock);
+  if (priv->status == GST_RTSP_MEDIA_STATUS_PREPARING) {
+    /* join the element in the PAUSED state because this callback is
+     * called from the streaming thread and it is PAUSED */
+    if (!gst_rtsp_stream_join_bin (stream, GST_BIN (priv->pipeline),
+            priv->rtpbin, GST_STATE_PAUSED)) {
+      GST_WARNING ("failed to join bin element");
+    }
+
+    if (priv->blocked)
+      gst_rtsp_stream_set_blocked (stream, TRUE);
+  }
+
+  g_rec_mutex_unlock (&priv->state_lock);
 
   return stream;
 }
@@ -2979,15 +3031,13 @@ gst_rtsp_media_get_rates (GstRTSPMedia * media, gdouble * rate,
           first_stream = FALSE;
         } else {
           if (save_rate != *rate || save_applied_rate != *applied_rate) {
-            /* diffrent rate or applied_rate, weird */
-            g_assert (FALSE);
+            /* different rate or applied_rate, weird */
             result = FALSE;
             break;
           }
         }
       } else {
-        /* complete stream withot rate and applied_rate, weird */
-        g_assert (FALSE);
+        /* complete stream without rate and applied_rate, weird */
         result = FALSE;
         break;
       }
@@ -3380,7 +3430,9 @@ gst_rtsp_media_seek (GstRTSPMedia * media, GstRTSPTimeRange * range)
 static void
 stream_collect_blocking (GstRTSPStream * stream, gboolean * blocked)
 {
-  *blocked &= gst_rtsp_stream_is_blocking (stream);
+  if (gst_rtsp_stream_is_sender (stream)) {
+    *blocked &= gst_rtsp_stream_is_blocking (stream);
+  }
 }
 
 static gboolean

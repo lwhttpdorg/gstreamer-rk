@@ -70,12 +70,6 @@ static gboolean _do_convert_draw (GstGLContext * context,
 
 /* *INDENT-OFF* */
 
-typedef struct
-{
-  GstGLColorConvert *convert;
-  GstBuffer *outbuf;
-} CopyMetaData;
-
 #define YUV_TO_RGB_COEFFICIENTS \
       "uniform mat4 to_RGB_matrix;\n" \
 
@@ -118,7 +112,13 @@ struct shader_templ
 
 static const char glsl_func_color_matrix[] = \
     "vec4 color_matrix_apply (vec4 texel, mat4 colormatrix) {\n" \
-    "  return colormatrix * texel;\n" \
+    // ignore alpha applying the RGB/YUV color matrix and copy alpha over to
+    // the output
+    "  float a = texel.a;\n" \
+    "  texel.a = 1.0;\n" \
+    "  vec4 ret = colormatrix * texel;\n" \
+    "  ret.a = a;\n" \
+    "  return ret;\n"
     "}\n";
 
 static const char glsl_func_swizzle[] = "vec4 swizzle(vec4 texel, int components[4]) {\n" \
@@ -448,7 +448,6 @@ static const struct shader_templ templ_AV12_to_RGB =
 
 /* TILED semi-planar to RGB conversion */
 static const gchar templ_TILED_SEMI_PLANAR_to_RGB_BODY[] =
-    "  vec4 rgba;\n"
     "  vec4 yuva;\n"
     "  ivec2 texel;\n"
     "\n"
@@ -1674,7 +1673,7 @@ _init_supported_formats (GstGLContext * context, gboolean output,
   if (!context || gst_gl_format_is_supported (context, GST_GL_RGB10_A2)) {
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
     _append_value_string_list (supported_formats, "BGR10A2_LE", "RGB10A2_LE",
-        "Y410", "v210", NULL);
+        "BGR10x2_LE", "RGB10x2_LE", "Y410", "v210", NULL);
 #else
     _append_value_string_list (supported_formats, "Y410", NULL);
 #endif
@@ -1712,11 +1711,13 @@ _init_supported_formats (GstGLContext * context, gboolean output,
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
     _append_value_string_list (supported_formats, "A420_10LE", "A422_10LE",
         "A444_10LE", "A444_12LE", "A422_12LE", "A420_12LE", "A444_16LE",
-        "A422_16LE", "A420_16LE", "I420_12LE", "I420_10LE", NULL);
+        "A422_16LE", "A420_16LE", "I420_12LE", "I420_10LE", "I422_10LE",
+        "I422_12LE", "Y444_10LE", "Y444_16LE", NULL);
 #else
     _append_value_string_list (supported_formats, "A420_10BE", "A422_10BE",
         "A444_10BE", "A444_12BE", "A422_12BE", "A420_12BE", "A444_16BE",
-        "A422_16BE", "A420_16BE", "I420_12BE", "I420_10BE", NULL);
+        "A422_16BE", "A420_16BE", "I420_12BE", "I420_10BE", "I422_10BE",
+        "I422_12BE", "Y444_10BE", "Y444_16BE", NULL);
 #endif
   }
 
@@ -1751,15 +1752,16 @@ gst_gl_color_convert_caps_transform_format_info (GstGLContext * context,
 
   _init_value_string_list (&rgb_formats, "RGBA", "ARGB", "BGRA", "ABGR", "RGBx",
       "xRGB", "BGRx", "xBGR", "RGB", "BGR", "ARGB64", "BGR10A2_LE",
-      "RGB10A2_LE", "RGBA64_LE", "RGBA64_BE", "RBGA", "GBRA", "GBR",
-      "RGBP", "BGRP", "RGB16", "BGR16", NULL);
-  _init_value_string_list (&planar_yuv_formats, "Y444", "I420", "Y42B", "Y41B",
-      "A420", "A444", "A422", "A420_10LE", "A422_10LE", "A444_10LE",
-      "A444_12LE", "A422_12LE", "A420_12LE", "A444_16LE", "A422_16LE",
-      "A420_16LE", "I420_12LE", "I420_10LE", "A420_10BE", "A422_10BE",
-      "A444_10BE", "A444_12BE", "A422_12BE", "A420_12BE", "A444_16BE",
-      "A422_16BE", "A420_16BE", "I420_12BE", "I420_10BE", "v210", "UYVY",
-      "YUY2", NULL);
+      "RGB10A2_LE", "BGR10x2_LE", "RGB10x2_LE", "RGBA64_LE", "RGBA64_BE",
+      "RBGA", "GBRA", "GBR", "RGBP", "BGRP", "RGB16", "BGR16", NULL);
+  _init_value_string_list (&planar_yuv_formats, "Y444", "Y444_10LE",
+      "Y444_16LE", "Y444_10BE", "Y444_16BE", "I420", "Y42B", "Y41B", "A420",
+      "A444", "A422", "A420_10LE", "A422_10LE", "A444_10LE", "A444_12LE",
+      "A422_12LE", "A420_12LE", "A444_16LE", "A422_16LE", "A420_16LE",
+      "I420_12LE", "I420_10LE", "I422_10LE", "I422_12LE", "A420_10BE",
+      "A422_10BE", "A444_10BE", "A444_12BE", "A422_12BE", "A420_12BE",
+      "A444_16BE", "A422_16BE", "A420_16BE", "I420_12BE", "I420_10BE",
+      "I422_10BE", "I422_12BE", "v210", "UYVY", "YUY2", NULL);
   _init_supported_formats (context, output, &supported_formats);
   gst_value_intersect (&supported_rgb_formats, &rgb_formats,
       &supported_formats);
@@ -3627,31 +3629,6 @@ out:
   return res;
 }
 
-static gboolean
-foreach_metadata (GstBuffer * inbuf, GstMeta ** meta, gpointer user_data)
-{
-  CopyMetaData *data = user_data;
-  GstGLColorConvert *convert = data->convert;
-  const GstMetaInfo *info = (*meta)->info;
-  GstBuffer *outbuf = data->outbuf;
-
-  if (!gst_meta_api_type_has_tag (info->api, _gst_meta_tag_memory) &&
-      info->api != gst_video_overlay_composition_meta_api_get_type () &&
-      info->api != gst_gl_sync_meta_api_get_type ()) {
-    GstMetaTransformCopy copy_data = { FALSE, 0, -1 };
-    if (info->transform_func) {
-      GST_TRACE_OBJECT (convert, "copy metadata %s", g_type_name (info->api));
-      info->transform_func (outbuf, *meta, inbuf,
-          _gst_meta_transform_copy, &copy_data);
-    } else {
-      GST_DEBUG_OBJECT (convert, "couldn't copy metadata %s",
-          g_type_name (info->api));
-    }
-  }
-
-  return TRUE;
-}
-
 /* Called by the idle function in the gl thread */
 void
 _do_convert (GstGLContext * context, GstGLColorConvert * convert)
@@ -3787,7 +3764,6 @@ _do_convert (GstGLContext * context, GstGLColorConvert * convert)
   }
 
   if (convert->outbuf) {
-    CopyMetaData data;
     GstVideoOverlayCompositionMeta *composition_meta;
     GstGLSyncMeta *sync_meta;
 
@@ -3812,10 +3788,6 @@ _do_convert (GstGLContext * context, GstGLColorConvert * convert)
       gst_buffer_add_video_overlay_composition_meta
           (convert->outbuf, composition_meta->overlay);
     }
-
-    data.convert = convert;
-    data.outbuf = convert->outbuf;
-    gst_buffer_foreach_meta (convert->inbuf, foreach_metadata, &data);
   }
 
   convert->priv->result = res;

@@ -133,9 +133,8 @@ gst_validate_issue_unref (GstValidateIssue * issue)
   if (G_UNLIKELY (g_atomic_int_dec_and_test (&issue->refcount))) {
     g_free (issue->summary);
     g_free (issue->description);
-
-    /* We are using an string array for area and name */
-    g_strfreev (&issue->area);
+    g_free (issue->area);
+    g_free (issue->name);
 
     g_free (issue);
   }
@@ -252,6 +251,7 @@ gst_validate_issue_new_full (GstValidateIssueId issue_id, const gchar * summary,
   }
 
   issue = g_new (GstValidateIssue, 1);
+  issue->refcount = 1;
   issue->issue_id = issue_id;
   issue->summary = g_strdup (summary);
   issue->description = g_strdup (description);
@@ -289,6 +289,7 @@ gst_validate_issue_new (GstValidateIssueId issue_id, const gchar * summary,
   }
 
   issue = g_new (GstValidateIssue, 1);
+  issue->refcount = 1;
   issue->issue_id = issue_id;
   issue->summary = g_strdup (summary);
   issue->description = g_strdup (description);
@@ -699,8 +700,6 @@ gst_validate_report_init (void)
     gchar **wanted_files;
     wanted_files = g_strsplit (file_env, G_SEARCHPATH_SEPARATOR_S, 0);
 
-    /* FIXME: Make sure it is freed in the deinit function when that is
-     * implemented */
     log_files =
         g_malloc0 (sizeof (FILE *) * (g_strv_length (wanted_files) + 1));
     for (i = 0; i < g_strv_length (wanted_files); i++) {
@@ -729,15 +728,24 @@ gst_validate_report_init (void)
   }
 
 #ifndef GST_DISABLE_GST_DEBUG
-  if (!newline_regex)
-    newline_regex =
-        g_regex_new ("\n", G_REGEX_OPTIMIZE | G_REGEX_MULTILINE, 0, NULL);
+  if (!newline_regex) {
+    newline_regex = g_regex_new ("\n", G_REGEX_MULTILINE, 0, NULL);
+  }
 #endif
 }
 
 void
 gst_validate_report_deinit (void)
 {
+#ifndef GST_DISABLE_GST_DEBUG
+  g_clear_pointer (&newline_regex, g_regex_unref);
+#endif
+
+  if (_gst_validate_issues)
+    g_hash_table_destroy (g_steal_pointer (&_gst_validate_issues));
+
+  _gst_validate_report_start_time = 0;
+
   if (server_ostream) {
     g_output_stream_close (server_ostream, NULL, NULL);
     server_ostream = NULL;
@@ -745,6 +753,16 @@ gst_validate_report_deinit (void)
 
   g_clear_object (&socket_client);
   g_clear_object (&server_connection);
+
+  if (log_files) {
+    gint i;
+    for (i = 0; log_files[i]; i++) {
+      if (log_files[i] != stdout && log_files[i] != stderr)
+        fclose (log_files[i]);
+    }
+    g_free (log_files);
+    log_files = NULL;
+  }
 }
 
 /**
@@ -962,10 +980,11 @@ typedef struct
 } PrintActionFieldData;
 
 static gboolean
-_append_value (GQuark field_id, const GValue * value, PrintActionFieldData * d)
+_append_value (const GstIdStr * field, const GValue * value,
+    PrintActionFieldData * d)
 {
   gchar *val_str = NULL;
-  const gchar *fieldname = g_quark_to_string (field_id);
+  const gchar *fieldname = gst_id_str_as_str (field);
 
   if (g_str_has_prefix (fieldname, "__") && g_str_has_suffix (fieldname, "__"))
     return TRUE;
@@ -1021,8 +1040,8 @@ gst_validate_print_action (GstValidateAction * action, const gchar * message)
           GST_VALIDATE_ACTION_N_REPEATS (action));
 
     g_string_append (string, " ( ");
-    gst_structure_foreach (action->structure,
-        (GstStructureForeachFunc) _append_value, &d);
+    gst_structure_foreach_id_str (action->structure,
+        (GstStructureForeachIdStrFunc) _append_value, &d);
     if (d.printed)
       g_string_append_printf (string, "\n%*c)\n", indent, ' ');
     else
@@ -1234,8 +1253,7 @@ gst_validate_printf_valist (gpointer source, const gchar * format, va_list args)
   g_free (tmp);
 
   if (!newline_regex)
-    newline_regex =
-        g_regex_new ("\n", G_REGEX_OPTIMIZE | G_REGEX_MULTILINE, 0, NULL);
+    newline_regex = g_regex_new ("\n", G_REGEX_MULTILINE, 0, NULL);
 
 #ifndef GST_DISABLE_GST_DEBUG
   {
@@ -1538,7 +1556,8 @@ gst_validate_error_structure (gpointer structure, const gchar * format, ...)
   if (debug)
     g_string_append (f, debug);
 
-  g_print ("Bail out! %sERROR%s: %s\n\n", color ? color : "", endcolor, f->str);
+  g_printerr ("Bail out! %sERROR%s: %s\n\n", color ? color : "", endcolor,
+      f->str);
   g_string_free (f, TRUE);
   g_free (debug);
   g_free (color);
@@ -1558,13 +1577,13 @@ gst_validate_abort (const gchar * format, ...)
   tmp = gst_info_strdup_vprintf (format, var_args);
   va_end (var_args);
 
-  g_print ("Bail out! %s\n", tmp);
+  g_printerr ("Bail out! %s\n", tmp);
   g_free (tmp);
   exit (-18);
 }
 
 gboolean
-is_tty ()
+is_tty (void)
 {
   return output_is_tty;
 }

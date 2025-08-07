@@ -72,9 +72,11 @@ struct _GstObjectDetectionOverlay
   guint od_outline_color;
   guint od_outline_stroke_width;
   gboolean draw_labels;
+  gboolean filled_box;
   guint labels_color;
   gdouble labels_stroke_width;
   gdouble labels_outline_ofs;
+  GstClockTime expire_overlay;
 
   /* composition */
   gboolean attach_compo_to_buffer;
@@ -82,6 +84,7 @@ struct _GstObjectDetectionOverlay
   gint canvas_length;
   GstVideoOverlayComposition *composition;
   GstVideoOverlayComposition *upstream_composition;
+  GstClockTime last_composition_update;
 
   /* Graphic Outline */
   PangoContext *pango_context;
@@ -100,6 +103,8 @@ enum
   PROP_OD_OUTLINE_COLOR = 1,
   PROP_DRAW_LABELS,
   PROP_LABELS_COLOR,
+  PROP_FILLED_BOX,
+  PROP_EXPIRE_OVERLAY,
   _PROP_COUNT
 };
 
@@ -174,6 +179,13 @@ gst_object_detection_overlay_render_text_annotation (GstObjectDetectionOverlay
     GstAnalyticsODMtd * od_mtd, const gchar * annotation);
 
 static void
+    gst_object_detection_overlay_render_tracking_text_annotation
+    (GstObjectDetectionOverlay * overlay,
+    GstObjectDetectionOverlayPangoCairoContext * ctx,
+    GstAnalyticsRelationMeta * rmeta, const GstAnalyticsODMtd * od_mtd);
+
+
+static void
 gst_object_detection_overlay_class_init (GstObjectDetectionOverlayClass * klass)
 {
   GObjectClass *gobject_class;
@@ -227,6 +239,36 @@ gst_object_detection_overlay_class_init (GstObjectDetectionOverlayClass * klass)
           "Labels color",
           "Color (ARGB) to use for object labels",
           0, G_MAXUINT, 0xFFFFFF, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+   /**
+   * GstObjectDetectionOverlay:filled-box
+   *
+   * Draw filled-box in the region where the object is detected is masked.
+   * Filling color will be based on object-detection-outline-color.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_FILLED_BOX,
+      g_param_spec_boolean ("filled-box",
+          "Filled box",
+          "Draw a filled box",
+          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+   /**
+   * GstObjectDetectionOverlay:expire-overlay
+   *
+   * Re-uses the last overlay for the specified amount of time before
+   * expiring it (in ns), NONE for never
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_EXPIRE_OVERLAY,
+      g_param_spec_uint64 ("expire-overlay",
+          "Expire overlay",
+          "Re-uses the last overlay for the specified amount of time before"
+          " expiring it (in ns), MAX for never",
+          0, GST_CLOCK_TIME_NONE, GST_SECOND,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   element_class = (GstElementClass *) klass;
 
@@ -282,6 +324,7 @@ gst_object_detection_overlay_init (GstObjectDetectionOverlay * overlay)
   overlay->od_outline_color = 0xFFFFFFFF;
   overlay->draw_labels = TRUE;
   overlay->labels_color = 0xFFFFFFFF;
+  overlay->filled_box = FALSE;
   overlay->in_info = &GST_VIDEO_FILTER (overlay)->in_info;
   overlay->attach_compo_to_buffer = TRUE;
   overlay->canvas = NULL;
@@ -290,6 +333,7 @@ gst_object_detection_overlay_init (GstObjectDetectionOverlay * overlay)
   overlay->composition = NULL;
   overlay->upstream_composition = NULL;
   overlay->flushing = FALSE;
+  overlay->expire_overlay = GST_SECOND;
   GST_DEBUG_CATEGORY_INIT (objectdetectionoverlay_debug,
       "analytics_overlay_od", 0, "Object detection overlay");
 }
@@ -310,6 +354,12 @@ gst_object_detection_overlay_set_property (GObject * object, guint prop_id,
       break;
     case PROP_LABELS_COLOR:
       overlay->labels_color = g_value_get_uint (value);
+      break;
+    case PROP_FILLED_BOX:
+      overlay->filled_box = g_value_get_boolean (value);
+      break;
+    case PROP_EXPIRE_OVERLAY:
+      overlay->expire_overlay = g_value_get_uint64 (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -332,6 +382,12 @@ gst_object_detection_overlay_get_property (GObject * object,
       break;
     case PROP_LABELS_COLOR:
       g_value_set_uint (value, od_overlay->labels_color);
+      break;
+    case PROP_FILLED_BOX:
+      g_value_set_boolean (value, od_overlay->filled_box);
+      break;
+    case PROP_EXPIRE_OVERLAY:
+      g_value_set_uint64 (value, od_overlay->expire_overlay);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -554,12 +610,14 @@ gst_object_detection_overlay_sink_event (GstBaseTransform * trans,
       GST_INFO_OBJECT (overlay, "EOS");
       overlay->eos = TRUE;
       g_mutex_unlock (&overlay->stream_event_mutex);
+      ret = GST_BASE_TRANSFORM_CLASS (parent_class)->sink_event (trans, event);
       break;
     case GST_EVENT_FLUSH_START:
       g_mutex_lock (&overlay->stream_event_mutex);
-      GST_INFO_OBJECT (overlay, "Flush stop");
+      GST_INFO_OBJECT (overlay, "Flush start");
       overlay->flushing = TRUE;
       g_mutex_unlock (&overlay->stream_event_mutex);
+      ret = GST_BASE_TRANSFORM_CLASS (parent_class)->sink_event (trans, event);
       break;
     case GST_EVENT_FLUSH_STOP:
       g_mutex_lock (&overlay->stream_event_mutex);
@@ -567,6 +625,7 @@ gst_object_detection_overlay_sink_event (GstBaseTransform * trans,
       overlay->eos = FALSE;
       overlay->flushing = FALSE;
       g_mutex_unlock (&overlay->stream_event_mutex);
+      ret = GST_BASE_TRANSFORM_CLASS (parent_class)->sink_event (trans, event);
       break;
     default:
       ret = GST_BASE_TRANSFORM_CLASS (parent_class)->sink_event (trans, event);
@@ -619,9 +678,8 @@ gst_object_detection_overlay_set_info (GstVideoFilter * filter,
     GstVideoInfo * out_info)
 {
   GstObjectDetectionOverlay *overlay = GST_OBJECT_DETECTION_OVERLAY (filter);
-  GST_DEBUG_OBJECT (filter, "set_info incaps:%s", gst_caps_to_string (incaps));
-  GST_DEBUG_OBJECT (filter, "set_info outcaps:%s",
-      gst_caps_to_string (outcaps));
+  GST_DEBUG_OBJECT (filter, "set_info incaps:%" GST_PTR_FORMAT, incaps);
+  GST_DEBUG_OBJECT (filter, "set_info outcaps:%" GST_PTR_FORMAT, outcaps);
 
   filter->in_info = *in_info;
   filter->out_info = *out_info;
@@ -667,6 +725,7 @@ static GstFlowReturn
 gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
     GstVideoFrame * frame)
 {
+  GstBaseTransform *baset = GST_BASE_TRANSFORM (filter);
   GstObjectDetectionOverlay *overlay = GST_OBJECT_DETECTION_OVERLAY (filter);
   GstVideoOverlayCompositionMeta *composition_meta;
   gpointer state = NULL;
@@ -677,6 +736,7 @@ gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
   gint x, y, w, h;
   gfloat loc_confi_lvl;
   gboolean success;
+  GstClockTime rt = GST_CLOCK_TIME_NONE;
 
   GST_DEBUG_OBJECT (filter, "buffer writeable=%d",
       gst_buffer_is_writable (frame->buffer));
@@ -698,6 +758,10 @@ gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
   } else if (overlay->upstream_composition != NULL) {
     overlay->upstream_composition = NULL;
   }
+
+  if (baset->have_segment)
+    rt = gst_segment_to_running_time (&baset->segment, GST_FORMAT_TIME,
+        GST_BUFFER_PTS (frame->buffer));
 
   GstAnalyticsRelationMeta *rmeta = (GstAnalyticsRelationMeta *)
       gst_buffer_get_meta (GST_BUFFER (frame->buffer),
@@ -734,6 +798,8 @@ gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
     } else {
       overlay->composition = gst_video_overlay_composition_new (NULL);
     }
+
+    overlay->last_composition_update = rt;
 
     /* Get quark represent object detection metadata type */
     GstAnalyticsMtdType rlt_type = gst_analytics_od_mtd_get_mtd_type ();
@@ -783,6 +849,9 @@ gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
 
         g_free (text);
       }
+
+      gst_object_detection_overlay_render_tracking_text_annotation
+          (GST_OBJECT_DETECTION_OVERLAY (filter), &cairo_ctx, rmeta, od_mtd);
     }
 
     rectangle = gst_video_overlay_rectangle_new_raw (overlay->canvas,
@@ -796,6 +865,15 @@ gst_object_detection_overlay_transform_frame_ip (GstVideoFilter * filter,
     gst_object_detection_overlay_destroy_cairo_context (&cairo_ctx);
     gst_buffer_unmap (buffer, &map);
 
+  } else {
+    if (rt != GST_CLOCK_TIME_NONE &&
+        overlay->expire_overlay != GST_CLOCK_TIME_NONE &&
+        overlay->last_composition_update != GST_CLOCK_TIME_NONE &&
+        overlay->composition &&
+        overlay->last_composition_update + overlay->expire_overlay <= rt) {
+      gst_video_overlay_composition_unref (overlay->composition);
+      overlay->composition = NULL;
+    }
   }
 
   if (overlay->composition) {
@@ -841,7 +919,12 @@ gst_object_detection_overlay_render_boundingbox (GstObjectDetectionOverlay
 
   /* draw bounding box */
   cairo_rectangle (ctx->cr, x, y, w, h);
-  cairo_stroke (ctx->cr);
+
+  if (overlay->filled_box == FALSE)
+    cairo_stroke (ctx->cr);
+  else
+    cairo_fill (ctx->cr);
+
   cairo_restore (ctx->cr);
 }
 
@@ -882,6 +965,65 @@ gst_object_detection_overlay_render_text_annotation (GstObjectDetectionOverlay
       ink_rect.width, ink_rect.height);
   cairo_move_to (ctx->cr, x + overlay->labels_outline_ofs,
       y - logical_rect.height - overlay->labels_outline_ofs);
+
+  pango_cairo_layout_path (ctx->cr, overlay->pango_layout);
+  cairo_stroke (ctx->cr);
+  cairo_restore (ctx->cr);
+}
+
+static void
+    gst_object_detection_overlay_render_tracking_text_annotation
+    (GstObjectDetectionOverlay * overlay,
+    GstObjectDetectionOverlayPangoCairoContext * ctx,
+    GstAnalyticsRelationMeta * rmeta, const GstAnalyticsODMtd * od_mtd)
+{
+  GstAnalyticsMtd tracking_mtd;
+  guint64 tid;
+  gboolean lost;
+  PangoRectangle ink_rect, logical_rect;
+  gint x, y, w, h;
+  gint maxw = GST_VIDEO_INFO_WIDTH (overlay->in_info) - 1;
+  gint maxh = GST_VIDEO_INFO_HEIGHT (overlay->in_info) - 1;
+
+  gchar *annotation;
+
+  if (!gst_analytics_relation_meta_get_direct_related (rmeta, od_mtd->id,
+          GST_ANALYTICS_REL_TYPE_RELATE_TO,
+          gst_analytics_tracking_mtd_get_mtd_type (), NULL, &tracking_mtd))
+    return;
+
+  gst_analytics_od_mtd_get_location (od_mtd, &x, &y, &w, &h, NULL);
+  gst_analytics_tracking_mtd_get_info (&tracking_mtd, &tid, NULL, NULL, &lost);
+
+  cairo_save (ctx->cr);
+  x = CLAMP (x, 0, maxw);
+  y = CLAMP (y, 0, maxh);
+  w = CLAMP (w, 0, maxw - x);
+  h = CLAMP (h, 0, maxh - y);
+
+  /* Set label strokes color and width */
+  cairo_set_source_rgba (ctx->cr,
+      ((overlay->labels_color >> 16) & 0xFF) / 255.0,
+      ((overlay->labels_color >> 8) & 0xFF) / 255.0,
+      ((overlay->labels_color) & 0xFF) / 255.0,
+      ((overlay->labels_color >> 24) & 0xFF) / 255.0);
+
+  cairo_set_line_width (ctx->cr, overlay->labels_stroke_width);
+
+  annotation = g_strdup_printf ("Track: %" G_GUINT64_FORMAT, tid);
+  pango_layout_set_markup (overlay->pango_layout, annotation,
+      strlen (annotation));
+  g_free (annotation);
+
+  pango_layout_get_pixel_extents (overlay->pango_layout, &ink_rect,
+      &logical_rect);
+
+  GST_LOG_OBJECT (overlay, "logical_rect:(%d,%d),%dx%d", logical_rect.x,
+      logical_rect.y, logical_rect.width, logical_rect.height);
+  GST_LOG_OBJECT (overlay, "ink_rect:(%d,%d),%dx%d", ink_rect.x, ink_rect.y,
+      ink_rect.width, ink_rect.height);
+  cairo_move_to (ctx->cr, x + overlay->labels_outline_ofs,
+      y + h - logical_rect.height - overlay->labels_outline_ofs);
 
   pango_cairo_layout_path (ctx->cr, overlay->pango_layout);
   cairo_stroke (ctx->cr);

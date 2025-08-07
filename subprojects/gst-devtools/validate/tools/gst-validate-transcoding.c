@@ -112,6 +112,8 @@ _execute_set_restriction (GstValidateScenario * scenario,
   GstEncodingProfile *encoding_profile;
 
   g_object_get (pipeline, "profile", &encoding_profile, NULL);
+  gst_object_unref (pipeline);
+
   restriction_caps =
       gst_structure_get_string (action->structure, "restriction-caps");
   profile_type_name =
@@ -220,8 +222,8 @@ _register_actions (void)
 /* *INDENT-ON* */
 }
 
-int
-main (int argc, gchar ** argv)
+static int
+real_main (int argc, gchar ** argv)
 {
   guint i;
   GOptionContext *ctx;
@@ -386,4 +388,26 @@ main (int argc, gchar ** argv)
   }
 
   return finish_transcoding (pipeline, ret);
+}
+
+int
+main (int argc, char *argv[])
+{
+  int ret;
+
+#ifdef G_OS_WIN32
+  argv = g_win32_get_command_line ();
+#endif
+
+#if defined(__APPLE__) && TARGET_OS_MAC && !TARGET_OS_IPHONE
+  ret = gst_macos_main ((GstMainFunc) real_main, argc, argv, NULL);
+#else
+  ret = real_main (argc, argv);
+#endif
+
+#ifdef G_OS_WIN32
+  g_strfreev (argv);
+#endif
+
+  return ret;
 }

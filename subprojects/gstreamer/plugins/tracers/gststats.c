@@ -25,6 +25,12 @@
  * A tracing module that builds usage statistic for elements and pads.
  */
 
+/**
+ * GstStatsTracer:
+ *
+ * Since: 1.8
+ */
+
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
@@ -527,6 +533,8 @@ gst_stats_tracer_constructed (GObject * object)
   gchar *params, *tmp;
   const gchar *name;
   GstStructure *params_struct = NULL;
+
+  G_OBJECT_CLASS (parent_class)->constructed (object);
 
   g_object_get (self, "params", &params, NULL);
 

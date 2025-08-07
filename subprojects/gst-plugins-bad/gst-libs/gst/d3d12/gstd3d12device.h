@@ -85,16 +85,20 @@ GST_D3D12_API
 IDXGIFactory2 *         gst_d3d12_device_get_factory_handle       (GstD3D12Device * device);
 
 GST_D3D12_API
+ID3D12Fence *           gst_d3d12_device_get_fence_handle         (GstD3D12Device * device,
+                                                                   D3D12_COMMAND_LIST_TYPE queue_type);
+
+GST_D3D12_API
 gboolean                gst_d3d12_device_get_format               (GstD3D12Device * device,
                                                                    GstVideoFormat format,
                                                                    GstD3D12Format * device_format);
 
 GST_D3D12_API
-GstD3D12CommandQueue *  gst_d3d12_device_get_command_queue        (GstD3D12Device * device,
+GstD3D12CmdQueue *      gst_d3d12_device_get_cmd_queue            (GstD3D12Device * device,
                                                                    D3D12_COMMAND_LIST_TYPE queue_type);
 
 GST_D3D12_API
-gboolean                gst_d3d12_device_execute_command_lists    (GstD3D12Device * device,
+HRESULT                 gst_d3d12_device_execute_command_lists    (GstD3D12Device * device,
                                                                    D3D12_COMMAND_LIST_TYPE queue_type,
                                                                    guint num_command_lists,
                                                                    ID3D12CommandList ** command_lists,
@@ -108,13 +112,13 @@ GST_D3D12_API
 gboolean                gst_d3d12_device_set_fence_notify         (GstD3D12Device * device,
                                                                    D3D12_COMMAND_LIST_TYPE queue_type,
                                                                    guint64 fence_value,
-                                                                   GstD3D12FenceData * fence_data);
+                                                                   gpointer fence_data,
+                                                                   GDestroyNotify notify);
 
 GST_D3D12_API
-gboolean                gst_d3d12_device_fence_wait               (GstD3D12Device * device,
+HRESULT                 gst_d3d12_device_fence_wait               (GstD3D12Device * device,
                                                                    D3D12_COMMAND_LIST_TYPE queue_type,
-                                                                   guint64 fence_value,
-                                                                   HANDLE event_handle);
+                                                                   guint64 fence_value);
 
 GST_D3D12_API
 gboolean                gst_d3d12_device_is_equal                 (GstD3D12Device * device1,

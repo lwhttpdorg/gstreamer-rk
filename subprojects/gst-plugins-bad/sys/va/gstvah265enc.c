@@ -38,6 +38,26 @@
  *
  */
 
+/**
+ * SECTION:element-vah265lpenc
+ * @title: vah265lpenc
+ * @short_description: A VA-API based H265 low power video encoder
+ *
+ * vah265lpenc encodes raw video VA surfaces into H.265 bitstreams using
+ * the installed and chosen [VA-API](https://01.org/linuxmedia/vaapi)
+ * driver.
+ *
+ * The raw video frames in main memory can be imported into VA surfaces.
+ *
+ * ## Example launch line
+ * ```
+ * gst-launch-1.0 videotestsrc num-buffers=60 ! timeoverlay ! vah265lpenc ! h265parse ! mp4mux ! filesink location=test.mp4
+ * ```
+ *
+ * Since: 1.22
+ *
+ */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -53,10 +73,10 @@
 #include "vacompat.h"
 #include "gstvabaseenc.h"
 #include "gstvaencoder.h"
-#include "gstvacaps.h"
 #include "gstvaprofile.h"
-#include "gstvadisplay_priv.h"
 #include "gstvapluginutils.h"
+
+#include "gst/glib-compat-private.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_va_h265enc_debug);
 #define GST_CAT_DEFAULT gst_va_h265enc_debug
@@ -191,6 +211,7 @@ struct _GstVaH265Enc
 
   gboolean aud;
   guint32 packed_headers;
+  gboolean support_trellis;
 
   struct
   {
@@ -407,23 +428,6 @@ static const GstVaH265LevelLimits _va_h265_level_limits[] = {
 /* *INDENT-ON* */
 
 #ifndef GST_DISABLE_GST_DEBUG
-static const gchar *
-_h265_slice_type_name (GstH265SliceType type)
-{
-  switch (type) {
-    case GST_H265_P_SLICE:
-      return "P";
-    case GST_H265_B_SLICE:
-      return "B";
-    case GST_H265_I_SLICE:
-      return "I";
-    default:
-      g_assert_not_reached ();
-  }
-
-  return NULL;
-}
-
 static const gchar *
 _rate_control_get_name (guint32 rc_mode)
 {
@@ -1546,7 +1550,7 @@ _h265_fill_picture_parameter (GstVaH265Enc * self, GstVaH265EncFrame * frame,
 
     if (g_queue_is_empty (&base->ref_list)) {
       GST_ERROR_OBJECT (self, "No reference found for frame type %s",
-          _h265_slice_type_name (frame->type));
+          gst_h265_slice_type_to_string (frame->type));
       return FALSE;
     }
 
@@ -1894,8 +1898,8 @@ _h265_encode_one_frame (GstVaH265Enc * self, GstVideoCodecFrame * gst_frame)
             self->rc.rc_ctrl_mode, self->rc.cpb_length_bits))
       return FALSE;
 
-    if (!gst_va_base_enc_add_trellis_parameter (base, frame->base.picture,
-            self->features.use_trellis))
+    if (self->support_trellis && !gst_va_base_enc_add_trellis_parameter (base,
+            frame->base.picture, self->features.use_trellis))
       return FALSE;
 
     _h265_fill_sequence_parameter (self, &sequence);
@@ -1934,7 +1938,7 @@ _h265_encode_one_frame (GstVaH265Enc * self, GstVideoCodecFrame * gst_frame)
     }
 
     /* reorder to select the most nearest forward frames. */
-    g_qsort_with_data (list_forward, list_forward_num, sizeof (gpointer),
+    g_sort_array (list_forward, list_forward_num, sizeof (gpointer),
         (GCompareDataFunc) _poc_des_compare, NULL);
 
     num_negative_pics = list_forward_num;
@@ -1972,7 +1976,7 @@ _h265_encode_one_frame (GstVaH265Enc * self, GstVideoCodecFrame * gst_frame)
     }
 
     /* reorder to select the most nearest backward frames. */
-    g_qsort_with_data (list_backward, list_backward_num, sizeof (gpointer),
+    g_sort_array (list_backward, list_backward_num, sizeof (gpointer),
         (GCompareDataFunc) _poc_asc_compare, NULL);
 
     num_positive_pics = list_backward_num;
@@ -2052,7 +2056,7 @@ _h265_push_one_frame (GstVaBaseEnc * base, GstVideoCodecFrame * gst_frame,
     if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME (gst_frame) &&
         !(self->gop.cur_frame_index == 0 ||
             self->gop.cur_frame_index == self->gop.idr_period)) {
-      GST_DEBUG_OBJECT (base, "system_frame_number: %d is a force key "
+      GST_DEBUG_OBJECT (base, "system_frame_number: %u is a force key "
           "frame(IDR), begin a new GOP.", gst_frame->system_frame_number);
 
       frame->poc = 0;
@@ -2087,7 +2091,7 @@ _h265_push_one_frame (GstVaBaseEnc * base, GstVideoCodecFrame * gst_frame,
 
       if (self->gop.cur_frame_index == 0) {
         g_assert (frame->poc == 0);
-        GST_LOG_OBJECT (self, "system_frame_number: %d, an IDR frame, starts"
+        GST_LOG_OBJECT (self, "system_frame_number: %u, an IDR frame, starts"
             " a new GOP", gst_frame->system_frame_number);
 
         g_queue_clear_full (&base->ref_list,
@@ -2096,9 +2100,9 @@ _h265_push_one_frame (GstVaBaseEnc * base, GstVideoCodecFrame * gst_frame,
 
       frame_setup_from_gop (self, frame, self->gop.cur_frame_index);
 
-      GST_LOG_OBJECT (self, "Push frame, system_frame_number: %d, poc %d, "
+      GST_LOG_OBJECT (self, "Push frame, system_frame_number: %u, poc %d, "
           "frame type %s", gst_frame->system_frame_number, frame->poc,
-          _h265_slice_type_name (frame->type));
+          gst_h265_slice_type_to_string (frame->type));
 
       self->gop.cur_frame_index++;
       g_queue_push_tail (&base->reorder_list,
@@ -2310,13 +2314,14 @@ get_one:
 
   if (self->gop.b_pyramid && vaframe->type == GST_H265_B_SLICE) {
     GST_LOG_OBJECT (self, "pop a pyramid B frame with system_frame_number:"
-        " %d, poc: %d, is_ref: %s, level %d",
+        " %u, poc: %d, is_ref: %s, level %d",
         frame->system_frame_number, vaframe->poc,
         vaframe->is_ref ? "true" : "false", vaframe->pyramid_level);
   } else {
-    GST_LOG_OBJECT (self, "pop a frame with system_frame_number: %d,"
+    GST_LOG_OBJECT (self, "pop a frame with system_frame_number: %u,"
         " frame type: %s, poc: %d, is_ref: %s",
-        frame->system_frame_number, _h265_slice_type_name (vaframe->type),
+        frame->system_frame_number,
+        gst_h265_slice_type_to_string (vaframe->type),
         vaframe->poc, vaframe->is_ref ? "true" : "false");
   }
 
@@ -2332,7 +2337,7 @@ gst_va_h265_enc_reorder_frame (GstVaBaseEnc * base, GstVideoCodecFrame * frame,
 {
   if (!_h265_push_one_frame (base, frame, bump_all)) {
     GST_ERROR_OBJECT (base, "Failed to push the input frame"
-        " system_frame_number: %d into the reorder list",
+        " system_frame_number: %u into the reorder list",
         frame->system_frame_number);
 
     *out_frame = NULL;
@@ -2521,6 +2526,7 @@ gst_va_h265_enc_reset_state (GstVaBaseEnc * base)
   self->bits_depth_chroma_minus8 = 0;
 
   self->packed_headers = 0;
+  self->support_trellis = FALSE;
 
   self->partition.slice_span_tiles = FALSE;
   g_clear_pointer (&self->partition.slice_segment_address, g_free);
@@ -3681,7 +3687,7 @@ _h265_print_gop_structure (GstVaH265Enc * self)
       g_string_append_printf (str, "%s", "LDB");
     } else {
       g_string_append_printf (str, "%s",
-          _h265_slice_type_name (self->gop.frame_types[i].slice_type));
+          gst_h265_slice_type_to_string (self->gop.frame_types[i].slice_type));
     }
 
     if (self->gop.b_pyramid
@@ -4338,9 +4344,9 @@ print_options:
       self->features.transquant_bypass_enabled_flag);
 
   /* Ensure trellis. */
-  if (self->features.use_trellis &&
-      !gst_va_encoder_has_trellis (base->encoder, base->profile,
-          GST_VA_BASE_ENC_ENTRYPOINT (base))) {
+  self->support_trellis = gst_va_encoder_has_trellis (base->encoder,
+      base->profile, GST_VA_BASE_ENC_ENTRYPOINT (base));
+  if (self->features.use_trellis && !self->support_trellis) {
     GST_INFO_OBJECT (self, "The trellis is not supported");
     self->features.use_trellis = FALSE;
   }
@@ -4498,7 +4504,7 @@ gst_va_h265_enc_reconfig (GstVaBaseEnc * base)
   GstVideoCodecState *output_state = NULL;
   GstVideoFormat format, reconf_format = GST_VIDEO_FORMAT_UNKNOWN;
   VAProfile profile = VAProfileNone;
-  gboolean do_renegotiation = TRUE, do_reopen, need_negotiation;
+  gboolean do_renegotiation = TRUE, do_reopen, need_negotiation, rc_same;
   guint max_ref_frames, max_surfaces = 0, rt_format = 0,
       codedbuf_size, latency_num;
   gint width, height;
@@ -4524,10 +4530,14 @@ gst_va_h265_enc_reconfig (GstVaBaseEnc * base)
   if (!_h265_decide_profile (self, &profile, &rt_format))
     return FALSE;
 
+  GST_OBJECT_LOCK (self);
+  rc_same = (self->prop.rc_ctrl == self->rc.rc_ctrl_mode);
+  GST_OBJECT_UNLOCK (self);
+
   /* first check */
   do_reopen = !(base->profile == profile && base->rt_format == rt_format
       && format == reconf_format && width == base->width
-      && height == base->height && self->prop.rc_ctrl == self->rc.rc_ctrl_mode);
+      && height == base->height && rc_same);
 
   if (do_reopen && gst_va_encoder_is_open (base->encoder))
     gst_va_encoder_close (base->encoder);
@@ -4644,8 +4654,8 @@ gst_va_h265_enc_reconfig (GstVaBaseEnc * base)
 
   /* Set the latency */
   latency = gst_util_uint64_scale (latency_num,
-      GST_VIDEO_INFO_FPS_D (&base->input_state->info) * GST_SECOND,
-      GST_VIDEO_INFO_FPS_N (&base->input_state->info));
+      GST_VIDEO_INFO_FPS_D (&base->in_info) * GST_SECOND,
+      GST_VIDEO_INFO_FPS_N (&base->in_info));
   gst_video_encoder_set_latency (venc, latency, latency);
 
   max_ref_frames = self->gop.b_pyramid ?
@@ -5401,16 +5411,6 @@ gst_va_h265_enc_class_init (gpointer g_klass, gpointer class_data)
   }
 
   g_object_class_install_properties (object_class, n_props, properties);
-
-  /**
-   * GstVaFeature:
-   * @GST_VA_FEATURE_DISABLED: The feature is disabled.
-   * @GST_VA_FEATURE_ENABLED: The feature is enabled.
-   * @GST_VA_FEATURE_AUTO: The feature is enabled automatically.
-   *
-   * Since: 1.22
-   */
-  gst_type_mark_as_plugin_api (GST_TYPE_VA_FEATURE, 0);
 }
 
 static GstCaps *

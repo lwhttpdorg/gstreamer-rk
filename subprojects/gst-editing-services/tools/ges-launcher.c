@@ -33,6 +33,10 @@
 #include "utils.h"
 #include "ges-launcher-kb.h"
 
+#ifdef HAVE_GST_VALIDATE
+#include <gst/validate/validate.h>
+#endif
+
 typedef enum
 {
   GST_PLAY_TRICK_MODE_NONE = 0,
@@ -320,6 +324,19 @@ _parse_track_type (const gchar * option_name, const gchar * value,
   opts->track_types = (GESTrackType) flags;
   return TRUE;
 }
+
+
+#ifdef HAVE_GST_VALIDATE
+static gboolean
+_parse_test_file (const gchar * option_name, const gchar * value,
+    GESLauncherParsedOptions * opts, GError ** error)
+{
+  opts->testfile = g_strdup (value);
+  gst_validate_init_debug ();
+  gst_validate_setup_test_file (opts->testfile, FALSE);
+  return TRUE;
+}
+#endif
 
 static gboolean
 _set_track_restriction_caps (GESTrack * track, const gchar * caps_str)
@@ -863,14 +880,19 @@ _project_loaded_cb (GESProject * project, GESTimeline * timeline,
   GESLauncherParsedOptions *opts = &self->priv->parsed_options;
   GST_INFO ("Project loaded, playing it");
 
-  if (opts->save_path) {
+  if (self->priv->seenerrors) {
+    return;
+  }
+
+  if (opts->save_path || opts->save_only_path) {
     gchar *uri;
     GError *error = NULL;
+    gchar *save_path = opts->save_path ? opts->save_path : opts->save_only_path;
 
     if (g_strcmp0 (opts->save_path, "+r") == 0) {
       uri = ges_project_get_uri (project);
-    } else if (!(uri = ensure_uri (opts->save_path))) {
-      g_error ("couldn't create uri for '%s", opts->save_path);
+    } else if (!(uri = ensure_uri (save_path))) {
+      g_error ("couldn't create uri for '%s", save_path);
 
       self->priv->seenerrors = TRUE;
       g_application_quit (G_APPLICATION (self));
@@ -885,6 +907,12 @@ _project_loaded_cb (GESProject * project, GESTimeline * timeline,
       self->priv->seenerrors = TRUE;
       g_error_free (error);
       g_application_quit (G_APPLICATION (self));
+    }
+
+    if (opts->save_only_path) {
+      g_application_quit (G_APPLICATION (self));
+
+      return;
     }
   }
 
@@ -1037,6 +1065,8 @@ bus_message_cb (GstBus * bus, GstMessage * message, GESLauncher * self)
       break;
     }
     case GST_MESSAGE_EOS:
+      GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (self->priv->pipeline),
+          GST_DEBUG_GRAPH_SHOW_ALL, "ges-launch.eos");
       if (!self->priv->parsed_options.ignore_eos) {
         ges_ok ("\nDone\n");
         g_application_quit (G_APPLICATION (self));
@@ -1177,7 +1207,8 @@ _run_pipeline (GESLauncher * self)
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (self->priv->pipeline));
   gst_bus_add_signal_watch (bus);
-  g_signal_connect (bus, "message", G_CALLBACK (bus_message_cb), self);
+  g_signal_connect_object (bus, "message", G_CALLBACK (bus_message_cb), self,
+      0);
 
   g_application_hold (G_APPLICATION (self));
 
@@ -1433,7 +1464,7 @@ ges_launcher_parse_options (GESLauncher * self,
           "Specify the track restriction caps of the audio track.",
     },
 #ifdef HAVE_GST_VALIDATE
-    {"set-test-file", 0, 0, G_OPTION_ARG_STRING, &opts->testfile,
+    {"set-test-file", 0, 0, G_OPTION_ARG_CALLBACK, &_parse_test_file,
           "ges-launch-1.0 exposes gst-validate functionalities, such as test files and scenarios."
           " Scenarios describe actions to execute, such as seeks or setting of "
           "properties. "
@@ -1639,14 +1670,15 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
     case 't':
       play_switch_trick_mode (self);
       break;
+    case '0':
+      play_do_seek (self, 0, self->priv->rate, self->priv->trick_mode);
+      break;
     case 27:                   /* ESC */
       if (key_input[1] == '\0') {
         g_application_quit (G_APPLICATION (self));
         break;
       }
-    case '0':
-      play_do_seek (self, 0, self->priv->rate, self->priv->trick_mode);
-      break;
+      /* FALLTHROUGH */
     default:
       if (strcmp (key_input, GST_PLAY_KB_ARROW_RIGHT) == 0) {
         relative_seek (self, +0.08);
@@ -1695,8 +1727,12 @@ _startup (GApplication * application)
   if (!_create_pipeline (self, opts->sanitized_timeline))
     goto failure;
 
-  if (opts->save_only_path)
+  if (opts->save_only_path) {
+    if (opts->load_path) {
+      g_application_hold (G_APPLICATION (self));
+    }
     goto done;
+  }
 
   if (!_set_playback_details (self))
     goto failure;

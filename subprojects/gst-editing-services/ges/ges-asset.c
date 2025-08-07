@@ -444,6 +444,7 @@ ges_asset_set_property (GObject * object, guint property_id,
       ges_extractable_register_metas (asset->priv->extractable_type, asset);
       break;
     case PROP_ID:
+      /* G_PARAM_CONSTRUCT_ONLY */
       asset->priv->id = g_value_dup_string (value);
       break;
     case PROP_PROXY:
@@ -493,7 +494,8 @@ ges_asset_class_init (GESAssetClass * klass)
   _properties[PROP_TYPE] =
       g_param_spec_gtype ("extractable-type", "Extractable type",
       "The type of the Object that can be extracted out of the asset",
-      G_TYPE_OBJECT, G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE);
+      G_TYPE_OBJECT,
+      G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GESAsset:id:
@@ -511,7 +513,7 @@ ges_asset_class_init (GESAssetClass * klass)
   _properties[PROP_ID] =
       g_param_spec_string ("id", "Identifier",
       "The unique identifier of the asset", NULL,
-      G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE);
+      G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GESAsset:proxy:
@@ -525,7 +527,8 @@ ges_asset_class_init (GESAssetClass * klass)
    */
   _properties[PROP_PROXY] =
       g_param_spec_object ("proxy", "Proxy",
-      "The asset default proxy.", GES_TYPE_ASSET, G_PARAM_READWRITE);
+      "The asset default proxy.", GES_TYPE_ASSET,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GESAsset:proxy-target:
@@ -545,7 +548,8 @@ ges_asset_class_init (GESAssetClass * klass)
    */
   _properties[PROP_PROXY_TARGET] =
       g_param_spec_object ("proxy-target", "Proxy target",
-      "The target of a proxy asset.", GES_TYPE_ASSET, G_PARAM_READABLE);
+      "The target of a proxy asset.", GES_TYPE_ASSET,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, PROP_LAST, _properties);
 
@@ -1326,8 +1330,11 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
       asset = g_initable_new (asset_type,
           NULL, error, "id", real_id, "extractable-type",
           extractable_type, NULL);
-    } else {
-      GST_INFO ("Tried to create an Asset for type %s but no ->init method",
+      if (!asset)
+        GST_WARNING ("Unable to create asset for %s(->%s) for type %s",
+            id, real_id, g_type_name (asset_type));
+    } else if (!g_type_is_a (extractable_type, GES_TYPE_URI_CLIP)) {
+      GST_WARNING ("Tried to create an Asset for type %s but no ->init method",
           g_type_name (extractable_type));
     }
     g_type_class_unref (klass);

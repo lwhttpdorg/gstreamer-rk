@@ -283,6 +283,7 @@ gst_plugin_loader_try_helper (GstPluginLoader * self, gchar * location)
   gchar *cmd = NULL;
   gchar *err = NULL;
   gint last_err;
+  gunichar2 *wlocation = NULL;
   gunichar2 *wcmd = NULL;
   STARTUPINFOW si;
   BOOL ret;
@@ -298,8 +299,13 @@ gst_plugin_loader_try_helper (GstPluginLoader * self, gchar * location)
 
   pipe_name = g_strdup_printf ("%s.%u", self->pipe_prefix,
       (guint) InterlockedIncrement ((LONG *) & global_pipe_index));
-  cmd = g_strdup_printf ("%s -l %s %s", location, _gst_executable_path,
-      pipe_name);
+  wlocation = g_utf8_to_utf16 (location, -1, NULL, NULL, NULL);
+  if (!wlocation) {
+    GST_WARNING ("Couldn't build location string");
+    goto error;
+  }
+  cmd = g_strdup_printf ("\"%s\" -l \"%s\" \"%s\"", location,
+      _gst_executable_path, pipe_name);
   wcmd = g_utf8_to_utf16 (cmd, -1, NULL, NULL, NULL);
   if (!wcmd) {
     GST_WARNING ("Couldn't build cmd string");
@@ -347,9 +353,9 @@ gst_plugin_loader_try_helper (GstPluginLoader * self, gchar * location)
 
   GST_LOG ("Trying to spawn gst-plugin-scanner helper at %s, command %s",
       location, cmd);
-  ret = CreateProcessW (NULL, (WCHAR *) wcmd, NULL, NULL, FALSE,
-      CREATE_UNICODE_ENVIRONMENT, (LPVOID) self->env_string, NULL, &si,
-      &self->child_info);
+  ret = CreateProcessW ((WCHAR *) wlocation, (WCHAR *) wcmd, NULL, NULL, FALSE,
+      CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, (LPVOID) self->env_string,
+      NULL, &si, &self->child_info);
 
   if (!ret) {
     last_err = GetLastError ();
@@ -427,6 +433,7 @@ gst_plugin_loader_try_helper (GstPluginLoader * self, gchar * location)
   self->client_running = TRUE;
 
   g_free (cmd);
+  g_free (wlocation);
   g_free (wcmd);
   g_free (err);
   g_free (pipe_name);
@@ -446,6 +453,7 @@ error:
     CloseHandle (loader->pipe);
   loader->pipe = INVALID_HANDLE_VALUE;
   g_free (cmd);
+  g_free (wlocation);
   g_free (wcmd);
   g_free (err);
   g_free (pipe_name);
@@ -467,7 +475,10 @@ find_helper_bin_location (void)
   if (env && *env != '\0') {
     /* use the env-var if it is set */
     GST_LOG ("Trying GST_PLUGIN_SCANNER env var: %s", env);
-    return g_strdup (env);
+    if (g_str_has_suffix (env, ".exe"))
+      return g_strdup (env);
+    else
+      return g_strdup_printf ("%s.exe", env);
   }
 
   /* use the installed version */
@@ -485,6 +496,7 @@ find_helper_bin_location (void)
     if (plugin_subdir_depth < MAX_PATH_DEPTH) {
       const char *filenamev[MAX_PATH_DEPTH + 5];
       int i = 0, j;
+      gchar *helper_bin_location;
 
       filenamev[i++] = relocated_libgstreamer;
       for (j = 0; j < plugin_subdir_depth; j++)
@@ -498,8 +510,9 @@ find_helper_bin_location (void)
       GST_DEBUG ("constructing path to system plugin scanner using "
           "plugin dir: \'%s\', plugin scanner dir: \'%s\'",
           GST_PLUGIN_SUBDIR, GST_PLUGIN_SCANNER_SUBDIR);
+      helper_bin_location = g_build_filenamev ((char **) filenamev);
       g_free (relocated_libgstreamer);
-      return g_build_filenamev ((char **) filenamev);
+      return helper_bin_location;
     } else {
       GST_WARNING ("GST_PLUGIN_SUBDIR: \'%s\' has too many path segments",
           GST_PLUGIN_SUBDIR);
@@ -1087,8 +1100,9 @@ gst_plugin_loader_new (GstRegistry * registry)
   memset (&pi, 0, sizeof (PROCESS_INFORMATION));
 
   /* Checks whether helper bin is installed or not. Expected exit code is 1 */
-  ret = CreateProcessW (NULL, helper_bin_location_wide, NULL, NULL, FALSE,
-      CREATE_UNICODE_ENVIRONMENT, env_string, NULL, &si, &pi);
+  ret = CreateProcessW (helper_bin_location_wide, NULL, NULL, NULL, FALSE,
+      CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, env_string, NULL, &si,
+      &pi);
   g_free (helper_bin_location_wide);
 
   if (!ret) {

@@ -381,22 +381,20 @@ gst_bayer2rgb_get_unit_size (GstBaseTransform * base, GstCaps * caps,
   GstBayer2RGB *bayer2rgb;
   int width;
   int height;
-  const char *name;
 
   structure = gst_caps_get_structure (caps, 0);
   bayer2rgb = GST_BAYER2RGB (base);
 
   if (gst_structure_get_int (structure, "width", &width) &&
       gst_structure_get_int (structure, "height", &height)) {
-    name = gst_structure_get_name (structure);
     /* Our name must be either video/x-bayer video/x-raw */
-    if (strcmp (name, "video/x-raw")) {
+    if (gst_structure_has_name (structure, "video/x-bayer")) {
       *size =
           GST_ROUND_UP_4 (width) * height * DIV_ROUND_UP (bayer2rgb->bpp, 8);
       return TRUE;
     } else {
       /* For output, calculate according to format */
-      *size = width * height * DIV_ROUND_UP (bayer2rgb->bpp, 8);
+      *size = width * height * 4 * DIV_ROUND_UP (bayer2rgb->bpp, 8);
       return TRUE;
     }
 
@@ -559,7 +557,9 @@ gst_bayer2rgb_process (GstBayer2RGB * bayer2rgb, uint8_t * dest,
   const int bayersrc16 = bayer2rgb->bpp > 8;
   int j;
   guint8 *tmp;
-  guint32 *dtmp;
+  // This is always initialized when we check for bayersrc16
+  // but explicitly do so to avoid the gcc false-positive warning
+  guint32 *dtmp = 0;
   process_func merge[2] = { NULL, NULL };
   process_func16 merge16[2] = { NULL, NULL };
   int r_off, g_off, b_off;

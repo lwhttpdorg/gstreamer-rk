@@ -3261,6 +3261,7 @@ GST_START_TEST (test_video_formats_pstrides)
         || fmt == GST_VIDEO_FORMAT_NV12_10LE32
         || fmt == GST_VIDEO_FORMAT_NV16_10LE32
         || fmt == GST_VIDEO_FORMAT_NV12_10LE40
+        || fmt == GST_VIDEO_FORMAT_NV16_10LE40
         || fmt == GST_VIDEO_FORMAT_Y410
         || fmt == GST_VIDEO_FORMAT_NV12_8L128
         || fmt == GST_VIDEO_FORMAT_NV12_10BE_8L128
@@ -4310,6 +4311,32 @@ GST_START_TEST (test_video_meta_serialize)
 
 GST_END_TEST;
 
+GST_START_TEST (test_dma_drm_big_engian)
+{
+  const guint32 fourcc = GST_MAKE_FOURCC ('A', 'B', 'C', 'D') | 1U << 31;
+
+  gchar *fmt = gst_video_dma_drm_fourcc_to_string (fourcc, 0);
+  fail_unless (g_strcmp0 (fmt, "ABCD_BE") == 0);
+
+  gchar *fmt_mod = gst_video_dma_drm_fourcc_to_string (fourcc, 1);
+  fail_unless (g_strcmp0 (fmt_mod, "ABCD_BE:0x0000000000000001") == 0);
+
+  guint64 parsed_mod;
+  guint32 parsed_fourcc =
+      gst_video_dma_drm_fourcc_from_string (fmt, &parsed_mod);
+  g_assert_cmpuint (parsed_fourcc, ==, fourcc);
+  g_assert_cmpuint (parsed_mod, ==, G_GUINT64_CONSTANT (0));
+
+  parsed_fourcc = gst_video_dma_drm_fourcc_from_string (fmt_mod, &parsed_mod);
+  g_assert_cmpuint (parsed_fourcc, ==, fourcc);
+  g_assert_cmpuint (parsed_mod, ==, G_GUINT64_CONSTANT (1));
+
+  g_free (fmt);
+  g_free (fmt_mod);
+}
+
+GST_END_TEST;
+
 static Suite *
 video_suite (void)
 {
@@ -4370,6 +4397,7 @@ video_suite (void)
   tcase_add_test (tc_chain, test_info_dma_drm);
   tcase_add_test (tc_chain, test_video_meta_serialize);
   tcase_add_test (tc_chain, test_video_convert_with_config_update);
+  tcase_add_test (tc_chain, test_dma_drm_big_engian);
 
   return s;
 }

@@ -46,6 +46,73 @@ typedef struct
 
 static gboolean bus_msg_handler (GstBus * bus, GstMessage * msg, gpointer data);
 
+typedef enum
+{
+  SHELL_POSIX,
+  SHELL_CMD,
+  SHELL_POWERSHELL,
+} ShellType;
+
+static ShellType
+get_shell_type (void)
+{
+  if (g_getenv ("PSModulePath") != NULL)
+    return SHELL_POWERSHELL;
+  if (g_getenv ("ComSpec") != NULL)
+    return SHELL_CMD;
+  return SHELL_POSIX;
+}
+
+static char *
+do_shell_quote (const char *s)
+{
+  switch (get_shell_type ()) {
+    case SHELL_POSIX:
+      return g_shell_quote (s);
+    case SHELL_CMD:
+    case SHELL_POWERSHELL:
+      /* TODO: implement some kind of quoting for cmd.exe and powershell.exe */
+      return g_strdup (s);
+  }
+  g_assert_not_reached ();
+}
+
+static char *
+value_to_string (const GValue * v)
+{
+  const char *d, *s = NULL;
+  char *ret, *ser = NULL;
+  gboolean need_quote = FALSE;
+  gboolean need_serialize = FALSE;
+
+  if (G_VALUE_HOLDS_STRING (v)) {
+    s = g_value_get_string (v);
+    need_serialize = !g_utf8_validate (s, -1, NULL);
+  } else {
+    need_serialize = TRUE;
+  }
+
+  /* Don't mess around if the value is weird */
+  if (need_serialize) {
+    ser = gst_value_serialize (v);
+    ret = do_shell_quote (ser);
+    g_free (ser);
+    return ret;
+  }
+
+  d = s;
+  while (*++d) {
+    if (!g_ascii_isalnum (*d)) {
+      need_quote = TRUE;
+      break;
+    }
+  }
+
+  if (need_quote)
+    return do_shell_quote (s);
+  return g_strdup (s);
+}
+
 static gchar *
 get_launch_line (GstDevice * device)
 {
@@ -95,8 +162,10 @@ get_launch_line (GstDevice * device)
         continue;
 
       for (j = 0; ignored_propnames[j]; j++)
-        if (!g_strcmp0 (ignored_propnames[j], property->name))
+        if (!g_strcmp0 (ignored_propnames[j], property->name)) {
           ignore = TRUE;
+          break;
+        }
 
       if (ignore)
         continue;
@@ -110,7 +179,7 @@ get_launch_line (GstDevice * device)
       g_object_get_property (G_OBJECT (element), property->name, &value);
       g_object_get_property (G_OBJECT (pureelement), property->name, &pvalue);
       if (gst_value_compare (&value, &pvalue) != GST_VALUE_EQUAL) {
-        gchar *valuestr = gst_value_serialize (&value);
+        char *valuestr = value_to_string (&value);
 
         if (!valuestr) {
           GST_WARNING ("Could not serialize property %s:%s",
@@ -122,7 +191,6 @@ get_launch_line (GstDevice * device)
         g_string_append_printf (launch_line, " %s=%s",
             property->name, valuestr);
         g_free (valuestr);
-
       }
 
     next:
@@ -140,7 +208,7 @@ get_launch_line (GstDevice * device)
 
 
 static gboolean
-print_structure_field (GQuark field_id, const GValue * value,
+print_structure_field (const GstIdStr * fieldname, const GValue * value,
     gpointer user_data)
 {
   gchar *val;
@@ -155,10 +223,10 @@ print_structure_field (GQuark field_id, const GValue * value,
   }
 
   if (val != NULL)
-    g_print ("\n\t\t%s = %s", g_quark_to_string (field_id), val);
+    gst_print ("\n\t\t%s = %s", gst_id_str_as_str (fieldname), val);
   else
-    g_print ("\n\t\t%s - could not serialise field of type %s",
-        g_quark_to_string (field_id), G_VALUE_TYPE_NAME (value));
+    gst_print ("\n\t\t%s - could not serialise field of type %s",
+        gst_id_str_as_str (fieldname), G_VALUE_TYPE_NAME (value));
 
   g_free (val);
 
@@ -166,11 +234,11 @@ print_structure_field (GQuark field_id, const GValue * value,
 }
 
 static gboolean
-print_field (GQuark field, const GValue * value, gpointer unused)
+print_field (const GstIdStr * fieldname, const GValue * value, gpointer unused)
 {
   gchar *str = gst_value_serialize (value);
 
-  g_print (", %s=%s", g_quark_to_string (field), str);
+  gst_print (", %s=%s", gst_id_str_as_str (fieldname), str);
   g_free (str);
   return TRUE;
 }
@@ -191,44 +259,44 @@ print_device (GstDevice * device, gboolean modified)
   device_class = gst_device_get_device_class (device);
   props = gst_device_get_properties (device);
 
-  g_print ("\nDevice %s:\n\n", modified ? "modified" : "found");
-  g_print ("\tname  : %s\n", name);
-  g_print ("\tclass : %s\n", device_class);
+  gst_print ("\nDevice %s:\n\n", modified ? "modified" : "found");
+  gst_print ("\tname  : %s\n", name);
+  gst_print ("\tclass : %s\n", device_class);
   for (i = 0; i < size; ++i) {
     GstStructure *s = gst_caps_get_structure (caps, i);
     GstCapsFeatures *features = gst_caps_get_features (caps, i);
 
-    g_print ("\t%s %s", (i == 0) ? "caps  :" : "       ",
+    gst_print ("\t%s %s", (i == 0) ? "caps  :" : "       ",
         gst_structure_get_name (s));
     if (features && (gst_caps_features_is_any (features) ||
             !gst_caps_features_is_equal (features,
                 GST_CAPS_FEATURES_MEMORY_SYSTEM_MEMORY))) {
       gchar *features_string = gst_caps_features_to_string (features);
 
-      g_print ("(%s)", features_string);
+      gst_print ("(%s)", features_string);
       g_free (features_string);
     }
-    gst_structure_foreach (s, print_field, NULL);
-    g_print ("\n");
+    gst_structure_foreach_id_str (s, print_field, NULL);
+    gst_print ("\n");
   }
   if (props) {
-    g_print ("\tproperties:");
-    gst_structure_foreach (props, print_structure_field, NULL);
+    gst_print ("\tproperties:");
+    gst_structure_foreach_id_str (props, print_structure_field, NULL);
     gst_structure_free (props);
-    g_print ("\n");
+    gst_print ("\n");
   }
   str = get_launch_line (device);
   if (gst_device_has_classes (device, "Source"))
-    g_print ("\tgst-launch-1.0 %s ! ...\n", str);
+    gst_print ("\tgst-launch-1.0 %s ! ...\n", str);
   else if (gst_device_has_classes (device, "Sink"))
-    g_print ("\tgst-launch-1.0 ... ! %s\n", str);
+    gst_print ("\tgst-launch-1.0 ... ! %s\n", str);
   else if (gst_device_has_classes (device, "CameraSource")) {
-    g_print ("\tgst-launch-1.0 %s.vfsrc name=camerasrc ! ... "
+    gst_print ("\tgst-launch-1.0 %s.vfsrc name=camerasrc ! ... "
         "camerasrc.vidsrc ! [video/x-h264] ... \n", str);
   }
 
   g_free (str);
-  g_print ("\n");
+  gst_print ("\n");
 
   g_free (name);
   g_free (device_class);
@@ -244,8 +312,8 @@ device_removed (GstDevice * device)
 
   name = gst_device_get_display_name (device);
 
-  g_print ("Device removed:\n");
-  g_print ("\tname  : %s\n", name);
+  gst_print ("Device removed:\n");
+  gst_print ("\tname  : %s\n", name);
 
   g_free (name);
 }
@@ -272,7 +340,7 @@ bus_msg_handler (GstBus * bus, GstMessage * msg, gpointer user_data)
       gst_object_unref (device);
       break;
     default:
-      g_print ("%s message\n", GST_MESSAGE_TYPE_NAME (msg));
+      gst_print ("%s message\n", GST_MESSAGE_TYPE_NAME (msg));
       break;
   }
 
@@ -330,7 +398,7 @@ real_main (int argc, char **argv)
   if (!g_option_context_parse (ctx, &argc, &argv, &err))
 #endif
   {
-    g_print ("Error initializing: %s\n", GST_STR_NULL (err->message));
+    gst_print ("Error initializing: %s\n", GST_STR_NULL (err->message));
     g_option_context_free (ctx);
     g_clear_error (&err);
     return 1;
@@ -348,9 +416,9 @@ real_main (int argc, char **argv)
     gchar *version_str;
 
     version_str = gst_version_string ();
-    g_print ("%s version %s\n", g_get_prgname (), PACKAGE_VERSION);
-    g_print ("%s\n", version_str);
-    g_print ("%s\n", GST_PACKAGE_ORIGIN);
+    gst_print ("%s version %s\n", g_get_prgname (), PACKAGE_VERSION);
+    gst_print ("%s\n", version_str);
+    gst_print ("%s\n", GST_PACKAGE_ORIGIN);
     g_free (version_str);
 
     return 0;
@@ -367,7 +435,7 @@ real_main (int argc, char **argv)
   /* process optional remaining arguments in the form
    * DEVICE_CLASSES or DEVICE_CLASSES:FILTER_CAPS */
   for (arg = args; arg != NULL && *arg != NULL; ++arg) {
-    gchar **filters = g_strsplit (*arg, ":", -1);
+    gchar **filters = g_strsplit (*arg, ":", 2);
     if (filters != NULL && filters[0] != NULL) {
       GstCaps *caps = NULL;
 
@@ -384,12 +452,12 @@ real_main (int argc, char **argv)
   }
   g_strfreev (args);
 
-  g_print ("Probing devices...\n\n");
+  gst_print ("Probing devices...\n\n");
 
   timer = g_timer_new ();
 
   if (!gst_device_monitor_start (app.monitor)) {
-    g_printerr ("Failed to start device monitor!\n");
+    gst_printerr ("Failed to start device monitor!\n");
     return -1;
   }
 
@@ -399,7 +467,7 @@ real_main (int argc, char **argv)
     /* Consume all the messages pending on the bus and exit */
     g_idle_add ((GSourceFunc) quit_loop, app.loop);
   } else {
-    g_print ("Monitoring devices, waiting for devices to be removed or "
+    gst_print ("Monitoring devices, waiting for devices to be removed or "
         "new devices to be added...\n");
   }
 
@@ -412,6 +480,7 @@ real_main (int argc, char **argv)
   g_main_loop_unref (app.loop);
   g_timer_destroy (timer);
 
+  gst_deinit ();
   return 0;
 }
 

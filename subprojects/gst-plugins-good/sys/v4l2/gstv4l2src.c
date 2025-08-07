@@ -390,17 +390,18 @@ gst_v4l2src_get_property (GObject * object,
 }
 
 static gboolean
-gst_vl42_src_fixate_fields (GQuark field_id, GValue * value, gpointer user_data)
+gst_vl42_src_fixate_fields (const GstIdStr * fieldname, GValue * value,
+    gpointer user_data)
 {
   GstStructure *s = user_data;
 
-  if (field_id == g_quark_from_string ("interlace-mode"))
+  if (gst_id_str_is_equal_to_str (fieldname, "interlace-mode"))
     return TRUE;
 
-  if (field_id == g_quark_from_string ("colorimetry"))
+  if (gst_id_str_is_equal_to_str (fieldname, "colorimetry"))
     return TRUE;
 
-  gst_structure_fixate_field (s, g_quark_to_string (field_id));
+  gst_structure_fixate_field (s, gst_id_str_as_str (fieldname));
 
   return TRUE;
 }
@@ -421,7 +422,7 @@ gst_v4l2_src_fixate_struct_with_preference (GstStructure * s,
 
   /* Finally, fixate everything else except the interlace-mode and colorimetry
    * which still need further negotiation as it wasn't probed */
-  gst_structure_map_in_place (s, gst_vl42_src_fixate_fields, s);
+  gst_structure_map_in_place_id_str (s, gst_vl42_src_fixate_fields, s);
 }
 
 static void
@@ -687,7 +688,8 @@ gst_v4l2src_query_preferred_size (GstV4l2Src * v4l2src,
   GST_INFO_OBJECT (v4l2src, "Detect input %u as `%s`", in.index, in.name);
 
   /* Notify signal status using WARNING/INFO messages */
-  if (in.status & (V4L2_IN_ST_NO_POWER | V4L2_IN_ST_NO_SIGNAL)) {
+  if (in.status & (V4L2_IN_ST_NO_POWER | V4L2_IN_ST_NO_SIGNAL |
+          V4L2_IN_ST_NO_SYNC)) {
     if (!v4l2src->no_signal)
       /* note: taken from decklinksrc element */
       GST_ELEMENT_WARNING (v4l2src, RESOURCE, READ, ("Signal lost"),
@@ -920,10 +922,10 @@ gst_v4l2src_decide_allocation (GstBaseSrc * bsrc, GstQuery * query)
 
     if (gst_query_get_n_allocation_pools (query))
       gst_query_set_nth_allocation_pool (query, 0, pool,
-          src->v4l2object->info.size, 1, 0);
+          src->v4l2object->info.vinfo.size, 1, 0);
     else
-      gst_query_add_allocation_pool (query, pool, src->v4l2object->info.size, 1,
-          0);
+      gst_query_add_allocation_pool (query, pool,
+          src->v4l2object->info.vinfo.size, 1, 0);
 
     if (pool)
       gst_object_unref (pool);
@@ -996,7 +998,7 @@ gst_v4l2src_query (GstBaseSrc * bsrc, GstQuery * query)
 
       /* min latency is the time to capture one frame/field */
       min_latency = gst_util_uint64_scale_int (GST_SECOND, fps_d, fps_n);
-      if (GST_VIDEO_INFO_INTERLACE_MODE (&obj->info) ==
+      if (GST_VIDEO_INFO_INTERLACE_MODE (&obj->info.vinfo) ==
           GST_VIDEO_INTERLACE_MODE_ALTERNATE)
         min_latency /= 2;
 
@@ -1158,7 +1160,7 @@ gst_v4l2src_create (GstPushSrc * src, GstBuffer ** buf)
 
   do {
     ret = GST_BASE_SRC_CLASS (parent_class)->alloc (GST_BASE_SRC (src), 0,
-        obj->info.size, buf);
+        obj->info.vinfo.size, buf);
 
     if (G_UNLIKELY (ret != GST_FLOW_OK)) {
       if (ret == GST_V4L2_FLOW_RESOLUTION_CHANGE) {

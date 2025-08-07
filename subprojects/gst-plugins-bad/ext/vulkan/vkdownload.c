@@ -51,7 +51,7 @@ _set_caps_features_with_passthrough (const GstCaps * caps,
     GstCapsFeatures *features, *orig_features;
 
     orig_features = gst_caps_get_features (caps, i);
-    features = gst_caps_features_new (feature_name, NULL);
+    features = gst_caps_features_new_static_str (feature_name, NULL);
 
     m = gst_caps_features_get_size (orig_features);
     for (j = 0; j < m; j++) {
@@ -83,7 +83,6 @@ struct ImageToRawDownload
   GstVideoInfo out_info;
 
   GstBufferPool *pool;
-  gboolean pool_active;
 
   GstVulkanOperation *exec;
 };
@@ -138,6 +137,61 @@ _image_to_raw_propose_allocation (gpointer impl, GstQuery * decide_query,
   /* FIXME: implement */
 }
 
+static gboolean
+_image_to_raw_decide_allocation (gpointer impl, GstQuery * query)
+{
+  struct ImageToRawDownload *raw = impl;
+  GstStructure *config;
+  guint min = 1, max = 0, size = 1;
+  GstCaps *caps;
+  gboolean update_pool = FALSE;
+  GstBufferPool *pool = NULL;
+
+  gst_query_parse_allocation (query, &caps, NULL);
+  if (!caps)
+    return FALSE;
+
+  if (gst_query_get_n_allocation_pools (query) > 0) {
+    gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
+    if (GST_IS_VULKAN_BUFFER_POOL (pool)) {
+      update_pool = TRUE;
+    } else {
+      gst_clear_object (&pool);
+    }
+  }
+
+  /* let's null current pool */
+  gst_clear_object (&raw->pool);
+
+  if (!pool) {
+    pool = gst_vulkan_buffer_pool_new (raw->download->device);
+  }
+
+  config = gst_buffer_pool_get_config (pool);
+
+  gst_buffer_pool_config_set_params (config, raw->download->out_caps, size,
+      min, max);
+  if (gst_query_find_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL)) {
+    gst_buffer_pool_config_add_option (config,
+        GST_BUFFER_POOL_OPTION_VIDEO_META);
+  }
+
+  if (!gst_buffer_pool_set_config (pool, config)) {
+    gst_clear_object (&pool);
+    GST_ERROR_OBJECT (raw->download, "Failed to set buffer pool config");
+    return FALSE;
+  }
+
+  if (update_pool)
+    gst_query_set_nth_allocation_pool (query, 0, pool, size, min, max);
+  else
+    gst_query_add_allocation_pool (query, pool, size, min, max);
+
+  raw->pool = pool;
+
+  return TRUE;
+}
+
 static GstFlowReturn
 _image_to_raw_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
 {
@@ -161,22 +215,13 @@ _image_to_raw_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
   }
 
   if (!raw->pool) {
-    GstStructure *config;
-    guint min = 0, max = 0;
-    gsize size = 1;
-
-    raw->pool = gst_vulkan_buffer_pool_new (raw->download->device);
-    config = gst_buffer_pool_get_config (raw->pool);
-    gst_buffer_pool_config_set_params (config, raw->download->out_caps, size,
-        min, max);
-    if (!gst_buffer_pool_set_config (raw->pool, config)) {
-      gst_clear_object (&raw->pool);
-      return GST_FLOW_ERROR;
-    }
+    GST_ERROR_OBJECT (raw->download, "No pool found.");
+    goto error;
   }
-  if (!raw->pool_active) {
-    gst_buffer_pool_set_active (raw->pool, TRUE);
-    raw->pool_active = TRUE;
+
+  if (!gst_buffer_pool_set_active (raw->pool, TRUE)) {
+    GST_ERROR_OBJECT (raw->download, "Couldn't activate pool.");
+    goto error;
   }
 
   if ((ret =
@@ -197,8 +242,9 @@ _image_to_raw_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
   cmd_buf = raw->exec->cmd_buf;
 
   if (!gst_vulkan_operation_add_frame_barrier (raw->exec, inbuf,
-          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, NULL))
+          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+          VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+          NULL))
     goto unlock_error;
 
   barriers = gst_vulkan_operation_retrieve_image_barriers (raw->exec);
@@ -320,10 +366,7 @@ _image_to_raw_free (gpointer impl)
   struct ImageToRawDownload *raw = impl;
 
   if (raw->pool) {
-    if (raw->pool_active) {
-      gst_buffer_pool_set_active (raw->pool, FALSE);
-    }
-    raw->pool_active = FALSE;
+    gst_buffer_pool_set_active (raw->pool, FALSE);
     gst_object_unref (raw->pool);
     raw->pool = NULL;
   }
@@ -345,6 +388,7 @@ static const struct DownloadMethod image_to_raw_download = {
   _image_to_raw_transform_caps,
   _image_to_raw_set_caps,
   _image_to_raw_propose_allocation,
+  _image_to_raw_decide_allocation,
   _image_to_raw_perform,
   _image_to_raw_free,
 };
@@ -440,7 +484,7 @@ gst_vulkan_download_class_init (GstVulkanDownloadClass * klass)
   gstelement_class = (GstElementClass *) klass;
   gstbasetransform_class = (GstBaseTransformClass *) klass;
 
-  gst_element_class_set_metadata (gstelement_class, "Vulkan Downloader",
+  gst_element_class_set_static_metadata (gstelement_class, "Vulkan Downloader",
       "Filter/Video", "A Vulkan data downloader",
       "Matthew Waters <matthew@centricular.com>");
 
@@ -568,32 +612,34 @@ gst_vulkan_download_change_state (GstElement * element,
             ("Failed to retrieve vulkan instance"), (NULL));
         return GST_STATE_CHANGE_FAILURE;
       }
-      if (!gst_vulkan_device_run_context_query (GST_ELEMENT (vk_download),
-              &vk_download->device)) {
-        GError *error = NULL;
-        GST_DEBUG_OBJECT (vk_download,
-            "No device retrieved from peer elements");
-        if (!(vk_download->device =
-                gst_vulkan_instance_create_device (vk_download->instance,
-                    &error))) {
-          GST_ELEMENT_ERROR (vk_download, RESOURCE, NOT_FOUND,
-              ("Failed to create vulkan device"), ("%s",
-                  error ? error->message : ""));
-          g_clear_error (&error);
-          return GST_STATE_CHANGE_FAILURE;
+      if (!gst_vulkan_ensure_element_device (element, vk_download->instance,
+              &vk_download->device, 0)) {
+        return GST_STATE_CHANGE_FAILURE;
+      }
+
+      if (gst_vulkan_queue_run_context_query (GST_ELEMENT (vk_download),
+              &vk_download->queue)) {
+        guint32 flags, idx;
+
+        GST_DEBUG_OBJECT (vk_download, "Queue retrieved from peer elements");
+        idx = vk_download->queue->family;
+        flags = vk_download->device->physical_device->queue_family_props[idx]
+            .queueFlags;
+        if ((flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT)) == 0) {
+          GST_DEBUG_OBJECT (vk_download,
+              "Queue does not support VK_QUEUE_GRAPHICS_BIT with VK_QUEUE_TRANSFER_BIT");
+          gst_clear_object (&vk_download->queue);
         }
       }
 
-      if (!gst_vulkan_queue_run_context_query (GST_ELEMENT (vk_download),
-              &vk_download->queue)) {
-        GST_DEBUG_OBJECT (vk_download, "No queue retrieved from peer elements");
+      if (!vk_download->queue) {
         vk_download->queue =
             gst_vulkan_device_select_queue (vk_download->device,
             VK_QUEUE_GRAPHICS_BIT);
       }
       if (!vk_download->queue) {
         GST_ELEMENT_ERROR (vk_download, RESOURCE, NOT_FOUND,
-            ("Failed to create/retrieve vulkan queue"), (NULL));
+            ("Failed to create/retrieve a valid vulkan queue"), (NULL));
         return GST_STATE_CHANGE_FAILURE;
       }
       break;
@@ -753,7 +799,40 @@ gst_vulkan_download_propose_allocation (GstBaseTransform * bt,
 static gboolean
 gst_vulkan_download_decide_allocation (GstBaseTransform * bt, GstQuery * query)
 {
-  return TRUE;
+  GstVulkanDownload *vk_download = GST_VULKAN_DOWNLOAD (bt);
+  guint i;
+  gboolean ret = TRUE;
+
+  for (i = 0; i < G_N_ELEMENTS (download_methods); i++) {
+    GstCaps *templ;
+    gboolean res;
+
+    templ = gst_static_caps_get (download_methods[i]->in_template);
+    if (!gst_caps_can_intersect (vk_download->in_caps, templ)) {
+      gst_caps_unref (templ);
+      continue;
+    }
+    gst_caps_unref (templ);
+
+    templ = gst_static_caps_get (download_methods[i]->out_template);
+    if (!gst_caps_can_intersect (vk_download->out_caps, templ)) {
+      gst_caps_unref (templ);
+      continue;
+    }
+    gst_caps_unref (templ);
+
+    res =
+        download_methods[i]->decide_allocation (vk_download->download_impls[i],
+        query);
+
+    /* if all methods fail, function fails */
+    if (i == 0)
+      ret = res;
+    else
+      ret |= res;
+  }
+
+  return ret;
 }
 
 static gboolean

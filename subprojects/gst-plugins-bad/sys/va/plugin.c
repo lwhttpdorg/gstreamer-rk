@@ -38,10 +38,13 @@
 #include "gstvah264enc.h"
 #include "gstvah265dec.h"
 #include "gstvah265enc.h"
+#include "gstvah266dec.h"
 #include "gstvajpegdec.h"
+#include "gstvajpegenc.h"
 #include "gstvampeg2dec.h"
 #include "gstvaprofile.h"
 #include "gstvavp8dec.h"
+#include "gstvavp8enc.h"
 #include "gstvavp9dec.h"
 #include "gstvavp9enc.h"
 #include "gstvavpp.h"
@@ -122,6 +125,15 @@ plugin_register_decoders (GstPlugin * plugin, GstVaDevice * device,
               device->render_device_path);
         }
         break;
+#if VA_CHECK_VERSION(1, 22, 0)
+      case VVC:
+        if (!gst_va_h266_dec_register (plugin, device, sinkcaps, srccaps,
+                GST_RANK_NONE)) {
+          GST_WARNING ("Failed to register H266 decoder: %s",
+              device->render_device_path);
+        }
+        break;
+#endif
       case VP8:
         if (!gst_va_vp8_dec_register (plugin, device, sinkcaps, srccaps,
                 GST_VA_RANK_PRIMARY)) {
@@ -175,6 +187,13 @@ plugin_register_encoders (GstPlugin * plugin, GstVaDevice * device,
   GHashTableIter iter;
   gpointer key, value;
 
+  if (GST_VA_DISPLAY_IS_IMPLEMENTATION (device->display, INTEL_I965)
+      && g_getenv ("GST_VA_ALL_DRIVERS") == NULL) {
+    gst_plugin_add_status_warning (plugin,
+        "The Intel i965 VA driver is blocklisted for encoding, use GST_VA_ALL_DRIVERS to overwrite.");
+    return;
+  }
+
   g_hash_table_iter_init (&iter, encoders);
   while (g_hash_table_iter_next (&iter, &key, &value)) {
     guint32 codec = *((gint64 *) key);
@@ -209,10 +228,24 @@ plugin_register_encoders (GstPlugin * plugin, GstVaDevice * device,
               device->render_device_path);
         }
         break;
+      case VP8:
+        if (!gst_va_vp8_enc_register (plugin, device, sinkcaps, srccaps,
+                GST_RANK_NONE, entrypoint)) {
+          GST_WARNING ("Failed to register VP8 encoder: %s",
+              device->render_device_path);
+        }
+        break;
       case VP9:
         if (!gst_va_vp9_enc_register (plugin, device, sinkcaps, srccaps,
                 GST_RANK_NONE, entrypoint)) {
           GST_WARNING ("Failed to register VP9 encoder: %s",
+              device->render_device_path);
+        }
+        break;
+      case JPEG:
+        if (!gst_va_jpeg_enc_register (plugin, device, sinkcaps, srccaps,
+                GST_RANK_NONE, entrypoint)) {
+          GST_WARNING ("Failed to register JPEG encoder: %s",
               device->render_device_path);
         }
         break;

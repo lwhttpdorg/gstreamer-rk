@@ -45,6 +45,7 @@
 #define __GST_RTSPSRC_H__
 
 #include <gst/gst.h>
+#include <gst/base/base.h>
 
 G_BEGIN_DECLS
 
@@ -227,6 +228,9 @@ struct _GstRTSPSrc {
   GstSDPMessage   *sdp;
   gboolean         from_sdp;
   GList           *streams;
+  GMutex           flow_combiner_lock;
+  GstFlowCombiner *flow_combiner;
+  gboolean         emitted_no_more_pads;
   GstStructure    *props;
   gboolean         need_activate;
 
@@ -281,6 +285,8 @@ struct _GstRTSPSrc {
   gboolean          ignore_x_server_reply;
   GstStructure     *prop_extra_http_request_headers;
   gboolean          tcp_timestamp;
+  gboolean          force_non_compliant_url;
+  gboolean          client_managed_mikey;
 
   /* state */
   GstRTSPState       state;
@@ -339,6 +345,8 @@ struct _GstRTSPSrcClass {
   gboolean (*get_parameter) (GstRTSPSrc *rtsp, const gchar *parameter, const gchar *content_type, GstPromise *promise);
   gboolean (*get_parameters) (GstRTSPSrc *rtsp, gchar **parameters, const gchar *content_type, GstPromise *promise);
   gboolean (*set_parameter) (GstRTSPSrc *rtsp, const gchar *name, const gchar *value, const gchar *content_type, GstPromise *promise);
+  gboolean (*set_mikey_parameter) (GstRTSPSrc *rtsp, guint id, GstCaps *mikey, GstPromise *promise);
+  gboolean (*remove_key) (GstRTSPSrc *rtsp, guint id);
   GstFlowReturn (*push_backchannel_buffer) (GstRTSPSrc *src, guint id, GstSample *sample);
   GstFlowReturn (*push_backchannel_sample) (GstRTSPSrc *src, guint id, GstSample *sample);
 };

@@ -66,9 +66,7 @@ GST_DEBUG_CATEGORY (GST_CAT_DEFAULT);
 
 #define gst_vulkan_decoder_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE (GstVulkanDecoder, gst_vulkan_decoder,
-    GST_TYPE_OBJECT, G_ADD_PRIVATE (GstVulkanDecoder)
-    GST_DEBUG_CATEGORY_INIT (gst_vulkan_decoder_debug,
-        "vulkandecoder", 0, "Vulkan device decoder"));
+    GST_TYPE_OBJECT, G_ADD_PRIVATE (GstVulkanDecoder));
 
 static GstVulkanHandle *gst_vulkan_decoder_new_video_session_parameters
     (GstVulkanDecoder * self, GstVulkanDecoderParameters * params,
@@ -136,7 +134,6 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
   GstVulkanDecoderPrivate *priv;
   VkPhysicalDevice gpu;
   VkResult res;
-  VkVideoDecodeCapabilitiesKHR dec_caps;
   VkVideoFormatPropertiesKHR *fmts = NULL;
   VkVideoProfileListInfoKHR profile_list = {
     .sType = VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR,
@@ -191,7 +188,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
   switch (self->codec) {
     case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
       /* *INDENT-OFF* */
-      priv->caps.codec.h264dec = (VkVideoDecodeH264CapabilitiesKHR) {
+      priv->caps.decoder.codec.h264 = (VkVideoDecodeH264CapabilitiesKHR) {
           .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_KHR,
       };
       /* *INDENT-ON* */
@@ -199,7 +196,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
       break;
     case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
       /* *INDENT-OFF* */
-      priv->caps.codec.h265dec = (VkVideoDecodeH265CapabilitiesKHR) {
+      priv->caps.decoder.codec.h265 = (VkVideoDecodeH265CapabilitiesKHR) {
           .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_CAPABILITIES_KHR,
       };
       /* *INDENT-ON* */
@@ -210,13 +207,13 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
   }
 
   /* *INDENT-OFF* */
-  dec_caps = (VkVideoDecodeCapabilitiesKHR) {
+  priv->caps.decoder.caps = (VkVideoDecodeCapabilitiesKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR,
-    .pNext = &priv->caps.codec,
+    .pNext = &priv->caps.decoder.codec,
   };
   priv->caps.caps =  (VkVideoCapabilitiesKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_CAPABILITIES_KHR,
-    .pNext = &dec_caps,
+    .pNext = &priv->caps.decoder.caps,
   };
   /* *INDENT-ON* */
 
@@ -229,10 +226,10 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
 
   switch (self->codec) {
     case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR:
-      maxlevel = priv->caps.codec.h264dec.maxLevelIdc;
+      maxlevel = priv->caps.decoder.codec.h264.maxLevelIdc;
       break;
     case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR:
-      maxlevel = priv->caps.codec.h265dec.maxLevelIdc;
+      maxlevel = priv->caps.decoder.codec.h265.maxLevelIdc;
       break;
     default:
       maxlevel = 0;
@@ -273,11 +270,11 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
       GST_STR_NULL (priv->caps.caps.stdHeaderVersion.extensionName),
       VK_CODEC_VERSION (priv->caps.caps.stdHeaderVersion.specVersion),
       VK_CODEC_VERSION (_vk_codec_extensions[codec_idx].specVersion),
-      dec_caps.flags ? "" : " invalid",
-      dec_caps.flags &
+      priv->caps.decoder.caps.flags ? "" : " invalid",
+      priv->caps.decoder.caps.flags &
       VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR ?
       " reuse_output_DPB" : "",
-      dec_caps.flags &
+      priv->caps.decoder.caps.flags &
       VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR ?
       " dedicated_DPB" : "");
 
@@ -288,7 +285,7 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
    * VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_DISTINCT_BIT_KHR - reports the
    * implementation supports using distinct Video Picture Resources for decode
    * DPB and decode output. */
-  self->dedicated_dpb = ((dec_caps.flags &
+  self->dedicated_dpb = ((priv->caps.decoder.caps.flags &
           VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR) == 0);
 
   /* The DPB or Reconstructed Video Picture Resources for the video session may
@@ -297,15 +294,6 @@ gst_vulkan_decoder_start (GstVulkanDecoder * self,
    * represents one of the DPB Video Picture Resources. */
   self->layered_dpb = ((priv->caps.caps.flags &
           VK_VIDEO_CAPABILITY_SEPARATE_REFERENCE_IMAGES_BIT_KHR) == 0);
-
-  if (self->layered_dpb && !self->dedicated_dpb) {
-    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INCOMPATIBLE_DRIVER,
-        "Buggy driver: "
-        "VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR set but "
-        "VK_VIDEO_CAPABILITY_SEPARATE_REFERENCE_IMAGES_BIT_KHR is unset!");
-
-    goto failed;
-  }
 
   priv->caps.caps.pNext = NULL;
 
@@ -697,11 +685,12 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
     return FALSE;
   }
 
-  new_layout = (self->layered_dpb || pic->dpb) ?
+  new_layout = ((self->layered_dpb && self->dedicated_dpb) || pic->dpb) ?
       VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR :
       VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR;
   gst_vulkan_operation_add_frame_barrier (priv->exec, pic->out,
-      VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+      VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,
+      VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,
       VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR, new_layout, NULL);
 
   /* Reference for the current image, if existing and not layered */
@@ -713,7 +702,7 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
     }
   }
 
-  if (!self->layered_dpb) {
+  if (!self->layered_buffer) {
     /* All references (apart from the current) for non-layered refs */
 
     for (i = 0; i < pic->decode_info.referenceSlotCount; i++) {
@@ -727,8 +716,36 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
       }
 
       if (!ref_pic->dpb) {
-        gst_vulkan_operation_add_frame_barrier (priv->exec, ref_buf,
-            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        guint i, n = gst_buffer_n_memory (ref_buf);
+        GArray *barriers =
+            gst_vulkan_operation_new_extra_image_barriers (priv->exec);
+
+        for (i = 0; i < n; i++) {
+          GstVulkanImageMemory *vkmem =
+              (GstVulkanImageMemory *) gst_buffer_peek_memory (ref_buf, i);
+          VkImageMemoryBarrier2KHR barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR,
+            .pNext = NULL,
+            .srcStageMask = VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,
+            .dstStageMask = VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstAccessMask = VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR
+                | VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR,
+            .oldLayout = vkmem->barrier.image_layout,
+            .newLayout = VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = vkmem->image,
+            .subresourceRange = vkmem->barrier.subresource_range,
+          };
+
+          g_array_append_val (barriers, barrier);
+        }
+
+        gst_vulkan_operation_add_extra_image_barriers (priv->exec, barriers);
+        g_array_unref (barriers);
+        gst_vulkan_operation_update_frame (priv->exec, ref_buf,
+            VK_PIPELINE_STAGE_2_VIDEO_DECODE_BIT_KHR,
             VK_ACCESS_2_VIDEO_DECODE_WRITE_BIT_KHR
             | VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR,
             VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR, NULL);
@@ -757,7 +774,8 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
   g_array_unref (barriers);
 
   priv->vk.CmdBeginVideoCoding (cmd_buf->cmd, &decode_start);
-  gst_vulkan_operation_begin_query (priv->exec, 0);
+  gst_vulkan_operation_begin_query (priv->exec,
+      (VkBaseInStructure *) & pic->decode_info, 0);
   priv->vk.CmdDecodeVideo (cmd_buf->cmd, &pic->decode_info);
   gst_vulkan_operation_end_query (priv->exec, 0);
   priv->vk.CmdEndVideoCoding (cmd_buf->cmd, &decode_end);
@@ -808,7 +826,8 @@ gst_vulkan_decoder_caps (GstVulkanDecoder * self,
 
   if (caps) {
     *caps = priv->caps;
-    caps->caps.pNext = &caps->codec;
+    caps->caps.pNext = &caps->decoder.caps;
+    caps->decoder.caps.pNext = &caps->decoder.codec;
   }
 
   return TRUE;
@@ -817,7 +836,7 @@ gst_vulkan_decoder_caps (GstVulkanDecoder * self,
 /**
  * gst_vulkan_decoder_out_format: (skip)
  * @self: a #GstVulkanDecoder
- * @format: the Vulkan output format properties
+ * @format: (out): the Vulkan output format properties
  *
  * Gets the Vulkan format properties of the output frames.
  *
@@ -996,7 +1015,8 @@ gst_vulkan_decoder_update_ycbcr_sampler (GstVulkanDecoder * self,
 
   device = self->queue->device;
 
-  if (!gst_vulkan_instance_check_version (device->instance, 1, 2, 0)) {
+  if (!gst_vulkan_physical_device_check_api_version (device->physical_device, 1,
+          2, 0)) {
     g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
         "Sampler Ycbcr conversion not available in API");
     return FALSE;
@@ -1068,61 +1088,14 @@ gst_vulkan_decoder_picture_create_view (GstVulkanDecoder * self,
     GstBuffer * buf, gboolean is_out)
 {
   GstVulkanDecoderPrivate *priv;
-  VkSamplerYcbcrConversionInfo yuv_sampler_info;
-  VkImageViewCreateInfo view_create_info;
-  GstVulkanImageMemory *vkmem;
-  GstMemory *mem;
-  gpointer pnext;
-  guint n_mems;
 
   g_return_val_if_fail (GST_IS_VULKAN_DECODER (self) && GST_IS_BUFFER (buf),
       NULL);
 
-  n_mems = gst_buffer_n_memory (buf);
-  if (n_mems != 1)
-    return NULL;
-
-  mem = gst_buffer_peek_memory (buf, 0);
-  if (!gst_is_vulkan_image_memory (mem))
-    return NULL;
-
   priv = gst_vulkan_decoder_get_instance_private (self);
 
-  pnext = NULL;
-  if (priv->sampler) {
-    /* *INDENT-OFF* */
-    yuv_sampler_info = (VkSamplerYcbcrConversionInfo) {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
-      .conversion = priv->sampler->handle,
-    };
-    /* *INDENT-ON* */
-
-    pnext = &yuv_sampler_info;
-  }
-
-  vkmem = (GstVulkanImageMemory *) mem;
-
-  /* *INDENT-OFF* */
-  view_create_info = (VkImageViewCreateInfo) {
-    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-    .pNext = pnext,
-    .viewType = self->layered_dpb && !is_out ?
-        VK_IMAGE_VIEW_TYPE_2D_ARRAY: VK_IMAGE_VIEW_TYPE_2D,
-    .format = vkmem->create_info.format,
-    .image = vkmem->image,
-    .components = _vk_identity_component_map,
-    .subresourceRange = (VkImageSubresourceRange) {
-      .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-      .baseArrayLayer = 0,
-      .layerCount     = self->layered_dpb && !is_out ?
-          VK_REMAINING_ARRAY_LAYERS : 1,
-      .levelCount     = 1,
-    },
-  };
-  /* *INDENT-ON* */
-
-  return gst_vulkan_get_or_create_image_view_with_info (vkmem,
-      &view_create_info);
+  return gst_vulkan_video_image_create_view (buf, self->layered_dpb, is_out,
+      priv->sampler);
 }
 
 /**
@@ -1148,7 +1121,7 @@ gst_vulkan_decoder_picture_init (GstVulkanDecoder * self,
 
   priv = gst_vulkan_decoder_get_instance_private (self);
 
-  if (self->layered_dpb)
+  if (self->layered_dpb && self->dedicated_dpb)
     g_return_val_if_fail (GST_IS_BUFFER (self->layered_buffer), FALSE);
   else if (self->dedicated_dpb)
     g_return_val_if_fail (GST_IS_BUFFER_POOL (priv->dpb_pool), FALSE);
@@ -1161,7 +1134,7 @@ gst_vulkan_decoder_picture_init (GstVulkanDecoder * self,
   pic->dpb = NULL;
   pic->img_view_ref = NULL;
 
-  if (self->layered_dpb) {
+  if (self->layered_dpb && self->dedicated_dpb) {
     pic->img_view_ref =
         gst_vulkan_decoder_picture_create_view (self, self->layered_buffer,
         FALSE);
@@ -1327,6 +1300,7 @@ gst_vulkan_decoder_new_from_queue (GstVulkanQueue * queue, guint codec)
   GstVulkanDecoder *decoder;
   guint flags, expected_flag, supported_video_ops;
   const char *extension;
+  static gsize cat_gonce = 0;
 
   g_return_val_if_fail (GST_IS_VULKAN_QUEUE (queue), NULL);
 
@@ -1335,7 +1309,13 @@ gst_vulkan_decoder_new_from_queue (GstVulkanQueue * queue, guint codec)
   flags = device->queue_family_props[queue->family].queueFlags;
   supported_video_ops = device->queue_family_ops[queue->family].video;
 
-  if (device->properties.apiVersion < VK_MAKE_VERSION (1, 3, 238)) {
+  if (g_once_init_enter (&cat_gonce)) {
+    GST_DEBUG_CATEGORY_INIT (gst_vulkan_decoder_debug,
+        "vulkandecoder", 0, "Vulkan device decoder");
+    g_once_init_leave (&cat_gonce, TRUE);
+  }
+
+  if (device->properties.apiVersion < VK_MAKE_VERSION (1, 3, 275)) {
     GST_WARNING_OBJECT (queue,
         "Driver API version [%d.%d.%d] doesn't support Video extensions",
         VK_VERSION_MAJOR (device->properties.apiVersion),

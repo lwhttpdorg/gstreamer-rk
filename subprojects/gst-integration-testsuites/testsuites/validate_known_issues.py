@@ -43,38 +43,9 @@ KNOWN_ISSUES = {
                 "timeout": True,
                 "sometimes": True,
             },
-        ]
-    },
-    "https://gitlab.freedesktop.org/gstreamer/gst-plugins-base/issues/311": {
-        "tests": [
-            "validate.http.*.ogg$",
-            "validate.http.*.ogv$",
-            "validate.rtsp.*.ogg$",
-            "validate.rtsp.*.ogv$",
-        ],
-        "issues": [
             {
-                "detected-on": "playbin",
-                "summary": "We got an ERROR message on the bus",
-                "details": ".*No valid frames decoded before end of stream.*",
-                "level": "critical",
-                "sometimes": True,
-            },
-            {
-                "level": "critical",
-                "summary": "We got an ERROR message on the bus",
-                "details": ".*Got error: Could not decode stream.*",
-                "sometimes": True,
-            },
-            {
-                "level": "critical",
-                "summary": "The program stopped before some actions were executed",
-                "sometimes": True,
-            },
-            {
-                "summary": "The program stopped before some actions were executed",
-                "issue-id": "scenario::not-ended",
-                "sometimes": True,
+                'returncode': 238,
+                'sometimes': True,
             },
         ]
     },
@@ -208,26 +179,6 @@ KNOWN_ISSUES = {
                 "sometimes": True,
             },
         ]
-    },
-    "https://gitlab.freedesktop.org/gstreamer/gst-libav/issues/45": {
-        "tests": [
-            "validate.file.playback.reverse_playback.rawaudioS32LE_prores_mov"
-        ],
-        "issues": [
-            {
-                "issue-id": "runtime::error-on-bus",
-                "summary": "We got an ERROR message on the bus",
-                "level": "critical",
-                "detected-on": "playbin0",
-                "details": ".*No valid frames decoded before end of stream.*",
-            },
-            {
-                "issue-id": "scenario::not-ended",
-                "summary": "The program stopped before some actions were executed",
-                "level": "critical",
-                "detected-on": "reverse_playback",
-            },
-        ],
     },
     "Our asf file is basically broken": {
         "tests": [

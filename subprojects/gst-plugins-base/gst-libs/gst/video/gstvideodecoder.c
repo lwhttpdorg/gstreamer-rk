@@ -1307,13 +1307,18 @@ caps_error:
   }
 }
 
+/* Must be called holding the GST_VIDEO_DECODER_STREAM_LOCK */
 static gboolean
-gst_video_decoder_handle_missing_data_default (GstVideoDecoder *
-    decoder, GstClockTime timestamp, GstClockTime duration)
+gst_video_decoder_handle_missing_data_default (GstVideoDecoder * decoder,
+    GstClockTime timestamp, GstClockTime duration)
 {
   GstVideoDecoderPrivate *priv;
 
   priv = decoder->priv;
+
+  /* Exit early in case the decoder has been resetted and hasn't received a new segment event yet. */
+  if (decoder->input_segment.format != GST_FORMAT_TIME)
+    return FALSE;
 
   if (priv->automatic_request_sync_points) {
     GstClockTime deadline =
@@ -1834,7 +1839,8 @@ gst_video_decoder_src_event_default (GstVideoDecoder * decoder,
       priv->proportion = proportion;
       if (G_LIKELY (GST_CLOCK_TIME_IS_VALID (timestamp))) {
         if (G_UNLIKELY (diff > 0)) {
-          priv->earliest_time = timestamp + 2 * diff + priv->qos_frame_duration;
+          priv->earliest_time =
+              timestamp + MIN (2 * diff, GST_SECOND) + priv->qos_frame_duration;
         } else {
           priv->earliest_time = timestamp + diff;
         }
@@ -2438,6 +2444,9 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
 
   priv->input_offset += gst_buffer_get_size (buf);
 
+  if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DECODE_ONLY))
+    GST_VIDEO_CODEC_FRAME_SET_DECODE_ONLY (priv->current_frame);
+
   if (priv->packetized) {
     GstVideoCodecFrame *frame;
     gboolean was_keyframe = FALSE;
@@ -2533,9 +2542,9 @@ gst_video_decoder_flush_decode (GstVideoDecoder * dec)
     }
 
     GST_DEBUG_OBJECT (dec, "decoding frame %p buffer %p, PTS %" GST_TIME_FORMAT
-        ", DTS %" GST_TIME_FORMAT, frame, frame->input_buffer,
-        GST_TIME_ARGS (GST_BUFFER_PTS (frame->input_buffer)),
-        GST_TIME_ARGS (GST_BUFFER_DTS (frame->input_buffer)));
+        ", DTS %" GST_TIME_FORMAT, current_frame, current_frame->input_buffer,
+        GST_TIME_ARGS (GST_BUFFER_PTS (current_frame->input_buffer)),
+        GST_TIME_ARGS (GST_BUFFER_DTS (current_frame->input_buffer)));
 
     next = walk->next;
 
@@ -4252,6 +4261,11 @@ gst_video_decoder_decide_allocation_default (GstVideoDecoder * decoder,
     /* no pool, we can make our own */
     GST_DEBUG_OBJECT (decoder, "no pool, making new pool");
     pool = gst_video_buffer_pool_new ();
+    {
+      gchar *name = g_strdup_printf ("%s-pool", GST_OBJECT_NAME (decoder));
+      g_object_set (pool, "name", name, NULL);
+      g_free (name);
+    }
   }
 
   /* now configure */
@@ -4272,6 +4286,12 @@ gst_video_decoder_decide_allocation_default (GstVideoDecoder * decoder,
 
       gst_object_unref (pool);
       pool = gst_video_buffer_pool_new ();
+      {
+        gchar *name =
+            g_strdup_printf ("%s-fallback-pool", GST_OBJECT_NAME (decoder));
+        g_object_set (pool, "name", name, NULL);
+        g_free (name);
+      }
       gst_buffer_pool_config_set_params (config, outcaps, size, min, max);
       gst_buffer_pool_config_set_allocator (config, allocator, &params);
     }

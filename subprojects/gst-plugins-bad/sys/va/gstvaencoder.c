@@ -28,10 +28,10 @@
 #include <gst/va/gstvavideoformat.h>
 #include <gst/va/vasurfaceimage.h>
 
+#include "vacompat.h"
 #include "gstvacaps.h"
 #include "gstvaprofile.h"
 #include "gstvadisplay_priv.h"
-#include "vacompat.h"
 
 struct _GstVaEncoder
 {
@@ -123,6 +123,7 @@ gst_va_encoder_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_DISPLAY:{
+      /* G_PARAM_CONSTRUCT_ONLY */
       g_assert (!self->display);
       self->display = g_value_dup_object (value);
       break;
@@ -364,7 +365,7 @@ _create_reconstruct_pool (GstVaDisplay * display, GArray * surface_formats,
 
   caps = gst_video_info_to_caps (&info);
   gst_caps_set_features_simple (caps,
-      gst_caps_features_from_string (GST_CAPS_FEATURE_MEMORY_VA));
+      gst_caps_features_new_single_static_str (GST_CAPS_FEATURE_MEMORY_VA));
 
   allocator = gst_va_allocator_new (display, surface_formats);
 

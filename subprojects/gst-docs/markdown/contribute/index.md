@@ -426,24 +426,18 @@ In the simplest case, you might be able to get away with just doing a `git pull
 
 #### Coding Style
 
-Try to stick to the GStreamer indentation and coding style. There is a script
-called [`gst-indent`][gst-indent] which you can run over your `.c` or `.cpp`
-files if you want your code auto-indented before making the patch. The script
-requires GNU indent to be installed already. Please do _not_ run `gst-indent` on
-header files, our header file indentation is free-form. If you build GStreamer
-from git, a local commit hook will be installed that checks if your commit
-conforms to the required style (also using GNU indent).
+Try to stick to the GStreamer indentation and coding style. There is an
+application called [`gst-indent-1.0`][gst-indent] that can be installed
+with `pip install gst-indent`. You can run it over your `.c` or
+`.cpp` files if you want your code auto-indented before making the patch.
 
-Different versions of GNU indent may occasionally yield slightly different
-indentations. If that happens, please ignore any indentation changes in
-sections of code that your patch does not touch. You can do that by staging
-changes selectively via `git add -p`. You can bypass the local indentation
-check hook by using `git commit -n`, but it will still be checked again later
-when you submit your changes through GitLab for merging.
+Please do _not_ run `gst-indent-1.0` on header files, our header file
+indentation is free-form.
 
-We are working on making this less hasslesome.
-
-[gst-indent]: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/scripts/gst-indent-all
+If you build GStreamer from git, a local commit hook will be installed that
+checks if your commit conforms to the required style. You can bypass that local
+indentation check hook by using `git commit -n`, but it will still be checked
+again later on the CI when you submit your changes through GitLab for merging.
 
 Compiler requirements:
  - we are targetting the C99 compiler and preprocesser feature subset
@@ -461,9 +455,41 @@ Other style guidelines:
    - declare variables inline (as opposed to only at the beginning of a block)
    - use advanced/nicer struct initialisers
 
-[gst-indent]: https://gitlab.freedesktop.org/gstreamer/gstreamer/tree/master/tools/gst-indent
+[gst-indent]: https://gitlab.freedesktop.org/gstreamer/gst-indent/
 [bitreader]: https://gstreamer.freedesktop.org/documentation/base/gstbitreader.html?gi-language=c#GstBitReader
 [bytereader]: https://gstreamer.freedesktop.org/documentation/base/gstbytereader.html?gi-language=c#GstByteReader
+
+##### Pre-commit
+
+GStreamer uses [pre-commit](https://pre-commit.com/) to validate coding style automatically when you create a new commit.
+
+pre-commit can be installed with `pip`:
+```
+pip install pre-commit
+```
+
+The pre-commit hooks are automatically installed the first you run `meson setup`.
+They can be also be installed manually using:
+```
+pre-commit install
+```
+
+One installed, pre-commit will run automatically on every `git commit`.
+You can also run manually all the pre-commit hooks using:
+```
+pre-commit run --all-files --show-diff-on-failure
+```
+
+When you create a new commit, the pre-commit hooks may apply changes to your files,
+automatically fixing the issues found. When this happens, simply add the changes to
+your staging environment, and re-run the commit.
+
+You can bypass the pre-commit hooks using `git commit --no-verify`. The commits will
+be validated in the CI's `check` stage, so you will still need to ensure that all
+hooks passes correctly. To fix your commits,  you can use the helper script located in
+`scripts/check-commits.py` that will rebase your work starting from the commit passed
+as first argument and it will run pre-commit for each commit, allowing you to fix them
+individually rather than using a new commit on top of your branch to fix the issues found.
 
 ### Writing Good Commit Messages
 
@@ -584,9 +610,19 @@ different revisions of a merge request branch, so just keep the branch always
 to the "latest clean version". See the [Rewriting History](https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History)
 section of the [Pro Git book](https://git-scm.com/book/en/v2) for more details.
 
+GStreamer does not use merge commits, and all merge requests will be rebased
+automatically by `gstreamer-merge-bot` before merging. Unless necessary due to
+conflicts, you should not rebase your merge request on top of the latest
+`main` branch. It makes it harder for reviewers to review changes pushed to the
+merge request, since it breaks the "Compare with previous version" option.
+
 GStreamer maintainers will typically receive e-mail notifications when you add
-a comment and when all oustanding discussions have been resolved. They may or
-may not receive e-mail notifications when you update the commits in your branch.
+a comment and when all oustanding discussions have been resolved. They may
+receive notifications when you push new commits, but will generally not receive
+notifications for rebases, so if you want to send a gentle review reminder,
+posting a comment is the best way to do it.
+
+![Compare with previous version](images/contribute/compare.png)
 
 # Workflows for GStreamer developers
 
@@ -655,6 +691,91 @@ It's of course fine for another developer to assign a merge request with
 a `Merge in X` label to Marge immediately if they think it's fine to go in
 now and don't expect further comments or review being needed by others.
 
+### Fixing Since tags
+
+Since a few releases, CI  runs checks to ensure that all new symbols added
+as public API are marked with a Since tag in their docstrings.
+
+If the documentation job rejects your MR with:
+
+```
+ERROR: [check-missing-since-markers]: (missing-since-marker): /some/path: Missing since marker for GST_SOME_SYMBOL
+```
+
+You should be able to get rid of the warning by adding a new gtk-doc comment
+in the relevant source or header file with such contents:
+
+```
+/**
+ * GST_SOME_SYMBOL:
+ *
+ * some description of the symbol purposes
+ *
+ * Since: 1.XX
+ */
+```
+
+A common mistake for the docstring is to omit the description paragraph:
+
+```
+/**
+ * GST_SOME_SYMBOL:
+ *
+ * Since: 1.XX
+ */
+```
+
+This will *not* parse as valid gtk-doc syntax.
+
+
+If your attempt is not enough and you'd rather avoid waiting for CI to try various
+docstrings, or you simply want to build your documentation changes *fast* on
+your local machine, you can proceed as follows:
+
+```
+# Make sure you have hotdoc
+pipx install hotdoc
+# Make sure you have a doc-enabled build
+rm -rf build && meson build -Dgpl=enabled -Ddoc=enabled && ninja -C build
+# Build the complete documentation once
+ninja -C build/ subprojects/gst-docs/GStreamer-doc -v
+# Enter the devenv, hotdoc now finds the current devhelp2 files and
+# will not emit warnings about incorrect links
+ninja -C build devenv
+# Go back to the toplevel directory
+cd ..
+# Build the exact documentation subproject you are interested in,
+# this is super fast, adapt command to your case
+hotdoc run --conf-file build/subprojects/gst-plugins-bad/docs/mpegts-doc.json --previous-symbol-index subprojects/gst-docs/symbols/symbol_index.json
+```
+
+Another, less common situation is for the header file the docstring was added in to
+be explicitly excluded by the meson build files: some header files are known
+to contain gtk-doc like docstrings and to generate a ton of irrelevant warnings,
+we ignore those.
+
+If you have a concern it might be the case you can look at the relevant
+hotdoc.json file for your subproject to see exactly what sources are
+included / excluded.
+
+You can enable checks for up-to-date plugin caches and presence of the necessary
+since tags at commit time by setting the `GST_ENABLE_DOC_PRE_COMMIT_HOOK`
+environment variable to any value other than "0":
+
+``` shell
+GST_ENABLE_DOC_PRE_COMMIT_HOOK=1 git commit
+```
+
+The pre-commit hook will:
+
+* Stash unstaged changes (the path to the patch file is printed out)
+* Locate the build directory (the location can be specified through the `GST_DOC_BUILDDIR` environment variable)
+* Build the version of the code that is to be committed
+* Build the relevant plugins caches and error out if there is a diff
+* Build the relevant doc subprojects using `hotdoc` and error out in case of since tag errors
+
+In any case, the stashed changes are then re-applied
+
 ## Backporting to a stable branch
 
 Before backporting any changes to a stable branch, they should first be
@@ -694,3 +815,16 @@ or not later.
 
 [needs-backport]: https://gitlab.freedesktop.org/groups/gstreamer/-/merge_requests?state=merged&label_name[]=Needs%20backport
 [maybe-backport]: https://gitlab.freedesktop.org/groups/gstreamer/-/merge_requests?state=merged&label_name[]=Maybe%20backport
+
+## Deleting branch in your personal fork when Merge Request gets merged
+
+When filing a Merge Request in GitLab, there's a checkbox that can be ticked
+to make GitLab automatically delete the feature branch in your personal fork
+when the Merge Request gets merged.
+
+This only works if the GitLab user merging the Merge Request has developer
+permissions in your personal fork though, so to make this work you will need
+to add the GStreamer Marge bot user as member to your personal fork.
+
+Alternatively there's a "Delete merged branches" menu item in the vertical dots
+menu on the "Branches" page of your personal fork in GitLab.

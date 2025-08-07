@@ -1,6 +1,6 @@
 project('gst-plugins-good', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -23,7 +23,7 @@ if have_cxx
 endif
 
 glib_req = '>= 2.64.0'
-orc_req = '>= 0.4.17'
+orc_req = '>= 0.4.34'
 
 if gst_version_is_stable
   gst_req = '>= @0@.@1@.0'.format(gst_version_major, gst_version_minor)
@@ -35,10 +35,24 @@ api_version = '1.0'
 
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 plugins = []
+plugin_sources = {}
 static_build = get_option('default_library') == 'static'
 
-cc = meson.get_compiler('c')
 host_system = host_machine.system()
+
+if host_system in ['ios', 'darwin']
+  have_objc = add_languages('objc', native: false)
+  have_objcpp = add_languages('objcpp', native: false)
+
+  if not have_objc
+    error('Building on MacOS/iOS/etc requires an ObjC compiler')
+  endif
+else
+  have_objc = false
+  have_objcpp = false
+endif
+
+cc = meson.get_compiler('c')
 
 if cc.get_id() == 'msvc'
   msvc_args = [
@@ -101,6 +115,10 @@ endif
 # Symbol visibility
 if cc.has_argument('-fvisibility=hidden')
   add_project_arguments('-fvisibility=hidden', language: 'c')
+
+  if have_objc
+    add_project_arguments('-fvisibility=hidden', language: 'objc')
+  endif
 endif
 
 # Disable strict aliasing
@@ -114,26 +132,25 @@ if gst_version_is_dev
   add_project_arguments('-DG_DISABLE_DEPRECATED', language: 'c')
 endif
 
-cast_checks = get_option('gobject-cast-checks')
-if cast_checks.disabled() or (cast_checks.auto() and not gst_version_is_dev)
+# Same logic as in GLib.
+glib_debug = get_option('glib_debug')
+if glib_debug.disabled() or (
+   glib_debug.auto() and (not get_option('debug') or get_option('optimization') not in [ '0', 'g' ]))
   message('Disabling GLib cast checks')
   add_project_arguments('-DG_DISABLE_CAST_CHECKS', language: 'c')
 endif
 
-glib_asserts = get_option('glib-asserts')
-if glib_asserts.disabled() or (glib_asserts.auto() and not gst_version_is_dev)
+if not get_option('glib_assert')
   message('Disabling GLib asserts')
   add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
 endif
 
-glib_checks = get_option('glib-checks')
-if glib_checks.disabled() or (glib_checks.auto() and not gst_version_is_dev)
+if not get_option('glib_checks')
   message('Disabling GLib checks')
   add_project_arguments('-DG_DISABLE_CHECKS', language: 'c')
 endif
 
 cdata = configuration_data()
-cdata.set('ENABLE_NLS', 1)
 
 check_headers = [
   ['HAVE_DLFCN_H', 'dlfcn.h'],
@@ -214,7 +231,7 @@ cdata.set('SIZEOF_INT', cc.sizeof('int'))
 cdata.set('SIZEOF_LONG', cc.sizeof('long'))
 cdata.set('SIZEOF_SHORT', cc.sizeof('short'))
 cdata.set('SIZEOF_VOIDP', cc.sizeof('void*'))
-cdata.set('SIZEOF_OFF_T', cc.sizeof('off_t'))
+cdata.set('SIZEOF_OFF_T', cc.sizeof('off_t', prefix : '#include<sys/types.h>'))
 
 have_rtld_noload = cc.has_header_symbol('dlfcn.h', 'RTLD_NOLOAD')
 cdata.set('HAVE_RTLD_NOLOAD', have_rtld_noload)
@@ -231,17 +248,27 @@ cdata.set_quoted('GETTEXT_PACKAGE', 'gst-plugins-good-1.0')
 cdata.set_quoted('LOCALEDIR', join_paths(get_option('prefix'), get_option('localedir')))
 cdata.set_quoted('PACKAGE_BUGREPORT', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/issues/new')
 
+# NOTE: Keep entries alphabetically sorted
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wredundant-decls',
-  '-Wwrite-strings',
+  '-Waddress',
+  '-Wformat',
+  '-Wformat-security',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
+  '-Wmissing-parameter-type',
   '-Wno-multichar',
-  '-Wvla',
   '-Wpointer-arith',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wundef',
+  '-Wvla',
+  '-Wwrite-strings',
 ]
 
+# C-only warnings
 warning_c_flags = [
   '-Wmissing-prototypes',
   '-Wold-style-definition',
@@ -382,7 +409,7 @@ endif
 zlib_dep = dependency('zlib')
 cdata.set('HAVE_ZLIB', true)
 
-gio_dep = dependency('gio-2.0', version: glib_req)
+gio_dep = dependency('gio-2.0', version: glib_req, default_options: {'sysprof': 'disabled'})
 gmodule_dep = dependency('gmodule-no-export-2.0')
 
 gst_plugins_good_args = ['-DHAVE_CONFIG_H']
@@ -491,6 +518,12 @@ if get_option('default_library') == 'shared'
   plugins_pkgconfig_install_dir = disabler()
 endif
 
+if host_machine.system() == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
+
 subdir('gst')
 subdir('sys')
 subdir('ext')
@@ -522,6 +555,7 @@ endif
 
 # xgettext is optional (on Windows for instance)
 if find_program('xgettext', required : get_option('nls')).found()
+  cdata.set('ENABLE_NLS', 1)
   subdir('po')
 endif
 
@@ -542,7 +576,7 @@ endif
 
 configure_file(output : 'config.h', configuration : cdata)
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 plugin_names = []
 gst_plugins = []

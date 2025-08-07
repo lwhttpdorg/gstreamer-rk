@@ -100,6 +100,7 @@ namespace Gst {
 		public const string TAG_CONDUCTOR = @"conductor";
 		public const string TAG_CONTACT = @"contact";
 		public const string TAG_CONTAINER_FORMAT = @"container-format";
+		public const string TAG_CONTAINER_SPECIFIC_TRACK_ID = @"container-specific-track-id";
 		public const string TAG_COPYRIGHT = @"copyright";
 		public const string TAG_COPYRIGHT_URI = @"copyright-uri";
 		public const string TAG_DATE = @"date";
@@ -171,8 +172,8 @@ namespace Gst {
 		public const int VALUE_LESS_THAN = -1;
 		public const int VALUE_UNORDERED = 2;
 		public const int VERSION_MAJOR = 1;
-		public const int VERSION_MICRO = 0;
-		public const int VERSION_MINOR = 25;
+		public const int VERSION_MICRO = 1;
+		public const int VERSION_MINOR = 27;
 		public const int VERSION_NANO = 1;
 #endregion
 	}

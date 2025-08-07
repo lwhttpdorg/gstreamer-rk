@@ -71,30 +71,20 @@ enum
 /* *INDENT-OFF* */
 struct GstWebView2SrcPrivate
 {
-  GstWebView2SrcPrivate ()
-  {
-    event_handle = CreateEventEx (nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-  }
-
   ~GstWebView2SrcPrivate ()
   {
     ClearResource ();
     gst_clear_object (&object);
     gst_clear_object (&device12);
     gst_clear_object (&device);
-
-    CloseHandle (event_handle);
   }
 
   void ClearResource ()
   {
     if (fence12) {
       auto completed = fence12->GetCompletedValue ();
-      if (completed < fence_val) {
-        auto hr = fence12->SetEventOnCompletion (fence_val, event_handle);
-        if (SUCCEEDED (hr))
-          WaitForSingleObject (event_handle, INFINITE);
-      }
+      if (completed < fence_val)
+        fence12->SetEventOnCompletion (fence_val, nullptr);
     }
 
     staging = nullptr;
@@ -124,7 +114,6 @@ struct GstWebView2SrcPrivate
   ComPtr<ID3D12Fence> fence12;
   gboolean can_d3d12_copy;
   UINT64 fence_val = 0;
-  HANDLE event_handle;
 
   /* properties */
   gint adapter_index = DEFAULT_ADAPTER;
@@ -857,15 +846,9 @@ gst_webview2_src_create (GstBaseSrc * src, guint64 offset, guint size,
   if (!system_copy) {
     gst_memory_unmap (mem, &out_map);
     if (is_d3d12) {
-      auto cq = gst_d3d12_device_get_command_queue (priv->device12,
-          D3D12_COMMAND_LIST_TYPE_DIRECT);
-      gst_d3d12_command_queue_execute_wait (cq,
-          priv->fence12.Get (), priv->fence_val);
-      guint64 fence_val_12;
-      gst_d3d12_command_queue_execute_command_lists (cq,
-          0, nullptr, &fence_val_12);
       auto dmem = GST_D3D12_MEMORY_CAST (mem);
-      dmem->fence_value = fence_val_12;
+      gst_d3d12_memory_set_fence (dmem, priv->fence12.Get (), priv->fence_val,
+          FALSE);
     }
   } else {
     auto context = gst_d3d11_device_get_device_context_handle (priv->device);

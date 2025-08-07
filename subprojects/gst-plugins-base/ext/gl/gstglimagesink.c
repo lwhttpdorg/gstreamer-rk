@@ -743,7 +743,7 @@ gst_glimage_sink_class_init (GstGLImageSinkClass * klass)
 
   gst_video_overlay_install_properties (gobject_class, PROP_LAST);
 
-  gst_element_class_set_metadata (element_class, "OpenGL video sink",
+  gst_element_class_set_static_metadata (element_class, "OpenGL video sink",
       "Sink/Video", "A videosink based on OpenGL",
       "Julien Isorce <julien.isorce@gmail.com>");
 
@@ -814,6 +814,7 @@ gst_glimage_sink_init (GstGLImageSink * glimage_sink)
   glimage_sink->handle_events = TRUE;
   glimage_sink->ignore_alpha = TRUE;
   glimage_sink->overlay_compositor = NULL;
+  glimage_sink->need_resize_window = FALSE;
 
   glimage_sink->mview_output_mode = DEFAULT_MULTIVIEW_MODE;
   glimage_sink->mview_output_flags = DEFAULT_MULTIVIEW_FLAGS;
@@ -1066,13 +1067,35 @@ _ensure_gl_setup (GstGLImageSink * gl_sink)
             gst_gl_display_get_gl_context_for_thread (gl_sink->display, NULL);
       }
 
-      if (!gst_gl_display_create_context (gl_sink->display,
-              other_context, &context, &error)) {
-        if (other_context)
-          gst_object_unref (other_context);
-        GST_OBJECT_UNLOCK (gl_sink->display);
-        goto context_error;
+      g_signal_emit_by_name (gl_sink->display, "create-context", other_context,
+          &context);
+      if (!context) {
+        GstGLWindow *window;
+        context = gst_gl_context_new (gl_sink->display);
+        if (!context) {
+          g_set_error (&error, GST_GL_CONTEXT_ERROR,
+              GST_GL_CONTEXT_ERROR_FAILED, "Failed to create GL context");
+          gst_clear_object (&other_context);
+          GST_OBJECT_UNLOCK (gl_sink->display);
+          goto context_error;
+        }
+
+        GST_DEBUG_OBJECT (gl_sink,
+            "creating context %" GST_PTR_FORMAT " from other context %"
+            GST_PTR_FORMAT, context, other_context);
+
+        window = gst_gl_display_create_window (context->display);
+        gst_gl_window_set_request_output_surface (window, TRUE);
+        gst_gl_context_set_window (context, window);
+        gst_clear_object (&window);
+        if (!gst_gl_context_create (context, other_context, &error)) {
+          gst_clear_object (&other_context);
+          gst_clear_object (&context);
+          GST_OBJECT_UNLOCK (gl_sink->display);
+          goto context_error;
+        }
       }
+
       _set_context (gl_sink, context);
       context = NULL;
 
@@ -1527,10 +1550,18 @@ update_output_format (GstGLImageSink * glimage_sink)
   GstVideoMultiviewMode mv_mode;
   GstGLWindow *window = NULL;
   GstGLTextureTarget previous_target;
+  gint pre_width = 0, pre_height = 0;
+  gint cur_width = 0, cur_height = 0;
   GstStructure *s;
   const gchar *target_str;
   GstCaps *out_caps;
   gboolean ret;
+
+  pre_width = GST_VIDEO_INFO_WIDTH (out_info);
+  pre_height = GST_VIDEO_INFO_HEIGHT (out_info);
+
+  cur_width = GST_VIDEO_INFO_WIDTH (&glimage_sink->in_info);
+  cur_height = GST_VIDEO_INFO_HEIGHT (&glimage_sink->in_info);
 
   *out_info = glimage_sink->in_info;
   previous_target = glimage_sink->texture_target;
@@ -1603,9 +1634,10 @@ update_output_format (GstGLImageSink * glimage_sink)
 
   out_caps = gst_video_info_to_caps (out_info);
   gst_caps_set_features (out_caps, 0,
-      gst_caps_features_from_string (GST_CAPS_FEATURE_MEMORY_GL_MEMORY));
-  gst_caps_set_simple (out_caps, "texture-target", G_TYPE_STRING,
-      target_str, NULL);
+      gst_caps_features_new_single_static_str
+      (GST_CAPS_FEATURE_MEMORY_GL_MEMORY));
+  gst_caps_set_simple (out_caps, "texture-target", G_TYPE_STRING, target_str,
+      NULL);
 
   if (glimage_sink->convert_views) {
     gst_caps_set_simple (out_caps, "texture-target", G_TYPE_STRING,
@@ -1624,6 +1656,10 @@ update_output_format (GstGLImageSink * glimage_sink)
   if (glimage_sink->out_caps)
     gst_caps_unref (glimage_sink->out_caps);
   glimage_sink->out_caps = out_caps;
+
+  if ((pre_width != 0 && pre_width != cur_width) ||
+      (pre_height != 0 && pre_height != cur_height))
+    glimage_sink->need_resize_window = TRUE;
 
   if (previous_target != GST_GL_TEXTURE_TARGET_NONE &&
       glimage_sink->texture_target != previous_target) {
@@ -2517,6 +2553,7 @@ gst_glimage_sink_redisplay (GstGLImageSink * gl_sink)
   GstGLWindow *window;
   GstBuffer *old_stored_buffer[2], *old_sync;
   gulong handler_id;
+  gboolean resize_window = gl_sink->need_resize_window;
 
   window = gst_gl_context_get_window (gl_sink->context);
   if (!window)
@@ -2537,6 +2574,12 @@ gst_glimage_sink_redisplay (GstGLImageSink * gl_sink)
       gst_object_unref (window);
       return FALSE;
     }
+
+    resize_window = TRUE;
+  }
+
+  if (resize_window) {
+    gl_sink->need_resize_window = FALSE;
 
     gst_gl_window_set_preferred_size (window, GST_VIDEO_SINK_WIDTH (gl_sink),
         GST_VIDEO_SINK_HEIGHT (gl_sink));

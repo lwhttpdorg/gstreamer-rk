@@ -1265,6 +1265,9 @@ ges_clip_can_set_time_property_of_child (GESClip * clip,
       GList *child_data;
       DurationLimitData *data = _duration_limit_data_new (child);
       GValue *copy = g_new0 (GValue, 1);
+      gboolean might_log =
+          gst_debug_category_get_threshold (GST_CAT_DEFAULT) >= GST_LEVEL_INFO;
+      gchar *prop_name_log = might_log ? g_strdup (prop_name) : NULL;
 
       g_value_init (copy, pspec->value_type);
       g_value_copy (value, copy);
@@ -1277,10 +1280,12 @@ ges_clip_can_set_time_property_of_child (GESClip * clip,
         gchar *val_str = gst_value_serialize (value);
         GST_INFO_OBJECT (clip, "Cannot set the child-property %s of "
             "child %" GES_FORMAT " to %s because the duration-limit "
-            "cannot be adjusted", prop_name, GES_ARGS (child), val_str);
+            "cannot be adjusted", prop_name_log, GES_ARGS (child), val_str);
         g_free (val_str);
+        g_free (prop_name_log);
         return FALSE;
       }
+      g_free (prop_name_log);
     }
   }
   return TRUE;
@@ -2208,14 +2213,15 @@ static GESContainer *
 _group (GList * containers)
 {
   GESClip *first_clip = NULL;
-  GESTimeline *timeline;
+  GESTimeline *timeline = NULL;
   GESTrackType supported_formats;
-  GESLayer *layer;
+  GESLayer *layer = NULL;
   GList *tmp, *tmp2, *tmpclip;
-  GstClockTime start, inpoint, duration;
+  GstClockTime start = GST_CLOCK_TIME_NONE, inpoint = GST_CLOCK_TIME_NONE;
+  GstClockTime duration = GST_CLOCK_TIME_NONE;
   GESTimelineElement *element;
 
-  GESAsset *asset;
+  GESAsset *asset = NULL;
   GESContainer *ret = NULL;
 
   if (!containers)
@@ -2587,7 +2593,7 @@ ges_clip_class_init (GESClipClass * klass)
   properties[PROP_SUPPORTED_FORMATS] = g_param_spec_flags ("supported-formats",
       "Supported formats", "Formats supported by the clip",
       GES_TYPE_TRACK_TYPE, GES_TRACK_TYPE_AUDIO | GES_TRACK_TYPE_VIDEO,
-      G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_property (object_class, PROP_SUPPORTED_FORMATS,
       properties[PROP_SUPPORTED_FORMATS]);
@@ -2603,7 +2609,8 @@ ges_clip_class_init (GESClipClass * klass)
    */
   properties[PROP_LAYER] = g_param_spec_object ("layer", "Layer",
       "The GESLayer where this clip is being used.",
-      GES_TYPE_LAYER, G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
+      GES_TYPE_LAYER,
+      G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, PROP_LAYER,
       properties[PROP_LAYER]);
 
@@ -2630,7 +2637,8 @@ ges_clip_class_init (GESClipClass * klass)
   properties[PROP_DURATION_LIMIT] =
       g_param_spec_uint64 ("duration-limit", "Duration Limit",
       "A limit on the duration of the clip", 0, G_MAXUINT64,
-      GST_CLOCK_TIME_NONE, G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY);
+      GST_CLOCK_TIME_NONE,
+      G_PARAM_READABLE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, PROP_DURATION_LIMIT,
       properties[PROP_DURATION_LIMIT]);
 

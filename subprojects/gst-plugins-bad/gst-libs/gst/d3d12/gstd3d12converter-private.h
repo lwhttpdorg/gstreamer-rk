@@ -26,16 +26,45 @@
 G_BEGIN_DECLS
 
 GST_D3D12_API
-gboolean            gst_d3d12_converter_apply_transform (GstD3D12Converter * converter,
-                                                         GstVideoOrientationMethod orientation,
-                                                         gfloat viewport_width,
-                                                         gfloat viewport_height,
-                                                         gfloat fov,
-                                                         gboolean ortho,
-                                                         gfloat rotation_x,
-                                                         gfloat rotation_y,
-                                                         gfloat rotation_z,
-                                                         gfloat scale_x,
-                                                         gfloat scale_y);
+gboolean  gst_d3d12_converter_apply_transform (GstD3D12Converter * converter,
+                                               GstVideoOrientationMethod orientation,
+                                               gfloat viewport_width,
+                                               gfloat viewport_height,
+                                               gfloat fov,
+                                               gboolean ortho,
+                                               gfloat rotation_x,
+                                               gfloat rotation_y,
+                                               gfloat rotation_z,
+                                               gfloat scale_x,
+                                               gfloat scale_y);
+
+GST_D3D12_API
+gboolean  gst_d3d12_converter_is_color_balance_needed (gfloat hue,
+                                                       gfloat saturation,
+                                                       gfloat brightness,
+                                                       gfloat contrast);
+
+GST_D3D12_API
+gboolean  gst_d3d12_converter_set_remap (GstD3D12Converter * converter,
+                                         ID3D12Resource * remap_vector);
+
+GST_D3D12_API
+gboolean  gst_d3d12_converter_update_viewport (GstD3D12Converter * converter,
+                                               gint x,
+                                               gint y,
+                                               gint width,
+                                               gint height);
+
+GST_D3D12_API
+gboolean  gst_d3d12_converter_convert_buffer_for_uv_remap (GstD3D12Converter * converter,
+                                                           GstBuffer * in_buf,
+                                                           GstBuffer * out_buf,
+                                                           GstD3D12FenceData * fence_data,
+                                                           ID3D12GraphicsCommandList * command_list,
+                                                           gboolean execute_gpu_wait,
+                                                           guint num_remap,
+                                                           ID3D12Resource ** lut,
+                                                           GstVideoRectangle * viewport,
+                                                           guint64 * border_color);
 
 G_END_DECLS

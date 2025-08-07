@@ -173,6 +173,7 @@ runner_stopping (GstValidateRunner * runner, ValidateSsimOverride * self)
 
     ref_path = g_build_path (G_DIR_SEPARATOR_S, compared_files_dir,
         refname, NULL);
+    g_free (refname);
 
     if (!gst_validate_ssim_compare_image_files (ssim, ref_path, frame->path,
             &mssim, &lowest, &highest, self->priv->result_outdir))
@@ -190,6 +191,8 @@ runner_stopping (GstValidateRunner * runner, ValidateSsimOverride * self)
             i + 1, nfiles, mssim, lowest, npassed, nfailures));
     g_free (bname);
   }
+
+  gst_object_unref (ssim);
 
   gst_validate_printf (NULL,
       "\nAverage similarity: %f, min_avg: %f, min_min: %f\n",
@@ -323,7 +326,7 @@ _can_attach (GstValidateOverride * override, GstValidateMonitor * monitor)
     GST_INFO_OBJECT (pad,
         "Doesn't have template, can't use it %" GST_PTR_FORMAT,
         gst_pad_query_caps (pad, NULL));
-    return FALSE;
+    goto fail;
   }
 
   template_caps = GST_PAD_TEMPLATE_CAPS (GST_PAD_PAD_TEMPLATE (pad));
@@ -410,6 +413,8 @@ _finalize (GObject * object)
 
   if (priv->config)
     gst_structure_free (priv->config);
+
+  G_OBJECT_CLASS (validate_ssim_override_parent_class)->finalize (object);
 }
 
 static void
@@ -476,6 +481,7 @@ _set_videoconvert (ValidateSsimOverride * o,
   caps = gst_pad_get_current_caps (pad);
   gst_object_unref (pad);
   gst_caps_replace (&priv->last_caps, caps);
+  gst_caps_unref (caps);
 
   gst_video_info_init (&priv->in_info);
   gst_video_info_init (&priv->out_info);
@@ -722,10 +728,11 @@ _handle_event (GstValidateOverride * override,
 }
 
 static gboolean
-_map_confg (GQuark field_id, GValue * value, GstStructure * structure)
+_map_confg (const GstIdStr * fieldname, GValue * value,
+    GstStructure * structure)
 {
-  if (!gst_structure_id_has_field (structure, field_id))
-    gst_structure_id_set_value (structure, field_id, value);
+  if (!gst_structure_id_str_has_field (structure, fieldname))
+    gst_structure_id_str_set_value (structure, fieldname, value);
 
   return TRUE;
 }
@@ -760,8 +767,8 @@ gst_validate_ssim_init (GstPlugin * plugin)
       continue;
 
     if (config_structure) {
-      gst_structure_map_in_place (config_structure,
-          (GstStructureMapFunc) _map_confg, tmp->data);
+      gst_structure_map_in_place_id_str (config_structure,
+          (GstStructureMapIdStrFunc) _map_confg, tmp->data);
     }
     if ((name || target_element_classification)) {
       GstValidateOverride *override =

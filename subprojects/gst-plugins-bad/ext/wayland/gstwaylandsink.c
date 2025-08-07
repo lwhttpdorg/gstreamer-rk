@@ -63,6 +63,7 @@ enum
   PROP_FULLSCREEN,
   PROP_ROTATE_METHOD,
   PROP_DRM_DEVICE,
+  PROP_FORCE_ASPECT_RATIO,
   PROP_LAST
 };
 
@@ -72,8 +73,8 @@ GST_DEBUG_CATEGORY (gstwayland_debug);
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (GST_WL_VIDEO_FORMATS) ";"
-        GST_VIDEO_DMA_DRM_CAPS_MAKE)
+    GST_STATIC_CAPS (GST_VIDEO_DMA_DRM_CAPS_MAKE ";"
+        GST_VIDEO_CAPS_MAKE (GST_WL_VIDEO_FORMATS))
     );
 
 static void gst_wayland_sink_get_property (GObject * object,
@@ -159,7 +160,8 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
   g_object_class_install_property (gobject_class, PROP_FULLSCREEN,
       g_param_spec_boolean ("fullscreen", "Fullscreen",
           "Whether the surface should be made fullscreen ", FALSE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
+          G_PARAM_STATIC_STRINGS));
 
   /**
    * waylandsink:rotate-method:
@@ -171,7 +173,8 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
           "rotate method",
           "rotate method",
           GST_TYPE_VIDEO_ORIENTATION_METHOD, GST_VIDEO_ORIENTATION_IDENTITY,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
+          G_PARAM_STATIC_STRINGS));
 
  /**
    * waylandsink:drm-device:
@@ -183,6 +186,18 @@ gst_wayland_sink_class_init (GstWaylandSinkClass * klass)
           "DRM device to use for dumb buffer allocation",
           NULL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT_ONLY));
+
+ /**
+   * waylandsink:force-aspect-ratio:
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_FORCE_ASPECT_RATIO,
+      g_param_spec_boolean ("force-aspect-ratio", "Force aspect ratio",
+          "When enabled, scaling will respect original aspect ratio",
+          TRUE,
+          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
+          G_PARAM_STATIC_STRINGS));
 
 
  /**
@@ -201,18 +216,22 @@ gst_wayland_sink_init (GstWaylandSink * self)
 {
   g_mutex_init (&self->display_lock);
   g_mutex_init (&self->render_lock);
+  self->force_aspect_ratio = TRUE;
 }
 
+/* must be called with the OBJECT_LOCK */
 static void
 gst_wayland_sink_set_fullscreen (GstWaylandSink * self, gboolean fullscreen)
 {
   if (fullscreen == self->fullscreen)
     return;
 
-  g_mutex_lock (&self->render_lock);
   self->fullscreen = fullscreen;
-  gst_wl_window_ensure_fullscreen (self->window, fullscreen);
-  g_mutex_unlock (&self->render_lock);
+  if (self->window) {
+    g_mutex_lock (&self->render_lock);
+    gst_wl_window_ensure_fullscreen (self->window, fullscreen);
+    g_mutex_unlock (&self->render_lock);
+  }
 }
 
 static void
@@ -252,6 +271,23 @@ gst_wayland_sink_set_rotate_method (GstWaylandSink * self,
   GST_OBJECT_UNLOCK (self);
 }
 
+/* must be called with the OBJECT_LOCK */
+static void
+gst_wayland_sink_set_force_aspect_ratio (GstWaylandSink * self,
+    gboolean force_aspect_ratio)
+{
+  if (force_aspect_ratio == self->force_aspect_ratio)
+    return;
+
+  self->force_aspect_ratio = force_aspect_ratio;
+  if (self->window) {
+    g_mutex_lock (&self->render_lock);
+    gst_wl_window_set_force_aspect_ratio (self->window,
+        self->force_aspect_ratio);
+    g_mutex_unlock (&self->render_lock);
+  }
+}
+
 static void
 gst_wayland_sink_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec)
@@ -279,6 +315,11 @@ gst_wayland_sink_get_property (GObject * object,
       g_value_set_string (value, self->drm_device);
       GST_OBJECT_UNLOCK (self);
       break;
+    case PROP_FORCE_ASPECT_RATIO:
+      GST_OBJECT_LOCK (self);
+      g_value_set_boolean (value, self->force_aspect_ratio);
+      GST_OBJECT_UNLOCK (self);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -294,6 +335,7 @@ gst_wayland_sink_set_property (GObject * object,
   switch (prop_id) {
     case PROP_DISPLAY:
       GST_OBJECT_LOCK (self);
+      g_free (self->display_name);
       self->display_name = g_value_dup_string (value);
       GST_OBJECT_UNLOCK (self);
       break;
@@ -307,8 +349,15 @@ gst_wayland_sink_set_property (GObject * object,
           FALSE);
       break;
     case PROP_DRM_DEVICE:
+      /* G_PARAM_CONSTRUCT_ONLY */
       GST_OBJECT_LOCK (self);
       self->drm_device = g_value_dup_string (value);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_FORCE_ASPECT_RATIO:
+      GST_OBJECT_LOCK (self);
+      gst_wayland_sink_set_force_aspect_ratio (self,
+          g_value_get_boolean (value));
       GST_OBJECT_UNLOCK (self);
       break;
     default:
@@ -365,35 +414,62 @@ gst_wayland_sink_set_display_from_context (GstWaylandSink * self,
 }
 
 static gboolean
-gst_wayland_sink_find_display (GstWaylandSink * self)
+gst_wayland_sink_query_context (GstWaylandSink * self, const gchar * type)
 {
   GstQuery *query;
+  gboolean ret;
+
+  query = gst_query_new_context (type);
+  ret = gst_pad_peer_query (GST_VIDEO_SINK_PAD (self), query);
+
+  if (ret) {
+    GstContext *context = NULL;
+    gst_query_parse_context (query, &context);
+    gst_wayland_sink_set_display_from_context (self, context);
+  }
+
+  gst_query_unref (query);
+  return ret;
+}
+
+static gboolean
+gst_wayland_sink_post_need_context (GstWaylandSink * self, const gchar * type)
+{
   GstMessage *msg;
-  GstContext *context = NULL;
+
+  /* now ask the application to set the display handle */
+  msg = gst_message_new_need_context (GST_OBJECT_CAST (self), type);
+
+  g_mutex_unlock (&self->display_lock);
+  gst_element_post_message (GST_ELEMENT_CAST (self), msg);
+  /* at this point we expect gst_wayland_sink_set_context
+   * to get called and fill self->display */
+  g_mutex_lock (&self->display_lock);
+
+  return self->display != NULL;
+}
+
+static gboolean
+gst_wayland_sink_find_display (GstWaylandSink * self)
+{
   GError *error = NULL;
   gboolean ret = TRUE;
 
   g_mutex_lock (&self->display_lock);
 
   if (!self->display) {
-    /* first query upstream for the needed display handle */
-    query = gst_query_new_context (GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE);
-    if (gst_pad_peer_query (GST_VIDEO_SINK_PAD (self), query)) {
-      gst_query_parse_context (query, &context);
-      gst_wayland_sink_set_display_from_context (self, context);
+    if (!gst_wayland_sink_query_context (self,
+            GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE)) {
+      gst_wayland_sink_query_context (self,
+          GST_WL_DISPLAY_HANDLE_LEGACY_CONTEXT_TYPE);
     }
-    gst_query_unref (query);
 
     if (G_LIKELY (!self->display)) {
-      /* now ask the application to set the display handle */
-      msg = gst_message_new_need_context (GST_OBJECT_CAST (self),
-          GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE);
-
-      g_mutex_unlock (&self->display_lock);
-      gst_element_post_message (GST_ELEMENT_CAST (self), msg);
-      /* at this point we expect gst_wayland_sink_set_context
-       * to get called and fill self->display */
-      g_mutex_lock (&self->display_lock);
+      if (!gst_wayland_sink_post_need_context (self,
+              GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE)) {
+        gst_wayland_sink_post_need_context (self,
+            GST_WL_DISPLAY_HANDLE_LEGACY_CONTEXT_TYPE);
+      }
 
       if (!self->display) {
         /* if the application didn't set a display, let's create it ourselves */
@@ -480,7 +556,9 @@ gst_wayland_sink_set_context (GstElement * element, GstContext * context)
   GstWaylandSink *self = GST_WAYLAND_SINK (element);
 
   if (gst_context_has_context_type (context,
-          GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE)) {
+          GST_WL_DISPLAY_HANDLE_CONTEXT_TYPE) ||
+      gst_context_has_context_type (context,
+          GST_WL_DISPLAY_HANDLE_LEGACY_CONTEXT_TYPE)) {
     g_mutex_lock (&self->display_lock);
     if (G_LIKELY (!self->display)) {
       gst_wayland_sink_set_display_from_context (self, context);
@@ -536,48 +614,21 @@ gst_wayland_sink_get_caps (GstBaseSink * bsink, GstCaps * filter)
   g_mutex_lock (&self->display_lock);
 
   if (self->display) {
-    GValue shm_list = G_VALUE_INIT, dmabuf_list = G_VALUE_INIT;
-    GValue value = G_VALUE_INIT;
-    GArray *formats, *modifiers;
-    gint i;
-    guint fmt;
-    GstVideoFormat gfmt;
-    guint64 mod;
+    GValue format_list = G_VALUE_INIT;
 
-    g_value_init (&shm_list, GST_TYPE_LIST);
-    g_value_init (&dmabuf_list, GST_TYPE_LIST);
-
-    /* Add corresponding shm formats */
-    formats = gst_wl_display_get_shm_formats (self->display);
-    for (i = 0; i < formats->len; i++) {
-      fmt = g_array_index (formats, uint32_t, i);
-      gfmt = gst_wl_shm_format_to_video_format (fmt);
-      if (gfmt != GST_VIDEO_FORMAT_UNKNOWN) {
-        g_value_init (&value, G_TYPE_STRING);
-        g_value_set_static_string (&value, gst_video_format_to_string (gfmt));
-        gst_value_list_append_and_take_value (&shm_list, &value);
-      }
-    }
-
-    gst_structure_take_value (gst_caps_get_structure (caps, 0), "format",
-        &shm_list);
+    g_value_init (&format_list, GST_TYPE_LIST);
 
     /* Add corresponding dmabuf formats */
-    formats = gst_wl_display_get_dmabuf_formats (self->display);
-    modifiers = gst_wl_display_get_dmabuf_modifiers (self->display);
-    for (i = 0; i < formats->len; i++) {
-      fmt = g_array_index (formats, uint32_t, i);
-      gfmt = gst_wl_dmabuf_format_to_video_format (fmt);
-      mod = g_array_index (modifiers, guint64, i);
-      if (gfmt != GST_VIDEO_FORMAT_UNKNOWN) {
-        g_value_init (&value, G_TYPE_STRING);
-        g_value_take_string (&value, gst_wl_dmabuf_format_to_string (fmt, mod));
-        gst_value_list_append_and_take_value (&dmabuf_list, &value);
-      }
-    }
+    gst_wl_display_fill_dmabuf_format_list (self->display, &format_list);
+    gst_structure_take_value (gst_caps_get_structure (caps, 0), "drm-format",
+        &format_list);
 
-    gst_structure_take_value (gst_caps_get_structure (caps, 1), "drm-format",
-        &dmabuf_list);
+    g_value_init (&format_list, GST_TYPE_LIST);
+
+    /* Add corresponding shm formats */
+    gst_wl_display_fill_shm_format_list (self->display, &format_list);
+    gst_structure_take_value (gst_caps_get_structure (caps, 1), "format",
+        &format_list);
 
     GST_DEBUG_OBJECT (self, "display caps: %" GST_PTR_FORMAT, caps);
   }
@@ -704,6 +755,11 @@ gst_wayland_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
       gst_video_info_dma_drm_init (&self->drm_info);
   }
 
+  self->have_mastering_info =
+      gst_video_mastering_display_info_from_caps (&self->minfo, caps);
+  self->have_light_info =
+      gst_video_content_light_level_from_caps (&self->linfo, caps);
+
   self->video_info_changed = TRUE;
   self->skip_dumb_buffer_copy = FALSE;
 
@@ -761,7 +817,6 @@ gst_wayland_sink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   GstCaps *caps;
   GstBufferPool *pool = NULL;
   gboolean need_pool;
-  GstAllocator *alloc;
   GstVideoInfoDmaDrm drm_info;
   GstVideoInfo vinfo;
   guint size;
@@ -782,7 +837,7 @@ gst_wayland_sink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
     size = vinfo.size;
   }
 
-  if (need_pool) {
+  if (need_pool && !gst_video_is_dma_drm_caps (caps)) {
     GstStructure *config;
     pool = gst_wl_video_buffer_pool_new ();
     config = gst_buffer_pool_get_config (pool);
@@ -796,10 +851,13 @@ gst_wayland_sink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   if (pool)
     g_object_unref (pool);
 
-  alloc = gst_shm_allocator_get ();
-  gst_query_add_allocation_param (query, alloc, NULL);
+  if (!gst_video_is_dma_drm_caps (caps)) {
+    GstAllocator *alloc = gst_shm_allocator_get ();
+    gst_query_add_allocation_param (query, alloc, NULL);
+    g_object_unref (alloc);
+  }
+
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
-  g_object_unref (alloc);
 
   return TRUE;
 }
@@ -810,14 +868,23 @@ render_last_buffer (GstWaylandSink * self, gboolean redraw)
 {
   GstWlBuffer *wlbuffer;
   const GstVideoInfo *info = NULL;
+  const GstVideoMasteringDisplayInfo *minfo = NULL;
+  const GstVideoContentLightLevel *linfo = NULL;
 
   wlbuffer = gst_buffer_get_wl_buffer (self->display, self->last_buffer);
 
   if (G_UNLIKELY (self->video_info_changed && !redraw)) {
     info = &self->video_info;
+
+    if (self->have_mastering_info)
+      minfo = &self->minfo;
+
+    if (self->have_light_info)
+      linfo = &self->linfo;
+
     self->video_info_changed = FALSE;
   }
-  return gst_wl_window_render (self->window, wlbuffer, info);
+  return gst_wl_window_render_hdr (self->window, wlbuffer, info, minfo, linfo);
 }
 
 static void
@@ -860,6 +927,8 @@ gst_wayland_sink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
           G_CALLBACK (on_window_closed), self, 0);
       gst_wl_window_set_rotate_method (self->window,
           self->current_rotate_method);
+      gst_wl_window_set_force_aspect_ratio (self->window,
+          self->force_aspect_ratio);
     }
   }
 
@@ -1039,25 +1108,29 @@ no_window_size:
   }
 no_buffer:
   {
-    GST_WARNING_OBJECT (self, "could not create buffer");
+    GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
+        ("could not create buffer"), (NULL));
+    ret = GST_FLOW_ERROR;
     goto done;
   }
 no_wl_buffer_shm:
   {
-    GST_ERROR_OBJECT (self, "could not create wl_buffer out of wl_shm memory");
+    GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
+        ("could not create wl_buffer out of wl_shm memory"), (NULL));
     ret = GST_FLOW_ERROR;
     goto done;
   }
 no_wl_buffer:
   {
-    GST_ERROR_OBJECT (self,
-        "buffer %" GST_PTR_FORMAT " cannot have a wl_buffer", buffer);
+    GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
+        ("buffer %" GST_PTR_FORMAT " cannot have a wl_buffer", buffer), (NULL));
     ret = GST_FLOW_ERROR;
     goto done;
   }
 activate_failed:
   {
-    GST_ERROR_OBJECT (self, "failed to activate bufferpool.");
+    GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
+        ("failed to activate bufferpool."), (NULL));
     ret = GST_FLOW_ERROR;
     goto done;
   }
@@ -1124,6 +1197,8 @@ gst_wayland_sink_set_window_handle (GstVideoOverlay * overlay, guintptr handle)
             &self->render_lock);
         gst_wl_window_set_rotate_method (self->window,
             self->current_rotate_method);
+        gst_wl_window_set_force_aspect_ratio (self->window,
+            self->force_aspect_ratio);
       }
     } else {
       GST_ERROR_OBJECT (self, "Failed to find display handle, "

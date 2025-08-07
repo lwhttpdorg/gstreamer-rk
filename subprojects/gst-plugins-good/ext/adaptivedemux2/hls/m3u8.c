@@ -1476,7 +1476,8 @@ gst_hls_media_playlist_find_partial_position (GstHLSMediaPlaylist * playlist,
 
     GST_DEBUG ("partial segment %d ts:%" GST_STIME_FORMAT " end:%"
         GST_STIME_FORMAT, part_idx, GST_STIME_ARGS (cand->stream_time),
-        GST_STIME_ARGS (cand->stream_time + cand->duration));
+        GST_STIME_ARGS ((GstClockTimeDiff) (cand->stream_time +
+                cand->duration)));
 
     /* If the target timestamp is before this partial segment, or in the first half, this
      * is the partial segment to land in */
@@ -1529,8 +1530,8 @@ gst_hls_media_playlist_find_position (GstHLSMediaPlaylist * playlist,
     GST_DEBUG ("segment %d ts:%" GST_STIME_FORMAT " end:%" GST_STIME_FORMAT
         " partial only: %d",
         seg_idx, GST_STIME_ARGS (cand->stream_time),
-        GST_STIME_ARGS (cand->stream_time + cand->duration),
-        cand->partial_only);
+        GST_STIME_ARGS ((GstClockTimeDiff) (cand->stream_time +
+                cand->duration)), cand->partial_only);
 
     /* Ignore any (disallowed by the spec) partial_only segment if
      * the playlist is no longer live */
@@ -2531,8 +2532,8 @@ gst_hls_media_playlist_has_lost_sync (GstHLSMediaPlaylist * m3u8,
   first = g_ptr_array_index (m3u8->segments, 0);
 
   GST_DEBUG ("position %" GST_TIME_FORMAT " first %" GST_STIME_FORMAT
-      " duration %" GST_STIME_FORMAT, GST_TIME_ARGS (position),
-      GST_STIME_ARGS (first->stream_time), GST_STIME_ARGS (first->duration));
+      " duration %" GST_TIME_FORMAT, GST_TIME_ARGS (position),
+      GST_STIME_ARGS (first->stream_time), GST_TIME_ARGS (first->duration));
 
   if (first->stream_time <= 0)
     return FALSE;
@@ -2597,7 +2598,7 @@ gst_hls_media_playlist_recommended_buffering_threshold (GstHLSMediaPlaylist *
       3 * (playlist->duration / playlist->segments->len) / 2;
 
   if (GST_HLS_MEDIA_PLAYLIST_IS_LIVE (playlist)) {
-    /* For live playlists, reduce the recommended buffering threshold 
+    /* For live playlists, reduce the recommended buffering threshold
      * to match the starting hold back distance if needed, otherwise
      * we'll hit the live edge and have to wait before we hit 100% */
     if (GST_CLOCK_TIME_IS_VALID (playlist->hold_back)
@@ -2650,7 +2651,7 @@ gst_m3u8_get_hls_media_type_from_string (const gchar * type_name)
     return GST_HLS_RENDITION_STREAM_TYPE_VIDEO;
   if (strcmp (type_name, "SUBTITLES") == 0)
     return GST_HLS_RENDITION_STREAM_TYPE_SUBTITLES;
-  if (strcmp (type_name, "CLOSED_CAPTIONS") == 0)
+  if (strcmp (type_name, "CLOSED-CAPTIONS") == 0)
     return GST_HLS_RENDITION_STREAM_TYPE_CLOSED_CAPTIONS;
 
   return GST_HLS_RENDITION_STREAM_TYPE_INVALID;
@@ -2736,7 +2737,8 @@ gst_m3u8_parse_media (gchar * desc, const gchar * base_uri)
   if (media->group_id == NULL || media->name == NULL)
     goto required_attributes_missing;
 
-  if (media->mtype == GST_HLS_RENDITION_STREAM_TYPE_CLOSED_CAPTIONS)
+  if (media->mtype == GST_HLS_RENDITION_STREAM_TYPE_CLOSED_CAPTIONS
+      && media->uri != NULL)
     goto uri_with_cc;
 
   GST_DEBUG ("media: %s, group '%s', name '%s', uri '%s', %s %s %s, lang=%s",
@@ -2862,8 +2864,12 @@ gst_hls_variant_parse (gchar * data, const gchar * base_uri)
       g_free (stream->codecs);
       stream->codecs = g_strdup (v);
       stream->caps = gst_codec_utils_caps_from_mime_codec (stream->codecs);
-      stream->codecs_stream_type =
-          gst_hls_get_stream_type_from_caps (stream->caps);
+      if (stream->caps != NULL) {
+        stream->codecs_stream_type =
+            gst_hls_get_stream_type_from_caps (stream->caps);
+      } else {
+        GST_WARNING ("Unhandled codec in CODECS tags: %s", v);
+      }
     } else if (g_str_equal (a, "RESOLUTION")) {
       if (!int_from_string (v, &v, &stream->width))
         GST_WARNING ("Error while reading RESOLUTION width");
@@ -3370,12 +3376,12 @@ hls_master_playlist_get_variant_for_bitrate (GstHLSMasterPlaylist *
 }
 
 static gboolean
-remove_uncommon (GQuark field_id, GValue * value, GstStructure * st2)
+remove_uncommon (const GstIdStr * fieldname, GValue * value, GstStructure * st2)
 {
   const GValue *other;
   GValue dest = G_VALUE_INIT;
 
-  other = gst_structure_id_get_value (st2, field_id);
+  other = gst_structure_id_str_get_value (st2, fieldname);
 
   if (other == NULL || (G_VALUE_TYPE (value) != G_VALUE_TYPE (other)))
     return FALSE;
@@ -3409,8 +3415,8 @@ gst_caps_merge_common (GstCaps * caps1, GstCaps * caps2)
       if (gst_structure_has_name (st2, name1)) {
         if (merged == NULL)
           merged = gst_structure_copy (st1);
-        gst_structure_filter_and_map_in_place (merged,
-            (GstStructureFilterMapFunc) remove_uncommon, st2);
+        gst_structure_filter_and_map_in_place_id_str (merged,
+            (GstStructureFilterMapIdStrFunc) remove_uncommon, st2);
       }
     }
 

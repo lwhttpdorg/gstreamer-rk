@@ -1,6 +1,6 @@
 project('gst-libav', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -154,7 +154,8 @@ if cc.has_argument('-fvisibility=hidden')
 endif
 
 # Don't export any symbols from static ffmpeg libraries
-if cc.has_link_argument('-Wl,--exclude-libs=ALL')
+# This also excludes the sanitizer libraries so disable if a sanitizer is enabled
+if get_option('b_sanitize') == 'none' and cc.has_link_argument('-Wl,--exclude-libs=ALL')
   add_project_link_arguments('-Wl,--exclude-libs=ALL', language: 'c')
 endif
 
@@ -195,23 +196,29 @@ else
   message('GStreamer debug system is enabled')
 endif
 
+# NOTE: Keep entries alphabetically sorted
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wmissing-prototypes',
-  '-Wold-style-definition',
-  '-Wredundant-decls',
-  '-Wundef',
-  '-Wwrite-strings',
+  '-Waddress',
+  '-Waggregate-return',
   '-Wformat',
   '-Wformat-nonliteral',
   '-Wformat-security',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
-  '-Waddress',
+  '-Wmissing-parameter-type',
+  '-Wmissing-prototypes',
   '-Wno-multichar',
-  '-Waggregate-return',
-  '-Wvla',
+  '-Wold-style-definition',
   '-Wpointer-arith',
+  '-Wredundant-decls',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wundef',
+  '-Wvla',
+  '-Wwrite-strings',
 ]
 
 foreach extra_arg : warning_flags
@@ -231,6 +238,12 @@ if get_option('default_library') == 'shared'
 endif
 
 plugins = []
+plugin_sources = {}
+if host_machine.system() == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
 subdir('ext/libav')
 subdir('docs')
 subdir('tests')
@@ -246,7 +259,7 @@ endif
 
 configure_file(output: 'config.h', configuration: cdata)
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 gst_plugins = []
 foreach plugin: plugins

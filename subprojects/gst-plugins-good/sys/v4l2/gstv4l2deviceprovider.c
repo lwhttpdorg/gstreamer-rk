@@ -427,7 +427,7 @@ gst_v4l2_device_provider_start (GstDeviceProvider * provider)
   self->context = g_main_context_new ();
   self->loop = g_main_loop_new (self->context, FALSE);
 
-  self->thread = g_thread_new ("v4l2-device-provider", provider_thread,
+  self->thread = g_thread_new ("v4l2-dev-prvdr", provider_thread,
       g_object_ref (self));
 
   while (self->started == FALSE)
@@ -602,6 +602,7 @@ gst_v4l2_device_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_DEVICE_PATH:
+      /* G_PARAM_CONSTRUCT_ONLY */
       device->device_path = g_value_dup_string (value);
       break;
     default:

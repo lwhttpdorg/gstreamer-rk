@@ -24,9 +24,7 @@
 #endif
 
 #include "gstalsadeviceprovider.h"
-#include <string.h>
 #include <gst/gst.h>
-
 
 static GstDevice *gst_alsa_device_new (const gchar * device_name,
     GstCaps * caps, const gchar * internal_name, snd_pcm_stream_t stream,
@@ -56,7 +54,7 @@ add_device (GstDeviceProvider * provider, snd_ctl_t * info,
   if (snd_pcm_open (&handle, device_name, stream, SND_PCM_NONBLOCK) < 0) {
     GST_ERROR_OBJECT (provider, "Could not open device %s for inspection!",
         device_name);
-    g_free (device_name);
+    free (device_name);
 
     return NULL;
   }
@@ -72,7 +70,7 @@ add_device (GstDeviceProvider * provider, snd_ctl_t * info,
       "device.class", G_TYPE_STRING, "sound",
       "alsa.card", G_TYPE_INT, card,
       "alsa.card_name", G_TYPE_STRING, card_name, NULL);
-  g_free (card_name);
+  free (card_name);
 
   snd_ctl_card_info_alloca (&card_info);
   if (snd_ctl_card_info (info, card_info) == 0) {
@@ -89,10 +87,176 @@ add_device (GstDeviceProvider * provider, snd_ctl_t * info,
 
   snd_card_get_longname (card, &longname);
   device = gst_alsa_device_new (longname, caps, device_name, stream, props);
+  free (longname);
 
   snd_pcm_close (handle);
 
   return device;
+}
+
+static GList *
+gst_alsa_parse_pcm_allow_patterns (const gchar * patterns)
+{
+  if (!patterns)
+    return NULL;
+
+  GList *pattern_list = NULL;
+  gchar *patterns_trimmed = g_strchomp (g_strdup (patterns));
+
+  if (g_strcmp0 (patterns_trimmed, "1") == 0) {
+    pattern_list = g_list_append (pattern_list, g_strdup ("*"));
+  } else {
+    gchar **pattern_strings = g_strsplit (patterns_trimmed, ";", -1);
+    for (size_t i = 0; pattern_strings[i]; i++) {
+      gchar *pattern = g_strchomp (pattern_strings[i]);
+      if (*pattern)
+        pattern_list = g_list_append (pattern_list, g_strdup (pattern));
+    }
+    g_strfreev (pattern_strings);
+  }
+
+  g_free (patterns_trimmed);
+  return pattern_list;
+}
+
+static gboolean
+gst_alsa_pcm_name_matches_pattern (const gchar * name, const gchar * pattern)
+{
+  g_assert (name);
+  g_assert (pattern);
+
+  size_t pattern_len = strlen (pattern);
+  g_assert (pattern_len > 0);
+
+  if (pattern[0] == '*') {
+    if (pattern_len == 1)       /* pattern == "*", matches any input */
+      return TRUE;
+
+    if (pattern[pattern_len - 1] == '*') {
+      if (pattern_len == 2)     /* pattern == "**", matches any input */
+        return TRUE;
+
+      /* pattern == "*<text>*", matches if <text> is contained in the name */
+      g_autofree gchar *needle = g_strndup (pattern + 1, pattern_len - 2);
+      return strstr (name, needle) != NULL;
+    }
+
+    /* pattern == "*<text>", matches if <text> is the name suffix */
+    return g_str_has_suffix (name, pattern + 1);
+  }
+
+  /* pattern == "<text>*", matches if <text> is the name prefix */
+  if (pattern[pattern_len - 1] == '*') {
+    g_autofree gchar *prefix = g_strndup (pattern, pattern_len - 1);
+    return g_str_has_prefix (name, prefix);
+  }
+
+  /* pattern == "<text>", matches if <text> is the same as the name */
+  return strcmp (name, pattern) == 0;
+}
+
+static gboolean
+gst_alsa_pcm_name_matches_any_pattern (const gchar * name, GList * patterns)
+{
+  g_assert (name);
+  g_assert (patterns);
+
+  for (GList * item = g_list_first (patterns); item; item = g_list_next (item))
+    if (gst_alsa_pcm_name_matches_pattern (name, item->data))
+      return TRUE;
+
+  return FALSE;
+}
+
+static GList *
+gst_alsa_device_provider_probe_pcm_sinks (GstDeviceProvider * provider,
+    GList * list)
+{
+  GList *allow_patterns =
+      gst_alsa_parse_pcm_allow_patterns (g_getenv ("GST_ALSA_PCM_ALLOW"));
+  if (!allow_patterns)
+    return list;
+
+  void **hints;
+  if (snd_device_name_hint (-1, "pcm", &hints) < 0)
+    goto beach;
+
+  snd_pcm_info_t *pcm_info;
+  snd_pcm_info_malloc (&pcm_info);
+
+  for (void **n = hints; *n; n++) {
+    char *name = snd_device_name_get_hint (*n, "NAME");
+    char *desc = snd_device_name_get_hint (*n, "DESC");
+    char *io = snd_device_name_get_hint (*n, "IOID");
+
+    if (!gst_alsa_pcm_name_matches_any_pattern (name, allow_patterns))
+      goto next_hint;
+
+    /*
+     * Skip devices without description or that have a valid IOID hint.
+     * The latter seems to be always NULL for "virtual" PCM sinks.
+     */
+    if (!desc || io) {
+      GST_DEBUG_OBJECT (provider, "No io or desc hint for %s", name);
+      goto next_hint;
+    }
+
+    snd_pcm_t *pcm_handle = NULL;
+    int err = snd_pcm_open (&pcm_handle, name, SND_PCM_STREAM_PLAYBACK,
+        SND_PCM_NONBLOCK);
+    if (err < 0) {
+      GST_ERROR_OBJECT (provider,
+          "Could not open PCM device '%s' for inspection! (%s)", name,
+          snd_strerror (err));
+      goto next_hint;
+    }
+
+    if ((err = snd_pcm_info (pcm_handle, pcm_info)) < 0) {
+      GST_WARNING_OBJECT (provider,
+          "Cannot obtain PCM info for device '%s' (%s)", name,
+          snd_strerror (err));
+      snd_pcm_close (pcm_handle);
+      goto next_hint;
+    }
+
+    GstCaps *template = gst_static_caps_get (&alsa_caps);
+    GstCaps *caps = gst_alsa_probe_supported_formats (GST_OBJECT (provider),
+        name, pcm_handle, template);
+    g_clear_pointer (&template, gst_caps_unref);
+
+    GstStructure *props = gst_structure_new ("alsa-proplist",
+        "device.api", G_TYPE_STRING, "alsa",
+        "device.class", G_TYPE_STRING, "sound",
+        NULL);
+    GstAlsaDevice *gstdev = g_object_new (GST_TYPE_ALSA_DEVICE,
+        "display-name", desc,
+        "caps", caps,
+        "device-class", "Audio/Sink",
+        "internal-name", name,
+        "properties", props,
+        NULL);
+    gstdev->stream = SND_PCM_STREAM_PLAYBACK;
+    gstdev->element = "alsasink";
+
+    gst_clear_structure (&props);
+    gst_clear_caps (&caps);
+
+    snd_pcm_close (pcm_handle);
+    list = g_list_prepend (list, gstdev);
+
+  next_hint:
+    free (name);
+    free (desc);
+    free (io);
+  }
+
+  snd_pcm_info_free (pcm_info);
+  snd_device_name_free_hint (hints);
+
+  g_list_free_full (allow_patterns, g_free);
+
+beach:
+  return list;
 }
 
 static GList *
@@ -163,7 +327,7 @@ beach:
   snd_ctl_card_info_free (info);
   snd_pcm_info_free (pcminfo);
 
-  return list;
+  return gst_alsa_device_provider_probe_pcm_sinks (provider, list);
 }
 
 
@@ -252,6 +416,7 @@ gst_alsa_device_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_INTERNAL_NAME:
+      /* G_PARAM_CONSTRUCT_ONLY */
       device->internal_name = g_value_dup_string (value);
       break;
     default:
@@ -265,7 +430,7 @@ gst_alsa_device_finalize (GObject * object)
 {
   GstAlsaDevice *device = GST_ALSA_DEVICE (object);
 
-  g_free (device->internal_name);
+  free (device->internal_name);
 
   G_OBJECT_CLASS (gst_alsa_device_parent_class)->finalize (object);
 }

@@ -64,6 +64,27 @@
 #include <gst/pbutils/pbutils.h>
 #include "gstsdpmessage.h"
 
+#ifndef GST_DISABLE_GST_DEBUG
+#define GST_CAT_DEFAULT ensure_debug_category()
+static GstDebugCategory *
+ensure_debug_category (void)
+{
+  static gsize cat_gonce = 0;
+
+  if (g_once_init_enter (&cat_gonce)) {
+    gsize cat_done;
+
+    cat_done = (gsize) _gst_debug_category_new ("sdpmessage", 0, "SDP message");
+
+    g_once_init_leave (&cat_gonce, cat_done);
+  }
+
+  return (GstDebugCategory *) cat_gonce;
+}
+#else
+#define ensure_debug_category() /* NOOP */
+#endif /* GST_DISABLE_GST_DEBUG */
+
 #define FREE_STRING(field)              g_free (field); (field) = NULL
 #define REPLACE_STRING(field, val)      FREE_STRING(field); (field) = g_strdup (val)
 
@@ -3585,8 +3606,7 @@ gst_sdp_media_caps_adjust_h264 (GstCaps * caps)
   gst_structure_set (s, "profile", G_TYPE_STRING,
       gst_codec_utils_h264_get_profile (sps, 2), NULL);
 
-  gst_structure_remove_fields (s, "level-asymmetry-allowed", "profile-level-id",
-      NULL);
+  gst_structure_remove_fields (s, "level-asymmetry-allowed", NULL);
 }
 
 /**
@@ -3792,54 +3812,122 @@ no_rate:
   }
 }
 
-/**
- * gst_sdp_media_set_media_from_caps:
- * @caps: a #GstCaps
- * @media: (out caller-allocates): a #GstSDPMedia
- *
- * Mapping of caps to SDP fields:
- *
- * a=rtpmap:(payload) (encoding_name) or (clock_rate)[or (encoding_params)]
- *
- * a=framesize:(payload) (width)-(height)
- *
- * a=fmtp:(payload) (param)[=(value)];...
- *
- * a=rtcp-fb:(payload) (param1) [param2]...
- *
- * a=extmap:(id)[/direction] (extensionname) (extensionattributes)
- *
- * Returns: a #GstSDPResult.
- *
- * Since: 1.8
- */
-GstSDPResult
-gst_sdp_media_set_media_from_caps (const GstCaps * caps, GstSDPMedia * media)
+static gboolean
+_sdp_media_has_extmap (const GstSDPMedia * media, guint id)
 {
-  const gchar *caps_str, *caps_enc, *caps_params;
+  gchar id_str_space[5];
+  gchar id_str_slash[5];
+  guint i;
+
+  g_snprintf (id_str_space, 5, "%u ", id);
+  g_snprintf (id_str_slash, 5, "%u/", id);
+
+  for (i = 0;; i++) {
+    const gchar *fval = gst_sdp_media_get_attribute_val_n (media, "extmap", i);
+
+    if (fval == NULL)
+      return FALSE;
+
+    if (g_str_has_prefix (fval, id_str_space) ||
+        g_str_has_prefix (fval, id_str_slash))
+      return TRUE;
+  }
+
+}
+
+/* This function tries to recreate the profile_idc and constraints, but
+ * it's not foolproof, as there could be many variants. To be perfectly
+ * compliant with the RFC, we'd need to store and return the orignal
+ * profile-level-id
+ */
+static gboolean
+h264_get_profile_idc (const gchar * profile, guint8 * profile_idc,
+    guint8 * constraint_flags)
+{
+  const guint8 CSF0 = 0x80;     /* Baseline compatible */
+  const guint8 CSF1 = 0x40;     /* Main compatible */
+  // const guint8 CSF2 = 0x20;     /* Extended compatible */
+  const guint8 CSF3 = 0x10;
+  const guint8 CSF4 = 0x08;
+  const guint8 CSF5 = 0x04;
+  g_return_val_if_fail (profile, FALSE);
+
+  *constraint_flags = 0;
+
+  if (!strcmp (profile, "constrained-baseline")) {
+    *profile_idc = 66;
+    *constraint_flags = CSF0 | CSF1;
+  } else if (!strcmp (profile, "baseline")) {
+    *profile_idc = 66;
+    *constraint_flags = CSF0;
+  } else if (!strcmp (profile, "main")) {
+    *profile_idc = 77;
+    *constraint_flags = CSF1;
+  } else if (!strcmp (profile, "extended")) {
+    *profile_idc = 88;
+    *constraint_flags = CSF3;
+  } else if (!strcmp (profile, "constrained-high")) {
+    *profile_idc = 100;
+    *constraint_flags = CSF4 | CSF5;
+  } else if (!strcmp (profile, "progressive-high")) {
+    *profile_idc = 100;
+    *constraint_flags = CSF4;
+  } else if (!strcmp (profile, "high-10")) {
+    *profile_idc = 110;
+  } else if (!strcmp (profile, "high-10-intra")) {
+    *profile_idc = 110;
+    *constraint_flags = CSF3;
+  } else if (!strcmp (profile, "progressive-high-10")) {
+    *profile_idc = 110;
+    *constraint_flags = CSF4;
+  } else if (!strcmp (profile, "high-4:2:2")) {
+    *profile_idc = 122;
+  } else if (!strcmp (profile, "high-4:2:2-intra")) {
+    *profile_idc = 122;
+    *constraint_flags = CSF3;
+  } else if (!strcmp (profile, "high-4:4:4")) {
+    *profile_idc = 244;
+  } else if (!strcmp (profile, "high-4:4:4-intra")) {
+    *profile_idc = 244;
+    *constraint_flags = CSF3;
+  } else if (!strcmp (profile, "cavlc-4:4:4-intra")) {
+    *profile_idc = 44;
+  } else if (!strcmp (profile, "multiview-high")) {
+    *profile_idc = 118;
+  } else if (!strcmp (profile, "stereo-high")) {
+    *profile_idc = 128;
+  } else if (!strcmp (profile, "scalable-baseline")) {
+    *profile_idc = 83;
+  } else if (!strcmp (profile, "scalable-constrained-baseline")) {
+    *profile_idc = 83;
+    *constraint_flags = CSF5;
+  } else if (!strcmp (profile, "scalable-high")) {
+    *profile_idc = 86;
+  } else if (!strcmp (profile, "scalable-constrained-high")) {
+    *profile_idc = 86;
+    *constraint_flags = CSF5;
+  } else if (!strcmp (profile, "scalable-high-intra")) {
+    *profile_idc = 86;
+    *constraint_flags = CSF3;
+  } else {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static GstSDPResult
+_add_media_format_from_structure (const GstStructure * s, GstSDPMedia * media)
+{
+  const gchar *caps_enc, *caps_params;
   gchar *tmp;
   gint caps_pt, caps_rate;
   guint n_fields, j;
   gboolean first, nack, nack_pli, ccm_fir, transport_cc;
   GString *fmtp;
-  GstStructure *s;
 
   g_return_val_if_fail (media != NULL, GST_SDP_EINVAL);
-  g_return_val_if_fail (caps != NULL && GST_IS_CAPS (caps), GST_SDP_EINVAL);
-
-  s = gst_caps_get_structure (caps, 0);
-  if (s == NULL) {
-    GST_ERROR ("ignoring stream without media type");
-    goto error;
-  }
-
-  /* get media type and payload for the m= line */
-  caps_str = gst_structure_get_string (s, "media");
-  if (!caps_str) {
-    GST_ERROR ("ignoring stream without media type");
-    goto error;
-  }
-  gst_sdp_media_set_media (media, caps_str);
+  g_return_val_if_fail (s != NULL, GST_SDP_EINVAL);
 
   if (!gst_structure_get_int (s, "payload", &caps_pt)) {
     GST_ERROR ("ignoring stream without payload type");
@@ -3976,6 +4064,12 @@ gst_sdp_media_set_media_from_caps (const GstCaps * caps, GstSDPMedia * media)
       if (*endptr != '\0' || id == 0 || id == 15 || id > 9999)
         continue;
 
+      /* The extmap are not per codec, so we don't want to duplicate them
+       * across codecs in the same media.
+       */
+      if (_sdp_media_has_extmap (media, id))
+        continue;
+
       if ((fval = gst_structure_get_string (s, fname))) {
         gchar *extmap = g_strdup_printf ("%u %s", id, fval);
         gst_sdp_media_add_attribute (media, "extmap", extmap);
@@ -4077,11 +4171,21 @@ gst_sdp_media_set_media_from_caps (const GstCaps * caps, GstSDPMedia * media)
        * representation */
       if (!g_strcmp0 (gst_structure_get_string (s, "encoding-name"), "H264")
           && !g_strcmp0 (fname, "profile")) {
-        fname = "level-asymmetry-allowed";
-        fval = "1";
-      }
+        guint8 profile_idc, constraint_flags;
 
-      g_string_append_printf (fmtp, "%s%s=%s", first ? "" : ";", fname, fval);
+        g_string_append_printf (fmtp, "%slevel-asymmetry-allowed=1",
+            first ? "" : ";");
+        if (!gst_structure_has_field (s, "profile-level-id")) {
+          if (h264_get_profile_idc (fval, &profile_idc, &constraint_flags))
+            g_string_append_printf (fmtp, ";profile-level-id=%02x%02x1f",
+                profile_idc, constraint_flags);
+          else
+            GST_FIXME ("Can't convert profile %s back into profile-level-id",
+                fval);
+        }
+      } else {
+        g_string_append_printf (fmtp, "%s%s=%s", first ? "" : ";", fname, fval);
+      }
       first = FALSE;
     }
   }
@@ -4097,8 +4201,93 @@ gst_sdp_media_set_media_from_caps (const GstCaps * caps, GstSDPMedia * media)
   return GST_SDP_OK;
 
   /* ERRORS */
-error:
-  {
+error:{
+    GST_DEBUG ("ignoring stream");
+    return GST_SDP_EINVAL;
+  }
+}
+
+/**
+ * gst_sdp_media_set_media_from_caps:
+ * @caps: a #GstCaps
+ * @media: (out caller-allocates): a #GstSDPMedia
+ *
+ * Mapping of caps to SDP fields:
+ *
+ * a=rtpmap:(payload) (encoding_name) or (clock_rate)[or (encoding_params)]
+ *
+ * a=framesize:(payload) (width)-(height)
+ *
+ * a=fmtp:(payload) (param)[=(value)];...
+ *
+ * a=rtcp-fb:(payload) (param1) [param2]...
+ *
+ * a=extmap:(id)[/direction] (extensionname) (extensionattributes)
+ *
+ * Only the first #GstStructure of the @caps is used.
+ *
+ * Returns: a #GstSDPResult.
+ *
+ * Since: 1.8
+ */
+GstSDPResult
+gst_sdp_media_set_media_from_caps (const GstCaps * caps, GstSDPMedia * media)
+{
+  g_return_val_if_fail (media != NULL, GST_SDP_EINVAL);
+  g_return_val_if_fail (caps != NULL && GST_IS_CAPS (caps), GST_SDP_EINVAL);
+
+  return gst_sdp_media_add_media_from_structure (gst_caps_get_structure (caps,
+          0), media);
+}
+
+/**
+ * gst_sdp_media_add_media_from_structure:
+ * @structure: a #GstStructure belonging to a #GstCaps SDP mapping, see also
+ * `gst_sdp_media_get_caps_from_media()`
+ * @media: (out caller-allocates): a #GstSDPMedia
+ *
+ * Mapping of structure fields to SDP attributes:
+ *
+ * a=rtpmap:(payload) (encoding_name) or (clock_rate)[or (encoding_params)]
+ *
+ * a=framesize:(payload) (width)-(height)
+ *
+ * a=fmtp:(payload) (param)[=(value)];...
+ *
+ * a=rtcp-fb:(payload) (param1) [param2]...
+ *
+ * a=extmap:(id)[/direction] (extensionname) (extensionattributes)
+ *
+ * Returns: a #GstSDPResult.
+ *
+ * Since: 1.28
+ */
+GstSDPResult
+gst_sdp_media_add_media_from_structure (const GstStructure * structure,
+    GstSDPMedia * media)
+{
+  const gchar *caps_str;
+
+  g_return_val_if_fail (media != NULL, GST_SDP_EINVAL);
+  g_return_val_if_fail (structure != NULL
+      && GST_IS_STRUCTURE (structure), GST_SDP_EINVAL);
+
+  if (structure == NULL) {
+    GST_ERROR ("ignoring stream without media type");
+    goto error;
+  }
+
+  /* get media type and payload for the m= line */
+  caps_str = gst_structure_get_string (structure, "media");
+  if (!caps_str) {
+    GST_ERROR ("ignoring stream without media type");
+    goto error;
+  }
+  gst_sdp_media_set_media (media, caps_str);
+  return _add_media_format_from_structure (structure, media);
+
+  /* ERRORS */
+error:{
     GST_DEBUG ("ignoring stream");
     return GST_SDP_EINVAL;
   }

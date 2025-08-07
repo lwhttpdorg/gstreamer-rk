@@ -193,6 +193,16 @@ Qt6GLVideoItem::setForceAspectRatio(bool force_aspect_ratio)
   emit forceAspectRatioChanged(force_aspect_ratio);
 }
 
+void
+Qt6GLVideoItem::setAcceptEvents(bool accept)
+{
+  if (accept == acceptEvents)
+    return;
+
+  acceptEvents = accept;
+  Q_EMIT acceptEventsChanged(acceptEvents);
+}
+
 bool
 Qt6GLVideoItem::getForceAspectRatio()
 {
@@ -274,7 +284,7 @@ Qt6GLVideoItem::updatePaintNode(QSGNode * oldNode,
     UpdatePaintNodeData * updatePaintNodeData)
 {
   GstBuffer *old_buffer;
-  GstQSGMaterial *tex = nullptr;
+  GstQSG6Material *tex = nullptr;
   QSGGeometry *geometry = nullptr;
   bool was_bound = false;
 
@@ -298,7 +308,7 @@ Qt6GLVideoItem::updatePaintNode(QSGNode * oldNode,
     gst_gl_context_activate (this->priv->other_context, TRUE);
 
   if (texNode) {
-    tex = static_cast<GstQSGMaterial *>(texNode->material());
+    tex = static_cast<GstQSG6Material *>(texNode->material());
     if (tex && !tex->compatibleWith(&this->priv->v_info)) {
       delete texNode;
       texNode = nullptr;
@@ -311,7 +321,7 @@ Qt6GLVideoItem::updatePaintNode(QSGNode * oldNode,
     geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), 4);
     texNode->setGeometry(geometry);
     texNode->setFlag(QSGGeometryNode::OwnsGeometry);
-    tex = GstQSGMaterial::new_for_format(GST_VIDEO_INFO_FORMAT (&this->priv->v_info));
+    tex = GstQSG6Material::new_for_format(GST_VIDEO_INFO_FORMAT (&this->priv->v_info));
     tex->setFiltering(is_smooth ? QSGTexture::Filtering::Linear :
         QSGTexture::Filtering::Nearest);
     texNode->setMaterial(tex);
@@ -487,18 +497,22 @@ Qt6GLVideoItem::wheelEvent(QWheelEvent * event)
     g_object_unref (element);
   }
   g_mutex_unlock (&this->priv->lock);
+
+  event->setAccepted(acceptEvents);
 }
 
 void
-Qt6GLVideoItem::hoverEnterEvent(QHoverEvent *)
+Qt6GLVideoItem::hoverEnterEvent(QHoverEvent *event)
 {
   mouseHovering = true;
+  event->setAccepted(acceptEvents);
 }
 
 void
-Qt6GLVideoItem::hoverLeaveEvent(QHoverEvent *)
+Qt6GLVideoItem::hoverLeaveEvent(QHoverEvent *event)
 {
   mouseHovering = false;
+  event->setAccepted(acceptEvents);
 }
 
 void
@@ -527,6 +541,7 @@ Qt6GLVideoItem::hoverMoveEvent(QHoverEvent * event)
     }
   }
   g_mutex_unlock (&this->priv->lock);
+  event->setAccepted(acceptEvents);
 }
 
 void
@@ -589,6 +604,7 @@ Qt6GLVideoItem::touchEvent(QTouchEvent * event)
 
   g_object_unref (element);
   g_mutex_unlock (&this->priv->lock);
+  event->setAccepted(acceptEvents);
 }
 
 void
@@ -641,12 +657,14 @@ Qt6GLVideoItem::mousePressEvent(QMouseEvent * event)
 {
   forceActiveFocus();
   sendMouseEvent(event, TRUE);
+  event->setAccepted(acceptEvents);
 }
 
 void
 Qt6GLVideoItem::mouseReleaseEvent(QMouseEvent * event)
 {
   sendMouseEvent(event, FALSE);
+  event->setAccepted(acceptEvents);
 }
 
 void

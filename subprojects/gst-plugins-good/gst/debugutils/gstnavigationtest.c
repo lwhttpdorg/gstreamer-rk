@@ -490,7 +490,8 @@ gst_navigationtest_class_init (GstNavigationtestClass * klass)
    */
   g_object_class_install_property (gobject_class, PROP_DISPLAY_MOUSE,
       g_param_spec_boolean ("display-mouse", "Display mouse",
-          "Toggles display of mouse events", TRUE, G_PARAM_READWRITE));
+          "Toggles display of mouse events", TRUE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * navigationtest:display-touch:
@@ -501,7 +502,8 @@ gst_navigationtest_class_init (GstNavigationtestClass * klass)
    */
   g_object_class_install_property (gobject_class, PROP_DISPLAY_TOUCH,
       g_param_spec_boolean ("display-touch", "Display touch",
-          "Toggles display of touchscreen events", TRUE, G_PARAM_READWRITE));
+          "Toggles display of touchscreen events", TRUE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   element_class->change_state =
       GST_DEBUG_FUNCPTR (gst_navigationtest_change_state);
@@ -543,5 +545,5 @@ plugin_init (GstPlugin * plugin)
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     navigationtest,
-    "Template for a video filter",
+    "Navigation event handling test plugin",
     plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

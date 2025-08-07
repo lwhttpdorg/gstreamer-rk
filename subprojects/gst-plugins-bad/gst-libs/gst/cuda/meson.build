@@ -3,6 +3,7 @@ cuda_sources = files([
   'gstcudacontext.cpp',
   'gstcudaloader.cpp',
   'gstcudamemory.cpp',
+  'gstcudamemorypool.cpp',
   'gstcudanvmm.cpp',
   'gstcudanvrtc.cpp',
   'gstcudastream.cpp',
@@ -16,11 +17,22 @@ cuda_headers = files([
   'gstcudacontext.h',
   'gstcudaloader.h',
   'gstcudamemory.h',
+  'gstcudamemorypool.h',
   'gstcudanvrtc.h',
   'gstcudastream.h',
   'gstcudautils.h',
 ])
 
+doc_sources = []
+foreach s: cuda_sources + cuda_headers
+  doc_sources += s.full_path()
+endforeach
+
+libs_sources += {
+  'cuda': pathsep.join(doc_sources)
+}
+
+extra_deps = []
 gstcuda_dep = dependency('', required : false)
 cuda_stubinc = include_directories('./stub')
 gstcuda_stub_dep = declare_dependency(
@@ -29,21 +41,19 @@ gstcuda_stub_dep = declare_dependency(
 
 have_nvbufsurface_h = false
 gstcuda_nvmm_inc = []
+nvbuf_dep = dependency('', required: false)
 
 gstcuda_platform_dep = []
 if host_system not in ['windows', 'linux']
   subdir_done()
 endif
 
-# Linux ARM would need -latomic for std::atomic<int64_t>
-if host_system == 'linux' and host_machine.cpu_family() not in ['x86', 'x86_64']
-  libatomic_dep = cxx.find_library('atomic', required: false)
-  if not libatomic_dep.found()
-    subdir_done()
-  endif
-
-  gstcuda_platform_dep += [libatomic_dep]
-endif
+# Check for libatomic for use of C11 atomics: some architectures need
+# to link explicitly to this library.
+# TODO: Once meson 1.7 is in use, this can be updated to
+# dependency('atomic')
+atomic_dep = cxx.find_library('atomic', required: false)
+gstcuda_platform_dep += [atomic_dep]
 
 cuda_win32_headers = [
   'initguid.h',
@@ -85,19 +95,51 @@ if host_system == 'windows'
     ])
   endif
 else
+  # We have NVMM with nvbufsurface.h on both Linux x86 and Jetson (aarch64)
   nvmm_opt = get_option('cuda-nvmm')
-  if not nvmm_opt.disabled()
+  fsmod = import('fs')
+  if nvmm_opt.allowed()
+    incdir_candidates = []
+
     nvmm_inc_opt = get_option('cuda-nvmm-include-path')
     if nvmm_inc_opt != ''
-      gstcuda_nvmm_inc = [include_directories(nvmm_inc_opt)]
+      incdir_candidates += [nvmm_inc_opt]
+    else
+      # try some other default locations
+      incdir_candidates = [
+        '/usr/src/jetson_multimedia_api/include',
+        '/opt/nvidia/deepstream/deepstream/sources/includes',
+      ]
     endif
 
-    have_nvbufsurface_h = cc.has_header('nvbufsurface.h',
-                                        include_directories: gstcuda_nvmm_inc,
-                                        required: nvmm_opt)
-  endif
-  if have_nvbufsurface_h
-    extra_args += ['-DHAVE_CUDA_NVMM']
+    foreach incdir: incdir_candidates
+      if fsmod.is_dir(incdir)
+        incdir = include_directories(incdir)
+        if cc.has_header('nvbufsurface.h',
+                         include_directories: incdir,
+                         required: false)
+          have_nvbufsurface_h = true
+          gstcuda_nvmm_inc = incdir
+          break
+        endif
+      endif
+    endforeach
+
+    if have_nvbufsurface_h
+      extra_args += ['-DHAVE_CUDA_NVMM']
+      # On Tegra, we also have libnvbufsurface.so, which is not present on x86
+      if host_machine.cpu_family() == 'aarch64'
+        # check if we have a tegra based system (jetson)
+        nvbuf_dep = cc.find_library('nvbufsurface', dirs: '/usr/lib/aarch64-linux-gnu/tegra/', required: nvmm_opt)
+        if nvbuf_dep.found()
+          extra_deps += [nvbuf_dep]
+          extra_args += ['-DHAVE_CUDA_NVMM_JETSON']
+        endif
+      endif
+    elif nvmm_opt.enabled()
+      error('Could not find required header: "nvbufsurface.h"')
+      subdir_done()
+    endif
   endif
 endif
 
@@ -110,7 +152,7 @@ gstcuda= library('gstcuda-' + api_version,
   version : libversion,
   soversion : soversion,
   install : true,
-  dependencies : [gstbase_dep, gmodule_dep, gstvideo_dep, gstglproto_dep, gstd3d11_dep, gstcuda_platform_dep]
+  dependencies : [gstbase_dep, gmodule_dep, gstvideo_dep, gstglproto_dep, gstd3d11_dep, gstcuda_platform_dep, extra_deps]
 )
 
 gen_sources = []

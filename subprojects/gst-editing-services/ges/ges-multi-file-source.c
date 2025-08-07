@@ -98,6 +98,7 @@ ges_multi_file_source_set_property (GObject * object, guint property_id,
 
   switch (property_id) {
     case PROP_URI:
+      /* G_PARAM_CONSTRUCT_ONLY */
       uriclip->uri = g_value_dup_string (value);
       break;
     default:
@@ -253,7 +254,8 @@ ges_multi_file_source_class_init (GESMultiFileSourceClass * klass)
    */
   g_object_class_install_property (object_class, PROP_URI,
       g_param_spec_string ("uri", "URI", "multifile uri",
-          NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+          NULL,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
   source_class->create_source = ges_multi_file_source_create_source;
 }
 

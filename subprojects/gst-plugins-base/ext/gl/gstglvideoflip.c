@@ -139,6 +139,8 @@ gst_gl_video_flip_constructed (GObject * object)
 {
   GstGLVideoFlip *self = GST_GL_VIDEO_FLIP (object);
 
+  G_OBJECT_CLASS (parent_class)->constructed (object);
+
   if (self->method == (GstVideoOrientationMethod) DEFAULT_METHOD) {
     gst_gl_video_flip_set_method (self,
         (GstVideoOrientationMethod) DEFAULT_METHOD, FALSE);
@@ -170,9 +172,9 @@ gst_gl_video_flip_class_init (GstGLVideoFlipClass * klass)
   gst_element_class_add_static_pad_template (element_class, &_src_template);
   gst_element_class_add_static_pad_template (element_class, &_sink_template);
 
-  gst_element_class_set_metadata (element_class, "OpenGL video flip filter",
-      "Filter/Effect/Video", "Flip video on the GPU",
-      "Matthew Waters <matthew@centricular.com>");
+  gst_element_class_set_static_metadata (element_class,
+      "OpenGL video flip filter", "Filter/Effect/Video",
+      "Flip video on the GPU", "Matthew Waters <matthew@centricular.com>");
 
   gst_type_mark_as_plugin_api (GST_TYPE_GL_VIDEO_FLIP_METHOD, 0);
 }

@@ -955,6 +955,10 @@ gst_rtsp_client_sink_finalize (GObject * object)
   g_free (rtsp_client_sink->user_pw);
   g_free (rtsp_client_sink->multi_iface);
   g_free (rtsp_client_sink->user_agent);
+  g_free (rtsp_client_sink->prop_proxy_id);
+  g_free (rtsp_client_sink->prop_proxy_pw);
+  g_free (rtsp_client_sink->proxy_user);
+  g_free (rtsp_client_sink->proxy_passwd);
 
   if (rtsp_client_sink->pool) {
     gst_object_unref (rtsp_client_sink->pool);
@@ -1706,6 +1710,8 @@ gst_rtsp_client_sink_set_property (GObject * object, guint prop_id,
         rtsp_client_sink->multi_iface = g_value_dup_string (value);
       break;
     case PROP_SDES:
+      if (rtsp_client_sink->sdes)
+        gst_structure_free (rtsp_client_sink->sdes);
       rtsp_client_sink->sdes = g_value_dup_boxed (value);
       break;
     case PROP_TLS_VALIDATION_FLAGS:
@@ -2341,6 +2347,7 @@ gst_rtsp_client_sink_loop_rx (GstRTSPClientSink * sink)
         break;
       case GST_RTSP_ENET:
         GST_DEBUG_OBJECT (sink, "An ethernet problem occured.");
+        /* FALLTHROUGH */
       default:
         GST_ELEMENT_WARNING (sink, RESOURCE, READ, (NULL),
             ("Unhandled return value %d.", res));
@@ -2988,7 +2995,8 @@ receive_error:
                       FALSE)) == 0)
             goto again;
         }
-        /* only try once after reconnect, then fallthrough and error out */
+        /* only try once after reconnect, else carry on and error out */
+        /* FALLTHROUGH */
       default:
       {
         gchar *str = gst_rtsp_strresult (res);
@@ -3980,6 +3988,24 @@ do_send_data_list (GstBufferList * buffer_list, guint8 channel,
   return res == GST_RTSP_OK;
 }
 
+static void
+transport_timed_out_notify_cb (GstRTSPStreamTransport * transport,
+    GParamSpec * unused, GstRTSPClientSink * sink)
+{
+  gboolean timed_out;
+
+  g_object_get (G_OBJECT (transport), "timed-out", &timed_out, NULL);
+
+  GST_DEBUG_OBJECT (sink, "Transport %p timed out notify: %d", transport,
+      timed_out);
+
+  if (timed_out) {
+    GST_ELEMENT_ERROR (sink, RESOURCE, WRITE, (NULL),
+        ("stream transport timed out"));
+  }
+}
+
+
 static GstRTSPResult
 gst_rtsp_client_sink_setup_streams (GstRTSPClientSink * sink, gboolean async)
 {
@@ -4265,10 +4291,13 @@ gst_rtsp_client_sink_setup_streams (GstRTSPClientSink * sink, gboolean async)
       if (!retry) {
         GST_DEBUG ("Configuring the stream transport for stream %d",
             context->index);
-        if (context->stream_transport == NULL)
+        if (context->stream_transport == NULL) {
           context->stream_transport =
               gst_rtsp_stream_transport_new (stream, transport);
-        else
+
+          g_signal_connect (context->stream_transport, "notify::timed-out",
+              (GCallback) transport_timed_out_notify_cb, sink);
+        } else
           gst_rtsp_stream_transport_set_transport (context->stream_transport,
               transport);
 
@@ -4912,8 +4941,8 @@ gst_rtsp_client_sink_handle_message (GstBin * bin, GstMessage * message)
             gst_element_state_get_name (newstate),
             gst_element_state_get_name (pending), rtsp_client_sink->prerolled);
       }
-      /* fallthrough */
     }
+      /* FALLTHROUGH */
     default:
     {
       GST_BIN_CLASS (parent_class)->handle_message (bin, message);

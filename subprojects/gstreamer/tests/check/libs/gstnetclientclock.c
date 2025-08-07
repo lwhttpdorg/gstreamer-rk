@@ -22,6 +22,10 @@
 #include "config.h"
 #endif
 
+#ifdef HAVE_VALGRIND
+# include <valgrind/valgrind.h>
+#endif
+
 #include <gst/check/gstcheck.h>
 #include <gst/net/gstnet.h>
 
@@ -43,6 +47,8 @@ GST_START_TEST (test_instantiation)
   ASSERT_OBJECT_REFCOUNT (local, "system clock", 2);
 
   gst_object_unref (local);
+
+  gst_net_client_clock_deinit ();
 }
 
 GST_END_TEST;
@@ -114,6 +120,8 @@ GST_START_TEST (test_functioning)
 
   gst_object_unref (client);
   gst_object_unref (server);
+
+  gst_net_client_clock_deinit ();
 }
 
 GST_END_TEST;

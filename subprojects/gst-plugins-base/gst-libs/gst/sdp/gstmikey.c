@@ -37,6 +37,27 @@
 
 #include "gstmikey.h"
 
+#ifndef GST_DISABLE_GST_DEBUG
+#define GST_CAT_DEFAULT ensure_debug_category()
+static GstDebugCategory *
+ensure_debug_category (void)
+{
+  static gsize cat_gonce = 0;
+
+  if (g_once_init_enter (&cat_gonce)) {
+    gsize cat_done;
+
+    cat_done = (gsize) _gst_debug_category_new ("sdpmikey", 0, "SDP mikey");
+
+    g_once_init_leave (&cat_gonce, cat_done);
+  }
+
+  return (GstDebugCategory *) cat_gonce;
+}
+#else
+#define ensure_debug_category() /* NOOP */
+#endif /* GST_DISABLE_GST_DEBUG */
+
 GST_DEFINE_MINI_OBJECT_TYPE (GstMIKEYPayload, gst_mikey_payload);
 GST_DEFINE_MINI_OBJECT_TYPE (GstMIKEYMessage, gst_mikey_message);
 
@@ -1860,13 +1881,213 @@ payloads_from_bytes (ParseState state, GArray * payloads, const guint8 * d,
         g_array_append_val (payloads, p);
         break;
       }
-      case GST_MIKEY_PT_DH:
-      case GST_MIKEY_PT_SIGN:
-      case GST_MIKEY_PT_ID:
-      case GST_MIKEY_PT_CERT:
-      case GST_MIKEY_PT_CHASH:
-      case GST_MIKEY_PT_V:
+      case GST_MIKEY_PT_DH:{
+        guint8 dh_group;
+        guint dh_len;
+        guint8 kv;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY DH payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * !  Next Payload ! DH-Group      !  DH-value                     ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! Reserv! KV    ! KV data (optional)                            ~
+         * * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (2);
+        next_payload = d[0];
+        dh_group = d[1];
+        switch (dh_group) {
+          case 0:
+            /* OAKLEY 5 */
+            dh_len = 1536 / 8;
+            break;
+          case 1:
+            /* OAKLEY 1 */
+            dh_len = 768 / 8;
+            break;
+          case 2:
+            /* OAKLEY 2 */
+            dh_len = 1024 / 8;
+            break;
+          default:
+            goto invalid_data;
+        }
+        CHECK_SIZE (2 + dh_len);
+        ADVANCE (2 + dh_len);
+
+        CHECK_SIZE (1);
+        kv = d[0] & 0x0f;
+        ADVANCE (1);
+
+        switch (kv) {
+          case GST_MIKEY_KV_NULL:
+            break;
+          case GST_MIKEY_KV_SPI:{
+            guint8 spi_len;
+
+            /*
+             *                      1                   2                   3
+             *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+             * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+             * ! SPI Length    ! SPI                                           ~
+             * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+             */
+
+            CHECK_SIZE (1);
+            spi_len = d[0];
+            CHECK_SIZE (1 + spi_len);
+            ADVANCE (1 + spi_len);
+            break;
+          }
+          case GST_MIKEY_KV_INTERVAL:{
+            guint8 vf_len, vt_len;
+
+            /*
+             *                      1                   2                   3
+             *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+             * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+             * ! VF Length     ! Valid From                                    ~
+             * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+             * ! VT Length     ! Valid To (expires)                            ~
+             * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+             */
+
+            CHECK_SIZE (1);
+            vf_len = d[0];
+            CHECK_SIZE (1 + vf_len);
+            ADVANCE (1 + vf_len);
+            CHECK_SIZE (1);
+            vt_len = d[0];
+            CHECK_SIZE (1 + vt_len);
+            ADVANCE (1 + vt_len);
+
+            break;
+          }
+          default:
+            goto invalid_data;
+        }
+
         break;
+      }
+      case GST_MIKEY_PT_SIGN:{
+        guint16 sig_len;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY SIGN payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! S type| Signature len         ! Signature                     ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        /* No next payload! */
+        next_payload = GST_MIKEY_PT_LAST;
+        CHECK_SIZE (2);
+        sig_len = GST_READ_UINT16_BE (&d[0]) & 0x0fff;
+        CHECK_SIZE (2 + sig_len);
+        ADVANCE (2 + sig_len);
+        break;
+      }
+      case GST_MIKEY_PT_ID:
+      case GST_MIKEY_PT_CERT:{
+        guint16 cert_len;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY ID/CERT payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * !  Next Payload ! ID/Cert Type  ! ID/Cert len                   !
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * !                       ID/Certificate Data                     ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (4);
+        next_payload = d[0];
+        cert_len = GST_READ_UINT16_BE (&d[2]);
+        CHECK_SIZE (4 + cert_len);
+        ADVANCE (4 + cert_len);
+        break;
+      }
+      case GST_MIKEY_PT_CHASH:{
+        guint8 hash_func;
+        guint hash_length;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY CHASH payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! Next Payload  ! Hash func     ! Hash                          ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (2);
+        next_payload = d[0];
+        hash_func = d[1];
+        switch (hash_func) {
+          case 0:
+            /* SHA-1 */
+            hash_length = 160 / 8;
+            break;
+          case 1:
+            /* MD5 */
+            hash_length = 128 / 8;
+            break;
+          default:
+            goto invalid_data;
+        }
+        CHECK_SIZE (2 + hash_length);
+        ADVANCE (2 + hash_length);
+        break;
+      }
+      case GST_MIKEY_PT_V:{
+        guint8 auth_alg;
+        guint ver_len;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY V payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! Next Payload  ! Auth alg      ! Ver data                      ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (2);
+        next_payload = d[0];
+        auth_alg = d[1];
+
+        switch (auth_alg) {
+          case GST_MIKEY_MAC_NULL:
+            ver_len = 0;
+            break;
+          case GST_MIKEY_MAC_HMAC_SHA_1_160:
+            ver_len = 160 / 8;
+            break;
+          default:
+            goto invalid_data;
+        }
+        CHECK_SIZE (2 + ver_len);
+        ADVANCE (2 + ver_len);
+        break;
+      }
       case GST_MIKEY_PT_SP:
       {
         guint8 policy;
@@ -1933,8 +2154,24 @@ payloads_from_bytes (ParseState state, GArray * payloads, const guint8 * d,
         g_array_append_val (payloads, p);
         break;
       }
-      case GST_MIKEY_PT_ERR:
+      case GST_MIKEY_PT_ERR:{
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY ERR payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * !  Next Payload ! Error no      !           Reserved            !
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (4);
+        next_payload = d[0];
+        /* skip remainder */
+        ADVANCE (4);
         break;
+      }
       case GST_MIKEY_PT_KEY_DATA:
       {
         GstMIKEYKeyDataType key_type;
@@ -2021,9 +2258,34 @@ payloads_from_bytes (ParseState state, GArray * payloads, const guint8 * d,
         g_array_append_val (payloads, p);
         break;
       }
-      case GST_MIKEY_PT_GEN_EXT:
+      case GST_MIKEY_PT_GEN_EXT:{
+        guint16 ext_len;
+
+        /* TODO: Actually include the payload in the return value */
+
+        GST_FIXME ("MIKEY GEN_EXT payload not supported");
+
+        /*
+         *                      1                   2                   3
+         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! Next payload  ! Type          ! Length                        !
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         * ! Data                                                          ~
+         * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         */
+        CHECK_SIZE (4);
+        next_payload = d[0];
+        /* skip type */
+        ext_len = GST_READ_UINT16_BE (&d[2]);
+        CHECK_SIZE (4 + ext_len);
+        ADVANCE (4 + ext_len);
+        break;
+      }
       case GST_MIKEY_PT_LAST:
         break;
+      default:
+        goto invalid_data;
     }
   }
   return TRUE;
@@ -2258,7 +2520,7 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
   GstStructure *s;
   GstMapInfo info;
   GstBuffer *srtpkey;
-  const GValue *val;
+  const GValue *val, *mki_val;
   const gchar *cipher, *auth;
   const gchar *srtpcipher, *srtpauth, *srtcpcipher, *srtcpauth;
 
@@ -2280,12 +2542,8 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
   srtcpcipher = gst_structure_get_string (s, "srtcp-cipher");
   srtcpauth = gst_structure_get_string (s, "srtcp-auth");
 
-  /* we need srtp cipher/auth or srtcp cipher/auth */
-  if ((srtpcipher == NULL || srtpauth == NULL)
-      && (srtcpcipher == NULL || srtcpauth == NULL)) {
-    GST_WARNING ("could not find the right SRTP parameters in caps");
-    return NULL;
-  }
+  /* Some mikey messages are intended to only set the SPI/MKI,
+   * in which case cipher or auth can be absent. */
 
   /* prefer srtp cipher over srtcp */
   cipher = srtpcipher;
@@ -2298,10 +2556,12 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
     auth = srtcpauth;
 
   /* get cipher and auth values */
-  if (!enc_alg_from_cipher_name (cipher, &enc_alg) ||
-      !auth_alg_from_cipher_name (cipher, &auth_alg) ||
-      !enc_key_length_from_cipher_name (cipher, &enc_key_length) ||
-      !auth_key_length_from_auth_cipher_name (auth, cipher, &auth_key_length)) {
+  if (cipher && (!enc_alg_from_cipher_name (cipher, &enc_alg) ||
+          !auth_alg_from_cipher_name (cipher, &auth_alg) ||
+          !enc_key_length_from_cipher_name (cipher, &enc_key_length) ||
+          (auth
+              && !auth_key_length_from_auth_cipher_name (auth, cipher,
+                  &auth_key_length)))) {
     return NULL;
   }
 
@@ -2310,37 +2570,47 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
   gst_mikey_message_set_info (msg, GST_MIKEY_VERSION, GST_MIKEY_TYPE_PSK_INIT,
       FALSE, GST_MIKEY_PRF_MIKEY_1, g_random_int (), GST_MIKEY_MAP_TYPE_SRTP);
 
-  /* timestamp is now */
-  gst_mikey_message_add_t_now_ntp_utc (msg);
-  /* add some random data */
-  gst_mikey_message_add_rand_len (msg, 16);
+  if (cipher || auth) {
+    /* timestamp is now */
+    gst_mikey_message_add_t_now_ntp_utc (msg);
+    /* add some random data */
+    gst_mikey_message_add_rand_len (msg, 16);
 
-  /* the policy '0' is SRTP */
-  payload = gst_mikey_payload_new (GST_MIKEY_PT_SP);
-  gst_mikey_payload_sp_set (payload, 0, GST_MIKEY_SEC_PROTO_SRTP);
+    /* the policy '0' is SRTP */
+    payload = gst_mikey_payload_new (GST_MIKEY_PT_SP);
+    gst_mikey_payload_sp_set (payload, 0, GST_MIKEY_SEC_PROTO_SRTP);
 
-  /* AES-CM or AES-GCM is supported */
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_ENC_ALG, 1,
-      &enc_alg);
-  /* encryption key length */
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_ENC_KEY_LEN, 1,
-      &enc_key_length);
-  /* HMAC-SHA1 or NULL in case of GCM */
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_ALG, 1,
-      &auth_alg);
-  /* authentication key length */
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_KEY_LEN, 1,
-      &auth_key_length);
-  /* we enable encryption on RTP and RTCP */
-  byte = 1;
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTP_ENC, 1,
-      &byte);
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTCP_ENC, 1,
-      &byte);
-  /* we enable authentication on RTP and RTCP */
-  gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTP_AUTH, 1,
-      &byte);
-  gst_mikey_message_add_payload (msg, payload);
+    if (cipher) {
+      /* AES-CM or AES-GCM is supported */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_ENC_ALG, 1,
+          &enc_alg);
+      /* encryption key length */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_ENC_KEY_LEN, 1,
+          &enc_key_length);
+    }
+    if (auth) {
+      /* HMAC-SHA1 or NULL in case of GCM */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_ALG, 1,
+          &auth_alg);
+      /* authentication key length */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_KEY_LEN,
+          1, &auth_key_length);
+    }
+    /* we enable encryption on RTP and RTCP */
+    byte = 1;
+    if (cipher) {
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTP_ENC, 1,
+          &byte);
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTCP_ENC, 1,
+          &byte);
+    }
+    if (auth) {
+      /* we enable authentication on RTP and RTCP */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_SRTP_AUTH, 1,
+          &byte);
+    }
+    gst_mikey_message_add_payload (msg, payload);
+  }
 
   /* make unencrypted KEMAC */
   payload = gst_mikey_payload_new (GST_MIKEY_PT_KEMAC);
@@ -2351,6 +2621,22 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
   gst_mikey_payload_key_data_set_key (pkd, GST_MIKEY_KD_TEK, info.size,
       info.data);
   gst_buffer_unmap (srtpkey, &info);
+  /* add optional SPI/MKI
+   * See: https://www.rfc-editor.org/rfc/rfc3830.html#section-6.14
+   */
+  mki_val = gst_structure_get_value (s, "mki");
+  if (mki_val) {
+    GstBuffer *mki = gst_value_get_buffer (mki_val);
+    if (mki && GST_IS_BUFFER (mki) && gst_buffer_get_size (mki) > 0) {
+      gst_buffer_map (mki, &info, GST_MAP_READ);
+      gst_mikey_payload_key_data_set_spi (pkd, info.size, info.data);
+      gst_buffer_unmap (mki, &info);
+    } else {
+      GST_WARNING
+          ("Failed to get 'mki' from caps as a buffer or the buffer is empty");
+    }
+  }
+
   gst_mikey_payload_kemac_add_sub (payload, pkd);
   gst_mikey_message_add_payload (msg, payload);
 
@@ -2511,6 +2797,16 @@ gst_mikey_message_to_caps (const GstMIKEYMessage * msg, GstCaps * caps)
     gst_buffer_unref (buf);
 
     gst_caps_set_simple (caps, "roc", G_TYPE_UINT, srtp->roc, NULL);
+
+    /* Get optional SPI/MKI
+     * See: https://www.rfc-editor.org/rfc/rfc3830.html#section-6.13
+     */
+    if (pkd->kv_type == GST_MIKEY_KV_SPI && pkd->kv_len[0] > 0) {
+      GstBuffer *mki =
+          gst_buffer_new_memdup (pkd->kv_data[0], (gsize) pkd->kv_len[0]);
+      gst_caps_set_simple (caps, "mki", GST_TYPE_BUFFER, mki, NULL);
+      gst_buffer_unref (mki);
+    }
   }
 
   gst_caps_set_simple (caps,

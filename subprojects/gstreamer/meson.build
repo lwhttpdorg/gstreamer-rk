@@ -1,6 +1,6 @@
 project('gstreamer', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -16,7 +16,7 @@ else
 endif
 gst_version_is_dev = gst_version_minor % 2 == 1 and gst_version_micro < 90
 
-apiversion = '1.0'
+api_version = '1.0'
 soversion = 0
 # maintaining compatibility with the previous libtool versioning
 # current = minor * 100 + micro
@@ -108,25 +108,29 @@ if gst_version_is_dev
   add_project_arguments('-DG_DISABLE_DEPRECATED', language: 'c')
 endif
 
-cast_checks = get_option('gobject-cast-checks')
-if cast_checks.disabled() or (cast_checks.auto() and not gst_version_is_dev)
+# Same logic as in GLib.
+glib_debug = get_option('glib_debug')
+disable_cast_checks = glib_debug.disabled() or (
+  glib_debug.auto() and (not get_option('debug') or get_option('optimization') not in [ '0', 'g' ]))
+if disable_cast_checks
   message('Disabling GLib cast checks')
   add_project_arguments('-DG_DISABLE_CAST_CHECKS', language: 'c')
+  disable_cast_checks = true
 endif
 
-glib_asserts = get_option('glib-asserts')
-if glib_asserts.disabled() or (glib_asserts.auto() and not gst_version_is_dev)
+disable_glib_asserts = not get_option('glib_assert')
+if disable_glib_asserts
   message('Disabling GLib asserts')
   add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
 endif
 
-glib_checks = get_option('glib-checks')
-if glib_checks.disabled() or (glib_checks.auto() and not gst_version_is_dev)
+disable_glib_checks = not get_option('glib_checks')
+if disable_glib_checks
   message('Disabling GLib checks')
   add_project_arguments('-DG_DISABLE_CHECKS', language: 'c')
 endif
 
-cdata.set_quoted('GST_API_VERSION', apiversion)
+cdata.set_quoted('GST_API_VERSION', api_version)
 cdata.set_quoted('GST_DATADIR', datadir)
 cdata.set_quoted('LOCALEDIR', join_paths(prefix, get_option('localedir')))
 cdata.set_quoted('LIBDIR', join_paths(prefix, get_option('libdir')))
@@ -435,6 +439,8 @@ if host_system == 'windows'
 
   if not building_for_win7
     add_project_arguments([
+      '-U_WIN32_WINNT',
+      '-UWINVER',
       '-D_WIN32_WINNT=_WIN32_WINNT_WIN7',
       '-DWINVER=_WIN32_WINNT_WIN7',
     ], language: ['c', 'cpp'])
@@ -511,23 +517,28 @@ else
   endif
 endif
 
+# NOTE: Keep entries alphabetically sorted
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wmissing-prototypes',
-  '-Wredundant-decls',
-  '-Wundef',
-  '-Wwrite-strings',
+  '-Waddress',
+  '-Waggregate-return',
   '-Wformat',
   '-Wformat-nonliteral',
   '-Wformat-security',
-  '-Wold-style-definition',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
-  '-Waddress',
-  '-Waggregate-return',
+  '-Wmissing-parameter-type',
+  '-Wmissing-prototypes',
   '-Wno-multichar',
-  '-Wvla',
+  '-Wold-style-definition',
   '-Wpointer-arith',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wundef',
+  '-Wvla',
+  '-Wwrite-strings',
 ]
 
 foreach extra_arg : warning_flags
@@ -558,7 +569,7 @@ glib_req = '>= 2.64.0'
 
 # Find dependencies
 glib_dep = dependency('glib-2.0', version: glib_req,
-  fallback: ['glib', 'libglib_dep'])
+    default_options: {'sysprof': 'disabled'})
 gobject_dep = dependency('gobject-2.0')
 gmodule_dep = dependency('gmodule-no-export-2.0')
 if host_system == 'windows'
@@ -588,6 +599,13 @@ if nsl_lib.found()
   network_deps += nsl_lib
 endif
 
+# Check for libatomic for use of C11 atomics: some architectures need
+# to link explicitly to this library.
+# TODO: Once meson 1.7 is in use, this can be updated to
+# dependency('atomic')
+atomic_dep = cc.find_library('atomic', required: false)
+platform_deps += atomic_dep
+
 gir = find_program('g-ir-scanner', required : get_option('introspection'))
 gnome = import('gnome')
 
@@ -598,6 +616,7 @@ gir_init_section = [ '--add-init-section=extern void gst_init(gint*,gchar**);' +
     'g_setenv("GST_REGISTRY_1.0", "/no/way/this/exists.reg", TRUE);' + \
     'g_setenv("GST_PLUGIN_PATH_1_0", "", TRUE);' + \
     'g_setenv("GST_PLUGIN_SYSTEM_PATH_1_0", "", TRUE);' + \
+    'g_setenv("GST_TRACERS", "", TRUE);' + \
     'gst_init(NULL,NULL);', '--quiet']
 
 gst_c_args = ['-DHAVE_CONFIG_H']
@@ -671,8 +690,14 @@ if host_system == 'darwin'
   pkgconfig_libs = ['-Wl,-rpath,${libdir}']
 endif
 
+if host_machine.system() == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
 
 gst_libraries = []
+subdir('cmake')
 subdir('gst')
 subdir('libs')
 subdir('plugins')
@@ -701,7 +726,7 @@ endif
 configure_file(output : 'config.h', configuration : cdata)
 install_data('gst-element-check-1.0.m4', install_dir : join_paths(get_option('datadir'), 'aclocal'))
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 plugin_names = []
 gst_plugins = []

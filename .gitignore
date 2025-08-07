@@ -6,6 +6,7 @@ prefix/
 .gdbinit
 
 # Editor/IDE spcific
+.helix/
 .vscode/
 .vscode-server/
 
@@ -21,7 +22,6 @@ prefix/
 /gst-devtools
 /gst-integration-testsuites
 /gst-editing-services
-/gstreamer-vaapi
 /gstreamer-sharp
 /pygobject
 /gst-python
@@ -29,7 +29,6 @@ prefix/
 /gst-plugins-rs
 
 # Automatic meson redirect wrap files
-subprojects/gdk-pixbuf.wrap
 subprojects/gobject-introspection.wrap
 subprojects/gtest.wrap
 subprojects/gvdb.wrap
@@ -38,8 +37,10 @@ subprojects/libsass.wrap
 subprojects/libtiff.wrap
 subprojects/sassc.wrap
 subprojects/abseil-cpp.wrap
+subprojects/sysprof.wrap
 
 subprojects/*/
+subprojects/.wraplock
 !subprojects/gst-devtools
 !subprojects/gst-docs
 !subprojects/gst-editing-services
@@ -53,12 +54,16 @@ subprojects/*/
 !subprojects/gst-python
 !subprojects/gstreamer
 !subprojects/gstreamer-sharp
-!subprojects/gstreamer-vaapi
 !subprojects/gst-rtsp-server
 !subprojects/macos-bison-binary
 !subprojects/win-flex-bison-binaries
 !subprojects/win-nasm
+!subprojects/win-pkgconfig
 !subprojects/packagefiles
+subprojects/*/*.zip
+subprojects/*/*.exe
+subprojects/*/*.tar.*
+subprojects/macos-bison-binary/bison*/
 
 # VSCode integration
 # launch.json will be modified by users depending on the pipeline to test
@@ -70,3 +75,6 @@ subprojects/*/
 
 # apk files from CI (or following its commands)
 *.apk
+
+# Cache files (from emacs)
+*~

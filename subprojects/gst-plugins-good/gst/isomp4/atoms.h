@@ -967,6 +967,7 @@ void       atom_moov_set_fragmented    (AtomMOOV *moov, gboolean fragmented);
 void       atom_moov_chunks_set_offset (AtomMOOV *moov, guint32 offset);
 void       atom_moov_add_trak          (AtomMOOV *moov, AtomTRAK *trak);
 guint      atom_moov_get_trak_count    (AtomMOOV *moov);
+guint64    atom_moov_calc_stco_to_co64_conversion_total_offset (AtomMOOV *moov, guint64 offset);
 
 guint      atom_framerate_to_timescale (gint fps_n, gint fps_d);
 
@@ -1122,6 +1123,7 @@ AtomInfo *   build_vpcC_extension        (guint8 profile, guint8 level, guint8 b
                                           guint8 chroma_subsampling, gboolean video_full_range,
                                           guint8 colour_primaries, guint8 transfer_characteristics,
                                           guint8 matrix_coefficients);
+AtomInfo *   build_vvcC_extension        (guint8 version, guint32 flags, const GstBuffer* codec_data);
 
 
 /*

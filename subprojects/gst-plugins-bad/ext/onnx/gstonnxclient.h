@@ -23,12 +23,18 @@
 #define __GST_ONNX_CLIENT_H__
 
 #include <gst/gst.h>
+#include <gst/analytics/analytics.h>
 #include <onnxruntime_cxx_api.h>
 #include <gst/video/video.h>
 #include "gstml.h"
-#include "tensor/gsttensormeta.h"
 
 GST_DEBUG_CATEGORY_EXTERN (onnx_inference_debug);
+
+/**
+ * GstOnnxOptimizationLevel:
+ *
+ * Since: 1.20
+ */
 
 typedef enum
 {
@@ -38,10 +44,17 @@ typedef enum
   GST_ONNX_OPTIMIZATION_LEVEL_ENABLE_ALL,
 } GstOnnxOptimizationLevel;
 
+/**
+ * GstOnnxExecutionProvider:
+ *
+ * Since: 1.20
+ */
+
 typedef enum
 {
   GST_ONNX_EXECUTION_PROVIDER_CPU,
   GST_ONNX_EXECUTION_PROVIDER_CUDA,
+  GST_ONNX_EXECUTION_PROVIDER_VSI,
 } GstOnnxExecutionProvider;
 
 
@@ -52,8 +65,10 @@ namespace GstOnnxNamespace {
     GstOnnxClient(GstElement *debug_parent);
     ~GstOnnxClient(void);
     bool createSession(std::string modelFile, GstOnnxOptimizationLevel optim,
-                       GstOnnxExecutionProvider provider);
+                       GstOnnxExecutionProvider provider, GstStructure *
+                       tensors);
     bool hasSession(void);
+    void destroySession(void);
     void setInputImageFormat(GstMlInputImageFormat format);
     GstMlInputImageFormat getInputImageFormat(void);
     GstTensorDataType getInputImageDatatype(void);
@@ -78,6 +93,7 @@ namespace GstOnnxNamespace {
     void convert_image_remove_alpha (T *dest, GstMlInputImageFormat hwc,
         uint8_t **srcPtr, uint32_t srcSamplesPerPixel, uint32_t stride, T offset, T div);
     bool doRun(uint8_t * img_data, GstVideoInfo vinfo, std::vector < Ort::Value > &modelOutput);
+    bool setTensorDescDatatype (ONNXTensorElementDataType dt, GstStructure * tensor_desc);
     Ort::Env env;
     Ort::Session * session;
     int32_t width;

@@ -113,6 +113,9 @@ GST_DEBUG_CATEGORY_EXTERN (adaptivedemux2_debug);
 #define GST_CAT_DEFAULT adaptivedemux2_debug
 
 #define DEFAULT_FAILED_COUNT 3
+#define DEFAULT_MAX_RETRIES 3
+#define DEFAULT_RETRY_BACKOFF_FACTOR 0.0
+#define DEFAULT_RETRY_BACKOFF_MAX    60.0
 #define DEFAULT_CONNECTION_BITRATE 0
 #define DEFAULT_BANDWIDTH_TARGET_RATIO 0.8f
 
@@ -133,6 +136,9 @@ enum
 {
   PROP_0,
   PROP_CONNECTION_SPEED,
+  PROP_MAX_RETRIES,
+  PROP_RETRY_BACKOFF_FACTOR,
+  PROP_RETRY_BACKOFF_MAX,
   PROP_BANDWIDTH_TARGET_RATIO,
   PROP_CONNECTION_BITRATE,
   PROP_MIN_BITRATE,
@@ -213,7 +219,7 @@ static gboolean gst_adaptive_demux_src_query (GstPad * pad, GstObject * parent,
 static gboolean gst_adaptive_demux_src_event (GstPad * pad, GstObject * parent,
     GstEvent * event);
 static gboolean gst_adaptive_demux_handle_seek_event (GstAdaptiveDemux * demux,
-    GstEvent * event);
+    GstEvent * event, gboolean lost_sync);
 static gboolean gst_adaptive_demux_handle_select_streams_event (GstAdaptiveDemux
     * demux, GstEvent * event);
 
@@ -288,6 +294,11 @@ gst_adaptive_demux_set_property (GObject * object, guint prop_id,
   GST_OBJECT_LOCK (demux);
 
   switch (prop_id) {
+    case PROP_MAX_RETRIES:
+      demux->priv->max_retries = g_value_get_int (value);
+      GST_DEBUG_OBJECT (demux, "Maximum retries set to %u",
+          demux->priv->max_retries);
+      break;
     case PROP_CONNECTION_SPEED:
       demux->connection_speed = g_value_get_uint (value) * 1000;
       GST_DEBUG_OBJECT (demux, "Connection speed set to %u",
@@ -322,6 +333,12 @@ gst_adaptive_demux_set_property (GObject * object, guint prop_id,
     case PROP_BUFFERING_LOW_WATERMARK_FRAGMENTS:
       demux->buffering_low_watermark_fragments = g_value_get_double (value);
       break;
+    case PROP_RETRY_BACKOFF_FACTOR:
+      demux->priv->retry_backoff_factor = g_value_get_double (value);
+      break;
+    case PROP_RETRY_BACKOFF_MAX:
+      demux->priv->retry_backoff_max = g_value_get_double (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -339,6 +356,9 @@ gst_adaptive_demux_get_property (GObject * object, guint prop_id,
   GST_OBJECT_LOCK (demux);
 
   switch (prop_id) {
+    case PROP_MAX_RETRIES:
+      g_value_set_int (value, demux->priv->max_retries);
+      break;
     case PROP_CONNECTION_SPEED:
       g_value_set_uint (value, demux->connection_speed / 1000);
       break;
@@ -377,6 +397,12 @@ gst_adaptive_demux_get_property (GObject * object, guint prop_id,
       break;
     case PROP_CURRENT_LEVEL_TIME_AUDIO:
       g_value_set_uint64 (value, demux->current_level_time_audio);
+      break;
+    case PROP_RETRY_BACKOFF_FACTOR:
+      g_value_set_double (value, demux->priv->retry_backoff_factor);
+      break;
+    case PROP_RETRY_BACKOFF_MAX:
+      g_value_set_double (value, demux->priv->retry_backoff_max);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -506,6 +532,54 @@ gst_adaptive_demux_class_init (GstAdaptiveDemuxClass * klass)
           G_PARAM_READABLE | GST_PARAM_MUTABLE_PLAYING |
           G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstAdaptiveDemux2:max-retries:
+   *
+   * Maximum number of times HTTP request can be retried before considering
+   * the request as failed (-1=infinite)
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_MAX_RETRIES,
+      g_param_spec_int ("max-retries", "Maximum Retries",
+          "Maximum number of retries for HTTP requests (-1=infinite)",
+          -1, G_MAXINT, DEFAULT_MAX_RETRIES,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+ /**
+   * GstAdaptiveDemux2:retry-backoff-factor:
+   *
+   * A backoff factor to apply between attempts after the second try
+   * (most errors are resolved immediately by a second try without a delay).
+   * souphttpsrc will sleep for:
+   *
+   * ```
+   * {backoff factor} * (2 ** ({number of previous retries}))
+   * ``
+   *
+   * seconds
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_RETRY_BACKOFF_FACTOR,
+      g_param_spec_double ("retry-backoff-factor", "Backoff Factor",
+          "Exponential retry backoff factor in seconds", 0.0, G_MAXDOUBLE,
+          DEFAULT_RETRY_BACKOFF_FACTOR,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstAdaptiveDemux2:retry-backoff-max:
+   *
+   * Maximum retry backoff delay in seconds
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_RETRY_BACKOFF_MAX,
+      g_param_spec_double ("retry-backoff-max", "Maximum retry Backoff delay",
+          "Maximum backoff delay in seconds", 0.0, G_MAXDOUBLE,
+          DEFAULT_RETRY_BACKOFF_MAX,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_add_static_pad_template (gstelement_class,
       &gst_adaptive_demux_audiosrc_template);
   gst_element_class_add_static_pad_template (gstelement_class,
@@ -588,6 +662,9 @@ gst_adaptive_demux_init (GstAdaptiveDemux * demux,
 
   demux->current_level_time_video = DEFAULT_CURRENT_LEVEL_TIME_VIDEO;
   demux->current_level_time_audio = DEFAULT_CURRENT_LEVEL_TIME_AUDIO;
+  demux->priv->max_retries = DEFAULT_MAX_RETRIES;
+  demux->priv->retry_backoff_factor = DEFAULT_RETRY_BACKOFF_FACTOR;
+  demux->priv->retry_backoff_max = DEFAULT_RETRY_BACKOFF_MAX;
 
   gst_element_add_pad (GST_ELEMENT (demux), demux->sinkpad);
 
@@ -893,7 +970,6 @@ gst_adaptive_demux_update_collection (GstAdaptiveDemux * demux,
 static gboolean
 gst_adaptive_demux_post_collection (GstAdaptiveDemux * demux)
 {
-  GstStreamCollection *collection;
   GstAdaptiveDemuxPeriod *period = demux->output_period;
   guint32 seqnum = g_atomic_int_get (&demux->priv->requested_selection_seqnum);
 
@@ -903,17 +979,18 @@ gst_adaptive_demux_post_collection (GstAdaptiveDemux * demux)
     return TRUE;
   }
 
-  collection = period->collection;
+  GstMessage *collection_msg =
+      gst_message_new_stream_collection (GST_OBJECT (demux),
+      period->collection);
 
-  GST_DEBUG_OBJECT (demux, "Posting collection for period %d",
-      period->period_num);
+  GST_DEBUG_OBJECT (demux, "Posting collection for period %d: %" GST_PTR_FORMAT,
+      period->period_num, collection_msg);
 
   /* Post collection */
   TRACKS_UNLOCK (demux);
   GST_MANIFEST_UNLOCK (demux);
 
-  gst_element_post_message (GST_ELEMENT_CAST (demux),
-      gst_message_new_stream_collection (GST_OBJECT (demux), collection));
+  gst_element_post_message (GST_ELEMENT_CAST (demux), collection_msg);
 
   GST_MANIFEST_LOCK (demux);
   TRACKS_LOCK (demux);
@@ -983,10 +1060,11 @@ handle_incoming_manifest (GstAdaptiveDemux * demux)
 
     if (!g_str_has_prefix (demux->manifest_uri, "data:")
         && !g_str_has_prefix (demux->manifest_uri, "http://")
-        && !g_str_has_prefix (demux->manifest_uri, "https://")) {
+        && !g_str_has_prefix (demux->manifest_uri, "https://")
+        && !g_str_has_prefix (demux->manifest_uri, "file://")) {
       GST_ELEMENT_ERROR (demux, STREAM, DEMUX,
           (_("Invalid manifest URI")),
-          ("Manifest URI needs to use either data:, http:// or https://"));
+          ("Manifest URI needs to use either data:, http://, https:// or file://"));
       gst_query_unref (query);
       ret = FALSE;
       goto unlock_out;
@@ -1106,12 +1184,12 @@ struct http_headers_collector
 };
 
 static gboolean
-gst_adaptive_demux_handle_upstream_http_header (GQuark field_id,
+gst_adaptive_demux_handle_upstream_http_header (const GstIdStr * fieldname,
     const GValue * value, gpointer userdata)
 {
   struct http_headers_collector *hdr_data = userdata;
   GstAdaptiveDemux *demux = hdr_data->demux;
-  const gchar *field_name = g_quark_to_string (field_id);
+  const gchar *field_name = gst_id_str_as_str (fieldname);
 
   if (G_UNLIKELY (value == NULL))
     return TRUE;                /* This should not happen */
@@ -1136,7 +1214,7 @@ gst_adaptive_demux_handle_upstream_http_header (GQuark field_id,
       cookies = (gchar **) g_malloc0 ((total_len + 1) * sizeof (gchar *));
 
       for (i = 0; i < gst_value_array_get_size (value); i++) {
-        GST_INFO_OBJECT (demux, "%s : %s", g_quark_to_string (field_id),
+        GST_INFO_OBJECT (demux, "%s : %s", gst_id_str_as_str (fieldname),
             g_value_get_string (gst_value_array_get_value (value, i)));
         cookies[i] = g_value_dup_string (gst_value_array_get_value (value, i));
       }
@@ -1144,12 +1222,12 @@ gst_adaptive_demux_handle_upstream_http_header (GQuark field_id,
       total_len = 1 + prev_len;
       cookies = (gchar **) g_malloc0 ((total_len + 1) * sizeof (gchar *));
 
-      GST_INFO_OBJECT (demux, "%s : %s", g_quark_to_string (field_id),
+      GST_INFO_OBJECT (demux, "%s : %s", gst_id_str_as_str (fieldname),
           g_value_get_string (value));
       cookies[0] = g_value_dup_string (value);
     } else {
       GST_WARNING_OBJECT (demux, "%s field is not string or array",
-          g_quark_to_string (field_id));
+          gst_id_str_as_str (fieldname));
     }
 
     if (cookies) {
@@ -1259,7 +1337,7 @@ gst_adaptive_demux_sink_event (GstPad * pad, GstObject * parent,
           gst_structure_get (structure, "request-headers", GST_TYPE_STRUCTURE,
               &req_headers, NULL);
           if (req_headers) {
-            gst_structure_foreach (req_headers,
+            gst_structure_foreach_id_str (req_headers,
                 gst_adaptive_demux_handle_upstream_http_header, &c);
             gst_structure_free (req_headers);
           }
@@ -1269,7 +1347,7 @@ gst_adaptive_demux_sink_event (GstPad * pad, GstObject * parent,
           gst_structure_get (structure, "response-headers", GST_TYPE_STRUCTURE,
               &res_headers, NULL);
           if (res_headers) {
-            gst_structure_foreach (res_headers,
+            gst_structure_foreach_id_str (res_headers,
                 gst_adaptive_demux_handle_upstream_http_header, &c);
             gst_structure_free (res_headers);
           }
@@ -1406,6 +1484,8 @@ gst_adaptive_demux_reset (GstAdaptiveDemux * demux)
   demux->priv->segment_seqnum = gst_util_seqnum_next ();
 
   demux->priv->global_output_position = 0;
+  demux->priv->initial_output_position = 0;
+  demux->priv->base_offset = 0;
 
   demux->priv->n_audio_streams = 0;
   demux->priv->n_video_streams = 0;
@@ -1425,7 +1505,7 @@ gst_adaptive_demux_send_event (GstElement * element, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
     {
-      res = gst_adaptive_demux_handle_seek_event (demux, event);
+      res = gst_adaptive_demux_handle_seek_event (demux, event, FALSE);
       break;
     }
     case GST_EVENT_SELECT_STREAMS:
@@ -2008,9 +2088,16 @@ gst_adaptive_demux_setup_streams_for_restart (GstAdaptiveDemux * demux,
                               GST_SEEK_FLAG_SNAP_AFTER | \
                               GST_SEEK_FLAG_SNAP_NEAREST))
 
+/**
+ * gst_adaptive_demux_handle_seek_event:
+ * @demux:
+ * @event: The seek event
+ * @lost_sync: TRUE if this triggered by a "lost sync" and not an external seek
+ *
+ */
 static gboolean
 gst_adaptive_demux_handle_seek_event (GstAdaptiveDemux * demux,
-    GstEvent * event)
+    GstEvent * event, gboolean lost_sync)
 {
   GstAdaptiveDemuxClass *demux_class = GST_ADAPTIVE_DEMUX_GET_CLASS (demux);
   gdouble rate;
@@ -2183,11 +2270,13 @@ gst_adaptive_demux_handle_seek_event (GstAdaptiveDemux * demux,
   /* have a backup in case seek fails */
   gst_segment_copy_into (&demux->segment, &oldsegment);
 
-  GST_DEBUG_OBJECT (demux, "sending flush start");
-  flush_event = gst_event_new_flush_start ();
-  gst_event_set_seqnum (flush_event, seqnum);
+  if (!lost_sync) {
+    GST_DEBUG_OBJECT (demux, "sending flush start");
+    flush_event = gst_event_new_flush_start ();
+    gst_event_set_seqnum (flush_event, seqnum);
 
-  gst_adaptive_demux_push_src_event (demux, flush_event);
+    gst_adaptive_demux_push_src_event (demux, flush_event);
+  }
 
   gst_adaptive_demux_stop_tasks (demux, FALSE);
   gst_adaptive_demux_reset_tracks (demux);
@@ -2307,10 +2396,12 @@ gst_adaptive_demux_handle_seek_event (GstAdaptiveDemux * demux,
   /* Resetting flow combiner */
   gst_flow_combiner_reset (demux->priv->flowcombiner);
 
-  GST_DEBUG_OBJECT (demux, "Sending flush stop on all pad");
-  flush_event = gst_event_new_flush_stop (TRUE);
-  gst_event_set_seqnum (flush_event, seqnum);
-  gst_adaptive_demux_push_src_event (demux, flush_event);
+  if (!lost_sync) {
+    GST_DEBUG_OBJECT (demux, "Sending flush stop on all pad");
+    flush_event = gst_event_new_flush_stop (TRUE);
+    gst_event_set_seqnum (flush_event, seqnum);
+    gst_adaptive_demux_push_src_event (demux, flush_event);
+  }
 
   /* If the seek generated a new period, prepare it */
   if (!demux->input_period->prepared) {
@@ -2325,8 +2416,19 @@ gst_adaptive_demux_handle_seek_event (GstAdaptiveDemux * demux,
   gst_adaptive_demux_setup_streams_for_restart (demux, start_type, stop_type);
   demux->priv->qos_earliest_time = GST_CLOCK_TIME_NONE;
 
-  /* Reset the global output position (running time) for when the output loop restarts */
-  demux->priv->global_output_position = 0;
+  if (!lost_sync) {
+    /* Reset the global output position (running time) for when the output loop restarts */
+    demux->priv->global_output_position = 0;
+    demux->priv->initial_output_position = demux->priv->base_offset = 0;
+  } else {
+    /* When dealing with lost-sync, we don't reset the global output position
+     * (running time), but we do need to take into account how much was played
+     * previously to add it to the outgoing segment base */
+    demux->priv->base_offset =
+        demux->priv->global_output_position -
+        demux->priv->initial_output_position;
+    demux->priv->initial_output_position = demux->priv->global_output_position;
+  }
 
   /* After a flushing seek, any instant-rate override is undone */
   demux->instant_rate_multiplier = 1.0;
@@ -2519,7 +2621,7 @@ gst_adaptive_demux_src_event (GstPad * pad, GstObject * parent,
         gst_event_unref (event);
         return TRUE;
       }
-      return gst_adaptive_demux_handle_seek_event (demux, event);
+      return gst_adaptive_demux_handle_seek_event (demux, event, FALSE);
     }
     case GST_EVENT_LATENCY:{
       /* Upstream and our internal source are irrelevant
@@ -2536,7 +2638,7 @@ gst_adaptive_demux_src_event (GstPad * pad, GstObject * parent,
       gst_event_parse_qos (event, NULL, NULL, &diff, &timestamp);
       /* Only take into account lateness if late */
       if (diff > 0)
-        earliest_time = timestamp + 2 * diff;
+        earliest_time = timestamp + MIN (2 * diff, GST_SECOND);
       else
         earliest_time = timestamp;
 
@@ -2684,6 +2786,7 @@ gst_adaptive_demux_src_query (GstPad * pad, GstObject * parent,
       GST_MANIFEST_UNLOCK (demux);
       break;
     case GST_QUERY_SELECTABLE:
+      GST_LOG_OBJECT (demux, "Answering TRUE to selectable query");
       gst_query_set_selectable (query, TRUE);
       ret = TRUE;
       break;
@@ -2722,6 +2825,7 @@ gst_adaptive_demux_query (GstElement * element, GstQuery * query)
             "No period setup yet, but still answering buffering query");
         return TRUE;
       }
+      break;
     }
     case GST_QUERY_SEEKING:
     {
@@ -2729,6 +2833,10 @@ gst_adaptive_demux_query (GstElement * element, GstQuery * query)
        * element query handler to fail, yet we can answer this query */
       return gst_adaptive_demux_handle_query_seeking (demux, query);
     }
+    case GST_QUERY_SELECTABLE:
+      GST_LOG_OBJECT (demux, "Answering TRUE to selectable query");
+      gst_query_set_selectable (query, TRUE);
+      return TRUE;
     default:
       break;
   }
@@ -2747,7 +2855,7 @@ gst_adaptive_demux_handle_lost_sync (GstAdaptiveDemux * demux)
       gst_event_new_seek (1.0, GST_FORMAT_TIME,
       GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, GST_SEEK_TYPE_END, 0,
       GST_SEEK_TYPE_NONE, 0);
-  gst_adaptive_demux_handle_seek_event (demux, seek);
+  gst_adaptive_demux_handle_seek_event (demux, seek, TRUE);
   return FALSE;
 }
 
@@ -2958,17 +3066,6 @@ gst_adaptive_demux_manifest_update_cb (GstAdaptiveDemux * demux)
   if (ret == GST_FLOW_OK) {
     GST_DEBUG_OBJECT (demux, "Updated playlist successfully");
     demux->priv->update_failed_count = 0;
-
-    /* Wake up download tasks */
-    if (demux->priv->stream_waiting_for_manifest) {
-      GList *iter;
-
-      for (iter = demux->input_period->streams; iter; iter = g_list_next (iter)) {
-        GstAdaptiveDemux2Stream *stream = iter->data;
-        gst_adaptive_demux2_stream_on_manifest_update (stream);
-      }
-      demux->priv->stream_waiting_for_manifest = FALSE;
-    }
   } else if (ret == GST_ADAPTIVE_DEMUX_FLOW_LOST_SYNC) {
     schedule_again = FALSE;
     gst_adaptive_demux_handle_lost_sync (demux);
@@ -2978,7 +3075,7 @@ gst_adaptive_demux_manifest_update_cb (GstAdaptiveDemux * demux)
   } else {
     demux->priv->update_failed_count++;
 
-    if (demux->priv->update_failed_count <= DEFAULT_FAILED_COUNT) {
+    if (demux->priv->update_failed_count <= demux->priv->max_retries) {
       GST_WARNING_OBJECT (demux, "Could not update the playlist, flow: %s",
           gst_flow_get_name (ret));
     } else {
@@ -3692,6 +3789,17 @@ handle_manifest_download_complete (DownloadRequest * request,
           "Duration unknown, can not send the duration message");
     }
 
+    /* Wake up download tasks */
+    if (demux->priv->stream_waiting_for_manifest) {
+      GList *iter;
+
+      for (iter = demux->input_period->streams; iter; iter = g_list_next (iter)) {
+        GstAdaptiveDemux2Stream *stream = iter->data;
+        gst_adaptive_demux2_stream_on_manifest_update (stream);
+      }
+      demux->priv->stream_waiting_for_manifest = FALSE;
+    }
+
     /* If a manifest changes it's liveness or periodic updateness, we need
      * to start/stop the manifest update task appropriately */
     /* Keep this condition in sync with the one in
@@ -3929,4 +4037,32 @@ GstAdaptiveDemuxLoop *
 gst_adaptive_demux_get_loop (GstAdaptiveDemux * demux)
 {
   return gst_adaptive_demux_loop_ref (demux->priv->scheduler_task);
+}
+
+gint
+gst_adaptive_demux_max_retries (GstAdaptiveDemux * self)
+{
+  GST_OBJECT_LOCK (self);
+  gint res = self->priv->max_retries;
+  GST_OBJECT_UNLOCK (self);
+
+  return res;
+}
+
+GstClockTime
+gst_adaptive_demux_retry_delay (GstAdaptiveDemux * self, gint retry,
+    GstClockTime default_delay)
+{
+  GST_OBJECT_LOCK (self);
+  gdouble backoff_factor = self->priv->retry_backoff_factor;
+  gdouble backoff_max = self->priv->retry_backoff_max;
+  GST_OBJECT_UNLOCK (self);
+
+  GstClockTime delay = default_delay;
+  if (backoff_factor > 0) {
+    GstClockTime backoff_delay = (backoff_factor * (1 << retry)) * GST_SECOND;
+    delay = MIN (backoff_delay, (backoff_max * GST_SECOND));
+  }
+
+  return delay;
 }

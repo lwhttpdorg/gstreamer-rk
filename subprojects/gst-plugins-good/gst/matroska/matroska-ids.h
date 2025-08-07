@@ -144,6 +144,8 @@
 #define GST_MATROSKA_ID_VIDEOCOLOUR                0x55B0
 /* IDs in the Colour master*/
 #define GST_MATROSKA_ID_VIDEOMATRIXCOEFFICIENTS    0x55B1
+#define GST_MATROSKA_ID_VIDEOCHROMASITINGHORZ      0x55B7
+#define GST_MATROSKA_ID_VIDEOCHROMASITINGVERT      0x55B8
 #define GST_MATROSKA_ID_VIDEORANGE                 0x55B9
 #define GST_MATROSKA_ID_VIDEOTRANSFERCHARACTERISTICS  0x55BA
 #define GST_MATROSKA_ID_VIDEOPRIMARIES             0x55BB
@@ -161,6 +163,14 @@
 #define GST_MATROSKA_ID_WHITEPOINTCHROMATICITYY    0x55D8
 #define GST_MATROSKA_ID_LUMINANCEMAX               0x55D9
 #define GST_MATROSKA_ID_LUMINANCEMIN               0x55DA
+
+#define GST_MATROSKA_ID_VIDEOPROJECTION            0x7670
+/* IDs in the Projection master*/
+#define GST_MATROSKA_ID_VIDEOPROJECTIONTYPE        0x7671
+#define GST_MATROSKA_ID_VIDEOPROJECTIONPRIVATE     0x7672
+#define GST_MATROSKA_ID_VIDEOPROJECTIONPOSEYAW     0x7673
+#define GST_MATROSKA_ID_VIDEOPROJECTIONPOSEPITCH   0x7674
+#define GST_MATROSKA_ID_VIDEOPROJECTIONPOSEROLL    0x7675
 
 /* IDs in the TrackAudio master */
 #define GST_MATROSKA_ID_AUDIOSAMPLINGFREQ          0xB5
@@ -206,6 +216,7 @@
 #define GST_MATROSKA_ID_CUETRACK                   0xF7
 #define GST_MATROSKA_ID_CUECLUSTERPOSITION         0xF1
 #define GST_MATROSKA_ID_CUEBLOCKNUMBER             0x5378
+#define GST_MATROSKA_ID_CUERELATIVEPOSITION        0xF0
 /* semi-draft */
 #define GST_MATROSKA_ID_CUECODECSTATE              0xEA
 /* semi-draft */
@@ -379,6 +390,7 @@
 #define GST_MATROSKA_CODEC_ID_VIDEO_VP9          "V_VP9"
 #define GST_MATROSKA_CODEC_ID_VIDEO_AV1          "V_AV1"
 #define GST_MATROSKA_CODEC_ID_VIDEO_MPEGH_HEVC   "V_MPEGH/ISO/HEVC"
+#define GST_MATROSKA_CODEC_ID_VIDEO_MPEGI_VVC    "V_MPEGI/ISO/VVC"
 #define GST_MATROSKA_CODEC_ID_VIDEO_PRORES       "V_PRORES"
 #define GST_MATROSKA_CODEC_ID_VIDEO_FFV1         "V_FFV1"
 
@@ -647,6 +659,7 @@ typedef struct _GstMatroskaTrackVideoContext {
 
   GstBuffer     *dirac_unit;
   GstVideoColorimetry colorimetry;
+  GstVideoChromaSite chroma_site;
 
   GstVideoMasteringDisplayInfo mastering_display_info;
   gboolean mastering_display_info_present;
@@ -675,8 +688,12 @@ typedef struct _GstMatroskaTrackSubtitleContext {
 typedef struct _GstMatroskaIndex {
   guint64        pos;      /* of the corresponding *cluster*! */
   GstClockTime   time;     /* in nanoseconds */
-  guint32        block;    /* number of the block in the cluster */
+  union {
+    guint32      block;    /* number of the block in the cluster */
+    guint32      offset;   /* relative offset from start of cluster */
+  };
   guint16        track;    /* reference to 'num' */
+  gboolean       relative; /* whether we're using relative offset or block number */
 } GstMatroskaIndex;
 
 typedef struct _Wavpack4Header {

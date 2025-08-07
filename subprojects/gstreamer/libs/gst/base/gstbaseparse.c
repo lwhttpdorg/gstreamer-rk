@@ -220,6 +220,7 @@ struct _GstBaseParsePrivate
 
   guint min_frame_size;
   gboolean disable_passthrough;
+  gboolean disable_clip;
   gboolean passthrough;
   gboolean pts_interpolate;
   gboolean infer_ts;
@@ -356,11 +357,13 @@ typedef struct _GstBaseParseSeek
 } GstBaseParseSeek;
 
 #define DEFAULT_DISABLE_PASSTHROUGH        FALSE
+#define DEFAULT_DISABLE_CLIP               TRUE
 
 enum
 {
   PROP_0,
   PROP_DISABLE_PASSTHROUGH,
+  PROP_DISABLE_CLIP,
   PROP_LAST
 };
 
@@ -567,6 +570,18 @@ gst_base_parse_class_init (GstBaseParseClass * klass)
           DEFAULT_DISABLE_PASSTHROUGH,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstBaseParse:disable-clip:
+   *
+   * Disable dropping buffers that are out of segment
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_DISABLE_CLIP,
+      g_param_spec_boolean ("disable-clip", "Disable Clip",
+          "Disable buffer dropping that are out of segment",
+          DEFAULT_DISABLE_CLIP, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class = (GstElementClass *) klass;
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_base_parse_change_state);
@@ -645,6 +660,7 @@ gst_base_parse_init (GstBaseParse * parse, GstBaseParseClass * bclass)
   parse->priv->parser_tags = NULL;
   parse->priv->parser_tags_merge_mode = GST_TAG_MERGE_APPEND;
   parse->priv->disable_passthrough = DEFAULT_DISABLE_PASSTHROUGH;
+  parse->priv->disable_clip = DEFAULT_DISABLE_CLIP;
 }
 
 static void
@@ -656,6 +672,9 @@ gst_base_parse_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_DISABLE_PASSTHROUGH:
       parse->priv->disable_passthrough = g_value_get_boolean (value);
+      break;
+    case PROP_DISABLE_CLIP:
+      parse->priv->disable_clip = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -672,6 +691,9 @@ gst_base_parse_get_property (GObject * object, guint prop_id, GValue * value,
   switch (prop_id) {
     case PROP_DISABLE_PASSTHROUGH:
       g_value_set_boolean (value, parse->priv->disable_passthrough);
+      break;
+    case PROP_DISABLE_CLIP:
+      g_value_set_boolean (value, parse->priv->disable_clip);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -952,16 +974,11 @@ gst_base_parse_queue_tag_event_update (GstBaseParse * parse)
   GST_DEBUG_OBJECT (parse, "merged   : %" GST_PTR_FORMAT, merged_tags);
 
   if (merged_tags == NULL)
-    return;
-
-  if (gst_tag_list_is_empty (merged_tags)) {
-    gst_tag_list_unref (merged_tags);
-    return;
-  }
+    merged_tags = gst_tag_list_new_empty ();
 
   if (parse->priv->framecount >= MIN_FRAMES_TO_POST_BITRATE) {
-    /* only add bitrate tags to non-empty taglists for now, and only if neither
-     * upstream tags nor the subclass sets the bitrate tag in question already */
+    /* only add bitrate tags if neither upstream tags nor the subclass sets the
+     * bitrate tag in question already */
     if (parse->priv->min_bitrate != G_MAXUINT && parse->priv->post_min_bitrate) {
       GST_LOG_OBJECT (parse, "adding min bitrate %u", parse->priv->min_bitrate);
       gst_tag_list_add (merged_tags, GST_TAG_MERGE_KEEP,
@@ -978,6 +995,11 @@ gst_base_parse_queue_tag_event_update (GstBaseParse * parse)
       gst_tag_list_add (merged_tags, GST_TAG_MERGE_KEEP,
           GST_TAG_BITRATE, parse->priv->avg_bitrate, NULL);
     }
+  }
+
+  if (gst_tag_list_is_empty (merged_tags)) {
+    gst_tag_list_unref (merged_tags);
+    return;
   }
 
   parse->priv->pending_events =
@@ -1111,7 +1133,7 @@ gst_base_parse_convert (GstBaseParse * parse,
 }
 
 static gboolean
-update_upstream_provided (GQuark field_id, const GValue * value,
+update_upstream_provided (const GstIdStr * field, const GValue * value,
     gpointer user_data)
 {
   GstCaps *default_caps = user_data;
@@ -1121,8 +1143,8 @@ update_upstream_provided (GQuark field_id, const GValue * value,
   caps_size = gst_caps_get_size (default_caps);
   for (i = 0; i < caps_size; i++) {
     GstStructure *structure = gst_caps_get_structure (default_caps, i);
-    if (!gst_structure_id_has_field (structure, field_id)) {
-      gst_structure_id_set_value (structure, field_id, value);
+    if (!gst_structure_has_field (structure, gst_id_str_as_str (field))) {
+      gst_structure_id_str_set_value (structure, field, value);
     }
     /* XXX: maybe try to fixate better than gst_caps_fixate() the
      * downstream caps based on upstream values if possible */
@@ -1162,7 +1184,8 @@ gst_base_parse_negotiate_default_caps (GstBaseParse * parse)
 
   if (sinkcaps) {
     structure = gst_caps_get_structure (sinkcaps, 0);
-    gst_structure_foreach (structure, update_upstream_provided, default_caps);
+    gst_structure_foreach_id_str (structure, update_upstream_provided,
+        default_caps);
   }
 
   default_caps = gst_caps_fixate (default_caps);
@@ -2581,7 +2604,8 @@ gst_base_parse_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
         parse->segment.stop + parse->priv->lead_out_ts) {
       GST_LOG_OBJECT (parse, "Dropped frame, after segment");
       ret = GST_FLOW_EOS;
-    } else if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer) &&
+    } else if (!parse->priv->disable_clip &&
+        GST_BUFFER_TIMESTAMP_IS_VALID (buffer) &&
         GST_BUFFER_DURATION_IS_VALID (buffer) &&
         GST_CLOCK_TIME_IS_VALID (parse->segment.start) &&
         GST_BUFFER_TIMESTAMP (buffer) + GST_BUFFER_DURATION (buffer) +

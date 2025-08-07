@@ -287,7 +287,8 @@ ges_uri_clip_asset_class_init (GESUriClipAssetClass * klass)
    */
   properties[PROP_DURATION] =
       g_param_spec_uint64 ("duration", "Duration", "The duration to use", 0,
-      G_MAXUINT64, GST_CLOCK_TIME_NONE, G_PARAM_READWRITE);
+      G_MAXUINT64, GST_CLOCK_TIME_NONE,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, PROP_DURATION,
       properties[PROP_DURATION]);
 
@@ -300,7 +301,8 @@ ges_uri_clip_asset_class_init (GESUriClipAssetClass * klass)
    */
   properties[PROP_IS_NESTED_TIMELINE] =
       g_param_spec_boolean ("is-nested-timeline", "Is nested timeline",
-      "Whether this is a nested timeline", FALSE, G_PARAM_READABLE);
+      "Whether this is a nested timeline", FALSE,
+      G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   g_object_class_install_property (object_class, PROP_IS_NESTED_TIMELINE,
       properties[PROP_IS_NESTED_TIMELINE]);
 
@@ -330,9 +332,14 @@ _create_uri_source_asset (GESUriClipAsset * asset,
       g_strdup (gst_discoverer_stream_info_get_stream_id (sinfo));
 
   if (stream_id == NULL) {
-    GST_WARNING_OBJECT (asset,
-        "No stream ID, ignoring stream info: %p off type: %s", sinfo,
-        ges_track_type_name (type));
+    if (type != GES_TRACK_TYPE_UNKNOWN) {
+      GST_WARNING_OBJECT (asset,
+          "No stream ID, ignoring stream info: %p off type: %s", sinfo,
+          ges_track_type_name (type));
+    } else {
+      GST_INFO_OBJECT (asset, "No stream ID, ignoring stream info: %p", sinfo);
+    }
+
     return;
   }
 
@@ -587,7 +594,7 @@ ges_uri_clip_asset_is_image (GESUriClipAsset * self)
 }
 
 /**
- * ges_uri_clip_asset_new:
+ * ges_uri_clip_asset_new: (sync-func request_sync) (finish-func finish):
  * @uri: The URI of the file for which to create a #GESUriClipAsset
  * @cancellable: optional %GCancellable object, %NULL to ignore.
  * @callback: (scope async): a #GAsyncReadyCallback to call when the initialization is finished
@@ -657,7 +664,7 @@ ges_uri_clip_asset_finish (GAsyncResult * res, GError ** error)
 }
 
 /**
- * ges_uri_clip_asset_request_sync:
+ * ges_uri_clip_asset_request_sync: (async-func new):
  * @uri: The URI of the file for which to create a #GESUriClipAsset.
  * You can also use multi file uris for #GESMultiFileSource.
  * @error: An error to be set in case something wrong happens or %NULL

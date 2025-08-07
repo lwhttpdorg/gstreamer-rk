@@ -42,6 +42,7 @@
 #include <future>
 #include <vector>
 #include <queue>
+#include <atomic>
 #include <string.h>
 #include <wrl.h>
 #include <gst/d3dshader/gstd3dshader.h>
@@ -172,10 +173,12 @@ enum
   PROP_ADAPTER,
   PROP_BACKGROUND,
   PROP_IGNORE_INACTIVE_PADS,
+  PROP_ASYNC_DEPTH,
 };
 
 #define DEFAULT_ADAPTER -1
 #define DEFAULT_BACKGROUND GST_D3D12_COMPOSITOR_BACKGROUND_CHECKER
+#define DEFAULT_ASYNC_DEPTH 0
 
 static const D3D12_RENDER_TARGET_BLEND_DESC g_blend_source = {
   TRUE,
@@ -220,19 +223,16 @@ static const D3D12_ROOT_SIGNATURE_FLAGS g_rs_flags =
     D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
     D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
     D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS;
+    D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
 /* *INDENT-OFF* */
 struct PadContext
 {
   PadContext (GstD3D12Device * dev)
   {
-    event_handle = CreateEventEx (nullptr, nullptr, 0, EVENT_ALL_ACCESS);
     device = (GstD3D12Device *) gst_object_ref (dev);
     auto device_handle = gst_d3d12_device_get_device_handle (device);
-    ca_pool = gst_d3d12_command_allocator_pool_new (device_handle,
+    ca_pool = gst_d3d12_cmd_alloc_pool_new (device_handle,
         D3D12_COMMAND_LIST_TYPE_DIRECT);
     gst_video_info_init (&info);
   }
@@ -242,9 +242,7 @@ struct PadContext
   ~PadContext ()
   {
     gst_d3d12_device_fence_wait (device, D3D12_COMMAND_LIST_TYPE_DIRECT,
-        fence_val, event_handle);
-
-    CloseHandle (event_handle);
+        fence_val);
 
     gst_clear_d3d12_fence_data (&fence_data);
     gst_clear_object (&conv);
@@ -253,12 +251,11 @@ struct PadContext
   }
 
   GstVideoInfo info;
-  GstD3D12CommandAllocatorPool *ca_pool;
+  GstD3D12CmdAllocPool *ca_pool;
   ComPtr < ID3D12GraphicsCommandList > cl;
   GstD3D12FenceData *fence_data = nullptr;
   GstD3D12Device *device;
   GstD3D12Converter *conv = nullptr;
-  HANDLE event_handle;
   guint64 fence_val = 0;
 };
 /* *INDENT-ON* */
@@ -321,10 +318,9 @@ struct BackgroundRender
 {
   BackgroundRender (GstD3D12Device * dev, const GstVideoInfo & info)
   {
-    event_handle = CreateEventEx (nullptr, nullptr, 0, EVENT_ALL_ACCESS);
     device = (GstD3D12Device *) gst_object_ref (dev);
     auto device_handle = gst_d3d12_device_get_device_handle (device);
-    ca_pool = gst_d3d12_command_allocator_pool_new (device_handle,
+    ca_pool = gst_d3d12_cmd_alloc_pool_new (device_handle,
         D3D12_COMMAND_LIST_TYPE_DIRECT);
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC rs_desc = { };
@@ -449,10 +445,12 @@ struct BackgroundRender
     D3D12_RESOURCE_DESC buffer_desc =
         CD3DX12_RESOURCE_DESC::Buffer (sizeof (VertexData) * 4 +
         sizeof (indices));
+    D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+    if (gst_d3d12_device_non_zeroed_supported (device))
+      heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
 
     hr = device_handle->CreateCommittedResource (&heap_prop,
-        D3D12_HEAP_FLAG_CREATE_NOT_ZEROED, &buffer_desc,
-        D3D12_RESOURCE_STATE_GENERIC_READ,
+        heap_flags, &buffer_desc, D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr, IID_PPV_ARGS (&vertex_index_upload));
     if (!gst_d3d12_result (hr, device)) {
       GST_ERROR_OBJECT (device, "Couldn't create vertex upload buf");
@@ -473,7 +471,7 @@ struct BackgroundRender
 
     heap_prop = CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_DEFAULT);
     hr = device_handle->CreateCommittedResource (&heap_prop,
-        D3D12_HEAP_FLAG_CREATE_NOT_ZEROED, &buffer_desc,
+        heap_flags, &buffer_desc,
         D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS (&vertex_index_buf));
     if (!gst_d3d12_result (hr, device)) {
       GST_ERROR_OBJECT (device, "Couldn't create index buffer");
@@ -510,9 +508,7 @@ struct BackgroundRender
   ~BackgroundRender ()
   {
     gst_d3d12_device_fence_wait (device, D3D12_COMMAND_LIST_TYPE_DIRECT,
-        fence_val, event_handle);
-
-    CloseHandle (event_handle);
+        fence_val);
 
     gst_clear_object (&ca_pool);
     gst_clear_object (&device);
@@ -526,16 +522,14 @@ struct BackgroundRender
   D3D12_VERTEX_BUFFER_VIEW vbv;
   D3D12_INDEX_BUFFER_VIEW ibv;
   ComPtr < ID3D12GraphicsCommandList > cl;
-  GstD3D12CommandAllocatorPool *ca_pool;
+  GstD3D12CmdAllocPool *ca_pool;
   D3D12_VIEWPORT viewport;
   D3D12_RECT scissor_rect;
   guint rtv_inc_size;
   bool need_upload = true;
   bool is_valid = false;
-  HANDLE event_handle;
   guint64 fence_val = 0;
 };
-/* *INDENT-ON* */
 
 struct ClearColor
 {
@@ -564,8 +558,8 @@ struct GStD3D12CompositorPrivate
   /* black/white/transparent */
   ClearColor clear_color[3];
   GstD3D12FenceDataPool *fence_data_pool;
-  std::vector < D3D12_CPU_DESCRIPTOR_HANDLE > rtv_handles;
-  std::queue < guint64 > scheduled;
+  std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rtv_handles;
+  std::queue<guint64> scheduled;
 
   GstVideoInfo negotiated_info;
 
@@ -576,7 +570,9 @@ struct GStD3D12CompositorPrivate
   /* properties */
   gint adapter = DEFAULT_ADAPTER;
   GstD3D12CompositorBackground background = DEFAULT_BACKGROUND;
+  std::atomic<guint> async_depth = { DEFAULT_ASYNC_DEPTH };
 };
+/* *INDENT-ON* */
 
 struct _GstD3D12Compositor
 {
@@ -955,7 +951,6 @@ gst_d3d12_compositor_pad_check_frame_obscured (GstVideoAggregatorPad * pad,
    *     left unscaled)
    */
 
-  std::lock_guard < std::recursive_mutex > lk (priv->lock);
   if (priv->alpha == 0)
     return TRUE;
 
@@ -986,8 +981,6 @@ gst_d3d12_compositor_pad_setup_converter (GstVideoAggregatorPad * pad,
   GstVideoRectangle frame_rect;
   gboolean output_has_alpha_comp = FALSE;
   gint x_offset, y_offset;
-
-  std::lock_guard < std::recursive_mutex > lk (priv->lock);
 
   if (GST_VIDEO_INFO_HAS_ALPHA (info) ||
       GST_VIDEO_INFO_FORMAT (info) == GST_VIDEO_FORMAT_BGRx ||
@@ -1028,8 +1021,8 @@ gst_d3d12_compositor_pad_setup_converter (GstVideoAggregatorPad * pad,
     auto ctx = std::make_unique < PadContext > (self->device);
     ctx->info = pad->info;
 
-    ctx->conv = gst_d3d12_converter_new (self->device, &pad->info, info,
-        &priv->blend_desc, priv->blend_factor, nullptr);
+    ctx->conv = gst_d3d12_converter_new (self->device, nullptr, &pad->info,
+        info, &priv->blend_desc, priv->blend_factor, nullptr);
     if (!ctx->conv) {
       GST_ERROR_OBJECT (pad, "Couldn't create converter");
       return FALSE;
@@ -1094,42 +1087,54 @@ gst_d3d12_compositor_preprare_func (GstVideoAggregatorPad * pad,
     return FALSE;
   }
 
-  /* Skip this frame */
-  if (gst_d3d12_compositor_pad_check_frame_obscured (pad, vagg))
-    return TRUE;
+  {
+    std::lock_guard < std::recursive_mutex > lk (priv->lock);
+    /* Skip this frame */
+    if (gst_d3d12_compositor_pad_check_frame_obscured (pad, vagg))
+      return TRUE;
 
-  if (!gst_d3d12_compositor_pad_setup_converter (pad, vagg))
-    return FALSE;
+    if (!gst_d3d12_compositor_pad_setup_converter (pad, vagg))
+      return FALSE;
 
-  gint x, y, w, h;
-  auto crop_meta = gst_buffer_get_video_crop_meta (buffer);
-  if (crop_meta) {
-    x = crop_meta->x;
-    y = crop_meta->y;
-    w = crop_meta->width;
-    h = crop_meta->height;
-  } else {
-    x = y = 0;
-    w = pad->info.width;
-    h = pad->info.height;
+    gint x, y, w, h;
+    gint x_offset = 0;
+    gint y_offset = 0;
+
+    if (priv->xpos < 0)
+      x_offset = priv->xpos;
+
+    if (priv->ypos < 0)
+      y_offset = priv->ypos;
+
+    auto crop_meta = gst_buffer_get_video_crop_meta (buffer);
+    if (crop_meta) {
+      x = crop_meta->x;
+      y = crop_meta->y;
+      w = crop_meta->width;
+      h = crop_meta->height;
+    } else {
+      x = y = 0;
+      w = pad->info.width;
+      h = pad->info.height;
+    }
+
+    g_assert (priv->ctx);
+
+    g_object_set (priv->ctx->conv, "src-x", x - x_offset, "src-y", y - y_offset,
+        "src-width", w + x_offset, "src-height", h + y_offset, nullptr);
   }
 
-  g_assert (priv->ctx);
-
-  g_object_set (priv->ctx->conv, "src-x", x, "src-y", y, "src-width", w,
-      "src-height", h, nullptr);
-
-  GstD3D12CommandAllocator *gst_ca;
-  if (!gst_d3d12_command_allocator_pool_acquire (priv->ctx->ca_pool, &gst_ca)) {
+  GstD3D12CmdAlloc *gst_ca;
+  if (!gst_d3d12_cmd_alloc_pool_acquire (priv->ctx->ca_pool, &gst_ca)) {
     GST_ERROR_OBJECT (cpad, "Couldn't acquire command allocator");
     return FALSE;
   }
 
   GstD3D12FenceData *fence_data;
   gst_d3d12_fence_data_pool_acquire (self->priv->fence_data_pool, &fence_data);
-  gst_d3d12_fence_data_add_notify_mini_object (fence_data, gst_ca);
+  gst_d3d12_fence_data_push (fence_data, FENCE_NOTIFY_MINI_OBJECT (gst_ca));
 
-  auto ca = gst_d3d12_command_allocator_get_handle (gst_ca);
+  auto ca = gst_d3d12_cmd_alloc_get_handle (gst_ca);
 
   auto hr = ca->Reset ();
   if (!gst_d3d12_result (hr, priv->ctx->device)) {
@@ -1156,12 +1161,9 @@ gst_d3d12_compositor_preprare_func (GstVideoAggregatorPad * pad,
     }
   }
 
-  auto cq = gst_d3d12_device_get_command_queue (priv->ctx->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT);
-  auto cq_handle = gst_d3d12_command_queue_get_handle (cq);
   if (!gst_d3d12_converter_convert_buffer (priv->ctx->conv,
           buffer, self->priv->generated_output_buf, fence_data,
-          priv->ctx->cl.Get (), cq_handle)) {
+          priv->ctx->cl.Get (), TRUE)) {
     GST_ERROR_OBJECT (self, "Couldn't build command list");
     gst_d3d12_fence_data_unref (fence_data);
     return FALSE;
@@ -1221,7 +1223,7 @@ gst_d3d12_compositor_pad_clean_frame (GstVideoAggregatorPad * pad,
   if (priv->ctx && priv->ctx->fence_data) {
     gst_d3d12_device_set_fence_notify (priv->ctx->device,
         D3D12_COMMAND_LIST_TYPE_DIRECT, priv->ctx->fence_val,
-        priv->ctx->fence_data);
+        FENCE_NOTIFY_MINI_OBJECT (priv->ctx->fence_data));
     priv->ctx->fence_data = nullptr;
   }
 }
@@ -1319,6 +1321,18 @@ gst_d3d12_compositor_class_init (GstD3D12CompositorClass * klass)
           "Avoid timing out waiting for inactive pads", FALSE,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
+  /**
+   * GstD3D12Compositor:async-depth:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_ASYNC_DEPTH,
+      g_param_spec_uint ("async-depth", "Async Depth",
+          "Number of in-flight GPU commands which can be scheduled without "
+          "synchronization (0 = unlimited)", 0, G_MAXINT, DEFAULT_ASYNC_DEPTH,
+          (GParamFlags) (GST_PARAM_MUTABLE_PLAYING |
+              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   element_class->request_new_pad =
       GST_DEBUG_FUNCPTR (gst_d3d12_compositor_request_new_pad);
   element_class->release_pad =
@@ -1400,6 +1414,9 @@ gst_d3d12_compositor_set_property (GObject * object,
       gst_aggregator_set_ignore_inactive_pads (GST_AGGREGATOR (object),
           g_value_get_boolean (value));
       break;
+    case PROP_ASYNC_DEPTH:
+      priv->async_depth = g_value_get_uint (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1424,6 +1441,9 @@ gst_d3d12_compositor_get_property (GObject * object,
     case PROP_IGNORE_INACTIVE_PADS:
       g_value_set_boolean (value,
           gst_aggregator_get_ignore_inactive_pads (GST_AGGREGATOR (object)));
+      break;
+    case PROP_ASYNC_DEPTH:
+      g_value_set_uint (value, priv->async_depth);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1915,6 +1935,9 @@ gst_d3d12_compositor_calculate_background_color (GstD3D12Compositor * self,
       }
     }
   }
+
+  priv->clear_color[2] = priv->clear_color[0];
+  priv->clear_color[2].color[0][3] = 0.0;
 }
 
 static gboolean
@@ -2163,7 +2186,8 @@ gst_d3d12_compositor_decide_allocation (GstAggregator * agg, GstQuery * query)
       params = gst_d3d12_allocation_params_new (self->device, &info,
           GST_D3D12_ALLOCATION_FLAG_DEFAULT,
           D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
-          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_HEAP_FLAG_NONE);
+          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+          D3D12_HEAP_FLAG_SHARED);
     } else {
       gst_d3d12_allocation_params_set_resource_flags (params,
           D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
@@ -2225,17 +2249,17 @@ gst_d3d12_compositor_draw_background (GstD3D12Compositor * self)
     }
   }
 
-  GstD3D12CommandAllocator *gst_ca;
-  if (!gst_d3d12_command_allocator_pool_acquire (bg_render->ca_pool, &gst_ca)) {
+  GstD3D12CmdAlloc *gst_ca;
+  if (!gst_d3d12_cmd_alloc_pool_acquire (bg_render->ca_pool, &gst_ca)) {
     GST_ERROR_OBJECT (self, "Couldn't acquire command allocator");
     return FALSE;
   }
 
   GstD3D12FenceData *fence_data;
   gst_d3d12_fence_data_pool_acquire (priv->fence_data_pool, &fence_data);
-  gst_d3d12_fence_data_add_notify_mini_object (fence_data, gst_ca);
+  gst_d3d12_fence_data_push (fence_data, FENCE_NOTIFY_MINI_OBJECT (gst_ca));
 
-  auto ca = gst_d3d12_command_allocator_get_handle (gst_ca);
+  auto ca = gst_d3d12_cmd_alloc_get_handle (gst_ca);
 
   auto hr = ca->Reset ();
   if (!gst_d3d12_result (hr, self->device)) {
@@ -2321,24 +2345,22 @@ gst_d3d12_compositor_draw_background (GstD3D12Compositor * self)
 
   ID3D12CommandList *cmd_list[] = { cl.Get () };
 
-  if (!gst_d3d12_device_execute_command_lists (self->device,
-          D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list,
-          &priv->bg_render->fence_val)) {
+  hr = gst_d3d12_device_execute_command_lists (self->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list, &priv->bg_render->fence_val);
+  if (!gst_d3d12_result (hr, self->device)) {
     GST_ERROR_OBJECT (self, "Couldn't execute command list");
     gst_d3d12_fence_data_unref (fence_data);
     return FALSE;
   }
 
-  gst_d3d12_buffer_after_write (priv->generated_output_buf,
-      bg_render->fence_val);
-
   if (bg_render->vertex_index_upload) {
-    gst_d3d12_fence_data_add_notify_com (fence_data,
-        bg_render->vertex_index_upload.Detach ());
+    gst_d3d12_fence_data_push (fence_data,
+        FENCE_NOTIFY_COM (bg_render->vertex_index_upload.Detach ()));
   }
 
   gst_d3d12_device_set_fence_notify (self->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT, priv->bg_render->fence_val, fence_data);
+      D3D12_COMMAND_LIST_TYPE_DIRECT, priv->bg_render->fence_val,
+      FENCE_NOTIFY_MINI_OBJECT (fence_data));
 
   return TRUE;
 }
@@ -2359,32 +2381,14 @@ gst_d3d12_compositor_aggregate_frames (GstVideoAggregator * vagg,
     return GST_FLOW_ERROR;
   }
 
-  auto completed = gst_d3d12_device_get_completed_value (self->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT);
-  while (!priv->scheduled.empty ()) {
-    if (priv->scheduled.front () > completed)
-      break;
-
-    priv->scheduled.pop ();
-  }
-
-  /* avoid too large buffering */
-  if (priv->scheduled.size () > 2) {
-    auto fence_to_wait = priv->scheduled.front ();
-    priv->scheduled.pop ();
-    GST_LOG_OBJECT (self, "Waiting for previous command, %" G_GUINT64_FORMAT,
-        fence_to_wait);
-    gst_d3d12_device_fence_wait (self->device,
-        D3D12_COMMAND_LIST_TYPE_DIRECT, fence_to_wait,
-        priv->bg_render->event_handle);
-  }
-
   if (!gst_d3d12_compositor_draw_background (self)) {
     GST_ERROR_OBJECT (self, "Couldn't draw background");
     return GST_FLOW_ERROR;
   }
 
   guint64 fence_val = priv->bg_render->fence_val;
+  auto fence = gst_d3d12_device_get_fence_handle (self->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT);
   GST_OBJECT_LOCK (self);
   for (iter = GST_ELEMENT (vagg)->sinkpads; iter; iter = g_list_next (iter)) {
     auto pad = GST_VIDEO_AGGREGATOR_PAD (iter->data);
@@ -2412,23 +2416,47 @@ gst_d3d12_compositor_aggregate_frames (GstVideoAggregator * vagg,
     GST_LOG_OBJECT (cpad, "Command list prepared");
 
     ID3D12CommandList *cmd_list[] = { pad_priv->ctx->cl.Get () };
-    if (!gst_d3d12_device_execute_command_lists (self->device,
-            D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list,
-            &pad_priv->ctx->fence_val)) {
+
+    auto hr = gst_d3d12_device_execute_command_lists (self->device,
+        D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list,
+        &pad_priv->ctx->fence_val);
+    if (!gst_d3d12_result (hr, self->device)) {
       GST_ERROR_OBJECT (self, "Couldn't execute command list");
       ret = GST_FLOW_ERROR;
       break;
     }
 
     fence_val = pad_priv->ctx->fence_val;
-    gst_d3d12_buffer_after_write (priv->generated_output_buf, fence_val);
   }
   GST_OBJECT_UNLOCK (self);
+
+  gst_d3d12_buffer_set_fence (priv->generated_output_buf,
+      fence, fence_val, FALSE);
 
   if (ret != GST_FLOW_OK)
     return ret;
 
   priv->scheduled.push (fence_val);
+
+  auto completed = gst_d3d12_device_get_completed_value (self->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT);
+  while (!priv->scheduled.empty ()) {
+    if (priv->scheduled.front () > completed)
+      break;
+
+    priv->scheduled.pop ();
+  }
+
+  auto async_depth = priv->async_depth.load ();
+  if (async_depth > 0 && priv->scheduled.size () > async_depth) {
+    auto fence_to_wait = priv->scheduled.front ();
+    priv->scheduled.pop ();
+    GST_LOG_OBJECT (self, "Waiting for previous command, %" G_GUINT64_FORMAT,
+        fence_to_wait);
+    gst_d3d12_device_fence_wait (self->device,
+        D3D12_COMMAND_LIST_TYPE_DIRECT, fence_to_wait);
+  }
+
   if (priv->generated_output_buf != outbuf) {
     GstVideoFrame out_frame, in_frame;
     if (!gst_video_frame_map (&in_frame, &vagg->info,

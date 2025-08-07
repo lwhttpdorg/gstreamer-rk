@@ -86,10 +86,24 @@ GST_START_TEST (monitors_cleanup)
       g_object_get_data ((GObject *) sink->sinkpads->data, "validate-monitor");
   gst_check_objects_destroyed_on_unref (monitor, pmonitor1, pmonitor2, NULL);
   gst_check_objects_destroyed_on_unref (pipeline, src, sink, NULL);
+
+  gst_object_unref (runner);
 }
 
 GST_END_TEST;
 
+
+static void
+setup (void)
+{
+  gst_validate_init ();
+}
+
+static void
+teardown (void)
+{
+  gst_validate_deinit ();
+}
 
 static Suite *
 gst_validate_suite (void)
@@ -97,10 +111,7 @@ gst_validate_suite (void)
   Suite *s = suite_create ("monitoring");
   TCase *tc_chain = tcase_create ("monitoring");
   suite_add_tcase (s, tc_chain);
-
-  if (atexit (gst_validate_deinit) != 0) {
-    GST_ERROR ("failed to set gst_validate_deinit as exit function");
-  }
+  tcase_add_checked_fixture (tc_chain, setup, teardown);
 
   tcase_add_test (tc_chain, monitors_added);
   tcase_add_test (tc_chain, monitors_cleanup);

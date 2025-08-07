@@ -110,6 +110,8 @@ public:
       case GST_VIDEO_FORMAT_RGB:
       case GST_VIDEO_FORMAT_RGBA:
       case GST_VIDEO_FORMAT_BGRA:
+      case GST_VIDEO_FORMAT_RGB16:
+      case GST_VIDEO_FORMAT_BGR16:
         tex_names[0] = UNIFORM_TEXTURE0_NAME;
         break;
       case GST_VIDEO_FORMAT_YV12:
@@ -190,18 +192,24 @@ G_PASTE(GstQSGMaterial_,format)::G_PASTE(GstQSGMaterial_,format)() {} \
 G_PASTE(GstQSGMaterial_,format)::~G_PASTE(GstQSGMaterial_,format)() {}
 
 DEFINE_MATERIAL(RGBA);
+DEFINE_MATERIAL(RGBA_external);
 DEFINE_MATERIAL(RGBA_SWIZZLE);
 DEFINE_MATERIAL(YUV_TRIPLANAR);
 DEFINE_MATERIAL(YUV_BIPLANAR);
 
 GstQSGMaterial *
-GstQSGMaterial::new_for_format(GstVideoFormat format)
+GstQSGMaterial::new_for_format_and_target(GstVideoFormat format, GstGLTextureTarget target)
 {
   switch (format) {
     case GST_VIDEO_FORMAT_RGB:
     case GST_VIDEO_FORMAT_RGBA:
+    case GST_VIDEO_FORMAT_RGB16:
+      if (target == GST_GL_TEXTURE_TARGET_EXTERNAL_OES)
+        return static_cast<GstQSGMaterial *>(new GstQSGMaterial_RGBA_external());
+
       return static_cast<GstQSGMaterial *>(new GstQSGMaterial_RGBA());
     case GST_VIDEO_FORMAT_BGRA:
+    case GST_VIDEO_FORMAT_BGR16:
       return static_cast<GstQSGMaterial *>(new GstQSGMaterial_RGBA_SWIZZLE());
     case GST_VIDEO_FORMAT_YV12:
       return static_cast<GstQSGMaterial *>(new GstQSGMaterial_YUV_TRIPLANAR());
@@ -246,9 +254,11 @@ GstQSGMaterial::~GstQSGMaterial ()
 }
 
 bool
-GstQSGMaterial::compatibleWith(GstVideoInfo * v_info)
+GstQSGMaterial::compatibleWith(GstVideoInfo *v_info, GstGLTextureTarget tex_target)
 {
   if (GST_VIDEO_INFO_FORMAT (&this->v_info) != GST_VIDEO_INFO_FORMAT (v_info))
+    return FALSE;
+  if (this->tex_target != tex_target)
     return FALSE;
 
   return TRUE;
@@ -264,10 +274,17 @@ vertexShaderForFormat(GstVideoFormat v_format)
   "attribute vec4 " ATTRIBUTE_POSITION ";\n" \
   "attribute vec2 " ATTRIBUTE_TEXCOORD ";\n" \
 
+#define gles2_precision \
+  "precision mediump float;\n"
+#define external_fragment_header \
+  "#extension GL_OES_EGL_image_external : require\n"
+
 #define texcoord_input \
   "varying vec2 v_texcoord;\n"
 #define single_texture_input \
   "uniform sampler2D " UNIFORM_TEXTURE0_NAME ";\n"
+#define single_texture_input_external \
+  "uniform samplerExternalOES tex;\n"
 #define triplanar_texture_input \
   "uniform sampler2D " UNIFORM_TRIPLANAR_PLANE0 ";\n" \
   "uniform sampler2D " UNIFORM_TRIPLANAR_PLANE1 ";\n" \
@@ -287,34 +304,48 @@ vertexShaderForFormat(GstVideoFormat v_format)
   "uniform vec3 " UNIFORM_YUV_VCOEFF_NAME ";\n"
 
 static char *
-fragmentShaderForFormat(GstVideoFormat v_format, GstGLContext * context)
+fragmentShaderForFormatAndTarget(GstVideoFormat v_format, GstGLTextureTarget tex_target, GstGLContext * context)
 {
+  gboolean is_gles2 = (gst_gl_context_get_gl_api (context) & GST_GL_API_GLES2) != 0;
+
   switch (v_format) {
     case GST_VIDEO_FORMAT_RGB:
-    case GST_VIDEO_FORMAT_RGBA: {
+    case GST_VIDEO_FORMAT_RGBA:
+    case GST_VIDEO_FORMAT_RGB16: {
       char *swizzle = gst_gl_color_convert_swizzle_shader_string (context);
-      char *ret = g_strdup_printf (texcoord_input single_texture_input uniform_opacity
-          "%s\n"
-          "void main(void) {\n"
-          "  gl_FragColor = texture2D(tex, v_texcoord) * " UNIFORM_OPACITY_NAME ";\n"
-          "}\n", swizzle);
+      char *ret = NULL;
+
+      if (tex_target == GST_GL_TEXTURE_TARGET_EXTERNAL_OES) {
+        ret = g_strdup_printf (external_fragment_header "%s" texcoord_input single_texture_input_external uniform_opacity
+            "void main(void) {\n"
+            "  gl_FragColor = texture2D(tex, v_texcoord) * " UNIFORM_OPACITY_NAME ";\n"
+            "}\n", is_gles2 ? gles2_precision : "");
+      } else {
+        ret = g_strdup_printf ("%s" texcoord_input single_texture_input uniform_opacity
+            "%s\n"
+            "void main(void) {\n"
+            "  gl_FragColor = texture2D(tex, v_texcoord) * " UNIFORM_OPACITY_NAME ";\n"
+            "}\n", is_gles2 ? gles2_precision : "", swizzle);
+      }
+
       g_clear_pointer (&swizzle, g_free);
       return ret;
     }
-    case GST_VIDEO_FORMAT_BGRA: {
+    case GST_VIDEO_FORMAT_BGRA:
+    case GST_VIDEO_FORMAT_BGR16: {
       char *swizzle = gst_gl_color_convert_swizzle_shader_string (context);
-      char *ret = g_strdup_printf (texcoord_input single_texture_input uniform_swizzle uniform_opacity
+      char *ret = g_strdup_printf ("%s" texcoord_input single_texture_input uniform_swizzle uniform_opacity
           "%s\n"
           "void main(void) {\n"
           "  gl_FragColor = swizzle(texture2D(tex, v_texcoord), " UNIFORM_SWIZZLE_COMPONENTS_NAME ") * " UNIFORM_OPACITY_NAME ";\n"
-          "}\n", swizzle);
+          "}\n", is_gles2 ? gles2_precision : "", swizzle);
       g_clear_pointer (&swizzle, g_free);
       return ret;
     }
     case GST_VIDEO_FORMAT_YV12: {
       char *yuv_to_rgb = gst_gl_color_convert_yuv_to_rgb_shader_string (context);
       char *swizzle = gst_gl_color_convert_swizzle_shader_string (context);
-      char *ret = g_strdup_printf (texcoord_input triplanar_texture_input uniform_swizzle uniform_yuv_to_rgb_color_matrix uniform_opacity
+      char *ret = g_strdup_printf ("%s" texcoord_input triplanar_texture_input uniform_swizzle uniform_yuv_to_rgb_color_matrix uniform_opacity
         "%s\n"
         "%s\n"
         "void main(void) {\n"
@@ -328,7 +359,7 @@ fragmentShaderForFormat(GstVideoFormat v_format, GstGLContext * context)
         "  rgba.a = yuva.a;\n"
         "  gl_FragColor = rgba * " UNIFORM_OPACITY_NAME ";\n"
         //"  gl_FragColor = vec4(yuva.x, 0.0, 0.0, 1.0);\n"
-        "}\n", yuv_to_rgb, swizzle);
+        "}\n", is_gles2 ? gles2_precision : "", yuv_to_rgb, swizzle);
       g_clear_pointer (&yuv_to_rgb, g_free);
       g_clear_pointer (&swizzle, g_free);
       return ret;
@@ -336,7 +367,7 @@ fragmentShaderForFormat(GstVideoFormat v_format, GstGLContext * context)
     case GST_VIDEO_FORMAT_NV12: {
       char *yuv_to_rgb = gst_gl_color_convert_yuv_to_rgb_shader_string (context);
       char *swizzle = gst_gl_color_convert_swizzle_shader_string (context);
-      char *ret = g_strdup_printf (texcoord_input biplanar_texture_input uniform_swizzle uniform_yuv_to_rgb_color_matrix uniform_opacity
+      char *ret = g_strdup_printf ("%s" texcoord_input biplanar_texture_input uniform_swizzle uniform_yuv_to_rgb_color_matrix uniform_opacity
         "%s\n"
         "%s\n"
         "void main(void) {\n"
@@ -349,7 +380,7 @@ fragmentShaderForFormat(GstVideoFormat v_format, GstGLContext * context)
         "  rgba.rgb = yuv_to_rgb (yuva.xyz, " UNIFORM_YUV_OFFSET_NAME ", " UNIFORM_YUV_YCOEFF_NAME ", " UNIFORM_YUV_UCOEFF_NAME ", " UNIFORM_YUV_VCOEFF_NAME ");\n"
         "  rgba.a = yuva.a;\n"
         "  gl_FragColor = rgba * " UNIFORM_OPACITY_NAME ";\n"
-        "}\n", yuv_to_rgb, swizzle);
+        "}\n", is_gles2 ? gles2_precision : "", yuv_to_rgb, swizzle);
       g_clear_pointer (&yuv_to_rgb, g_free);
       g_clear_pointer (&swizzle, g_free);
       return ret;
@@ -363,8 +394,10 @@ QSGMaterialShader *
 GstQSGMaterial::createShader() const
 {
   GstVideoFormat v_format = GST_VIDEO_INFO_FORMAT (&this->v_info);
+  GstGLTextureTarget tex_target = this->tex_target;
+
   char *vertex = vertexShaderForFormat(v_format);
-  char *fragment = fragmentShaderForFormat(v_format, NULL);
+  char *fragment = fragmentShaderForFormatAndTarget(v_format, tex_target, gst_gl_context_get_current ());
 
   if (!vertex || !fragment)
     return nullptr;
@@ -405,22 +438,36 @@ GstQSGMaterial::setCaps (GstCaps * caps)
   GST_LOG ("%p setCaps %" GST_PTR_FORMAT, this, caps);
 
   gst_video_info_from_caps (&this->v_info, caps);
+  GstStructure *s = gst_caps_get_structure (caps, 0);
+  const gchar *target_str = gst_structure_get_string (s, "texture-target");
+  if (target_str) {
+    this->tex_target = gst_gl_texture_target_from_string(target_str);
+  } else {
+    this->tex_target = GST_GL_TEXTURE_TARGET_2D;
+  }
 }
 
 /* only called from the streaming thread with scene graph thread blocked */
 gboolean
 GstQSGMaterial::setBuffer (GstBuffer * buffer)
 {
-  GST_LOG ("%p setBuffer %" GST_PTR_FORMAT, this, buffer);
+  GstGLContext *qt_context;
+  gboolean ret = FALSE;
+
   /* FIXME: update more state here */
-  if (!gst_buffer_replace (&this->buffer_, buffer))
-    return FALSE;
+  if (gst_buffer_replace (&this->buffer_, buffer)) {
+    GST_LOG ("%p setBuffer new buffer %" GST_PTR_FORMAT, this, buffer);
 
-  this->buffer_was_bound = FALSE;
+    this->buffer_was_bound = FALSE;
+    ret = TRUE;
+  }
 
-  g_weak_ref_set (&this->qt_context_ref_, gst_gl_context_get_current ());
+  qt_context = gst_gl_context_get_current ();
+  GST_DEBUG ("%p setBuffer with qt context %" GST_PTR_FORMAT, this, qt_context);
 
-  return TRUE;
+  g_weak_ref_set (&this->qt_context_ref_, qt_context);
+
+  return ret;
 }
 
 /* only called from the streaming thread with scene graph thread blocked */
@@ -441,19 +488,16 @@ void
 GstQSGMaterial::bind(GstQSGMaterialShader *shader, GstVideoFormat v_format)
 {
   const GstGLFuncs *gl;
-  GstGLContext *context, *qt_context;
+  GstGLContext *context, *qt_context = NULL;
   GstGLSyncMeta *sync_meta;
   GstMemory *mem;
+  GstGLMemory *gl_mem;
   gboolean use_dummy_tex = TRUE;
 
   if (this->v_frame.buffer) {
     gst_video_frame_unmap (&this->v_frame);
     memset (&this->v_frame, 0, sizeof (this->v_frame));
   }
-
-  qt_context = GST_GL_CONTEXT (g_weak_ref_get (&this->qt_context_ref_));
-  if (!qt_context)
-    goto out;
 
   if (!this->buffer_)
     goto out;
@@ -462,6 +506,10 @@ GstQSGMaterial::bind(GstQSGMaterialShader *shader, GstVideoFormat v_format)
 
   this->mem_ = gst_buffer_peek_memory (this->buffer_, 0);
   if (!this->mem_)
+    goto out;
+
+  qt_context = GST_GL_CONTEXT (g_weak_ref_get (&this->qt_context_ref_));
+  if (!qt_context)
     goto out;
 
   gl = qt_context->gl_vtable;
@@ -473,8 +521,11 @@ GstQSGMaterial::bind(GstQSGMaterialShader *shader, GstVideoFormat v_format)
     goto out;
   }
 
+  GST_DEBUG ("%p attempting to bind with context %" GST_PTR_FORMAT, this, qt_context);
+
   mem = gst_buffer_peek_memory (this->buffer_, 0);
   g_assert (gst_is_gl_memory (mem));
+  gl_mem = (GstGLMemory *)mem;
 
   context = ((GstGLBaseMemory *)mem)->context;
 
@@ -499,8 +550,7 @@ GstQSGMaterial::bind(GstQSGMaterialShader *shader, GstVideoFormat v_format)
     shader->program()->setUniformValue(shader->tex_uniforms[i], i);
     gl->ActiveTexture (GL_TEXTURE0 + i);
     GST_LOG ("%p binding for plane %d Qt texture %u", this, i, tex_id);
-
-    gl->BindTexture (GL_TEXTURE_2D, tex_id);
+    gl->BindTexture (gst_gl_texture_target_to_gl (gl_mem->tex_target), tex_id);
   }
 
   /* Texture was successfully bound, so we do not need
@@ -529,6 +579,9 @@ out:
       funcs->glActiveTexture(GL_TEXTURE0 + i);
 
       if (this->dummy_textures[i] == 0) {
+        /* Default GL formats for most supported input formats. */
+        guint glformat = GL_RGBA;
+        guint gltype = GL_UNSIGNED_BYTE;
         /* Make this a black 64x64 pixel RGBA texture.
          * This size and format is supported pretty much everywhere, so these
          * are a safe pick. (64 pixel sidelength must be supported according
@@ -546,6 +599,18 @@ out:
             for (gsize j = 0; j < tex_sidelength; j++) {
               for (gsize k = 0; k < tex_sidelength; k++) {
                 data[(j * tex_sidelength + k) * 4 + 3] = 0xFF; // opaque
+              }
+            }
+            break;
+          case GST_VIDEO_FORMAT_RGB16:
+          case GST_VIDEO_FORMAT_BGR16:
+            /* Override GL formats to support RGB565/BGR565 */
+            glformat = GL_RGB;
+            gltype = GL_UNSIGNED_SHORT_5_6_5;
+            for (gsize j = 0; j < tex_sidelength; j++) {
+              for (gsize k = 0; k < tex_sidelength; k++) {
+                data[(j * tex_sidelength + k) * 2 + 0] = 0xFF;
+                data[(j * tex_sidelength + k) * 2 + 1] = 0xFF;
               }
             }
             break;
@@ -577,8 +642,8 @@ out:
         funcs->glBindTexture (GL_TEXTURE_2D, this->dummy_textures[i]);
         funcs->glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         funcs->glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        funcs->glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, tex_sidelength,
-            tex_sidelength, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        funcs->glTexImage2D (GL_TEXTURE_2D, 0, glformat, tex_sidelength,
+            tex_sidelength, 0, glformat, gltype, data);
       }
 
       g_assert (this->dummy_textures[i] != 0);

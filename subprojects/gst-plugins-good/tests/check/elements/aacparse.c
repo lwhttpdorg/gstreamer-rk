@@ -28,6 +28,7 @@
 #include "parser.h"
 
 #define SRC_CAPS_CDATA "audio/mpeg, mpegversion=(int)4, framed=(boolean)false, codec_data=(buffer)1190"
+#define SRC_CAPS_CDATA_6CH "audio/mpeg, mpegversion=(int)4, framed=(boolean)false, codec_data=(buffer)118004c841000108800d4c61766336312e31392e31303156e500,"
 #define SRC_CAPS_TMPL  "audio/mpeg, framed=(boolean)false, mpegversion=(int){2,4}"
 #define SRC_CAPS_RAW   "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string)raw, rate=(int)48000, channels=(int)2, codec_data=(buffer)1190"
 
@@ -157,6 +158,72 @@ GST_START_TEST (test_parse_adts_detect_mpeg_version)
 
 GST_END_TEST;
 
+GST_START_TEST (test_parse_adts_reuse)
+{
+  GstElement *aacparse;
+  GstPad *sinkpad;
+  GstPad *srcpad;
+
+  aacparse = gst_element_factory_make ("aacparse", NULL);
+
+  gst_element_set_state (aacparse, GST_STATE_PLAYING);
+
+  sinkpad = gst_element_get_static_pad (aacparse, "sink");
+  srcpad = gst_element_get_static_pad (aacparse, "src");
+
+  GstEvent *streamstart_event = gst_event_new_stream_start ("test");
+
+  GstCaps *caps = gst_caps_from_string (SINK_CAPS_MPEG2);
+  GstEvent *caps_event = gst_event_new_caps (caps);
+  gst_clear_caps (&caps);
+
+  GstSegment segment;
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  GstEvent *segment_event = gst_event_new_segment (&segment);
+
+  GstBuffer *buf;
+  buf = gst_buffer_new_memdup (adts_frame_mpeg2, sizeof (adts_frame_mpeg2));
+
+  // Send start-up events
+  fail_unless (gst_pad_send_event (sinkpad, gst_event_ref (streamstart_event)));
+  fail_unless (gst_pad_send_event (sinkpad, gst_event_ref (caps_event)));
+  fail_unless (gst_pad_send_event (sinkpad, gst_event_ref (segment_event)));
+
+  // Send Buffer
+  fail_unless_equals_int (gst_pad_chain (sinkpad, gst_buffer_ref (buf)),
+      GST_FLOW_OK);
+
+  // Send EOS (so it can parse the single frame without next frame sync)
+  gst_pad_send_event (sinkpad, gst_event_new_eos ());
+
+  // Should have output caps now
+  fail_unless (gst_pad_has_current_caps (srcpad));
+
+  // Shut down and start up again
+  gst_element_set_state (aacparse, GST_STATE_NULL);
+  fail_if (gst_pad_has_current_caps (srcpad));
+
+  gst_element_set_state (aacparse, GST_STATE_PLAYING);
+  fail_if (gst_pad_has_current_caps (srcpad));
+
+  fail_unless (gst_pad_send_event (sinkpad, streamstart_event));
+  fail_unless (gst_pad_send_event (sinkpad, caps_event));
+  fail_unless (gst_pad_send_event (sinkpad, segment_event));
+  fail_unless_equals_int (gst_pad_chain (sinkpad, buf), GST_FLOW_OK);
+  gst_pad_send_event (sinkpad, gst_event_new_eos ());
+
+  // Should have output caps again
+  fail_unless (gst_pad_has_current_caps (srcpad));
+
+  gst_object_unref (srcpad);
+  gst_object_unref (sinkpad);
+
+  gst_element_set_state (aacparse, GST_STATE_NULL);
+  gst_object_unref (aacparse);
+}
+
+GST_END_TEST;
+
 /*
  * Test if the parser correctly handles short raw frames and doesn't
  * concatenate them.
@@ -212,6 +279,35 @@ GST_START_TEST (test_parse_handle_codec_data)
   fail_unless (gst_structure_has_name (s, "audio/mpeg"));
   fail_unless_structure_field_int_equals (s, "mpegversion", 4);
   fail_unless_structure_field_int_equals (s, "channels", 2);
+  fail_unless_structure_field_int_equals (s, "rate", 48000);
+  fail_unless (gst_structure_has_field (s, "codec_data"));
+  fail_unless (gst_structure_has_field (s, "stream-format"));
+  stream_format = gst_structure_get_string (s, "stream-format");
+  fail_unless (strcmp (stream_format, "raw") == 0);
+
+  gst_caps_unref (caps);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_parse_handle_codec_data_6ch)
+{
+  GstCaps *caps;
+  GstStructure *s;
+  const gchar *stream_format;
+
+  /* Push random data. It should get through since the parser should be
+   * initialized because it got codec_data in the caps */
+  caps = gst_parser_test_get_output_caps (NULL, 100, SRC_CAPS_CDATA_6CH);
+  fail_unless (caps != NULL);
+
+  /* Check that the negotiated caps are as expected */
+  /* When codec_data is present, parser assumes that data is version 4 */
+  GST_LOG ("aac output caps: %" GST_PTR_FORMAT, caps);
+  s = gst_caps_get_structure (caps, 0);
+  fail_unless (gst_structure_has_name (s, "audio/mpeg"));
+  fail_unless_structure_field_int_equals (s, "mpegversion", 4);
+  fail_unless_structure_field_int_equals (s, "channels", 6);
   fail_unless_structure_field_int_equals (s, "rate", 48000);
   fail_unless (gst_structure_has_field (s, "codec_data"));
   fail_unless (gst_structure_has_field (s, "stream-format"));
@@ -296,12 +392,14 @@ aacparse_suite (void)
   tcase_add_test (tc_chain, test_parse_adts_split);
   tcase_add_test (tc_chain, test_parse_adts_skip_garbage);
   tcase_add_test (tc_chain, test_parse_adts_detect_mpeg_version);
+  tcase_add_test (tc_chain, test_parse_adts_reuse);
 
   /* Raw tests */
   tcase_add_test (tc_chain, test_parse_raw_short);
 
   /* Other tests */
   tcase_add_test (tc_chain, test_parse_handle_codec_data);
+  tcase_add_test (tc_chain, test_parse_handle_codec_data_6ch);
 
   /* caps tests */
   tcase_add_test (tc_chain, test_parse_proxy_constraints);

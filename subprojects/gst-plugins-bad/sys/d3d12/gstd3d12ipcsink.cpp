@@ -410,7 +410,8 @@ gst_d3d12_ipc_sink_set_caps (GstBaseSink * sink, GstCaps * caps)
   }
 
   gst_caps_set_features_simple (new_caps,
-      gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY, nullptr));
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY,
+          nullptr));
 
   gst_clear_caps (&priv->caps);
   priv->caps = new_caps;
@@ -582,10 +583,8 @@ gst_d3d12_ipc_sink_ensure_server (GstD3D12IpcSink * self, GstBuffer * buffer)
     }
   }
 
-  auto queue = gst_d3d12_device_get_command_queue (priv->device,
+  auto fence = gst_d3d12_device_get_fence_handle (priv->device,
       D3D12_COMMAND_LIST_TYPE_DIRECT);
-  auto fence = gst_d3d12_command_queue_get_fence_handle (queue);
-
   priv->server = gst_d3d12_ipc_server_new (priv->pipe_name, adapter_luid,
       fence);
   if (!priv->server) {

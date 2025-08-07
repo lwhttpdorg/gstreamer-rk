@@ -28,7 +28,7 @@
  * may need to box it.
  */
 
-#include "gstglcontext_egl.h"
+#include "gstglcontext_egl_private.h"
 
 #include <gst/gl/gl.h>
 #include <gst/gl/gstglcontext_private.h>
@@ -55,6 +55,14 @@
 #endif
 #if GST_GL_HAVE_WINDOW_VIV_FB
 #include "../viv-fb/gstglwindow_viv_fb_egl.h"
+#endif
+
+#if GST_GL_HAVE_DMABUF
+#ifdef HAVE_LIBDRM
+#include <drm_fourcc.h>
+#endif
+#else
+#define DRM_FORMAT_MOD_LINEAR  0ULL
 #endif
 
 #define GST_CAT_DEFAULT gst_gl_context_debug
@@ -1081,41 +1089,36 @@ gst_gl_context_egl_create_context (GstGLContext * context,
     gst_gl_window_x11_create_window ((GstGLWindowX11 *) context->window);
   }
 #endif
-
-  if (other_context == NULL) {
-    /* FIXME: fails to show two outputs at all.  We need a property/option for
-     * glimagesink to say its a visible context */
 #if GST_GL_HAVE_WINDOW_WAYLAND
-    if (GST_IS_GL_WINDOW_WAYLAND_EGL (context->window)) {
-      gst_gl_window_wayland_egl_create_window ((GstGLWindowWaylandEGL *)
-          context->window);
-    }
+  if (GST_IS_GL_WINDOW_WAYLAND_EGL (context->window)) {
+    gst_gl_window_wayland_egl_create_window ((GstGLWindowWaylandEGL *)
+        context->window);
+  }
 #endif
 #if GST_GL_HAVE_WINDOW_WIN32
-    if (GST_IS_GL_WINDOW_WIN32 (context->window)) {
-      gst_gl_window_win32_create_window ((GstGLWindowWin32 *) context->window,
-          NULL);
-    }
+  if (GST_IS_GL_WINDOW_WIN32 (context->window)) {
+    gst_gl_window_win32_create_window ((GstGLWindowWin32 *) context->window,
+        NULL);
+  }
 #endif
 #if GST_GL_HAVE_WINDOW_DISPMANX
-    if (GST_IS_GL_WINDOW_DISPMANX_EGL (context->window)) {
-      gst_gl_window_dispmanx_egl_create_window ((GstGLWindowDispmanxEGL *)
-          context->window);
-    }
+  if (GST_IS_GL_WINDOW_DISPMANX_EGL (context->window)) {
+    gst_gl_window_dispmanx_egl_create_window ((GstGLWindowDispmanxEGL *)
+        context->window);
+  }
 #endif
 #if GST_GL_HAVE_WINDOW_GBM
-    if (GST_IS_GL_WINDOW_GBM_EGL (context->window)) {
-      gst_gl_window_gbm_egl_create_window ((GstGLWindowGBMEGL *)
-          context->window);
-    }
+  if (GST_IS_GL_WINDOW_GBM_EGL (context->window)) {
+    gst_gl_window_gbm_egl_create_window ((GstGLWindowGBMEGL *)
+        context->window);
+  }
 #endif
 #if GST_GL_HAVE_WINDOW_VIV_FB
-    if (GST_IS_GL_WINDOW_VIV_FB_EGL (context->window)) {
-      gst_gl_window_viv_fb_egl_create_window ((GstGLWindowVivFBEGL *)
-          context->window);
-    }
-#endif
+  if (GST_IS_GL_WINDOW_VIV_FB_EGL (context->window)) {
+    gst_gl_window_viv_fb_egl_create_window ((GstGLWindowVivFBEGL *)
+        context->window);
   }
+#endif
 
   if (window)
     window_handle = gst_gl_window_get_window_handle (window);
@@ -1278,6 +1281,15 @@ gst_gl_context_egl_activate (GstGLContext * context, gboolean activate)
     }
     result = eglMakeCurrent (egl->egl_display, egl->egl_surface,
         egl->egl_surface, egl->egl_context);
+#if GST_GL_HAVE_WINDOW_WAYLAND
+    if (GST_IS_GL_WINDOW_WAYLAND_EGL (context->window)) {
+      if (eglSwapInterval (egl->egl_display, 0) == EGL_TRUE) {
+        GST_INFO ("Set EGL swap interval to 0");
+      } else {
+        GST_INFO ("Failed to set EGL swap interval to 0");
+      }
+    }
+#endif
   } else {
     result = eglMakeCurrent (egl->egl_display, EGL_NO_SURFACE,
         EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -1548,23 +1560,31 @@ _print_all_dma_formats (GstGLContext * context, GArray * dma_formats)
     dma_fmt = &g_array_index (dma_formats, GstGLDmaFormat, i);
 
     gst_fmt_str = gst_video_format_to_string
-        (gst_video_dma_drm_fourcc_to_format (dma_fmt->fourcc));
+        (gst_video_dma_drm_format_to_gst_format (dma_fmt->fourcc, 0));
 
-    g_string_append_printf (str, "\n| %-12s |", gst_fmt_str);
+    g_string_append_printf (str, "\n");
 
     if (!dma_fmt->modifiers) {
       fmt_str = gst_video_dma_drm_fourcc_to_string (dma_fmt->fourcc, 0);
+      g_string_append_printf (str, "| %-12s |", gst_fmt_str);
       g_string_append_printf (str, " %-23s |", fmt_str);
       g_string_append_printf (str, " %-13s |\n", "external only");
     } else {
       for (j = 0; j < dma_fmt->modifiers->len; j++) {
+        GstVideoFormat gst_fmt;
         dma_modifier = &g_array_index (dma_fmt->modifiers, GstGLDmaModifier, j);
+
+        gst_fmt = gst_video_dma_drm_format_to_gst_format (dma_fmt->fourcc,
+            dma_modifier->modifier);
+        gst_fmt_str = gst_video_format_to_string (gst_fmt);
+
+        if (gst_fmt == GST_VIDEO_FORMAT_UNKNOWN)
+          g_string_append_printf (str, "|              |");
+        else
+          g_string_append_printf (str, "| %-12s |", gst_fmt_str);
 
         fmt_str = gst_video_dma_drm_fourcc_to_string (dma_fmt->fourcc,
             dma_modifier->modifier);
-
-        if (j > 0)
-          g_string_append_printf (str, "|              |");
 
         g_string_append_printf (str, " %-23s |", fmt_str);
         g_string_append_printf (str, " %-13s |\n", dma_modifier->external_only ?
@@ -1699,12 +1719,7 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
 
   for (i = 0; i < num_formats; i++) {
     EGLint num_mods = 0;
-    GstVideoFormat gst_format;
     GstGLDmaFormat dma_frmt;
-
-    gst_format = gst_video_dma_drm_fourcc_to_format (formats[i]);
-    if (gst_format == GST_VIDEO_FORMAT_UNKNOWN)
-      continue;
 
     dma_frmt.fourcc = formats[i];
     dma_frmt.modifiers = NULL;
@@ -1721,11 +1736,12 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
 
       if (mods_len == 0) {
         modifiers = g_new (EGLuint64KHR, num_mods);
-        ext_only = g_new (EGLBoolean, num_mods);
+        ext_only = g_new0 (EGLBoolean, num_mods);
         mods_len = num_mods;
       } else if (mods_len < num_mods) {
         modifiers = g_renew (EGLuint64KHR, modifiers, num_mods);
         ext_only = g_renew (EGLBoolean, ext_only, num_mods);
+        memset (ext_only, 0, num_mods * sizeof (EGLBoolean));
         mods_len = num_mods;
       }
 
@@ -1754,11 +1770,19 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
 
   g_array_sort (dma_formats, _compare_dma_formats);
 
-  _print_all_dma_formats (context, dma_formats);
-
   GST_OBJECT_LOCK (context);
-  egl->dma_formats = dma_formats;
+  // Are we the first to initialize?
+  ret = egl->dma_formats == NULL;
+  if (ret)
+    egl->dma_formats = dma_formats;
   GST_OBJECT_UNLOCK (context);
+
+  if (ret) {
+    _print_all_dma_formats (context, dma_formats);
+  } else {
+    // We lost the race...
+    g_array_unref (dma_formats);
+  }
 
   g_free (formats);
   g_free (modifiers);
@@ -1824,6 +1848,100 @@ beach:
   return ret;
 #endif
   return FALSE;
+}
+
+/**
+ * gst_gl_context_egl_format_supports_modifier: (skip)
+ * @context: an EGL #GstGLContext
+ * @fourcc: the FourCC format to look up
+ * @modifier: the format modifier to check
+ * @include_externam: whether to take external-only modifiers into account
+ *
+ * Returns: %TRUE if @fourcc supports @modifier.
+ *
+ * Since: 1.26
+ */
+gboolean
+gst_gl_context_egl_format_supports_modifier (GstGLContext * context,
+    guint32 fourcc, guint64 modifier, gboolean include_external)
+{
+#if GST_GL_HAVE_DMABUF
+  const GArray *dma_modifiers;
+  guint i;
+
+  g_return_val_if_fail (GST_IS_GL_CONTEXT_EGL (context), FALSE);
+
+  if (!gst_gl_context_egl_get_format_modifiers (context, fourcc,
+          &dma_modifiers))
+    return FALSE;
+
+  if (!dma_modifiers) {
+    /* fourcc found, but no modifier info; consider only linear is supported */
+    return (modifier == DRM_FORMAT_MOD_LINEAR);
+  }
+
+  for (i = 0; i < dma_modifiers->len; i++) {
+    GstGLDmaModifier *mod = &g_array_index (dma_modifiers, GstGLDmaModifier, i);
+
+    if (!mod->external_only || include_external) {
+      if (mod->modifier == modifier)
+        return TRUE;
+    }
+  }
+#endif
+  return FALSE;
+}
+
+/**
+ * gst_gl_context_egl_append_all_drm_formats:
+ * @context: an EGL #GstGLContext
+ * @drm_fromats: a #GPtrArray holding strings
+ * @external_only: set to %TRUE to include external only formats
+ *
+ * Append all fourcc/modifier pair supported for this EGL context. This is
+ * useful when implementating direct dmabuf upload as all the formats can be
+ * processed as RGBA in this case.
+ *
+ * Since 1.28
+ */
+void
+gst_gl_context_egl_append_all_drm_formats (GstGLContext * context,
+    GPtrArray * drm_formats, gboolean include_external)
+{
+#if GST_GL_HAVE_DMABUF
+  GstGLContextEGL *egl;
+
+  g_return_if_fail (GST_IS_GL_CONTEXT_EGL (context));
+
+  if (!gst_gl_context_egl_fetch_dma_formats (context))
+    return;
+
+  egl = GST_GL_CONTEXT_EGL (context);
+
+  GST_OBJECT_LOCK (context);
+  if (!egl->dma_formats)
+    goto beach;
+
+  for (gint i = 0; i < egl->dma_formats->len; i++) {
+    GstGLDmaFormat *format;
+    format = &g_array_index (egl->dma_formats, GstGLDmaFormat, i);
+
+    for (gint j = 0; j < format->modifiers->len; j++) {
+      GstGLDmaModifier *modifier;
+      modifier = &g_array_index (format->modifiers, GstGLDmaModifier, j);
+
+      if (modifier->external_only && !include_external)
+        continue;
+
+      gchar *drm_fmt_str = gst_video_dma_drm_fourcc_to_string (format->fourcc,
+          modifier->modifier);
+      g_ptr_array_add (drm_formats, drm_fmt_str);
+    }
+  }
+
+beach:
+  GST_OBJECT_UNLOCK (context);
+#endif
 }
 
 /**

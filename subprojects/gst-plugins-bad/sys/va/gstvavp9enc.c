@@ -54,10 +54,10 @@
 #include "vacompat.h"
 #include "gstvabaseenc.h"
 #include "gstvaencoder.h"
-#include "gstvacaps.h"
 #include "gstvaprofile.h"
-#include "gstvadisplay_priv.h"
 #include "gstvapluginutils.h"
+
+#include "gst/glib-compat-private.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_va_vp9enc_debug);
 #define GST_CAT_DEFAULT gst_va_vp9enc_debug
@@ -1091,7 +1091,7 @@ gst_va_vp9_enc_reorder_frame (GstVaBaseEnc * base, GstVideoCodecFrame * frame,
   va_frame->frame_num = self->gop.frame_num_since_kf;
   self->gop.frame_num_since_kf++;
 
-  GST_LOG_OBJECT (self, "push frame: system_frame_number %d, frame_num: %d",
+  GST_LOG_OBJECT (self, "push frame: system_frame_number %u, frame_num: %d",
       frame->system_frame_number, va_frame->frame_num);
 
   /* A new key frame force to finish the current GF group. */
@@ -1133,7 +1133,7 @@ gst_va_vp9_enc_reorder_frame (GstVaBaseEnc * base, GstVideoCodecFrame * frame,
 
   if (!_vp9_gf_group_push_frame (&self->gop.current_group, frame)) {
     GST_WARNING_OBJECT (base, "Failed to push the frame,"
-        " system_frame_number %d.", frame->system_frame_number);
+        " system_frame_number %u.", frame->system_frame_number);
     goto error;
   }
 
@@ -1147,7 +1147,7 @@ pop:
 finish:
   if (*out_frame) {
     va_frame = _enc_frame (*out_frame);
-    GST_LOG_OBJECT (self, "pop frame: system_frame_number %d,"
+    GST_LOG_OBJECT (self, "pop frame: system_frame_number %u,"
         " frame_num: %d, frame_type %s", (*out_frame)->system_frame_number,
         va_frame->frame_num, _vp9_get_frame_type_name (va_frame->type));
   }
@@ -1157,7 +1157,7 @@ finish:
 error:
   if (frame) {
     GST_ERROR_OBJECT (base, "Failed to reorder the frame,"
-        " system_frame_number %d.", frame->system_frame_number);
+        " system_frame_number %u.", frame->system_frame_number);
   } else {
     GST_ERROR_OBJECT (base, "error when poping frame.");
   }
@@ -1239,7 +1239,7 @@ _vp9_assign_ref_index (GstVaVp9Enc * self, GstVideoCodecFrame * frame)
     return FALSE;
   }
 
-  g_qsort_with_data (all_refs, ref_num, sizeof (GstVaVp9Ref),
+  g_sort_array (all_refs, ref_num, sizeof (GstVaVp9Ref),
       _vp9_sort_by_frame_num, NULL);
 
   /* Assign the forward references in order of:
@@ -1566,6 +1566,7 @@ _vp9_decide_profile (GstVaVp9Enc * self, guint rt_format,
       }
     }
   }
+  gst_caps_unref (allowed_caps);
 
   if (candidates->len == 0) {
     GST_ERROR_OBJECT (self, "No available profile in caps");
@@ -1620,7 +1621,7 @@ out:
   if (ret_profile != VAProfileNone)
     GST_INFO_OBJECT (self, "Decide the profile: %s",
         gst_va_profile_name (ret_profile));
-
+  g_array_unref (candidates);
   return ret_profile;
 }
 
@@ -2094,7 +2095,7 @@ gst_va_vp9_enc_reconfig (GstVaBaseEnc * base)
   GstVideoCodecState *output_state;
   GstVideoFormat format, reconf_format = GST_VIDEO_FORMAT_UNKNOWN;
   VAProfile profile;
-  gboolean do_renegotiation = TRUE, do_reopen, need_negotiation;
+  gboolean do_renegotiation = TRUE, do_reopen, need_negotiation, rc_same;
   guint max_ref_frames, max_surfaces = 0,
       rt_format, depth = 0, chrome = 0, codedbuf_size, latency_num;
   gint width, height;
@@ -2126,11 +2127,15 @@ gst_va_vp9_enc_reconfig (GstVaBaseEnc * base)
   if (profile == VAProfileNone)
     return FALSE;
 
+  GST_OBJECT_LOCK (self);
+  rc_same = (self->prop.rc_ctrl == self->rc.rc_ctrl_mode);
+  GST_OBJECT_UNLOCK (self);
+
   /* first check */
   do_reopen = !(base->profile == profile && base->rt_format == rt_format
       && format == reconf_format && width == base->width
-      && height == base->height && self->prop.rc_ctrl == self->rc.rc_ctrl_mode
-      && depth == self->depth && chrome == self->chrome);
+      && height == base->height && rc_same && depth == self->depth
+      && chrome == self->chrome);
 
   if (do_reopen && gst_va_encoder_is_open (base->encoder))
     gst_va_encoder_close (base->encoder);
@@ -2185,8 +2190,8 @@ gst_va_vp9_enc_reconfig (GstVaBaseEnc * base)
 
   /* Set the latency */
   latency = gst_util_uint64_scale (latency_num,
-      GST_VIDEO_INFO_FPS_D (&base->input_state->info) * GST_SECOND,
-      GST_VIDEO_INFO_FPS_N (&base->input_state->info));
+      GST_VIDEO_INFO_FPS_D (&base->in_info) * GST_SECOND,
+      GST_VIDEO_INFO_FPS_N (&base->in_info));
   gst_video_encoder_set_latency (venc, latency, latency);
 
   max_ref_frames = GST_VP9_REF_FRAMES;
@@ -2518,7 +2523,7 @@ gst_va_vp9_enc_encode_frame (GstVaBaseEnc * base,
 
   if (!_vp9_assign_ref_index (self, gst_frame)) {
     GST_ERROR_OBJECT (self, "Failed to assign reference for frame:"
-        "system_frame_number %d, frame_num: %d, frame_type %s",
+        "system_frame_number %u, frame_num: %d, frame_type %s",
         gst_frame->system_frame_number, va_frame->frame_num,
         _vp9_get_frame_type_name (va_frame->type));
     return GST_FLOW_ERROR;
@@ -2541,23 +2546,23 @@ gst_va_vp9_enc_encode_frame (GstVaBaseEnc * base,
               self->rc.rc_ctrl_mode, self->rc.max_bitrate_bits,
               self->rc.target_percentage, self->rc.base_qindex,
               self->rc.min_qindex, self->rc.max_qindex, self->rc.mbbrc))
-        return FALSE;
+        return GST_FLOW_ERROR;
 
       if (!gst_va_base_enc_add_quality_level_parameter (base,
               va_frame->base.picture, self->rc.target_usage))
-        return FALSE;
+        return GST_FLOW_ERROR;
 
       if (!gst_va_base_enc_add_frame_rate_parameter (base,
               va_frame->base.picture))
-        return FALSE;
+        return GST_FLOW_ERROR;
 
       if (!gst_va_base_enc_add_hrd_parameter (base, va_frame->base.picture,
               self->rc.rc_ctrl_mode, self->rc.cpb_length_bits))
-        return FALSE;
+        return GST_FLOW_ERROR;
 
       _vp9_fill_sequence_param (self, &seq_param);
       if (!_vp9_add_sequence_param (self, va_frame->base.picture, &seq_param))
-        return FALSE;
+        return GST_FLOW_ERROR;
     }
 
     if (!_vp9_encode_one_frame (self, va_frame)) {
@@ -2605,7 +2610,7 @@ _vp9_create_super_frame_output_buffer (GstVaVp9Enc * self,
         frame_enc->base.picture, data + offset, total_sz - offset);
     if (frame_size[num] <= 0) {
       GST_ERROR_OBJECT (self, "Fails to copy the output data of "
-          "system_frame_number %d, frame_num: %d",
+          "system_frame_number %u, frame_num: %d",
           self->frames_in_super[num]->system_frame_number,
           frame_enc->frame_num);
       goto error;
@@ -2619,7 +2624,7 @@ _vp9_create_super_frame_output_buffer (GstVaVp9Enc * self,
       frame_enc->base.picture, data + offset, total_sz - offset);
   if (frame_size[num] <= 0) {
     GST_ERROR_OBJECT (self, "Fails to copy the output data of "
-        "system_frame_number %d, frame_num: %d",
+        "system_frame_number %u, frame_num: %d",
         last_frame->system_frame_number, frame_enc->frame_num);
     goto error;
   }
@@ -2671,8 +2676,8 @@ gst_va_vp9_enc_prepare_output (GstVaBaseEnc * base,
 
   frame_enc = _enc_frame (frame);
 
-  GST_LOG_OBJECT (base, "Prepare to output: frame system_frame_number: %d,"
-      "frame_num: %d, frame type: %s, flags: 0x%x, super_num is %d",
+  GST_LOG_OBJECT (base, "Prepare to output: frame system_frame_number: %u,"
+      "frame_num: %d, frame type: %s, flags: 0x%x, super_num is %u",
       frame->system_frame_number, frame_enc->frame_num,
       _vp9_get_frame_type_name (frame_enc->type), frame_enc->flags,
       self->frames_in_super_num);
@@ -3232,16 +3237,6 @@ gst_va_vp9_enc_class_init (gpointer g_klass, gpointer class_data)
   }
 
   g_object_class_install_properties (object_class, n_props, properties);
-
-  /**
-   * GstVaFeature:
-   * @GST_VA_FEATURE_DISABLED: The feature is disabled.
-   * @GST_VA_FEATURE_ENABLED: The feature is enabled.
-   * @GST_VA_FEATURE_AUTO: The feature is enabled automatically.
-   *
-   * Since: 1.24
-   */
-  gst_type_mark_as_plugin_api (GST_TYPE_VA_FEATURE, 0);
 }
 
 static GstCaps *

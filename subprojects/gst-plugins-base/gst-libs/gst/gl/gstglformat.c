@@ -215,6 +215,8 @@ gst_gl_format_from_video_info (GstGLContext * context,
       break;
     case GST_VIDEO_FORMAT_BGR10A2_LE:
     case GST_VIDEO_FORMAT_RGB10A2_LE:
+    case GST_VIDEO_FORMAT_BGR10x2_LE:
+    case GST_VIDEO_FORMAT_RGB10x2_LE:
     case GST_VIDEO_FORMAT_Y410:
     case GST_VIDEO_FORMAT_v210:
       return GST_GL_RGB10_A2;
@@ -241,6 +243,10 @@ gst_gl_format_from_video_info (GstGLContext * context,
     case GST_VIDEO_FORMAT_I420_10BE:
     case GST_VIDEO_FORMAT_I420_12LE:
     case GST_VIDEO_FORMAT_I420_12BE:
+    case GST_VIDEO_FORMAT_I422_10LE:
+    case GST_VIDEO_FORMAT_I422_12LE:
+    case GST_VIDEO_FORMAT_I422_10BE:
+    case GST_VIDEO_FORMAT_I422_12BE:
     case GST_VIDEO_FORMAT_A420_10LE:
     case GST_VIDEO_FORMAT_A420_10BE:
     case GST_VIDEO_FORMAT_A420_12LE:
@@ -259,6 +265,10 @@ gst_gl_format_from_video_info (GstGLContext * context,
     case GST_VIDEO_FORMAT_A444_12BE:
     case GST_VIDEO_FORMAT_A444_16LE:
     case GST_VIDEO_FORMAT_A444_16BE:
+    case GST_VIDEO_FORMAT_Y444_10LE:
+    case GST_VIDEO_FORMAT_Y444_10BE:
+    case GST_VIDEO_FORMAT_Y444_16LE:
+    case GST_VIDEO_FORMAT_Y444_16BE:
       return GST_GL_R16;
     default:
       n_plane_components = 4;
@@ -495,14 +505,16 @@ get_single_planar_format_gl_swizzle_order (GstVideoFormat format,
   g_return_if_fail (finfo->flags & GST_VIDEO_FORMAT_FLAG_RGB
       || format == GST_VIDEO_FORMAT_AYUV || format == GST_VIDEO_FORMAT_VUYA);
 
-  if (format == GST_VIDEO_FORMAT_BGR10A2_LE) {
+  if (format == GST_VIDEO_FORMAT_BGR10A2_LE
+      || format == GST_VIDEO_FORMAT_BGR10x2_LE) {
     swizzle[0] = 2;
     swizzle[1] = 1;
     swizzle[2] = 0;
     swizzle[3] = 3;
     return;
   }
-  if (format == GST_VIDEO_FORMAT_RGB10A2_LE) {
+  if (format == GST_VIDEO_FORMAT_RGB10A2_LE
+      || format == GST_VIDEO_FORMAT_RGB10x2_LE) {
     swizzle[0] = 0;
     swizzle[1] = 1;
     swizzle[2] = 2;
@@ -585,6 +597,10 @@ gst_gl_video_format_swizzle (GstVideoFormat video_format, int *swizzle)
     case GST_VIDEO_FORMAT_I420_10BE:
     case GST_VIDEO_FORMAT_I420_12LE:
     case GST_VIDEO_FORMAT_I420_12BE:
+    case GST_VIDEO_FORMAT_I422_10LE:
+    case GST_VIDEO_FORMAT_I422_10BE:
+    case GST_VIDEO_FORMAT_I422_12LE:
+    case GST_VIDEO_FORMAT_I422_12BE:
     case GST_VIDEO_FORMAT_Y444:
     case GST_VIDEO_FORMAT_Y42B:
     case GST_VIDEO_FORMAT_Y41B:
@@ -609,6 +625,10 @@ gst_gl_video_format_swizzle (GstVideoFormat video_format, int *swizzle)
     case GST_VIDEO_FORMAT_A444_12BE:
     case GST_VIDEO_FORMAT_A444_16LE:
     case GST_VIDEO_FORMAT_A444_16BE:
+    case GST_VIDEO_FORMAT_Y444_10BE:
+    case GST_VIDEO_FORMAT_Y444_10LE:
+    case GST_VIDEO_FORMAT_Y444_16BE:
+    case GST_VIDEO_FORMAT_Y444_16LE:
       swizzle[0] = 0;
       swizzle[1] = 1;
       swizzle[2] = 2;

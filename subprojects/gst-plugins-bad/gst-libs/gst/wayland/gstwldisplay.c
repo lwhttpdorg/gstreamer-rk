@@ -24,6 +24,8 @@
 
 #include "gstwldisplay.h"
 
+#include "color-management-v1-client-protocol.h"
+#include "color-representation-v1-client-protocol.h"
 #include "fullscreen-shell-unstable-v1-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 #include "single-pixel-buffer-v1-client-protocol.h"
@@ -53,9 +55,20 @@ typedef struct _GstWlDisplayPrivate
   struct wl_shm *shm;
   struct wp_viewporter *viewporter;
   struct zwp_linux_dmabuf_v1 *dmabuf;
+  struct wp_color_manager_v1 *color;
+  struct wp_color_representation_manager_v1 *color_representation;
+
   GArray *shm_formats;
   GArray *dmabuf_formats;
   GArray *dmabuf_modifiers;
+
+  gboolean color_parametric_creator_supported;
+  gboolean color_mastering_display_supported;
+  GArray *color_transfer_functions;
+  GArray *color_primaries;
+  GArray *color_alpha_modes;
+  GArray *color_coefficients;
+  GArray *color_coefficients_range;
 
   /* private */
   gboolean own_display;
@@ -92,12 +105,20 @@ gst_wl_display_init (GstWlDisplay * self)
   priv->shm_formats = g_array_new (FALSE, FALSE, sizeof (uint32_t));
   priv->dmabuf_formats = g_array_new (FALSE, FALSE, sizeof (uint32_t));
   priv->dmabuf_modifiers = g_array_new (FALSE, FALSE, sizeof (guint64));
+  priv->color_transfer_functions =
+      g_array_new (FALSE, FALSE, sizeof (uint32_t));
+  priv->color_primaries = g_array_new (FALSE, FALSE, sizeof (uint32_t));
+  priv->color_coefficients = g_array_new (FALSE, FALSE, sizeof (uint32_t));
+  priv->color_coefficients_range =
+      g_array_new (FALSE, FALSE, sizeof (uint32_t));
+  priv->color_alpha_modes = g_array_new (FALSE, FALSE, sizeof (uint32_t));
   priv->wl_fd_poll = gst_poll_new (TRUE);
   priv->buffers = g_hash_table_new (g_direct_hash, g_direct_equal);
   g_mutex_init (&priv->buffers_mutex);
   g_rec_mutex_init (&priv->sync_mutex);
 
   gst_wl_linux_dmabuf_init_once ();
+  gst_wl_shm_init_once ();
   gst_shm_allocator_init_once ();
   gst_wl_videoformat_init_once ();
 }
@@ -132,10 +153,23 @@ gst_wl_display_finalize (GObject * gobject)
   g_array_unref (priv->shm_formats);
   g_array_unref (priv->dmabuf_formats);
   g_array_unref (priv->dmabuf_modifiers);
+
+  g_array_unref (priv->color_transfer_functions);
+  g_array_unref (priv->color_primaries);
+  g_array_unref (priv->color_alpha_modes);
+  g_array_unref (priv->color_coefficients);
+  g_array_unref (priv->color_coefficients_range);
+
   gst_poll_free (priv->wl_fd_poll);
   g_hash_table_unref (priv->buffers);
   g_mutex_clear (&priv->buffers_mutex);
   g_rec_mutex_clear (&priv->sync_mutex);
+
+  if (priv->color)
+    wp_color_manager_v1_destroy (priv->color);
+
+  if (priv->color_representation)
+    wp_color_representation_manager_v1_destroy (priv->color_representation);
 
   if (priv->viewporter)
     wp_viewporter_destroy (priv->viewporter);
@@ -203,43 +237,142 @@ dmabuf_modifier (void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf,
 {
   GstWlDisplay *self = data;
   guint64 modifier = (guint64) modifier_hi << 32 | modifier_lo;
-  static gboolean table_header = TRUE;
+  GstVideoFormat gst_format = gst_wl_dmabuf_format_to_video_format (format);
+  static uint32_t last_format = 0;
 
   GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
 
-  if (gst_wl_dmabuf_format_to_video_format (format) != GST_VIDEO_FORMAT_UNKNOWN) {
-    GstVideoFormat gst_format = gst_wl_dmabuf_format_to_video_format (format);
-    const guint32 fourcc = gst_video_dma_drm_fourcc_from_format (gst_format);
+  /*
+   * Ignore unsupported formats along with implicit modifiers. Implicit
+   * modifiers have been source of garbled output for many many years and it
+   * was decided that we prefer disabling zero-copy over risking a bad output.
+   */
+  if (format == DRM_FORMAT_INVALID || modifier == DRM_FORMAT_MOD_INVALID)
+    return;
 
-    /*
-     * Ignore unsupported formats along with implicit modifiers. Implicit
-     * modifiers have been source of garbled output for many many years and it
-     * was decided that we prefer disabling zero-copy over risking a bad output.
-     */
-    if (fourcc == DRM_FORMAT_INVALID || modifier == DRM_FORMAT_MOD_INVALID)
-      return;
-
-    if (table_header == TRUE) {
-      GST_INFO ("===== All DMA Formats With Modifiers =====");
-      GST_INFO ("| Gst Format   | DRM Format              |");
-      table_header = FALSE;
-    }
-
-    if (modifier == 0)
-      GST_INFO ("|-----------------------------------------");
-
-    GST_INFO ("| %-12s | %-23s |",
-        (modifier == 0) ? gst_video_format_to_string (gst_format) : "",
-        gst_video_dma_drm_fourcc_to_string (fourcc, modifier));
-
-    g_array_append_val (priv->dmabuf_formats, format);
-    g_array_append_val (priv->dmabuf_modifiers, modifier);
+  if (last_format == 0) {
+    GST_INFO ("===== All DMA Formats With Modifiers =====");
+    GST_INFO ("| Gst Format   | DRM Format              |");
   }
+
+  if (last_format != format) {
+    GST_INFO ("|-----------------------------------------");
+    last_format = format;
+  }
+
+  GST_INFO ("| %-12s | %-23s |",
+      (modifier == 0) ? gst_video_format_to_string (gst_format) : "",
+      gst_video_dma_drm_fourcc_to_string (format, modifier));
+
+  g_array_append_val (priv->dmabuf_formats, format);
+  g_array_append_val (priv->dmabuf_modifiers, modifier);
 }
 
 static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
   dmabuf_format,
   dmabuf_modifier,
+};
+
+static void
+color_supported_intent (void *data,
+    struct wp_color_manager_v1 *wp_color_manager_v1, uint32_t render_intent)
+{
+}
+
+static void
+color_supported_feature (void *data,
+    struct wp_color_manager_v1 *wp_color_manager_v1, uint32_t feature)
+{
+  GstWlDisplay *self = data;
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  switch (feature) {
+    case WP_COLOR_MANAGER_V1_FEATURE_PARAMETRIC:
+      GST_INFO_OBJECT (self, "New_parametric_creator supported");
+      priv->color_parametric_creator_supported = TRUE;
+      break;
+    case WP_COLOR_MANAGER_V1_FEATURE_SET_MASTERING_DISPLAY_PRIMARIES:
+      GST_INFO_OBJECT (self, "Mastering Display supported");
+      priv->color_mastering_display_supported = TRUE;
+      break;
+    default:
+      break;
+  }
+}
+
+static void
+color_supported_tf_named (void *data,
+    struct wp_color_manager_v1 *wp_color_manager_v1, uint32_t tf)
+{
+  GstWlDisplay *self = data;
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  GST_INFO_OBJECT (self, "Supported transfer function 0x%x", tf);
+  g_array_append_val (priv->color_transfer_functions, tf);
+}
+
+static void
+color_supported_primaries_named (void *data,
+    struct wp_color_manager_v1 *wp_color_manager_v1, uint32_t primaries)
+{
+  GstWlDisplay *self = data;
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  GST_INFO_OBJECT (self, "Supported primaries: 0x%x", primaries);
+  g_array_append_val (priv->color_primaries, primaries);
+}
+
+static void
+color_done (void *data, struct wp_color_manager_v1 *wp_color_manager_v1)
+{
+}
+
+static const struct wp_color_manager_v1_listener color_listener = {
+  .supported_intent = color_supported_intent,
+  .supported_feature = color_supported_feature,
+  .supported_tf_named = color_supported_tf_named,
+  .supported_primaries_named = color_supported_primaries_named,
+  .done = color_done,
+};
+
+static void
+color_representation_supported_alpha_mode (void *data,
+    struct wp_color_representation_manager_v1
+    *wp_color_representation_manager_v1, uint32_t alpha_mode)
+{
+  GstWlDisplay *self = data;
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  GST_INFO_OBJECT (self, "Supported alpha mode: 0x%x", alpha_mode);
+  g_array_append_val (priv->color_alpha_modes, alpha_mode);
+}
+
+static void
+color_representation_supported_coefficients_and_ranges (void *data,
+    struct wp_color_representation_manager_v1
+    *wp_color_representation_manager_v1, uint32_t coefficients, uint32_t range)
+{
+  GstWlDisplay *self = data;
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  GST_INFO_OBJECT (self, "Supported coefficients and range: 0x%x/0x%x",
+      coefficients, range);
+  g_array_append_val (priv->color_coefficients, coefficients);
+  g_array_append_val (priv->color_coefficients_range, range);
+}
+
+static void
+color_representation_done (void *data, struct wp_color_representation_manager_v1
+    *wp_color_representation_manager_v1)
+{
+}
+
+static const struct wp_color_representation_manager_v1_listener
+    color_representation_listener = {
+  .supported_alpha_mode = color_representation_supported_alpha_mode,
+  .supported_coefficients_and_ranges =
+      color_representation_supported_coefficients_and_ranges,
+  .done = color_representation_done,
 };
 
 gboolean
@@ -336,6 +469,17 @@ registry_handle_global (void *data, struct wl_registry *registry,
     priv->single_pixel_buffer =
         wl_registry_bind (registry, id,
         &wp_single_pixel_buffer_manager_v1_interface, 1);
+  } else if (g_strcmp0 (interface, wp_color_manager_v1_interface.name) == 0) {
+    priv->color = wl_registry_bind (registry, id,
+        &wp_color_manager_v1_interface, 1);
+    wp_color_manager_v1_add_listener (priv->color, &color_listener, self);
+  } else if (g_strcmp0 (interface,
+          wp_color_representation_manager_v1_interface.name) == 0) {
+    priv->color_representation =
+        wl_registry_bind (registry, id,
+        &wp_color_representation_manager_v1_interface, 1);
+    wp_color_representation_manager_v1_add_listener (priv->color_representation,
+        &color_representation_listener, self);
   }
 }
 
@@ -560,6 +704,28 @@ gst_wl_display_sync (GstWlDisplay * self,
   return callback;
 }
 
+/* gst_wl_display_object_destroy
+ *
+ * A syncronized version of `xxx_destroy` that ensures that the
+ * once this function returns, the destroy_func will either have already completed,
+ * or will never be called.
+ */
+void
+gst_wl_display_object_destroy (GstWlDisplay * self,
+    gpointer * object, GDestroyNotify destroy_func)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  g_rec_mutex_lock (&priv->sync_mutex);
+
+  if (*object) {
+    destroy_func (*object);
+    *object = NULL;
+  }
+
+  g_rec_mutex_unlock (&priv->sync_mutex);
+}
+
 /* gst_wl_display_callback_destroy
  *
  * A syncronized version of `wl_callback_destroy` that ensures that the
@@ -570,16 +736,8 @@ void
 gst_wl_display_callback_destroy (GstWlDisplay * self,
     struct wl_callback **callback)
 {
-  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
-
-  g_rec_mutex_lock (&priv->sync_mutex);
-
-  if (*callback) {
-    wl_callback_destroy (*callback);
-    *callback = NULL;
-  }
-
-  g_rec_mutex_unlock (&priv->sync_mutex);
+  gst_wl_display_object_destroy (self, (gpointer *) callback,
+      (GDestroyNotify) wl_callback_destroy);
 }
 
 struct wl_display *
@@ -678,6 +836,61 @@ gst_wl_display_get_dmabuf_formats (GstWlDisplay * self)
   return priv->dmabuf_formats;
 }
 
+/**
+ * gst_wl_display_fill_shm_format_list:
+ * @self: A #GstWlDisplay
+ * @format_list: A #GValue of type #GST_TYPE_LIST
+ *
+ * Append supported SHM formats to a given list, suitable for use with the "format" caps value.
+ *
+ * Since: 1.26
+ */
+void
+gst_wl_display_fill_shm_format_list (GstWlDisplay * self, GValue * format_list)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  GValue value = G_VALUE_INIT;
+  guint fmt;
+  GstVideoFormat gfmt;
+
+  for (gint i = 0; i < priv->shm_formats->len; i++) {
+    fmt = g_array_index (priv->shm_formats, uint32_t, i);
+    gfmt = gst_wl_shm_format_to_video_format (fmt);
+    if (gfmt != GST_VIDEO_FORMAT_UNKNOWN) {
+      g_value_init (&value, G_TYPE_STRING);
+      g_value_set_static_string (&value, gst_video_format_to_string (gfmt));
+      gst_value_list_append_and_take_value (format_list, &value);
+    }
+  }
+}
+
+/**
+ * gst_wl_display_fill_drm_format_list:
+ * @self: A #GstWlDisplay
+ * @format_list: A #GValue of type #GST_TYPE_LIST
+ *
+ * Append supported DRM formats to a given list, suitable for use with the "drm-format" caps value.
+ *
+ * Since: 1.26
+ */
+void
+gst_wl_display_fill_dmabuf_format_list (GstWlDisplay * self,
+    GValue * format_list)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  GValue value = G_VALUE_INIT;
+  guint fmt;
+  guint64 mod;
+
+  for (gint i = 0; i < priv->dmabuf_formats->len; i++) {
+    fmt = g_array_index (priv->dmabuf_formats, uint32_t, i);
+    mod = g_array_index (priv->dmabuf_modifiers, guint64, i);
+    g_value_init (&value, G_TYPE_STRING);
+    g_value_take_string (&value, gst_video_dma_drm_fourcc_to_string (fmt, mod));
+    gst_value_list_append_and_take_value (format_list, &value);
+  }
+}
+
 struct wp_single_pixel_buffer_manager_v1 *
 gst_wl_display_get_single_pixel_buffer_manager_v1 (GstWlDisplay * self)
 {
@@ -692,4 +905,184 @@ gst_wl_display_has_own_display (GstWlDisplay * self)
   GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
 
   return priv->own_display;
+}
+
+/**
+ * gst_wl_display_get_color_manager_v1:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: (transfer none): The color manager global or %NULL
+ *
+ * Since: 1.28
+ */
+struct wp_color_manager_v1 *
+gst_wl_display_get_color_manager_v1 (GstWlDisplay * self)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  return priv->color;
+}
+
+/**
+ * gst_wl_display_get_color_representation_manager_v1:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: (transfer none): The color representation global or %NULL
+ *
+ * Since: 1.28
+ */
+struct wp_color_representation_manager_v1 *
+gst_wl_display_get_color_representation_manager_v1 (GstWlDisplay * self)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  return priv->color_representation;
+}
+
+/**
+ * gst_wl_display_is_color_parametric_creator_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports parametric image descriptions
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_is_color_parametric_creator_supported (GstWlDisplay * self)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  return priv->color_parametric_creator_supported;
+}
+
+/**
+ * gst_wl_display_is_color_mastering_display_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports mastering display primaries
+ *          image descriptions
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_is_color_mastering_display_supported (GstWlDisplay * self)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+
+  return priv->color_mastering_display_supported;
+}
+
+/**
+ * gst_wl_display_is_color_transfer_function_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports @transfer_function
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_is_color_transfer_function_supported (GstWlDisplay * self,
+    uint32_t transfer_function)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  guint i;
+
+  /* A value of 0 is invalid and will never be present in the list of enums. */
+  if (transfer_function == 0)
+    return FALSE;
+
+  for (i = 0; i < priv->color_transfer_functions->len; i++) {
+    uint32_t candidate =
+        g_array_index (priv->color_transfer_functions, uint32_t, i);
+
+    if (candidate == transfer_function)
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * gst_wl_display_are_color_primaries_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports @primaries
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_are_color_primaries_supported (GstWlDisplay * self,
+    uint32_t primaries)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  guint i;
+
+  /* A value of 0 is invalid and will never be present in the list of enums. */
+  if (primaries == 0)
+    return FALSE;
+
+  for (i = 0; i < priv->color_primaries->len; i++) {
+    uint32_t candidate = g_array_index (priv->color_primaries, uint32_t, i);
+
+    if (candidate == primaries)
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * gst_wl_display_is_color_alpha_mode_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports @alpha_mode
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_is_color_alpha_mode_supported (GstWlDisplay * self,
+    uint32_t alpha_mode)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  guint i;
+
+  for (i = 0; i < priv->color_alpha_modes->len; i++) {
+    uint32_t candidate = g_array_index (priv->color_alpha_modes, uint32_t, i);
+
+    if (candidate == alpha_mode)
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * gst_wl_display_are_color_coefficients_supported:
+ * @self: A #GstWlDisplay
+ *
+ * Returns: %TRUE if the compositor supports the combination of @coefficients and @range
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_wl_display_are_color_coefficients_supported (GstWlDisplay * self,
+    uint32_t coefficients, uint32_t range)
+{
+  GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  guint i;
+
+  /* A value of 0 is invalid and will never be present in the list of enums. */
+  if (coefficients == 0 || range == 0)
+    return FALSE;
+
+  for (i = 0; i < priv->color_coefficients->len; i++) {
+    uint32_t candidate = g_array_index (priv->color_coefficients, uint32_t, i);
+    uint32_t candidate_range =
+        g_array_index (priv->color_coefficients_range, uint32_t, i);
+
+    if (candidate == coefficients && candidate_range == range)
+      return TRUE;
+  }
+
+  return FALSE;
 }

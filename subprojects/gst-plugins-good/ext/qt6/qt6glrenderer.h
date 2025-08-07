@@ -62,8 +62,9 @@ public:
     void cleanup();
 
     /* retrieve the rootItem from the qml scene.  Only valid after
-     * setQmlScene() has been successfully called */
+     * setQmlScene() has been successfully called, or setRootItem() */
     QQuickItem *rootItem() const;
+    bool setRootItem(QQuickItem *root);
 
 private slots:
     void initializeQml();
@@ -77,6 +78,7 @@ private:
     static void render_gst_gl_c (GstGLContext * context, GstQt6QuickRenderer * self) { self->renderGstGL (); }
     void renderGstGL ();
 
+    void initializeWinsys();
     static void initialize_gst_gl_c (GstGLContext * context, GstQt6QuickRenderer * self) { self->initializeGstGL (); }
     void initializeGstGL ();
 
@@ -97,6 +99,7 @@ private:
     QQmlEngine *m_qmlEngine;
     QQmlComponent *m_qmlComponent;
     QQuickItem *m_rootItem;
+    QQuickItem *m_setRootItem;
 
     GstGLBaseMemoryAllocator *gl_allocator;
     GstGLAllocationParams *gl_params;
@@ -107,13 +110,13 @@ private:
     struct SharedRenderData *m_sharedRenderData;
 };
 
-class CreateSurfaceWorker : public QObject
+class Qt6CreateSurfaceWorker : public QObject
 {
   Q_OBJECT
 
 public:
-  CreateSurfaceWorker (struct SharedRenderData * rdata);
-  ~CreateSurfaceWorker ();
+  Qt6CreateSurfaceWorker (struct SharedRenderData * rdata);
+  ~Qt6CreateSurfaceWorker ();
 
   bool event(QEvent *ev) override;
 

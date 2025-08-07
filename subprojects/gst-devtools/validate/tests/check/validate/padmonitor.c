@@ -154,6 +154,7 @@ GST_START_TEST (buffer_before_segment)
   _check_reports_refcount (srcpad, 2);
   gst_object_unref (srcpad);
   gst_check_object_destroyed_on_unref (sink);
+  gst_object_unref (monitor);
   ASSERT_OBJECT_REFCOUNT (runner, "runner", 2);
   gst_object_unref (runner);
 }
@@ -221,11 +222,15 @@ GST_START_TEST (buffer_outside_segment)
     buffer = gst_discont_buffer_new ();
     GST_BUFFER_PTS (buffer) = 10 * GST_SECOND;
     GST_BUFFER_DURATION (buffer) = GST_SECOND;
-    fail_if (GST_PAD_IS_FLUSHING (gst_element_get_static_pad (identity,
-                "sink")));
-    fail_if (GST_PAD_IS_FLUSHING (gst_element_get_static_pad (identity,
-                "src")));
-    fail_if (GST_PAD_IS_FLUSHING (gst_element_get_static_pad (sink, "sink")));
+    pad = gst_element_get_static_pad (identity, "sink");
+    fail_if (GST_PAD_IS_FLUSHING (pad));
+    gst_clear_object (&pad);
+    pad = gst_element_get_static_pad (identity, "src");
+    fail_if (GST_PAD_IS_FLUSHING (pad));
+    gst_clear_object (&pad);
+    pad = gst_element_get_static_pad (sink, "sink");
+    fail_if (GST_PAD_IS_FLUSHING (pad));
+    gst_clear_object (&pad);
     fail_unless_equals_int (gst_pad_push (srcpad, buffer), GST_FLOW_OK);
 
     reports = gst_validate_runner_get_reports (runner);
@@ -1057,20 +1062,31 @@ GST_END_TEST;
 
 
 
+static void
+setup (void)
+{
+  /*
+   * Don't initialize validate here. Each test needs to setup the
+   * environment before initialization
+   */
+  /* gst_validate_init (); */
+
+  fake_elements_register ();
+}
+
+static void
+teardown (void)
+{
+  gst_validate_deinit ();
+}
+
 static Suite *
 gst_validate_suite (void)
 {
   Suite *s = suite_create ("padmonitor");
   TCase *tc_chain = tcase_create ("padmonitor");
   suite_add_tcase (s, tc_chain);
-
-  if (atexit (gst_validate_deinit) != 0) {
-    GST_ERROR ("failed to set gst_validate_deinit as exit function");
-  }
-  // Do not abort on critical issues, as this test will generate them on purpose.
-  g_setenv ("GST_VALIDATE", "print_issues", TRUE);
-
-  fake_elements_register ();
+  tcase_add_checked_fixture (tc_chain, setup, teardown);
 
   tcase_add_test (tc_chain, buffer_before_segment);
   tcase_add_test (tc_chain, buffer_outside_segment);
@@ -1096,6 +1112,9 @@ gst_validate_suite (void)
   tcase_add_test (tc_chain, caps_events);
   tcase_add_test (tc_chain, flow_error_without_message);
   tcase_add_test (tc_chain, flow_error_with_message);
+
+  // Do not abort on critical issues, as this test will generate them on purpose.
+  g_setenv ("GST_VALIDATE", "print_issues", TRUE);
 
   return s;
 }

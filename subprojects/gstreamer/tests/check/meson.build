@@ -1,5 +1,10 @@
 have_debug = true # FIXME
 
+valgrind_dep = dependency('valgrind', required: false).partial_dependency(compile_args : true)
+if valgrind_dep.found()
+  cdata.set('HAVE_VALGRIND', 1)
+endif
+
 # tests and condition when to skip the test
 core_tests = [
   [ 'gst/gst.c', not gst_registry ],
@@ -20,6 +25,8 @@ core_tests = [
   [ 'gst/gstelement.c', not gst_registry or not gst_parse],
   [ 'gst/gstelementfactory.c', not gst_registry ],
   [ 'gst/gstghostpad.c', not gst_registry ],
+  [ 'gst/gstidstr.c' ],
+  [ 'gst/gstidstr-noinline.c' ],
   [ 'gst/gstinfo.c' ],
   [ 'gst/gstiterator.c' ],
   [ 'gst/gstmessage.c' ],

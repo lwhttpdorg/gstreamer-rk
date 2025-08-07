@@ -122,13 +122,11 @@ ges_video_uri_source_get_natural_size (GESVideoSource * source, gint * width,
   par_n = gst_discoverer_video_info_get_par_num (info);
   par_d = gst_discoverer_video_info_get_par_denom (info);
 
-  if (par_n > 0 && par_d > 0) {
-    if (*height % par_n == 0) {
+  if (par_n != par_d && par_n > 0 && par_d > 0) {
+    if (par_n < par_d) {
       *height = gst_util_uint64_scale_int (*height, par_d, par_n);
-    } else if (*width % par_d == 0) {
-      *height = gst_util_uint64_scale_int (*width, par_n, par_d);
     } else {
-      *width = gst_util_uint64_scale_int (*height, par_d, par_n);
+      *width = gst_util_uint64_scale_int (*width, par_n, par_d);
     }
   }
 
@@ -330,7 +328,8 @@ ges_video_uri_source_class_init (GESVideoUriSourceClass * klass)
    */
   g_object_class_install_property (object_class, PROP_URI,
       g_param_spec_string ("uri", "URI", "uri of the resource",
-          NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+          NULL,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   src_class->select_pad = ges_uri_source_select_pad;
 

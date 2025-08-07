@@ -99,24 +99,6 @@ namespace Gst.Audio {
 			}
 		}
 
-		public int Segdone {
-			get {
-				unsafe {
-					int* raw_ptr = (int*)(((byte*)Handle) + abi_info.GetFieldOffset("segdone"));
-					return (*raw_ptr);
-				}
-			}
-		}
-
-		public int Segbase {
-			get {
-				unsafe {
-					int* raw_ptr = (int*)(((byte*)Handle) + abi_info.GetFieldOffset("segbase"));
-					return (*raw_ptr);
-				}
-			}
-		}
-
 		public int Waiting {
 			get {
 				unsafe {
@@ -1067,6 +1049,34 @@ namespace Gst.Audio {
 		}
 
 		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
+		static extern ulong gst_audio_ring_buffer_get_segbase(IntPtr raw);
+
+		public ulong Segbase { 
+			get {
+				ulong raw_ret = gst_audio_ring_buffer_get_segbase(Handle);
+				ulong ret = raw_ret;
+				return ret;
+			}
+		}
+
+		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
+		static extern ulong gst_audio_ring_buffer_get_segdone(IntPtr raw);
+
+		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
+		static extern void gst_audio_ring_buffer_set_segdone(IntPtr raw, ulong segdone);
+
+		public ulong Segdone { 
+			get {
+				ulong raw_ret = gst_audio_ring_buffer_get_segdone(Handle);
+				ulong ret = raw_ret;
+				return ret;
+			}
+			set {
+				gst_audio_ring_buffer_set_segdone(Handle, value);
+			}
+		}
+
+		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
 		static extern bool gst_audio_ring_buffer_is_acquired(IntPtr raw);
 
 		public bool IsAcquired { 
@@ -1182,6 +1192,13 @@ namespace Gst.Audio {
 					native_value [i] = (int) value[i];
 				gst_audio_ring_buffer_set_channel_positions(Handle, native_value);
 			}
+		}
+
+		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
+		static extern void gst_audio_ring_buffer_set_errored(IntPtr raw);
+
+		public void SetErrored() {
+			gst_audio_ring_buffer_set_errored(Handle);
 		}
 
 		[DllImport("gstaudio-1.0-0.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -1394,14 +1411,22 @@ namespace Gst.Audio {
 							, -1
 							, (uint) Marshal.SizeOf(typeof(IntPtr)) // cb_data_notify
 							, "active"
-							, "_gst_reserved"
+							, "priv"
 							, (long) Marshal.OffsetOf(typeof(GstAudioRingBuffer_cb_data_notifyAlign), "cb_data_notify")
+							, 0
+							),
+						new GLib.AbiField("priv"
+							, -1
+							, (uint) Marshal.SizeOf(typeof(IntPtr)) // priv
+							, "cb_data_notify"
+							, "_gst_reserved"
+							, (uint) Marshal.SizeOf(typeof(IntPtr))
 							, 0
 							),
 						new GLib.AbiField("_gst_reserved"
 							, -1
-							, (uint) Marshal.SizeOf(typeof(IntPtr)) * 3 // _gst_reserved
-							, "cb_data_notify"
+							, (uint) Marshal.SizeOf(typeof(IntPtr)) * 2 // _gst_reserved
+							, "priv"
 							, null
 							, (uint) Marshal.SizeOf(typeof(IntPtr))
 							, 0

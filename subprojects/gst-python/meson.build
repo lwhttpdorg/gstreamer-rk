@@ -1,8 +1,7 @@
 project('gst-python', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
-                      'c_std=gnu99',
                       'buildtype=debugoptimized' ])
 
 gst_version = meson.project_version()
@@ -18,15 +17,17 @@ add_project_arguments('-DHAVE_CONFIG_H', language: 'c')
 gst_req = '>= @0@.@1@.0'.format(gst_version_major, gst_version_minor)
 
 gst_dep = dependency('gstreamer-1.0', version : gst_req,
-  fallback : ['gstreamer', 'gst_dep'])
+  allow_fallback: true)
 gstbase_dep = dependency('gstreamer-base-1.0', version : gst_req,
-  fallback : ['gstreamer', 'gst_base_dep'])
+  allow_fallback: true)
+gstbad_dep = dependency('gstreamer-analytics-1.0', version :gst_req,
+  fallback : [])
 gmodule_dep = dependency('gmodule-no-export-2.0')
 libdl = cc.find_library('dl', required: false)
-pygobject_dep = dependency('pygobject-3.0', fallback: ['pygobject', 'pygobject_dep'], version : '>= 3.8')
+pygobject_dep = dependency('pygobject-3.0', allow_fallback: true, version: '>= 3.8')
 
 pymod = import('python')
-python = pymod.find_installation(get_option('python'))
+python = pymod.find_installation(get_option('python-exe'), required: true)
 pythonver = python.language_version()
 if pythonver.version_compare('<3.0')
   error('Python2 is not supported anymore, please port your code to python3 (@0@ specified)'.format(python.language_version()))
@@ -127,7 +128,7 @@ cdata.set_quoted('PY_LIB_FNAME', pylib_fname)
 configure_file(output : 'config.h', configuration : cdata)
 configinc = include_directories('.')
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 pkgconfig = import('pkgconfig')
 plugins_install_dir = join_paths(libdir, 'gstreamer-1.0')
@@ -148,3 +149,6 @@ endif
 if not get_option('tests').disabled()
   subdir('testsuite')
 endif
+
+# This makes "import gi" load or overrides, see gi/__init__.py
+meson.add_devenv({'PYTHONPATH': meson.current_source_dir()}, method: 'prepend')

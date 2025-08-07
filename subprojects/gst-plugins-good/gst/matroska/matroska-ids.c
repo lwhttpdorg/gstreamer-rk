@@ -70,6 +70,7 @@ gst_matroska_track_init_video_context (GstMatroskaTrackContext ** p_context)
   video_context->colorimetry.matrix = GST_VIDEO_COLOR_MATRIX_UNKNOWN;
   video_context->colorimetry.transfer = GST_VIDEO_TRANSFER_UNKNOWN;
   video_context->colorimetry.primaries = GST_VIDEO_COLOR_PRIMARIES_UNKNOWN;
+  video_context->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
   gst_video_mastering_display_info_init
       (&video_context->mastering_display_info);
   video_context->mastering_display_info_present = FALSE;
@@ -189,8 +190,10 @@ gst_matroska_parse_xiph_stream_headers (gpointer codec_data,
     if (offset + length[i] > codec_data_size)
       goto error;
 
-    hdr = gst_buffer_new_memdup (p + offset, length[i]);
-    gst_buffer_list_add (list, hdr);
+    if (length[i] > 0) {
+      hdr = gst_buffer_new_memdup (p + offset, length[i]);
+      gst_buffer_list_add (list, hdr);
+    }
 
     offset += length[i];
   }

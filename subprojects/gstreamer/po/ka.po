@@ -5,19 +5,19 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: gstreamer 1.19.2\n"
+"Project-Id-Version: gstreamer 1.24.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-01-11 15:40+0000\n"
-"PO-Revision-Date: 2022-04-17 15:35+0200\n"
+"POT-Creation-Date: 2025-07-08 17:06+0100\n"
+"PO-Revision-Date: 2025-03-02 06:01+0100\n"
 "Last-Translator: Temuri Doghonadze <temuri.doghonadze@gmail.com>\n"
 "Language-Team: Georgian <(nothing)>\n"
 "Language: ka\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Bugs: Report translation errors to the Language-Team address.\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 3.0.1\n"
+"X-Bugs: Report translation errors to the Language-Team address.\n"
+"X-Generator: Poedit 3.5\n"
 
 msgid "Print the GStreamer version"
 msgstr "GStreamer-ის ვერსიის გამოტანა"
@@ -26,7 +26,7 @@ msgid "Make all warnings fatal"
 msgstr "ყველა გაფრთხილების ფატალურად გამოცხადება"
 
 msgid "Print available debug categories and exit"
-msgstr ""
+msgstr "ხელმისაწვდომი გამართვის კატეგორიების გამოტანა და გასვლა"
 
 msgid ""
 "Default debug level from 1 (only error) to 9 (anything) or 0 for no output"
@@ -53,9 +53,6 @@ msgstr ""
 
 msgid "Disable debugging"
 msgstr "გამართვის გამორთვა"
-
-msgid "Enable verbose plugin loading diagnostics"
-msgstr "დამატებების დიაგნოსტიკური შეტყობინებების გამორთვა"
 
 msgid "Colon-separated paths containing plugins"
 msgstr ""
@@ -91,7 +88,7 @@ msgid "Unknown option"
 msgstr "უცნობი პარამეტრი"
 
 msgid "GStreamer encountered a general core library error."
-msgstr ""
+msgstr "GStreamer-მა აღმოაჩინა ზოგადი ბირთვული ბიბლიოთეკის შეცდომა."
 
 msgid ""
 "GStreamer developers were too lazy to assign an error code to this error."
@@ -793,6 +790,12 @@ msgstr "private-data"
 msgid "Private data"
 msgstr "პირადი მონაცემები"
 
+msgid "container-specific-track-id"
+msgstr ""
+
+msgid "Container-specific Track ID"
+msgstr ""
+
 #. separator between two strings
 msgid ", "
 msgstr ", "
@@ -833,11 +836,11 @@ msgid "link has no sink [source=%s@%p]"
 msgstr ""
 
 msgid "No such property."
-msgstr ""
+msgstr "ასეთი თვისება არ არსებობს."
 
 #, c-format
 msgid "no property \"%s\" in element \"%s\""
-msgstr ""
+msgstr "თვისება \"%s\" ელემენტში \"%s\" არ არსებობს"
 
 #, c-format
 msgid "Element \"%s\" is not a GstPreset"
@@ -1023,6 +1026,10 @@ msgstr ""
 msgid "%sImplemented Interfaces%s:\n"
 msgstr ""
 
+#, c-format
+msgid "%sElement Flags%s:\n"
+msgstr ""
+
 msgid "readable"
 msgstr "კითხვადი"
 
@@ -1037,6 +1044,9 @@ msgstr "კონტროლირებადი"
 
 msgid "conditionally available"
 msgstr "პირობითად ხელმისაწვდომი"
+
+msgid "can be set only at object construction time"
+msgstr ""
 
 msgid "changeable in NULL, READY, PAUSED or PLAYING state"
 msgstr "შეცვლადია NULL, READY, PAUSED და PLAYING მდგომარეობაში"
@@ -1281,6 +1291,12 @@ msgstr ""
 msgid "PROPERTY-NAME"
 msgstr ""
 
+msgid "Set the name of the program"
+msgstr ""
+
+msgid "PROGRAM-NAME"
+msgstr ""
+
 msgid "Do not install a fault handler"
 msgstr ""
 
@@ -1335,3 +1351,6 @@ msgstr ""
 
 msgid "Freeing pipeline ...\n"
 msgstr ""
+
+#~ msgid "Enable verbose plugin loading diagnostics"
+#~ msgstr "დამატებების დიაგნოსტიკური შეტყობინებების გამორთვა"

@@ -135,9 +135,9 @@ GST_START_TEST (test_complex_reporting_details)
 
   gst_object_unref (element);
 
-  g_object_unref (pipeline_monitor);
+  gst_object_unref (pipeline_monitor);
   gst_object_unref (pipeline);
-  g_object_unref (runner);
+  gst_object_unref (runner);
 }
 
 GST_END_TEST;
@@ -206,6 +206,10 @@ _create_issues (GstValidateRunner * runner)
   gst_object_unref (sinkpad);
   gst_object_unref (funnel_sink1);
   gst_object_unref (funnel_sink2);
+  free_element_monitor (fakemixer);
+  free_element_monitor (sink);
+  free_element_monitor (src2);
+  free_element_monitor (src1);
   gst_check_objects_destroyed_on_unref (fakemixer, funnel_sink1, funnel_sink2,
       NULL);
   gst_check_objects_destroyed_on_unref (src1, srcpad1, NULL);
@@ -250,18 +254,31 @@ TEST_LEVELS (issue_type, "event::flush-stop-unexpected:none", 0);
 
 #undef TEST_LEVELS
 
+static void
+setup (void)
+{
+  /*
+   * Don't initialize validate here. Each test needs to setup the
+   * environment before initialization
+   */
+  /* gst_validate_init (); */
+
+  fake_elements_register ();
+}
+
+static void
+teardown (void)
+{
+  gst_validate_deinit ();
+}
+
 static Suite *
 gst_validate_suite (void)
 {
   Suite *s = suite_create ("reporting");
   TCase *tc_chain = tcase_create ("reporting");
   suite_add_tcase (s, tc_chain);
-
-  if (atexit (gst_validate_deinit) != 0) {
-    GST_ERROR ("failed to set gst_validate_deinit as exit function");
-  }
-
-  fake_elements_register ();
+  tcase_add_checked_fixture (tc_chain, setup, teardown);
 
   tcase_add_test (tc_chain, test_report_levels_all);
   tcase_add_test (tc_chain, test_report_levels_2);

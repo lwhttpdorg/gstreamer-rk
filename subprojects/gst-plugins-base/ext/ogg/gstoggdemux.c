@@ -661,7 +661,7 @@ gst_ogg_demux_chain_peer (GstOggPad * pad, ogg_packet * packet,
               /* use total time to update the total ogg time */
               if (ogg->total_time == -1) {
                 ogg->total_time = ipad->map.total_time;
-              } else if (ipad->map.total_time > 0) {
+              } else if (GST_CLOCK_TIME_IS_VALID (ipad->map.total_time)) {
                 ogg->total_time = MAX (ogg->total_time, ipad->map.total_time);
               }
             }
@@ -1288,8 +1288,18 @@ gst_ogg_pad_stream_out (GstOggPad * pad, gint npackets)
   GstFlowReturn result = GST_FLOW_OK;
   gboolean done = FALSE;
   GstOggDemux *ogg;
+  gboolean drop;
 
   ogg = pad->ogg;
+
+  GST_PUSH_LOCK (ogg);
+  drop = (ogg->seek_event_drop_till != GST_SEQNUM_INVALID);
+  GST_PUSH_UNLOCK (ogg);
+  if (drop) {
+    GST_DEBUG_OBJECT (ogg,
+        "Not pushing new packets until the pending seek is over");
+    return result;
+  }
 
   while (!done) {
     int ret;
@@ -2487,7 +2497,7 @@ gst_ogg_demux_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
                  ogg sync object as we already reset the chain */
               GST_DEBUG_OBJECT (ogg, "No chain, just resetting ogg sync");
               ogg_sync_reset (&ogg->sync);
-            } else {
+            } else if (ogg->push_state != PUSH_DURATION) {
               /* reset pad push mode seeking state */
               for (i = 0; i < chain->streams->len; i++) {
                 GstOggPad *pad = g_array_index (chain->streams, GstOggPad *, i);
@@ -4916,7 +4926,7 @@ gst_ogg_demux_loop (GstOggPad * pad)
 {
   GstOggDemux *ogg;
   gboolean res;
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_ERROR;
   GstEvent *seek;
 
   ogg = GST_OGG_DEMUX (GST_OBJECT_PARENT (pad));

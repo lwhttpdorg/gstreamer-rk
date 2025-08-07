@@ -1,6 +1,6 @@
 project('gst-plugins-base', 'c',
-  version : '1.25.0.1',
-  meson_version : '>= 1.1',
+  version : '1.27.1.1',
+  meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
 
@@ -28,7 +28,7 @@ else
 endif
 
 glib_req = '>= 2.64.0'
-orc_req = '>= 0.4.24'
+orc_req = '>= 0.4.34'
 
 if gst_version_is_stable
   gst_req = '>= @0@.@1@.0'.format(gst_version_major, gst_version_minor)
@@ -47,6 +47,7 @@ osxversion = curversion + 1
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 static_build = get_option('default_library') == 'static'
 plugins = []
+plugin_sources = {}
 gst_libraries = []
 
 cc = meson.get_compiler('c')
@@ -100,7 +101,6 @@ if cc.has_link_argument('-Wl,-z,nodelete')
 endif
 
 core_conf = configuration_data()
-core_conf.set('ENABLE_NLS', 1)
 
 # Symbol visibility
 if cc.has_argument('-fvisibility=hidden')
@@ -121,20 +121,20 @@ if gst_version_is_dev
   add_project_arguments('-DG_DISABLE_DEPRECATED', language: 'c')
 endif
 
-cast_checks = get_option('gobject-cast-checks')
-if cast_checks.disabled() or (cast_checks.auto() and not gst_version_is_dev)
+# Same logic as in GLib.
+glib_debug = get_option('glib_debug')
+if glib_debug.disabled() or (
+   glib_debug.auto() and (not get_option('debug') or get_option('optimization') not in [ '0', 'g' ]))
   message('Disabling GLib cast checks')
   add_project_arguments('-DG_DISABLE_CAST_CHECKS', language: 'c')
 endif
 
-glib_asserts = get_option('glib-asserts')
-if glib_asserts.disabled() or (glib_asserts.auto() and not gst_version_is_dev)
+if not get_option('glib_assert')
   message('Disabling GLib asserts')
   add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
 endif
 
-glib_checks = get_option('glib-checks')
-if glib_checks.disabled() or (glib_checks.auto() and not gst_version_is_dev)
+if not get_option('glib_checks')
   message('Disabling GLib checks')
   add_project_arguments('-DG_DISABLE_CHECKS', language: 'c')
 endif
@@ -197,6 +197,7 @@ check_functions = [
   ['HAVE_LRINTF', 'lrintf', '#include<math.h>'],
   ['HAVE_MMAP', 'mmap', '#include<sys/mman.h>'],
   ['HAVE_LOG2', 'log2', '#include<math.h>'],
+  ['HAVE_MEMMEM', 'memmem', '#include<string.h>'],
 ]
 
 libm = cc.find_library('m', required : false)
@@ -230,25 +231,32 @@ endif
 core_conf.set_quoted('GST_INSTALL_PLUGINS_HELPER', install_plugins_helper)
 
 warning_flags = [
-  '-Wmissing-declarations',
-  '-Wredundant-decls',
-  '-Wundef',
-  '-Wwrite-strings',
+  '-Waddress',
   '-Wformat',
   '-Wformat-nonliteral',
   '-Wformat-security',
+  '-Wimplicit-fallthrough=3',
   '-Winit-self',
+  '-Wmissing-declarations',
   '-Wmissing-include-dirs',
-  '-Waddress',
+  '-Wmissing-parameter-type',
   '-Wno-multichar',
-  '-Wvla',
+  '-Wold-style-definition',
   '-Wpointer-arith',
+  '-Wredundant-decls',
+  '-Wshift-negative-value',
+  '-Wtype-limits',
+  '-Wundef',
+  '-Wvla',
+  '-Wwrite-strings',
 ]
 
+# C only warning flags
 warning_c_flags = [
   '-Wmissing-prototypes',
 ]
 
+# C++ only warning flags
 warning_cxx_flags = [
   '-Waggregate-return',
 ]
@@ -303,6 +311,9 @@ if get_option('default_library') == 'static'
   gst_plugins_base_args += ['-DGST_STATIC_COMPILATION']
 endif
 
+valgrind_dep = dependency('valgrind', required: false)
+core_conf.set('HAVE_VALGRIND', valgrind_dep.found())
+
 libdrm_dep = dependency('libdrm', version : '>= 2.4.98',
   required : get_option('drm'),
   allow_fallback: host_system not in ['darwin', 'ios', 'android', 'windows']
@@ -313,7 +324,7 @@ core_conf.set('HAVE_LIBDRM', libdrm_dep.found())
 # X11 checks are for sys/ and tests/
 x11_dep = dependency('x11', required : get_option('x11'))
 # GIO is used by the GIO plugin, and by the TCP, SDP, and RTSP plugins
-gio_dep = dependency('gio-2.0', version: glib_req)
+gio_dep = dependency('gio-2.0', version: glib_req, default_options: {'sysprof': 'disabled'})
 giounix_dep = dependency('', required: false)
 if host_system != 'windows'
   giounix_dep = dependency('gio-unix-2.0')
@@ -387,6 +398,15 @@ else
   core_conf.set('DISABLE_ORC', 1)
 endif
 
+base_platform_dep = []
+# Check for libatomic for use of C11 atomics: some architectures need
+# to link explicitly to this library.
+# TODO: Once meson 1.7 is in use, this can be updated to
+# dependency('atomic')
+atomic_dep = cc.find_library('atomic', required: false)
+
+base_platform_dep += [atomic_dep]
+
 # Used to build SSE* things in audio-resampler
 sse_args = '-msse'
 sse2_args = '-msse2'
@@ -456,6 +476,7 @@ gir_init_section = [ '--add-init-section=extern void gst_init(gint*,gchar**);' +
     'g_setenv("GST_REGISTRY_1.0", "@0@", TRUE);'.format(meson.current_build_dir() + '/gir_empty_registry.reg') + \
     'g_setenv("GST_PLUGIN_PATH_1_0", "", TRUE);' + \
     'g_setenv("GST_PLUGIN_SYSTEM_PATH_1_0", "", TRUE);' + \
+    'g_setenv("GST_TRACERS", "", TRUE);' + \
     'gst_init(NULL,NULL);', '--quiet']
 
 pkgconfig = import('pkgconfig')
@@ -477,6 +498,12 @@ pkgconfig_subdirs = ['gstreamer-1.0']
 
 meson_pkg_config_file_fixup_script = find_program('scripts/meson-pkg-config-file-fixup.py')
 
+if host_machine.system() == 'windows'
+  pathsep = ';'
+else
+  pathsep = ':'
+endif
+
 python3 = import('python').find_installation()
 subdir('gst-libs')
 subdir('gst')
@@ -487,6 +514,7 @@ subdir('tests')
 
 # xgettext is optional (on Windows for instance)
 if find_program('xgettext', required : get_option('nls')).found()
+  core_conf.set('ENABLE_NLS', 1)
   subdir('po')
 endif
 subdir('docs')
@@ -555,7 +583,7 @@ endif
 # Use core_conf after all subdirs have set values
 configure_file(output : 'config.h', configuration : core_conf)
 
-meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.22.0', meson.project_version())
+meson.add_dist_script('scripts/gen-changelog.py', meson.project_name(), '1.24.0', meson.project_version())
 
 plugin_names = []
 gst_plugins = []

@@ -1339,6 +1339,11 @@ analyze_new_pad (GstParseBin * parsebin, GstElement * src, GstPad * pad,
   gst_pad_set_active (GST_PAD_CAST (parsepad), TRUE);
   parse_pad_set_target (parsepad, pad);
 
+  /* If we know the caps, store them in the parsepad GstStream */
+  if (gst_caps_is_fixed (caps)) {
+    gst_parse_pad_update_caps (parsepad, caps);
+  }
+
   /* 1. Emit 'autoplug-continue' the result will tell us if this pads needs
    * further autoplugging. Only do this for fixed caps, for unfixed caps
    * we will later come here again from the notify::caps handler. The
@@ -1597,8 +1602,6 @@ setup_caps_delay:
 
     /* connect to caps notification */
     CHAIN_MUTEX_LOCK (chain);
-    GST_LOG_OBJECT (parsebin, "Chain %p has now %d dynamic pads", chain,
-        g_list_length (chain->pending_pads));
     ppad = g_new0 (GstPendingPad, 1);
     ppad->pad = gst_object_ref (pad);
     ppad->chain = chain;
@@ -1608,6 +1611,8 @@ setup_caps_delay:
     chain->pending_pads = g_list_prepend (chain->pending_pads, ppad);
     ppad->notify_caps_id = g_signal_connect (pad, "notify::caps",
         G_CALLBACK (caps_notify_cb), chain);
+    GST_LOG_OBJECT (parsebin, "Chain %p has now %d dynamic pads", chain,
+        g_list_length (chain->pending_pads));
     CHAIN_MUTEX_UNLOCK (chain);
 
     /* If we're here because we have a Parser/Converter
@@ -1790,7 +1795,7 @@ connect_pad (GstParseBin * parsebin, GstElement * src, GstParsePad * parsepad,
       if (segment)
         segment_format = segment->format;
     }
-    if (segment == GST_FORMAT_UNDEFINED) {
+    if (segment_format == GST_FORMAT_UNDEFINED) {
       GstQuery *segment_query = gst_query_new_segment (GST_FORMAT_TIME);
       if (gst_pad_query (pad, segment_query)) {
         gst_query_parse_segment (segment_query, NULL, &segment_format, NULL,
@@ -3190,9 +3195,28 @@ gst_parse_chain_accept_caps (GstParseChain * chain, GstCaps * caps)
       GST_ELEMENT_NAME (initial_element->element), caps);
 
   sink = gst_element_get_static_pad (initial_element->element, "sink");
-  ret = gst_pad_query_accept_caps (sink, caps);
-  gst_object_unref (sink);
-
+  if (sink) {
+    ret = gst_pad_query_accept_caps (sink, caps);
+    gst_object_unref (sink);
+  } else {
+    GST_OBJECT_LOCK (initial_element->element);
+    if (G_UNLIKELY (!initial_element->element->numsinkpads)) {
+      GST_ERROR_OBJECT (chain->parsebin,
+          "element %" GST_PTR_FORMAT " has no sink pad",
+          initial_element->element);
+      GST_OBJECT_UNLOCK (initial_element->element);
+      return FALSE;
+    }
+    GstPad *pad =
+        GST_PAD_CAST (gst_object_ref (initial_element->element->sinkpads));
+    GST_OBJECT_UNLOCK (initial_element->element);
+    GST_DEBUG_OBJECT (chain->parsebin,
+        "element %" GST_PTR_FORMAT
+        " doesn't have a 'sink' pad, sending accept-caps query to "
+        "%" GST_PTR_FORMAT, initial_element->element, pad);
+    ret = gst_pad_query_accept_caps (pad, caps);
+    gst_object_unref (pad);
+  }
   GST_DEBUG_OBJECT (chain->parsebin, "Chain can%s handle caps",
       ret ? "" : " NOT");
 
@@ -3696,6 +3720,14 @@ retry:
     gst_pad_sticky_events_foreach (GST_PAD_CAST (parsepad), debug_sticky_event,
         parsepad);
 
+    /* Store the stream-collection event on the pad */
+    if (parsepad->active_collection == NULL && fallback_collection) {
+      GstEvent *new_collection =
+          gst_event_new_stream_collection (fallback_collection);
+      gst_pad_store_sticky_event (GST_PAD (parsepad), new_collection);
+      gst_event_unref (new_collection);
+    }
+
     /* 2. activate and add */
     parsepad->exposed = TRUE;
     if (!gst_element_add_pad (GST_ELEMENT (parsebin), GST_PAD_CAST (parsepad))) {
@@ -3719,13 +3751,6 @@ retry:
       GST_DEBUG_OBJECT (parsepad, "unblocking");
       gst_parse_pad_unblock (parsepad);
       GST_DEBUG_OBJECT (parsepad, "unblocked");
-    }
-
-    /* Send stream-collection events for any pads that don't have them,
-     * and post a stream-collection onto the bus */
-    if (parsepad->active_collection == NULL && fallback_collection) {
-      gst_pad_push_event (GST_PAD (parsepad),
-          gst_event_new_stream_collection (fallback_collection));
     }
     gst_object_unref (parsepad);
   }
@@ -4085,9 +4110,15 @@ gst_parse_pad_stream_start_event (GstParsePad * parsepad, GstEvent * event)
   gst_event_parse_stream_flags (event, &streamflags);
 
   if (parsepad->active_stream != NULL &&
-      g_str_equal (parsepad->active_stream->stream_id, stream_id))
+      g_str_equal (parsepad->active_stream->stream_id, stream_id)) {
+    GST_DEBUG_OBJECT (parsepad, "Saw repeat stream id %s", stream_id);
     repeat_event = TRUE;
-  else {
+  } else {
+    if (parsepad->active_stream)
+      GST_DEBUG_OBJECT (parsepad, "Saw a different stream id (%s vs %s)",
+          parsepad->active_stream->stream_id, stream_id);
+    else
+      GST_DEBUG_OBJECT (parsepad, "Saw a new stream_id : %s", stream_id);
     /* A new stream requires a new collection event, or else
      * we'll place it in a fallback collection later */
     gst_object_replace ((GstObject **) & parsepad->active_collection, NULL);
@@ -4102,10 +4133,6 @@ gst_parse_pad_stream_start_event (GstParsePad * parsepad, GstEvent * event)
       GstPad *peer = gst_ghost_pad_get_target (GST_GHOST_PAD (parsepad));
       caps = gst_pad_get_current_caps (peer);
       gst_object_unref (peer);
-    }
-    if (caps == NULL && parsepad->chain && parsepad->chain->start_caps) {
-      /* Still no caps, use the chain start caps */
-      caps = gst_caps_ref (parsepad->chain->start_caps);
     }
 
     GST_DEBUG_OBJECT (parsepad,

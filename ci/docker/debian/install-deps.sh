@@ -2,9 +2,13 @@
 
 set -eux
 
-apt update -y && apt full-upgrade -y
-apt install -y $(<./ci/docker/debian/deps.txt)
+sudo apt update -y && sudo apt full-upgrade -y
+sudo apt install -y $(<./ci/docker/debian/deps.txt)
 
-pip3 install --break-system-packages meson hotdoc python-gitlab tomli junitparser
+# These get pulled by other deps
+sudo apt remove -y rustc cargo
 
-apt clean all
+sudo bash ./ci/scripts/create-pip-config.sh
+sudo pip3 install --break-system-packages meson==1.7.2 hotdoc python-gitlab tomli junitparser
+
+sudo apt clean all

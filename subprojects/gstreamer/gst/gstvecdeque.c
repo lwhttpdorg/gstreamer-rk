@@ -37,6 +37,8 @@
 #include <gst/gst.h>
 #include "gstvecdeque.h"
 
+#include "glib-compat-private.h"
+
 #define gst_vec_deque_idx(a, i) \
   ((a)->array + (((a)->head + (i)) % (a)->size) * (a)->elt_size)
 
@@ -386,7 +388,7 @@ gst_vec_deque_do_expand (GstVecDeque * array)
 }
 
 /**
- * gst_vec_deque_push_element_tail: (skip)
+ * gst_vec_deque_push_tail_struct: (skip)
  * @array: a #GstVecDeque object
  * @p_struct: address of element or structure to push to the tail of the queue
  *
@@ -607,7 +609,7 @@ gst_vec_deque_sort (GstVecDeque * array, GCompareDataFunc compare_func,
   if (array->length == 0)
     return;
 
-  /* To be able to use g_qsort_with_data, we might need to rearrange:
+  /* To be able to use g_sort_array, we might need to rearrange:
    * [0-----TAIL][HEAD-----SIZE] -> [HEAD-------TAIL] */
   if (array->head >= array->tail) {
     gsize t1 = array->head;
@@ -631,7 +633,7 @@ gst_vec_deque_sort (GstVecDeque * array, GCompareDataFunc compare_func,
   }
 
   if (array->struct_array) {
-    g_qsort_with_data (array->array +
+    g_sort_array (array->array +
         (array->head % array->size) * array->elt_size, array->length,
         array->elt_size, compare_func, user_data);
   } else {
@@ -639,7 +641,7 @@ gst_vec_deque_sort (GstVecDeque * array, GCompareDataFunc compare_func,
      * to dereference our pointers before passing them for comparison. 
      * This matches the behaviour of gst_vec_deque_find(). */
     QueueSortData sort_data = { compare_func, user_data };
-    g_qsort_with_data (array->array +
+    g_sort_array (array->array +
         (array->head % array->size) * array->elt_size, array->length,
         array->elt_size, (GCompareDataFunc) compare_wrapper, &sort_data);
   }
@@ -806,7 +808,7 @@ gst_vec_deque_is_empty (GstVecDeque * array)
 gboolean
 gst_vec_deque_drop_struct (GstVecDeque * array, gsize idx, gpointer p_struct)
 {
-  int first_item_index, last_item_index;
+  gsize first_item_index, last_item_index;
   gsize actual_idx;
   gsize elt_size;
 

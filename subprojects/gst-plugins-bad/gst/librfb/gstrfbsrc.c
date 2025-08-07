@@ -287,7 +287,8 @@ gst_rfb_src_set_property (GObject * object, guint prop_id,
       break;
     }
     case PROP_HOST:
-      src->host = g_value_dup_string (value);;
+      g_free (src->host);
+      src->host = g_value_dup_string (value);
       break;
     case PROP_PORT:
       src->port = g_value_get_int (value);
@@ -416,6 +417,11 @@ gst_rfb_src_decide_allocation (GstBaseSrc * bsrc, GstQuery * query)
   if (pool == NULL) {
     /* we did not get a pool, make one ourselves then */
     pool = gst_video_buffer_pool_new ();
+    {
+      gchar *name = g_strdup_printf ("%s-pool", GST_OBJECT_NAME (bsrc));
+      g_object_set (pool, "name", name, NULL);
+      g_free (name);
+    }
     size = info.size;
     min = 1;
     max = 0;

@@ -17,6 +17,33 @@
  * Boston, MA 02110-1301, USA.
  */
 
+/**
+ * SECTION:element-nvav1enc
+ * @title: nvav1enc
+ *
+ * NVIDIA AV1 video encoder
+ *
+ * Since: 1.26
+ */
+
+/**
+ * SECTION:element-nvd3d11av1enc
+ * @title: nvd3d11av1enc
+ *
+ * NVIDIA Direct3D11 mode AV1 video encoder
+ *
+ * Since: 1.26
+ */
+
+/**
+ * SECTION:element-nvautogpuav1enc
+ * @title: nvautogpuav1enc
+ *
+ * NVIDIA auto GPU select mode AV1 video encoder
+ *
+ * Since: 1.26
+ */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -29,6 +56,30 @@
 
 GST_DEBUG_CATEGORY_STATIC (gst_nv_av1_encoder_debug);
 #define GST_CAT_DEFAULT gst_nv_av1_encoder_debug
+
+#define DOC_SINK_CAPS_COMM \
+    "format = (string) { NV12, P010_10LE, VUYA, RGBA, RGBx, BGRA, BGRx, RGB10A2_LE }, " \
+    "width = (int) [ 192, 8192 ], height = (int) [ 128, 8192 ]"
+
+#define DOC_SINK_CAPS \
+    "video/x-raw(memory:CUDAMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:D3D12Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:GLMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SINK_CAPS_D3D11 \
+    "video/x-raw(memory:D3D11Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SINK_CAPS_AUTOGPU \
+    "video/x-raw(memory:CUDAMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:D3D11Memory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw(memory:GLMemory), " DOC_SINK_CAPS_COMM "; " \
+    "video/x-raw, " DOC_SINK_CAPS_COMM
+
+#define DOC_SRC_CAPS \
+    "video/x-av1, width = (int) [ 192, 8192 ], height = (int) [ 128, 8192 ], " \
+    "profile = (string) main, alignment = (string) tu, stream-format = (string) obu-stream"
 
 static GTypeClass *parent_class = nullptr;
 
@@ -239,6 +290,11 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
                     GST_PARAM_DOC_SHOW_DEFAULT)));
       }
       if (cdata->adapter_luid_size > 0) {
+        /**
+         * GstNvAutoGpuAv1Enc:adapter-luid:
+         *
+         * Since: 1.26
+         */
         g_object_class_install_property (object_class, PROP_ADAPTER_LUID,
             g_param_spec_int64 ("adapter-luid", "Adapter LUID",
                 "DXGI Adapter LUID (Locally Unique Identifier) to use",
@@ -383,6 +439,9 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
           "Target Constant Quality level for VBR mode (0 = automatic)",
           0, 51, DEFAULT_CONST_QUALITY, param_flags));
 
+  GstPadTemplate *pad_templ = gst_pad_template_new ("sink",
+      GST_PAD_SINK, GST_PAD_ALWAYS, cdata->sink_caps);
+  GstCaps *doc_caps = nullptr;
   switch (cdata->device_mode) {
     case GST_NV_ENCODER_DEVICE_CUDA:
       gst_element_class_set_static_metadata (element_class,
@@ -390,6 +449,7 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode AV1 video streams using NVCODEC API CUDA Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS);
       break;
     case GST_NV_ENCODER_DEVICE_D3D11:
       gst_element_class_set_static_metadata (element_class,
@@ -397,6 +457,7 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode AV1 video streams using NVCODEC API Direct3D11 Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS_D3D11);
       break;
     case GST_NV_ENCODER_DEVICE_AUTO_SELECT:
       gst_element_class_set_static_metadata (element_class,
@@ -404,18 +465,23 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
           "Codec/Encoder/Video/Hardware",
           "Encode AV1 video streams using NVCODEC API auto GPU select Mode",
           "Seungha Yang <seungha@centricular.com>");
+      doc_caps = gst_caps_from_string (DOC_SINK_CAPS_AUTOGPU);
       break;
     default:
       g_assert_not_reached ();
       break;
   }
 
-  gst_element_class_add_pad_template (element_class,
-      gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS,
-          cdata->sink_caps));
-  gst_element_class_add_pad_template (element_class,
-      gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-          cdata->src_caps));
+  gst_pad_template_set_documentation_caps (pad_templ, doc_caps);
+  gst_caps_unref (doc_caps);
+  gst_element_class_add_pad_template (element_class, pad_templ);
+
+  pad_templ = gst_pad_template_new ("src",
+      GST_PAD_SRC, GST_PAD_ALWAYS, cdata->src_caps);
+  doc_caps = gst_caps_from_string (DOC_SRC_CAPS);
+  gst_pad_template_set_documentation_caps (pad_templ, doc_caps);
+  gst_caps_unref (doc_caps);
+  gst_element_class_add_pad_template (element_class, pad_templ);
 
   nvenc_class->set_format = GST_DEBUG_FUNCPTR (gst_nv_av1_encoder_set_format);
   nvenc_class->set_output_state =
@@ -1457,17 +1523,34 @@ gst_nv_av1_encoder_create_class_data (GstObject * device, gpointer session,
 #ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11) {
     gst_caps_set_features (sink_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY,
+            nullptr));
   }
 #endif
 
   if (device_mode == GST_NV_ENCODER_DEVICE_CUDA) {
     gst_caps_set_features (sink_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY,
+            nullptr));
+#ifdef HAVE_GST_D3D12
+    if (gst_nvcodec_is_windows_10_or_greater ()) {
+      gboolean have_interop = FALSE;
+      g_object_get (device,
+          "external-resource-interop", &have_interop, nullptr);
+      if (have_interop) {
+        auto d3d12_caps = gst_caps_copy (system_caps);
+        gst_caps_set_features_simple (d3d12_caps,
+            gst_caps_features_new_static_str
+            (GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY, nullptr));
+        gst_caps_append (sink_caps, d3d12_caps);
+      }
+    }
+#endif
 #ifdef HAVE_CUDA_GST_GL
     GstCaps *gl_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (gl_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_GL_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_GL_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, gl_caps);
 #endif
   }
@@ -1485,8 +1568,12 @@ gst_nv_av1_encoder_create_class_data (GstObject * device, gpointer session,
     cdata->formats = g_list_append (cdata->formats, g_strdup (iter.c_str()));
   /* *INDENT-ON* */
 
+#ifdef G_OS_WIN32
   if (device_mode == GST_NV_ENCODER_DEVICE_D3D11)
     g_object_get (device, "adapter-luid", &cdata->adapter_luid, nullptr);
+  else
+    g_object_get (device, "dxgi-adapter-luid", &cdata->adapter_luid, nullptr);
+#endif
 
   if (device_mode == GST_NV_ENCODER_DEVICE_CUDA)
     g_object_get (device, "cuda-device-id", &cdata->cuda_device_id, nullptr);
@@ -1757,14 +1844,16 @@ gst_nv_av1_encoder_register_auto_select (GstPlugin * plugin,
   if (cuda_device_id_size > 0) {
     GstCaps *cuda_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (cuda_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_CUDA_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, cuda_caps);
   }
 #ifdef G_OS_WIN32
   if (adapter_luid_size > 0) {
     GstCaps *d3d11_caps = gst_caps_copy (system_caps);
     gst_caps_set_features (d3d11_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY, nullptr));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_D3D11_MEMORY,
+            nullptr));
     gst_caps_append (sink_caps, d3d11_caps);
   }
 #endif
@@ -1772,7 +1861,8 @@ gst_nv_av1_encoder_register_auto_select (GstPlugin * plugin,
 #ifdef HAVE_CUDA_GST_GL
   GstCaps *gl_caps = gst_caps_copy (system_caps);
   gst_caps_set_features (gl_caps, 0,
-      gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_GL_MEMORY, nullptr));
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_GL_MEMORY,
+          nullptr));
   gst_caps_append (sink_caps, gl_caps);
 #endif
 

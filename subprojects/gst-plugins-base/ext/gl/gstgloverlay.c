@@ -72,6 +72,7 @@ GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (gloverlay, "gloverlay",
 static gboolean gst_gl_overlay_set_caps (GstGLFilter * filter,
     GstCaps * incaps, GstCaps * outcaps);
 
+static void gst_gl_overlay_finalize (GObject * object);
 static void gst_gl_overlay_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_gl_overlay_get_property (GObject * object, guint prop_id,
@@ -162,6 +163,7 @@ gst_gl_overlay_gl_stop (GstGLBaseFilter * base_filter)
   if (overlay->image_memory) {
     gst_memory_unref ((GstMemory *) overlay->image_memory);
     overlay->image_memory = NULL;
+    overlay->location_has_changed = TRUE;
   }
 
   if (overlay->vao) {
@@ -203,6 +205,7 @@ gst_gl_overlay_class_init (GstGLOverlayClass * klass)
 
   gst_gl_filter_add_rgba_pad_templates (GST_GL_FILTER_CLASS (klass));
 
+  gobject_class->finalize = gst_gl_overlay_finalize;
   gobject_class->set_property = gst_gl_overlay_set_property;
   gobject_class->get_property = gst_gl_overlay_get_property;
 
@@ -263,7 +266,7 @@ gst_gl_overlay_class_init (GstGLOverlayClass * klass)
           0.0, 1.0, 1.0, GST_PARAM_CONTROLLABLE | GST_PARAM_MUTABLE_PLAYING
           | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  gst_element_class_set_metadata (element_class,
+  gst_element_class_set_static_metadata (element_class,
       "Gstreamer OpenGL Overlay", "Filter/Effect/Video",
       "Overlay GL video texture with a JPEG/PNG image",
       "Filippo Argiolas <filippo.argiolas@gmail.com>, "
@@ -286,6 +289,16 @@ gst_gl_overlay_init (GstGLOverlay * overlay)
   overlay->overlay_height = 0;
 
   overlay->alpha = 1.0;
+}
+
+static void
+gst_gl_overlay_finalize (GObject * object)
+{
+  GstGLOverlay *overlay = GST_GL_OVERLAY (object);
+
+  g_free (overlay->location);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static void
@@ -384,6 +397,7 @@ gst_gl_overlay_set_caps (GstGLFilter * filter, GstCaps * incaps,
 
   overlay->window_width = width;
   overlay->window_height = height;
+  overlay->geometry_change = TRUE;
 
   return TRUE;
 }

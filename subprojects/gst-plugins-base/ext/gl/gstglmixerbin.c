@@ -277,8 +277,9 @@ gst_gl_mixer_bin_class_init (GstGLMixerBinClass * klass)
           upload_caps));
   gst_caps_unref (upload_caps);
 
-  gst_element_class_set_metadata (element_class, "OpenGL video_mixer empty bin",
-      "Bin/Filter/Effect/Video/Mixer", "OpenGL video_mixer empty bin",
+  gst_element_class_set_static_metadata (element_class,
+      "OpenGL video_mixer empty bin", "Bin/Filter/Effect/Video/Mixer",
+      "OpenGL video_mixer empty bin",
       "Matthew Waters <matthew@centricular.com>");
 
   gst_type_mark_as_plugin_api (GST_TYPE_GL_MIXER_BIN_START_TIME_SELECTION, 0);
@@ -443,10 +444,15 @@ static gboolean
 _connect_mixer_element (GstGLMixerBin * self)
 {
   gboolean res = TRUE;
+  gchar *tmp, *name;
 
   g_return_val_if_fail (self->priv->input_chains == NULL, FALSE);
 
-  gst_object_set_name (GST_OBJECT (self->mixer), "mixer");
+  tmp = gst_object_get_name (GST_OBJECT (self));
+  name = g_strdup_printf ("%s-mixer", tmp);
+  g_free (tmp);
+  gst_object_set_name (GST_OBJECT (self->mixer), name);
+  g_free (name);
   res &= gst_bin_add (GST_BIN (self), self->mixer);
 
   res &= gst_element_link_pads (self->mixer, "src", self->out_convert, "sink");
@@ -534,7 +540,7 @@ gst_gl_mixer_bin_set_property (GObject * object,
         g_object_set_property (G_OBJECT (self->mixer), pspec->name, value);
       break;
     case PROP_START_TIME_SELECTION:
-      self->start_time_selection = g_value_get_uint (value);
+      self->start_time_selection = g_value_get_enum (value);
       if (self->mixer)
         g_object_set_property (G_OBJECT (self->mixer), pspec->name, value);
       break;

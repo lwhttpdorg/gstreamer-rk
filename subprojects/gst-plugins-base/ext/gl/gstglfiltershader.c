@@ -163,7 +163,7 @@ gst_gl_filtershader_class_init (GstGLFilterShaderClass * klass)
       g_signal_new ("create-shader", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, GST_TYPE_GL_SHADER, 0);
 
-  gst_element_class_set_metadata (element_class,
+  gst_element_class_set_static_metadata (element_class,
       "OpenGL fragment shader filter", "Filter/Effect",
       "Perform operations with a GLSL shader", "<matthew@centricular.com>");
 
@@ -188,6 +188,10 @@ gst_gl_filtershader_finalize (GObject * object)
 {
   GstGLFilterShader *filtershader = GST_GL_FILTERSHADER (object);
 
+  if (filtershader->shader)
+    gst_object_unref (filtershader->shader);
+  filtershader->shader = NULL;
+
   g_free (filtershader->vertex);
   filtershader->vertex = NULL;
 
@@ -211,7 +215,7 @@ gst_gl_filtershader_set_property (GObject * object, guint prop_id,
     case PROP_SHADER:
       GST_OBJECT_LOCK (filtershader);
       gst_object_replace ((GstObject **) & filtershader->shader,
-          g_value_dup_object (value));
+          g_value_get_object (value));
       filtershader->new_source = FALSE;
       GST_OBJECT_UNLOCK (filtershader);
       break;
@@ -285,11 +289,8 @@ static void
 gst_gl_filtershader_gl_stop (GstGLBaseFilter * base)
 {
   GstGLFilterShader *filtershader = GST_GL_FILTERSHADER (base);
-
-  if (filtershader->shader)
-    gst_object_unref (filtershader->shader);
-  filtershader->shader = NULL;
-
+  gst_clear_object (&filtershader->shader);
+  filtershader->new_source = TRUE;
   GST_GL_BASE_FILTER_CLASS (parent_class)->gl_stop (base);
 }
 
@@ -352,10 +353,11 @@ gst_gl_filtershader_filter_texture (GstGLFilter * filter, GstGLMemory * in_tex,
 }
 
 static gboolean
-_set_uniform (GQuark field_id, const GValue * value, gpointer user_data)
+_set_uniform (const GstIdStr * fieldname, const GValue * value,
+    gpointer user_data)
 {
   GstGLShader *shader = user_data;
-  const gchar *field_name = g_quark_to_string (field_id);
+  const gchar *field_name = gst_id_str_as_str (fieldname);
 
   if (G_TYPE_CHECK_VALUE_TYPE ((value), G_TYPE_INT)) {
     gst_gl_shader_set_uniform_1i (shader, field_name, g_value_get_int (value));
@@ -404,8 +406,8 @@ _update_uniforms (GstGLFilterShader * filtershader)
   if (filtershader->new_uniforms && filtershader->uniforms) {
     gst_gl_shader_use (filtershader->shader);
 
-    gst_structure_foreach (filtershader->uniforms,
-        (GstStructureForeachFunc) _set_uniform, filtershader->shader);
+    gst_structure_foreach_id_str (filtershader->uniforms,
+        (GstStructureForeachIdStrFunc) _set_uniform, filtershader->shader);
     filtershader->new_uniforms = FALSE;
   }
 }

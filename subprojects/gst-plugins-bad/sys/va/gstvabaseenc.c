@@ -463,7 +463,7 @@ _push_buffer_to_downstream (GstVaBaseEnc * base, GstVideoCodecFrame * frame)
   }
 
   if (frame->output_buffer)
-    GST_LOG_OBJECT (base, "Push to downstream: frame system_frame_number: %d,"
+    GST_LOG_OBJECT (base, "Push to downstream: frame system_frame_number: %u,"
         " pts: %" GST_TIME_FORMAT ", dts: %" GST_TIME_FORMAT
         " duration: %" GST_TIME_FORMAT ", buffer size: %" G_GSIZE_FORMAT,
         frame->system_frame_number, GST_TIME_ARGS (frame->pts),
@@ -503,7 +503,7 @@ _push_out_one_buffer (GstVaBaseEnc * base)
 
   if (ret != GST_FLOW_OK) {
     GST_DEBUG_OBJECT (base, "fails to push one buffer, system_frame_number "
-        "%d: %s", system_frame_number, gst_flow_get_name (ret));
+        "%u: %s", system_frame_number, gst_flow_get_name (ret));
   }
 
   return ret;
@@ -527,7 +527,7 @@ _try_to_push_out_one_buffer (GstVaBaseEnc * base)
 
   ready = va_check_surface_has_status (base->display, surface, VASurfaceReady);
 
-  GST_LOG_OBJECT (base, "Output of system_frame_number %d is %s",
+  GST_LOG_OBJECT (base, "Output of system_frame_number %u is %s",
       frame_out->system_frame_number, ready ? "ready" : "not ready");
 
   if (!ready)
@@ -657,7 +657,7 @@ gst_va_base_enc_handle_frame (GstVideoEncoder * venc,
   GstVideoCodecFrame *frame_encode = NULL;
 
   GST_LOG_OBJECT (venc,
-      "handle frame id %d, dts %" GST_TIME_FORMAT ", pts %" GST_TIME_FORMAT,
+      "handle frame id %u, dts %" GST_TIME_FORMAT ", pts %" GST_TIME_FORMAT,
       frame->system_frame_number,
       GST_TIME_ARGS (GST_BUFFER_DTS (frame->input_buffer)),
       GST_TIME_ARGS (GST_BUFFER_PTS (frame->input_buffer)));
@@ -881,8 +881,8 @@ gst_va_base_enc_src_query (GstVideoEncoder * venc, GstQuery * query)
         ret = TRUE;
         break;
       }
-      /* else jump to default */
     }
+      /* FALLTHROUGH */
     default:
       ret = GST_VIDEO_ENCODER_CLASS (parent_class)->src_query (venc, query);
       break;
@@ -919,8 +919,7 @@ gst_va_base_enc_set_context (GstElement * element, GstContext * context)
 
   if (!ret || (old_display && new_display && old_display != new_display
           && base->encoder)) {
-    GST_ELEMENT_WARNING (element, RESOURCE, BUSY,
-        ("Can't replace VA display while operating"), (NULL));
+    GST_WARNING_OBJECT (element, "Can't replace VA display while operating");
   }
 
   gst_clear_object (&old_display);
@@ -1170,16 +1169,13 @@ gst_va_base_enc_add_trellis_parameter (GstVaBaseEnc * base,
   } trellis = {
     .type = VAEncMiscParameterTypeQuantization,
     .tr.quantization_flags.bits = {
-       .disable_trellis = 0,
-       .enable_trellis_I = 1,
-       .enable_trellis_B = 1,
-       .enable_trellis_P = 1,
+       .disable_trellis = !use_trellis,
+       .enable_trellis_I = use_trellis,
+       .enable_trellis_B = use_trellis,
+       .enable_trellis_P = use_trellis,
     },
   };
   /* *INDENT-ON* */
-
-  if (!use_trellis)
-    return TRUE;
 
   if (!gst_va_encoder_add_param (base->encoder, picture,
           VAEncMiscParameterBufferType, &trellis, sizeof (trellis))) {
@@ -1198,7 +1194,9 @@ gst_va_base_enc_add_codec_tag (GstVaBaseEnc * base, const gchar * codec_name)
   const gchar *encoder_name;
   guint bitrate = 0;
 
-  g_object_get (venc, "bitrate", &bitrate, NULL);
+  if (g_object_class_find_property (G_OBJECT_GET_CLASS (base), "bitrate"))
+    g_object_get (venc, "bitrate", &bitrate, NULL);
+
   if (bitrate > 0)
     gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_NOMINAL_BITRATE,
         bitrate, NULL);

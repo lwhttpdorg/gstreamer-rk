@@ -33,15 +33,15 @@
 
 class QRhi;
 class QRhiResourceUpdateBatch;
-class GstQSGMaterialShader;
+class GstQSG6MaterialShader;
 
-class GstQSGMaterial : public QSGMaterial
+class GstQSG6Material : public QSGMaterial
 {
 protected:
-    GstQSGMaterial();
-    ~GstQSGMaterial();
+    GstQSG6Material();
+    ~GstQSG6Material();
 public:
-    static GstQSGMaterial *new_for_format (GstVideoFormat format);
+    static GstQSG6Material *new_for_format (GstVideoFormat format);
 
     void setCaps (GstCaps * caps);
     gboolean setBuffer (GstBuffer * buffer);
@@ -50,7 +50,7 @@ public:
 
     void setFiltering(QSGTexture::Filtering);
 
-    QSGTexture * bind(GstQSGMaterialShader *, QRhi *, QRhiResourceUpdateBatch *, guint binding, GstVideoFormat);
+    QSGTexture * bind(GstQSG6MaterialShader *, QRhi *, QRhiResourceUpdateBatch *, guint binding, GstVideoFormat);
 
     /* QSGMaterial */
     QSGMaterialShader *createShader(QSGRendererInterface::RenderMode renderMode) const override;
@@ -66,8 +66,8 @@ private:
     bool buffer_was_bound;
     GWeakRef qt_context_ref_;
     GstBuffer * sync_buffer_;
-    GstMemory * mem_;
     GstVideoInfo v_info;
+    GstGLTextureTarget tex_target;
     GstVideoFrame v_frame;
     QSGTexture::Filtering m_filtering;
 };

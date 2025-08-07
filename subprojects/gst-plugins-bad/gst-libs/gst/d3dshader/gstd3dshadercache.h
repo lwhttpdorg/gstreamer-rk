@@ -35,6 +35,8 @@ typedef enum
   GST_D3D_PLUGIN_PS_COLOR,
   GST_D3D_PLUGIN_PS_SAMPLE_PREMULT,
   GST_D3D_PLUGIN_PS_SAMPLE,
+  GST_D3D_PLUGIN_PS_SAMPLE_SCRGB_TONEMAP,
+  GST_D3D_PLUGIN_PS_SAMPLE_SCRGB,
   GST_D3D_PLUGIN_PS_SNOW,
 
   GST_D3D_PLUGIN_PS_LAST
@@ -49,6 +51,23 @@ typedef enum
   GST_D3D_PLUGIN_VS_LAST,
 } GstD3DPluginVS;
 
+typedef enum
+{
+  GST_D3D_PLUGIN_CS_MIP_GEN,
+  GST_D3D_PLUGIN_CS_MIP_GEN_VUYA,
+  GST_D3D_PLUGIN_CS_MIP_GEN_AYUV,
+  GST_D3D_PLUGIN_CS_MIP_GEN_GRAY,
+  GST_D3D_PLUGIN_CS_YADIF_1,
+  GST_D3D_PLUGIN_CS_YADIF_1_10,
+  GST_D3D_PLUGIN_CS_YADIF_1_12,
+  GST_D3D_PLUGIN_CS_YADIF_2,
+  GST_D3D_PLUGIN_CS_YADIF_4,
+  GST_D3D_PLUGIN_CS_FISHEYE_EQUIRECT,
+  GST_D3D_PLUGIN_CS_FISHEYE_PANORAMA,
+  GST_D3D_PLUGIN_CS_FISHEYE_PERSPECTIVE,
+
+  GST_D3D_PLUGIN_CS_LAST,
+} GstD3DPluginCS;
 
 typedef enum
 {
@@ -72,6 +91,8 @@ typedef enum
   GST_D3D_CONVERTER_RANGE,
   GST_D3D_CONVERTER_GAMMA,
   GST_D3D_CONVERTER_PRIMARY,
+  GST_D3D_CONVERTER_COLOR_BALANCE,
+  GST_D3D_CONVERTER_PRIMARY_AND_COLOR_BALANCE,
 } GstD3DConverterType;
 
 typedef struct _GstD3DConverterCSByteCode
@@ -100,6 +121,11 @@ gboolean gst_d3d_plugin_shader_get_ps_blob (GstD3DPluginPS type,
                                             GstD3DShaderByteCode * byte_code);
 
 GST_D3D_SHADER_API
+gboolean gst_d3d_plugin_shader_get_cs_blob (GstD3DPluginCS type,
+                                            GstD3DShaderModel shader_model,
+                                            GstD3DShaderByteCode * byte_code);
+
+GST_D3D_SHADER_API
 gboolean gst_d3d_converter_shader_get_vs_blob (GstD3DShaderModel shader_model,
                                                GstD3DShaderByteCode * byte_code);
 
@@ -111,11 +137,15 @@ gboolean gst_d3d_converter_shader_get_cs_blob (GstVideoFormat in_format,
 
 GST_D3D_SHADER_API
 guint   gst_d3d_converter_shader_get_ps_blob (GstVideoFormat in_format,
-                                               GstVideoFormat out_format,
-                                               gboolean in_premul,
-                                               gboolean out_premul,
-                                               GstD3DConverterType conv_type,
-                                               GstD3DShaderModel shader_model,
-                                               GstD3DConverterPSByteCode byte_code[4]);
+                                              GstVideoFormat out_format,
+                                              gboolean in_premul,
+                                              gboolean out_premul,
+                                              GstD3DConverterType conv_type,
+                                              GstD3DShaderModel shader_model,
+                                              GstD3DConverterPSByteCode byte_code[4]);
+
+GST_D3D_SHADER_API
+gboolean gst_d3d12_shader_cache_get_gamma_lut_blob (GstD3DShaderByteCode * vs_blob,
+                                                    GstD3DShaderByteCode * ps_blob);
 
 G_END_DECLS

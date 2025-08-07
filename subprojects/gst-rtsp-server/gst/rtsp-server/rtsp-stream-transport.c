@@ -106,8 +106,11 @@ typedef struct
 enum
 {
   PROP_0,
+  PROP_TIMED_OUT,
   PROP_LAST
 };
+
+#define DEFAULT_TIMED_OUT FALSE
 
 GST_DEBUG_CATEGORY_STATIC (rtsp_stream_transport_debug);
 #define GST_CAT_DEFAULT rtsp_stream_transport_debug
@@ -118,6 +121,21 @@ G_DEFINE_TYPE_WITH_PRIVATE (GstRTSPStreamTransport, gst_rtsp_stream_transport,
     G_TYPE_OBJECT);
 
 static void
+gst_rtsp_stream_transport_get_property (GObject * object, guint propid,
+    GValue * value, GParamSpec * pspec)
+{
+  GstRTSPStreamTransport *transport = GST_RTSP_STREAM_TRANSPORT (object);
+
+  switch (propid) {
+    case PROP_TIMED_OUT:
+      g_value_set_boolean (value, transport->priv->timed_out);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, propid, pspec);
+  }
+}
+
+static void
 gst_rtsp_stream_transport_class_init (GstRTSPStreamTransportClass * klass)
 {
   GObjectClass *gobject_class;
@@ -125,6 +143,19 @@ gst_rtsp_stream_transport_class_init (GstRTSPStreamTransportClass * klass)
   gobject_class = G_OBJECT_CLASS (klass);
 
   gobject_class->finalize = gst_rtsp_stream_transport_finalize;
+  gobject_class->get_property = gst_rtsp_stream_transport_get_property;
+
+  /**
+   * GstRTSPStreamTransport:timed-out:
+   *
+   * Whether this transport is timed out
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_TIMED_OUT,
+      g_param_spec_boolean ("timed-out", "Timed Out",
+          "Whether this transport is timed out",
+          DEFAULT_TIMED_OUT, G_PARAM_READABLE));
 
   GST_DEBUG_CATEGORY_INIT (rtsp_stream_transport_debug, "rtspmediatransport",
       0, "GstRTSPStreamTransport");
@@ -225,9 +256,9 @@ gst_rtsp_stream_transport_get_stream (GstRTSPStreamTransport * trans)
 /**
  * gst_rtsp_stream_transport_set_callbacks:
  * @trans: a #GstRTSPStreamTransport
- * @send_rtp: (scope notified): a callback called when RTP should be sent
- * @send_rtcp: (scope notified): a callback called when RTCP should be sent
- * @user_data: (closure): user data passed to callbacks
+ * @send_rtp: (scope notified) (closure user_data): a callback called when RTP should be sent
+ * @send_rtcp: (scope notified) (closure user_data): a callback called when RTCP should be sent
+ * @user_data: user data passed to callbacks
  * @notify: (allow-none): called with the user_data when no longer needed.
  *
  * Install callbacks that will be called when data for a stream should be sent
@@ -255,9 +286,9 @@ gst_rtsp_stream_transport_set_callbacks (GstRTSPStreamTransport * trans,
 /**
  * gst_rtsp_stream_transport_set_list_callbacks:
  * @trans: a #GstRTSPStreamTransport
- * @send_rtp_list: (scope notified): a callback called when RTP should be sent
- * @send_rtcp_list: (scope notified): a callback called when RTCP should be sent
- * @user_data: (closure): user data passed to callbacks
+ * @send_rtp_list: (scope notified) (closure user_data): a callback called when RTP should be sent
+ * @send_rtcp_list: (scope notified) (closure user_data): a callback called when RTCP should be sent
+ * @user_data: user data passed to callbacks
  * @notify: (allow-none): called with the user_data when no longer needed.
  *
  * Install callbacks that will be called when data for a stream should be sent
@@ -326,8 +357,8 @@ gst_rtsp_stream_transport_check_back_pressure (GstRTSPStreamTransport * trans,
 /**
  * gst_rtsp_stream_transport_set_keepalive:
  * @trans: a #GstRTSPStreamTransport
- * @keep_alive: (scope notified): a callback called when the receiver is active
- * @user_data: (closure): user data passed to callback
+ * @keep_alive: (scope notified) (closure user_data): a callback called when the receiver is active
+ * @user_data: user data passed to callback
  * @notify: (allow-none): called with the user_data when no longer needed.
  *
  * Install callbacks that will be called when RTCP packets are received from the
@@ -353,8 +384,8 @@ gst_rtsp_stream_transport_set_keepalive (GstRTSPStreamTransport * trans,
 /**
  * gst_rtsp_stream_transport_set_message_sent:
  * @trans: a #GstRTSPStreamTransport
- * @message_sent: (scope notified): a callback called when a message has been sent
- * @user_data: (closure): user data passed to callback
+ * @message_sent: (scope notified) (closure user_data): a callback called when a message has been sent
+ * @user_data: user data passed to callback
  * @notify: (allow-none): called with the user_data when no longer needed
  *
  * Install a callback that will be called when a message has been sent on @trans.
@@ -380,8 +411,8 @@ gst_rtsp_stream_transport_set_message_sent (GstRTSPStreamTransport * trans,
 /**
  * gst_rtsp_stream_transport_set_message_sent_full:
  * @trans: a #GstRTSPStreamTransport
- * @message_sent: (scope notified): a callback called when a message has been sent
- * @user_data: (closure): user data passed to callback
+ * @message_sent: (scope notified) (closure user_data): a callback called when a message has been sent
+ * @user_data: user data passed to callback
  * @notify: (allow-none): called with the user_data when no longer needed
  *
  * Install a callback that will be called when a message has been sent on @trans.
@@ -589,6 +620,8 @@ gst_rtsp_stream_transport_set_timed_out (GstRTSPStreamTransport * trans,
   g_return_if_fail (GST_IS_RTSP_STREAM_TRANSPORT (trans));
 
   trans->priv->timed_out = timedout;
+
+  g_object_notify (G_OBJECT (trans), "timed-out");
 }
 
 /**

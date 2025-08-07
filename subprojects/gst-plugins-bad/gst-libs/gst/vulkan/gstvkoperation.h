@@ -103,6 +103,7 @@ GArray *                gst_vulkan_operation_new_extra_image_barriers
 GST_VULKAN_API
 gboolean                gst_vulkan_operation_add_frame_barrier  (GstVulkanOperation * self,
                                                                  GstBuffer * frame,
+                                                                 guint64 src_stage,
                                                                  guint64 dst_stage,
                                                                  guint64 new_access,
                                                                  VkImageLayout new_layout,
@@ -139,11 +140,11 @@ gboolean                gst_vulkan_operation_get_query          (GstVulkanOperat
                                                                  GError ** error);
 GST_VULKAN_API
 gboolean                gst_vulkan_operation_begin_query        (GstVulkanOperation * self,
+                                                                 VkBaseInStructure* base,
                                                                  guint32 id);
 GST_VULKAN_API
 gboolean                gst_vulkan_operation_end_query          (GstVulkanOperation * self,
                                                                  guint32 id);
-
 GST_VULKAN_API
 gboolean                gst_vulkan_operation_use_sync2          (GstVulkanOperation * self);
 GST_VULKAN_API

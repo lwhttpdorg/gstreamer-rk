@@ -46,7 +46,6 @@
 #include <gst/gst.h>
 #include <gobject/gvaluecollector.h>
 #include "gstutils.h"
-#include "gstquark.h"
 
 /* GstValueUnionFunc:
  * @dest: a #GValue for the result
@@ -101,6 +100,8 @@ static gboolean _priv_gst_value_parse_list (gchar * s, gchar ** after,
     GValue * value, GType type, GParamSpec * pspec);
 static gboolean _priv_gst_value_parse_array (gchar * s, gchar ** after,
     GValue * value, GType type, GParamSpec * pspec);
+static gboolean _priv_gst_value_parse_strv (const gchar * s,
+    const gchar ** after, GValue * dest);
 
 typedef struct _GstValueUnionInfo GstValueUnionInfo;
 struct _GstValueUnionInfo
@@ -170,7 +171,7 @@ struct _GstValueList
 #define VALUE_LIST_IS_USING_DYNAMIC_ARRAY(array) ((array)->fields != &(array)->arr[0])
 
 static GArray *gst_value_table;
-static GHashTable *gst_value_hash;
+static GHashTable *gst_value_hash_table;
 static GstValueTable *gst_value_tables_fundamental[FUNDAMENTAL_TYPE_ID_MAX + 1];
 static GArray *gst_value_union_funcs;
 static GArray *gst_value_intersect_funcs;
@@ -198,7 +199,7 @@ gst_value_hash_lookup_type (GType type)
   if (G_LIKELY (G_TYPE_IS_FUNDAMENTAL (type)))
     return gst_value_tables_fundamental[FUNDAMENTAL_TYPE_ID (type)];
   else
-    return g_hash_table_lookup (gst_value_hash, (gpointer) type);
+    return g_hash_table_lookup (gst_value_hash_table, (gpointer) type);
 }
 
 static void
@@ -207,7 +208,7 @@ gst_value_hash_add_type (GType type, const GstValueTable * table)
   if (G_TYPE_IS_FUNDAMENTAL (type))
     gst_value_tables_fundamental[FUNDAMENTAL_TYPE_ID (type)] = (gpointer) table;
 
-  g_hash_table_insert (gst_value_hash, (gpointer) type, (gpointer) table);
+  g_hash_table_insert (gst_value_hash_table, (gpointer) type, (gpointer) table);
 }
 
 /********
@@ -354,7 +355,7 @@ _priv_gst_value_serialize_any_list (const GValue * value, const gchar * begin,
   GstValueList *vlist = value->data[0].v_pointer;
   GString *s;
   GValue *v;
-  gchar *s_val;
+  gchar *s_val = NULL;
   guint alen = vlist->len;
 
   /* estimate minimum string length to minimise re-allocs in GString */
@@ -2812,8 +2813,13 @@ _priv_gst_value_parse_value (gchar * str,
     g_value_init (value, GST_TYPE_LIST);
     ret = _priv_gst_value_parse_list (s, &s, value, type, pspec);
   } else if (*s == '<') {
-    g_value_init (value, GST_TYPE_ARRAY);
-    ret = _priv_gst_value_parse_array (s, &s, value, type, pspec);
+    if (type == G_TYPE_STRV) {
+      g_value_init (value, G_TYPE_STRV);
+      ret = _priv_gst_value_parse_strv (s, (const gchar **) &s, value);
+    } else {
+      g_value_init (value, GST_TYPE_ARRAY);
+      ret = _priv_gst_value_parse_array (s, &s, value, type, pspec);
+    }
   } else {
     value_s = s;
 
@@ -2893,18 +2899,18 @@ gst_value_serialize_segment_internal (const GValue * value, gboolean escape)
   gchar *t, *res;
   GstStructure *s;
 
-  s = gst_structure_new_id (GST_QUARK (SEGMENT),
-      GST_QUARK (FLAGS), GST_TYPE_SEGMENT_FLAGS, seg->flags,
-      GST_QUARK (RATE), G_TYPE_DOUBLE, seg->rate,
-      GST_QUARK (APPLIED_RATE), G_TYPE_DOUBLE, seg->applied_rate,
-      GST_QUARK (FORMAT), GST_TYPE_FORMAT, seg->format,
-      GST_QUARK (BASE), G_TYPE_UINT64, seg->base,
-      GST_QUARK (OFFSET), G_TYPE_UINT64, seg->offset,
-      GST_QUARK (START), G_TYPE_UINT64, seg->start,
-      GST_QUARK (STOP), G_TYPE_UINT64, seg->stop,
-      GST_QUARK (TIME), G_TYPE_UINT64, seg->time,
-      GST_QUARK (POSITION), G_TYPE_UINT64, seg->position,
-      GST_QUARK (DURATION), G_TYPE_UINT64, seg->duration, NULL);
+  s = gst_structure_new_static_str ("segment",
+      "flags", GST_TYPE_SEGMENT_FLAGS, seg->flags,
+      "rate", G_TYPE_DOUBLE, seg->rate,
+      "applied-rate", G_TYPE_DOUBLE, seg->applied_rate,
+      "format", GST_TYPE_FORMAT, seg->format,
+      "base", G_TYPE_UINT64, seg->base,
+      "offset", G_TYPE_UINT64, seg->offset,
+      "start", G_TYPE_UINT64, seg->start,
+      "stop", G_TYPE_UINT64, seg->stop,
+      "time", G_TYPE_UINT64, seg->time,
+      "position", G_TYPE_UINT64, seg->position,
+      "duration", G_TYPE_UINT64, seg->duration, NULL);
 
   t = gst_structure_to_string (s);
   if (escape) {
@@ -2953,18 +2959,18 @@ gst_value_deserialize_segment_internal (GValue * dest, const gchar * s,
   if (G_UNLIKELY (str == NULL))
     return FALSE;
 
-  res = gst_structure_id_get (str,
-      GST_QUARK (FLAGS), GST_TYPE_SEGMENT_FLAGS, &seg.flags,
-      GST_QUARK (RATE), G_TYPE_DOUBLE, &seg.rate,
-      GST_QUARK (APPLIED_RATE), G_TYPE_DOUBLE, &seg.applied_rate,
-      GST_QUARK (FORMAT), GST_TYPE_FORMAT, &seg.format,
-      GST_QUARK (BASE), G_TYPE_UINT64, &seg.base,
-      GST_QUARK (OFFSET), G_TYPE_UINT64, &seg.offset,
-      GST_QUARK (START), G_TYPE_UINT64, &seg.start,
-      GST_QUARK (STOP), G_TYPE_UINT64, &seg.stop,
-      GST_QUARK (TIME), G_TYPE_UINT64, &seg.time,
-      GST_QUARK (POSITION), G_TYPE_UINT64, &seg.position,
-      GST_QUARK (DURATION), G_TYPE_UINT64, &seg.duration, NULL);
+  res = gst_structure_get (str,
+      "flags", GST_TYPE_SEGMENT_FLAGS, &seg.flags,
+      "rate", G_TYPE_DOUBLE, &seg.rate,
+      "applied-rate", G_TYPE_DOUBLE, &seg.applied_rate,
+      "format", GST_TYPE_FORMAT, &seg.format,
+      "base", G_TYPE_UINT64, &seg.base,
+      "offset", G_TYPE_UINT64, &seg.offset,
+      "start", G_TYPE_UINT64, &seg.start,
+      "stop", G_TYPE_UINT64, &seg.stop,
+      "time", G_TYPE_UINT64, &seg.time,
+      "position", G_TYPE_UINT64, &seg.position,
+      "duration", G_TYPE_UINT64, &seg.duration, NULL);
   gst_structure_free (str);
 
   if (res)
@@ -3213,6 +3219,7 @@ gst_value_serialize_tag_list (const GValue * value)
 static gint
 compare_buffer (GstBuffer * buf1, GstBuffer * buf2)
 {
+  /* keep this implementation synced with gst_hash_buffer() */
   gsize size1, size2;
   GstMapInfo info1, info2;
   gint result, mret;
@@ -3349,6 +3356,7 @@ wrong_char:
 static gint
 gst_value_compare_sample (const GValue * value1, const GValue * value2)
 {
+  /* keep this implementation synced with gst_value_hash_sample() */
   GstBuffer *buf1 = gst_sample_get_buffer (gst_value_get_sample (value1));
   GstBuffer *buf2 = gst_sample_get_buffer (gst_value_get_sample (value2));
 
@@ -4503,14 +4511,78 @@ gst_value_is_subset_list (const GValue * value1, const GValue * value2)
   return FALSE;
 }
 
+static gboolean
+gst_value_is_subset_array_array (const GValue * val_sub, const GValue * val_sup)
+{
+  /* Check if each element of the subset is within the subset while
+   * respecting order. Not all element of superset has to be present in
+   * subset. If at least one element in val_sub is a subset of the corresponding
+   * element in val_sup, and other elements of val_sub are equal to
+   * corresponding elements of val_sup then val_sub is still a subset of val_sup
+   */
+
+  GstValueList *superset = VALUE_LIST_ARRAY (val_sup);
+  GstValueList *subset = VALUE_LIST_ARRAY (val_sub);
+  gint it1, it2, len1, len2;
+  gboolean is_subset, is_equal = FALSE;
+  gsize subset_count = 0;
+  gsize equal_count = 0;
+
+  len2 = superset->len;
+  len1 = subset->len;
+  is_subset = len1 <= len2;
+
+  for (it1 = 0, it2 = 0; (is_subset || is_equal) && it1 < len1; it1++, it2++) {
+    const GValue *child1 = &subset->fields[it1];
+    const GValue *child2 = &superset->fields[it2];
+
+    is_equal = gst_value_compare (child1, child2) == GST_VALUE_EQUAL;
+    if (is_equal)
+      equal_count++;
+    else if ((is_subset = gst_value_is_subset (child1, child2)))
+      subset_count++;
+    else if (subset_count == 0 && equal_count == 0) {
+      /* try to find an element in superset that is a superset of subset[it1] */
+      for (it2 = it2 + 1; it2 < len2 && it2 + len1 <= len2; it2++) {
+        child2 = &superset->fields[it2];
+        if (gst_value_compare (child1, child2) == GST_VALUE_EQUAL) {
+          is_equal = TRUE;
+          equal_count++;
+          break;
+        } else if ((is_subset = gst_value_is_subset (child1, child2))) {
+          subset_count++;
+          break;
+        }
+      }
+    }
+  }
+
+  if (is_equal || is_subset) {
+    if (gst_value_is_fixed (val_sup) && gst_value_is_fixed (val_sub)) {
+      /* With two fixed array we don't allow both array to be equal for
+       * consistency with other is_subset operation on other fixed values */
+      return subset_count > 0;
+    } else {
+
+      /* For un-fixed value we consider equal value to be a subset */
+      return TRUE;
+    }
+  } else {
+    return FALSE;
+  }
+}
+
+
 /**
  * gst_value_is_subset:
  * @value1: a #GValue
  * @value2: a #GValue
  *
- * Check that @value1 is a subset of @value2.
+ * Check that @value1 is a subset of @value2. If @value1 and @value2 is are
+ * fixed value, value1 must be a subset of value2 and not equal to @value2 to
+ * be a subset of @value2.
  *
- * Return: %TRUE is @value1 is a subset of @value2
+ * Return: %TRUE is @value1 is a subset, strict subset if both values are  of @value2
  */
 gboolean
 gst_value_is_subset (const GValue * value1, const GValue * value2)
@@ -4537,26 +4609,46 @@ gst_value_is_subset (const GValue * value1, const GValue * value2)
     if (type1 == GST_TYPE_LIST)
       return gst_value_is_subset_list_list (value1, value2);
     return gst_value_is_subset_list (value1, value2);
+  } else if (type2 == GST_TYPE_CAPS) {
+    return gst_caps_is_subset (gst_value_get_caps (value1),
+        gst_value_get_caps (value2));
+  } else if (type1 == GST_TYPE_ARRAY && type2 == GST_TYPE_ARRAY) {
+    return gst_value_is_subset_array_array (value1, value2);
   }
 
   /*
+   * First (superset - subset) needs to return a non-empty set, second
+   * (subset - superset) needs to give an empty set. Requiring (subset - superset)
+   * to give an empty set enforce a subset (value1) to be a proper/strict
+   * subset of the superset (value2).
+   *
+   * Example with range:
+   * subset = [1, 2]
+   * superset = 1
    * 1 - [1,2] = empty
    * -> !subset
    *
+   * Example with range:
+   * subset = 1
+   * superset = [1, 2]
    * [1,2] - 1 = 2
-   *  -> 1 - [1,2] = empty
+   *  and 1 - [1,2] = empty
    *  -> subset
    *
+   * Example with range:
+   * subset = [1, 2]
+   * superset = [1, 3]
    * [1,3] - [1,2] = 3
-   * -> [1,2] - [1,3] = empty
-   * -> subset
+   *  and [1,2] - [1,3] = empty
+   *  -> subset
    *
-   * {1,2} - {1,3} = 2
-   * -> {1,3} - {1,2} = 3
-   * -> !subset
+   * Example  with list:
+   * subset: {1, 3}
+   * superset: {1, 2}
+   * {1,2} - {1,3} = empty
+   *  and {1,3} - {1,2} = 3
+   *  -> !subset
    *
-   *  First caps subtraction needs to return a non-empty set, second
-   *  subtractions needs to give en empty set.
    *  Both substractions are switched below, as it's faster that way.
    */
   if (!gst_value_subtract (NULL, value1, value2)) {
@@ -4736,13 +4828,14 @@ gst_value_union_flagset_flagset (GValue * dest, const GValue * src1,
 
 /* iterating over the result taking the union with the other structure's value */
 static gboolean
-structure_field_union_into (GQuark field_id, GValue * val, gpointer user_data)
+structure_field_union_into (const GstIdStr * field, GValue * val,
+    gpointer user_data)
 {
   GstStructure *other = user_data;
   const GValue *other_value;
   GValue res_value = G_VALUE_INIT;
 
-  other_value = gst_structure_id_get_value (other, field_id);
+  other_value = gst_structure_id_str_get_value (other, field);
   /* no value in the other struct, just keep this value */
   if (!other_value)
     return TRUE;
@@ -4757,15 +4850,15 @@ structure_field_union_into (GQuark field_id, GValue * val, gpointer user_data)
 
 /* iterating over the other source structure adding missing values */
 static gboolean
-structure_field_union_from (GQuark field_id, const GValue * other_val,
+structure_field_union_from (const GstIdStr * field, const GValue * other_val,
     gpointer user_data)
 {
   GstStructure *result = user_data;
   const GValue *result_value;
 
-  result_value = gst_structure_id_get_value (result, field_id);
+  result_value = gst_structure_id_str_get_value (result, field);
   if (!result_value)
-    gst_structure_id_set_value (result, field_id, other_val);
+    gst_structure_id_str_set_value (result, field, other_val);
 
   return TRUE;
 }
@@ -4792,12 +4885,13 @@ gst_value_union_structure_structure (GValue * dest, const GValue * src1,
 
   result = gst_structure_copy (s1);
   ret =
-      gst_structure_map_in_place (result, structure_field_union_into,
+      gst_structure_map_in_place_id_str (result, structure_field_union_into,
       (gpointer) s2);
   if (!ret)
     goto out;
   ret =
-      gst_structure_foreach (s2, structure_field_union_from, (gpointer) result);
+      gst_structure_foreach_id_str (s2, structure_field_union_from,
+      (gpointer) result);
 
   if (ret) {
     g_value_init (dest, GST_TYPE_STRUCTURE);
@@ -5863,6 +5957,94 @@ gst_value_subtract_list (GValue * dest, const GValue * minuend,
   return TRUE;
 }
 
+/*
+ * This function is used to handle subtraction cases where the minuend is a
+ * GST_TYPE_ARRAY. The implementation is limited to subtrahends of fixed types.
+ *
+ * NOTE: Current use case is gst_value_is_subset () where only one of the
+ *  GValue is a GST_TYPE_ARRAY. For these use cases gst_value_is_subset ()
+ *  uses subtractions to evaluate if a value is a subset of another value.
+ */
+static gboolean
+gst_value_subtract_from_array (GValue * dest,
+    const GValue * minuend, const GValue * subtrahend)
+{
+  GstValueList *m = VALUE_LIST_ARRAY (minuend);
+  gint it;
+  gint consumed = FALSE;
+  gboolean dest_init = FALSE;
+  GType stype = G_VALUE_TYPE (subtrahend);
+
+  if (stype != GST_TYPE_ARRAY && gst_type_is_fixed (stype)) {
+    for (it = 0; it < m->len; it++) {
+      const GValue *child = &m->fields[it];
+
+      if (G_VALUE_TYPE (child) == stype) {
+        if (!consumed && gst_value_compare (subtrahend, child) ==
+            GST_VALUE_EQUAL) {
+          consumed = TRUE;
+          continue;
+        } else if (dest) {
+          if (!dest_init) {
+            g_value_init (dest, G_TYPE_ARRAY);
+            dest_init = TRUE;
+          }
+          gst_value_array_append_value (dest, child);
+        }
+      }
+    }
+
+    if (consumed && m->len == 1) {
+      if (dest_init)
+        g_value_unset (dest);
+      return FALSE;
+    }
+
+  } else {
+    g_warning ("not implemented");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/*
+ * This function is used to handle subtraction cases where the subtrahend is a
+ * GST_TYPE_ARRAY. The implementation is limited to minuends of fixed types.
+ *
+ * NOTE: Current use case is gst_value_is_subset () where only one of the
+ *  GValue is a GST_TYPE_ARRAY. For these use cases gst_value_is_subset ()
+ *  uses subtractions to evaluate if a value is a subset of another value.
+ */
+static gboolean
+gst_value_subtract_array (GValue * dest, const GValue * minuend,
+    const GValue * subtrahend)
+{
+  GstValueList *s = VALUE_LIST_ARRAY (subtrahend);
+  gint it;
+  GType mtype = G_VALUE_TYPE (minuend);
+
+  if (mtype != GST_TYPE_ARRAY && gst_type_is_fixed (mtype)) {
+
+    for (it = 0; it < s->len; it++) {
+      const GValue *child = &s->fields[it];
+
+      if (G_VALUE_TYPE (child) == mtype) {
+        if (gst_value_compare (minuend, child) == GST_VALUE_EQUAL)
+          return FALSE;
+      }
+    }
+
+    if (dest)
+      gst_value_init_and_copy (dest, minuend);
+  } else {
+    g_warning ("not implemented");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 static gboolean
 gst_value_subtract_fraction_fraction_range (GValue * dest,
     const GValue * minuend, const GValue * subtrahend)
@@ -6128,7 +6310,8 @@ gst_value_compare (const GValue * value1, const GValue * value2)
   value2_is_list = G_VALUE_TYPE (value2) == GST_TYPE_LIST;
 
   /* Special cases: lists and scalar values ("{ 1 }" and "1" are equal),
-     as well as lists and ranges ("{ 1, 2 }" and "[ 1, 2 ]" are equal) */
+     as well as lists and ranges ("{ 1, 2 }" and "[ 1, 2 ]" are equal).
+     Make sure to update gst_value_hash() when adding new special cases. */
   if (value1_is_list && !value2_is_list) {
     gint i, n, ret;
 
@@ -6349,6 +6532,28 @@ gst_value_can_intersect (const GValue * value1, const GValue * value2)
   return gst_value_can_compare_unchecked (value1, value2);
 }
 
+static gboolean
+gst_value_intersect_caps (GValue * dest, const GValue * value1, const GValue *
+    value2)
+{
+  gboolean empty;
+  GstCaps *icaps;
+  GstCaps *caps1 = g_value_get_boxed (value1);
+  GstCaps *caps2 = g_value_get_boxed (value2);
+  g_return_val_if_fail (caps1 != NULL, FALSE);
+  g_return_val_if_fail (caps2 != NULL, FALSE);
+
+  icaps = gst_caps_intersect (caps1, caps2);
+  empty = gst_caps_is_empty (icaps);
+
+  if (dest != NULL) {
+    g_value_init (dest, GST_TYPE_CAPS);
+    gst_value_set_caps (dest, icaps);
+  }
+  gst_caps_unref (icaps);
+  return !empty;
+}
+
 /**
  * gst_value_intersect:
  * @dest: (out caller-allocates) (transfer full) (allow-none):
@@ -6409,6 +6614,8 @@ gst_value_intersect (GValue * dest, const GValue * value1,
       return gst_value_intersect_flagset_flagset (dest, value1, value2);
     if (type1 == GST_TYPE_STRUCTURE)
       return gst_value_intersect_structure_structure (dest, value1, value2);
+    if (type1 == GST_TYPE_CAPS)
+      return gst_value_intersect_caps (dest, value1, value2);
   } else {
     /* Different type comparison */
     len = gst_value_intersect_funcs->len;
@@ -6498,6 +6705,14 @@ gst_value_subtract (GValue * dest, const GValue * minuend,
     return gst_value_subtract_from_list (dest, minuend, subtrahend);
   if (stype == GST_TYPE_LIST)
     return gst_value_subtract_list (dest, minuend, subtrahend);
+
+  if (mtype == GST_TYPE_ARRAY && stype != GST_TYPE_ARRAY &&
+      gst_type_is_fixed (stype))
+    return gst_value_subtract_from_array (dest, minuend, subtrahend);
+
+  if (stype == GST_TYPE_ARRAY && mtype != GST_TYPE_ARRAY &&
+      gst_type_is_fixed (mtype))
+    return gst_value_subtract_array (dest, minuend, subtrahend);
 
   len = gst_value_subtract_funcs->len;
   for (i = 0; i < len; i++) {
@@ -6819,7 +7034,7 @@ gst_value_deserialize_with_pspec (GValue * dest, const gchar * src,
 }
 
 static gboolean
-structure_field_is_fixed (GQuark field_id, const GValue * val,
+structure_field_is_fixed (const GstIdStr * field, const GValue * val,
     gpointer user_data)
 {
   return gst_value_is_fixed (val);
@@ -6867,8 +7082,10 @@ gst_value_is_fixed (const GValue * value)
     /* Flagsets are only fixed if there are no 'don't care' bits */
     return (gst_value_get_flagset_mask (value) == GST_FLAG_SET_MASK_EXACT);
   } else if (GST_VALUE_HOLDS_STRUCTURE (value)) {
-    return gst_structure_foreach (gst_value_get_structure (value),
+    return gst_structure_foreach_id_str (gst_value_get_structure (value),
         structure_field_is_fixed, NULL);
+  } else if (type == GST_TYPE_CAPS) {
+    return gst_caps_is_fixed (gst_value_get_caps (value));
   }
   return gst_type_is_fixed (type);
 }
@@ -6956,6 +7173,13 @@ gst_value_fixate (GValue * dest, const GValue * src)
     g_value_init (dest, GST_TYPE_STRUCTURE);
     gst_value_set_structure (dest, kid);
     gst_structure_free (kid);
+    return TRUE;
+  } else if (G_VALUE_TYPE (src) == GST_TYPE_CAPS) {
+    g_value_init (dest, GST_TYPE_CAPS);
+    GstCaps *caps = gst_caps_copy (gst_value_get_caps (src));
+    caps = gst_caps_fixate (caps);
+    gst_value_set_caps (dest, caps);
+    gst_caps_unref (caps);
     return TRUE;
   } else {
     return FALSE;
@@ -7486,6 +7710,7 @@ gst_value_serialize_g_date_time (const GValue * val)
 static gboolean
 gst_value_deserialize_g_date_time (GValue * dest, const gchar * s)
 {
+  GstDateTime *gst_datetime;
   GDateTime *datetime;
 
   if (!s || strcmp (s, "null") == 0) {
@@ -7493,8 +7718,13 @@ gst_value_deserialize_g_date_time (GValue * dest, const gchar * s)
   }
 
   /* The Gstreamer iso8601 parser is a bit more forgiving */
-  datetime =
-      gst_date_time_to_g_date_time (gst_date_time_new_from_iso8601_string (s));
+  gst_datetime = gst_date_time_new_from_iso8601_string (s);
+  if (gst_datetime == NULL) {
+    GST_WARNING ("Failed to deserialize date time string '%s'", s);
+    return FALSE;
+  }
+  datetime = gst_date_time_to_g_date_time (gst_datetime);
+  gst_date_time_unref (gst_datetime);
   if (datetime != NULL) {
     g_value_take_boxed (dest, datetime);
     return TRUE;
@@ -7543,12 +7773,12 @@ gst_value_deserialize_bytes (GValue * dest, const gchar * s)
   guint8 *data;
 
   if (!s) {
-    g_value_set_boxed (dest, g_bytes_new (NULL, 0));
+    g_value_take_boxed (dest, g_bytes_new (NULL, 0));
     return TRUE;
   }
 
   data = g_base64_decode (s, &len);
-  g_value_set_boxed (dest, g_bytes_new_take (data, len));
+  g_value_take_boxed (dest, g_bytes_new_take (data, len));
   return TRUE;
 }
 
@@ -8018,6 +8248,564 @@ gst_value_compare_flagset (const GValue * value1, const GValue * value2)
   return GST_VALUE_UNORDERED;
 }
 
+static gboolean
+gst_value_hash_int (const GValue * v, guint * res)
+{
+  gint i = g_value_get_int (v);
+  *res = g_int_hash ((gconstpointer) & i);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_int64 (const GValue * v, guint * res)
+{
+  gint64 i = g_value_get_int64 (v);
+  *res = g_int64_hash ((gconstpointer) & i);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_long (const GValue * v, guint * res)
+{
+  glong l = g_value_get_long (v);
+
+#if GLIB_SIZEOF_LONG == 4
+  *res = g_int_hash ((gconstpointer) & l);
+#else
+  *res = g_int64_hash ((gconstpointer) & l);
+#endif
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_uint (const GValue * v, guint * res)
+{
+  guint u = g_value_get_uint (v);
+  *res = g_int_hash ((gconstpointer) & u);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_uint64 (const GValue * v, guint * res)
+{
+  guint64 u = g_value_get_uint64 (v);
+  *res = g_int64_hash ((gconstpointer) & u);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_ulong (const GValue * v, guint * res)
+{
+  gulong u = g_value_get_ulong (v);
+  *res = g_double_hash ((gconstpointer) & u);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_uchar (const GValue * v, guint * res)
+{
+  guchar u = g_value_get_uchar (v);
+  gint i = u;
+  *res = g_int_hash ((gconstpointer) & i);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_gtype (const GValue * v, guint * res)
+{
+  GType t = g_value_get_gtype (v);
+
+#if GLIB_SIZEOF_SIZE_T == 4
+  *res = g_int_hash ((gconstpointer) & t);
+#else
+  *res = g_int64_hash ((gconstpointer) & t);
+#endif
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_double (const GValue * v, guint * res)
+{
+  gdouble d = g_value_get_double (v);
+  *res = g_double_hash ((gconstpointer) & d);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_float (const GValue * v, guint * res)
+{
+  gfloat f = g_value_get_float (v);
+  *res = g_int_hash ((gconstpointer) & f);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_string (const GValue * v, guint * res)
+{
+  const gchar *s = g_value_get_string (v);
+  *res = g_str_hash (s);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_boolean (const GValue * v, guint * res)
+{
+  gboolean b = g_value_get_boolean (v);
+  *res = b ? 1 : 0;
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_enum (const GValue * v, guint * res)
+{
+  gint e = g_value_get_enum (v);
+  *res = g_int_hash ((gconstpointer) & e);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_gflags (const GValue * v, guint * res)
+{
+  guint f = g_value_get_flags (v);
+  *res = g_int_hash ((gconstpointer) & f);
+  return TRUE;
+}
+
+/* helper to combine hash when hashing ordered container */
+static void
+combine_hash_ordered (guint * hash, guint value_hash)
+{
+  /* perform a rotating shift to account for the position in the container */
+  *hash = ((*hash << 5) | (*hash >> 27)) ^ value_hash;
+}
+
+static gboolean
+gst_value_hash_int_range (const GValue * v, guint * res)
+{
+  gint min = gst_value_get_int_range_min (v);
+  gint max = gst_value_get_int_range_max (v);
+  gint step = gst_value_get_int_range_step (v);
+  gint i;
+
+  *res = 0;
+  /* range and list are considered as equal if they contain the same elements,
+     so they should have the same hash. Lists are not ordered so do not account
+     for element position when hashing. */
+  for (i = min; i <= max; i += step) {
+    *res ^= g_int_hash ((gconstpointer) & i);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_int64_range (const GValue * v, guint * res)
+{
+  gint64 min = gst_value_get_int64_range_min (v);
+  gint64 max = gst_value_get_int64_range_max (v);
+  gint64 step = gst_value_get_int64_range_step (v);
+  gint64 i;
+
+  *res = 0;
+  for (i = min; i <= max; i += step) {
+    *res ^= g_int64_hash ((gconstpointer) & i);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_double_range (const GValue * v, guint * res)
+{
+  gdouble min = gst_value_get_double_range_min (v);
+  gdouble max = gst_value_get_double_range_max (v);
+
+  *res = g_double_hash ((gconstpointer) & min) ^ g_double_hash ((gconstpointer)
+      & max);
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_g_value_array (const GValue * v, guint * res)
+{
+  guint i = 0;
+  GValueArray *array = g_value_get_boxed (v);
+
+  *res = 0;
+  for (i = 0; i < array->n_values; i++) {
+    guint value_hash;
+    if (!gst_value_hash (&array->values[i], &value_hash))
+      return FALSE;
+    combine_hash_ordered (res, value_hash);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_hash_buffer (GstBuffer * buf, guint * res)
+{
+  GstBufferMapInfo map;
+  guint i;
+
+  *res = 0;
+
+  if (!gst_buffer_map (buf, &map, GST_MAP_READ)) {
+    return FALSE;
+  }
+
+  for (i = 0; i < map.size; i++) {
+    combine_hash_ordered (res, map.data[i]);
+  }
+
+  gst_buffer_unmap (buf, &map);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_buffer (const GValue * v, guint * res)
+{
+  GstBuffer *buf = gst_value_get_buffer (v);
+
+  /* compare_buffer() only compares the buffer content */
+  return gst_hash_buffer (buf, res);
+}
+
+static gboolean
+gst_value_hash_sample (const GValue * v, guint * res)
+{
+  GstSample *sample = gst_value_get_sample (v);
+  GstBuffer *buf = gst_sample_get_buffer (sample);
+
+  /* gst_value_compare_sample() only compares buffers */
+  return gst_hash_buffer (buf, res);
+}
+
+static gboolean
+gst_value_hash_fraction (const GValue * v, guint * res)
+{
+  gint num = gst_value_get_fraction_numerator (v);
+  gint den = gst_value_get_fraction_denominator (v);
+  gfloat div = ((gfloat) num) / ((gfloat) den);
+
+  *res = g_int_hash ((gconstpointer) & div);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_fraction_range (const GValue * v, guint * res)
+{
+  const GValue *min = gst_value_get_fraction_range_min (v);
+  const GValue *max = gst_value_get_fraction_range_max (v);
+  gint num, den;
+  gfloat div;
+
+  num = gst_value_get_fraction_numerator (min);
+  den = gst_value_get_fraction_denominator (min);
+  div = ((gfloat) num) / ((gfloat) den);
+  *res = g_int_hash ((gconstpointer) & div);
+
+  num = gst_value_get_fraction_numerator (max);
+  den = gst_value_get_fraction_denominator (max);
+  div = ((gfloat) num) / ((gfloat) den);
+  *res ^= g_int_hash ((gconstpointer) & div);
+
+  return TRUE;
+}
+
+static gboolean
+hash_structure_foreach (const GstIdStr * fieldname,
+    const GValue * value, gpointer user_data)
+{
+  gint *hash = user_data;
+  guint value_hash;
+
+  *hash ^= g_str_hash (gst_id_str_as_str (fieldname));
+  if (!gst_value_hash (value, &value_hash))
+    return FALSE;
+  *hash ^= value_hash;
+
+  return TRUE;
+}
+
+static gboolean
+gst_hash_structure (const GstStructure * s, guint * res)
+{
+  *res = g_str_hash (gst_structure_get_name (s));
+  return gst_structure_foreach_id_str (s, hash_structure_foreach, res);
+}
+
+static gboolean
+gst_value_hash_structure (const GValue * v, guint * res)
+{
+  const GstStructure *s = gst_value_get_structure (v);
+
+  return gst_hash_structure (s, res);
+}
+
+static gboolean
+gst_hash_caps_features (const GstCapsFeatures * features, guint * res)
+{
+  guint i;
+
+  if (gst_caps_features_is_any (features)) {
+    *res = g_str_hash ("ANY");
+    return TRUE;
+  } else if (gst_caps_features_get_size (features) == 0) {
+    *res = g_str_hash ("EMPTY");
+    return TRUE;
+  }
+
+  *res = 0;
+
+  for (i = 0; i < gst_caps_features_get_size (features); i++) {
+    const gchar *feature = gst_caps_features_get_nth (features, i);
+    *res ^= g_str_hash (feature);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_caps_features (const GValue * v, guint * res)
+{
+  const GstCapsFeatures *features = gst_value_get_caps_features (v);
+  return gst_hash_caps_features (features, res);
+}
+
+static gboolean
+gst_value_hash_caps (const GValue * v, guint * res)
+{
+  const GstCaps *caps = gst_value_get_caps (v);
+  guint i;
+  guint n = gst_caps_get_size (caps);
+
+  if (gst_caps_is_any (caps)) {
+    *res = g_str_hash ("ANY");
+    return TRUE;
+  } else if (n == 0) {
+    *res = g_str_hash ("EMPTY");
+    return TRUE;
+  }
+
+  *res = 0;
+  for (i = 0; i < n; i++) {
+    GstCapsFeatures *features = gst_caps_get_features (caps, i);
+    guint hash;
+
+    if (!gst_hash_structure (gst_caps_get_structure (caps, i), &hash))
+      return FALSE;
+    *res ^= hash;
+
+    if (!gst_hash_caps_features (features, &hash))
+      return FALSE;
+    *res ^= hash;
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_tag_list (const GValue * v, guint * res)
+{
+  const GstTagList *tags = g_value_get_boxed (v);
+  const GstStructure *s;
+
+  s = _gst_tag_list_structure (tags);
+  return gst_hash_structure (s, res);
+}
+
+static gboolean
+gst_value_hash_date (const GValue * v, guint * res)
+{
+  const GDate *date = g_value_get_boxed (v);
+  guint32 julian, year, month, day;
+
+  julian = g_date_get_julian (date);
+  if (julian) {
+    *res = g_int_hash ((gconstpointer) & julian);
+    return TRUE;
+  }
+
+  year = g_date_get_year (date);
+  month = g_date_get_month (date);
+  day = g_date_get_day (date);
+
+  *res = g_int_hash ((gconstpointer) & year);
+  combine_hash_ordered (res, g_int_hash ((gconstpointer) & month));
+  combine_hash_ordered (res, g_int_hash ((gconstpointer) & day));
+
+  return TRUE;
+}
+
+static gboolean
+gst_hash_g_date_time (const GDateTime * dt, guint * res)
+{
+  gint64 unix_time;
+
+  unix_time = g_date_time_to_unix ((GDateTime *) dt);
+  *res = g_int64_hash ((gconstpointer) & unix_time);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_g_date_time (const GValue * v, guint * res)
+{
+  GDateTime *dt = g_value_get_boxed (v);
+  return gst_hash_g_date_time (dt, res);
+}
+
+static gboolean
+gst_value_hash_date_time (const GValue * v, guint * res)
+{
+  GstDateTime *dt = g_value_get_boxed (v);
+  GDateTime *gdt;
+  gboolean ret_val;
+
+  gdt = gst_date_time_to_g_date_time (dt);
+  ret_val = gst_hash_g_date_time (gdt, res);
+
+  g_date_time_unref (gdt);
+  return ret_val;
+}
+
+static gboolean
+gst_value_hash_bytes (const GValue * v, guint * res)
+{
+  GBytes *bytes = g_value_get_boxed (v);
+  const guint *data;
+  gsize size, i;
+
+  *res = 0;
+  data = g_bytes_get_data (bytes, &size);
+
+  for (i = 0; i < size; i++) {
+    combine_hash_ordered (res, data[i]);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_bitmask (const GValue * v, guint * res)
+{
+  guint64 mask = gst_value_get_bitmask (v);
+  *res = g_int64_hash ((gconstpointer) & mask);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_flagset (const GValue * v, guint * res)
+{
+  guint flags = gst_value_get_flagset_flags (v);
+  guint mask = gst_value_get_flagset_mask (v);
+  guint value = flags & mask;
+  *res = g_int_hash ((gconstpointer) & value);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_segment (const GValue * v, guint * res)
+{
+  GstSegment *segment = g_value_get_boxed (v);
+
+  *res = g_int_hash ((gconstpointer) & segment->flags);
+  combine_hash_ordered (res, g_double_hash ((gconstpointer) & segment->rate));
+  combine_hash_ordered (res,
+      g_double_hash ((gconstpointer) & segment->applied_rate));
+  combine_hash_ordered (res, g_int_hash ((gconstpointer) & segment->format));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & segment->base));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & segment->offset));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & segment->start));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & segment->stop));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & segment->time));
+  combine_hash_ordered (res,
+      g_int64_hash ((gconstpointer) & segment->position));
+  combine_hash_ordered (res,
+      g_int64_hash ((gconstpointer) & segment->duration));
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_allocation_params (const GValue * v, guint * res)
+{
+  GstAllocationParams *params = g_value_get_boxed (v);
+
+  *res = g_int_hash ((gconstpointer) & params->flags);
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & params->align));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & params->prefix));
+  combine_hash_ordered (res, g_int64_hash ((gconstpointer) & params->padding));
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_object (const GValue * v, guint * res)
+{
+  GObject *obj = g_value_get_object (v);
+  *res = g_direct_hash (obj);
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_value_list (const GValue * v, guint * res)
+{
+  guint i, n;
+
+  *res = 0;
+  /* value list not ordered */
+  n = gst_value_list_get_size (v);
+  for (i = 0; i < n; i++) {
+    guint value_hash;
+
+    if (!gst_value_hash (gst_value_list_get_value (v, i), &value_hash))
+      return FALSE;
+    *res ^= value_hash;
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_value_array (const GValue * v, guint * res)
+{
+  guint i, n;
+
+  *res = 0;
+  /* value array is ordered */
+  n = gst_value_array_get_size (v);
+  for (i = 0; i < n; i++) {
+    guint value_hash;
+
+    if (!gst_value_hash (gst_value_array_get_value (v, i), &value_hash))
+      return FALSE;
+    combine_hash_ordered (res, value_hash);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_value_hash_strv (const GValue * v, guint * res)
+{
+  GStrv strv = g_value_get_boxed (v);
+  guint i, n;
+
+  *res = 0;
+
+  /* GStrv is ordered */
+  n = g_strv_length (strv);
+  for (i = 0; i < n; i++) {
+    combine_hash_ordered (res, g_str_hash (strv[i]));
+  }
+
+  return TRUE;
+}
+
 /***********************
  * GstAllocationParams *
  ***********************/
@@ -8049,16 +8837,21 @@ gst_value_transform_allocation_params_string (const GValue * value1,
 {
   GstAllocationParams *params = value1->data[0].v_pointer;
   gchar *res;
-  GstStructure *s;
 
-  s = gst_structure_new_id (GST_QUARK (ALLOCATION_PARAMS),
-      GST_QUARK (FLAGS), GST_TYPE_MEMORY_FLAGS, params->flags,
-      GST_QUARK (ALIGN), G_TYPE_UINT64, params->align,
-      GST_QUARK (PREFIX), G_TYPE_UINT64, params->prefix,
-      GST_QUARK (PADDING), G_TYPE_UINT64, params->padding, NULL);
+  if (params) {
+    GstStructure *s = NULL;
 
-  res = gst_structure_to_string (s);
-  gst_structure_free (s);
+    s = gst_structure_new_static_str ("GstAllocationParams",
+        "flags", GST_TYPE_MEMORY_FLAGS, params->flags,
+        "align", G_TYPE_UINT64, params->align,
+        "prefix", G_TYPE_UINT64, params->prefix,
+        "padding", G_TYPE_UINT64, params->padding, NULL);
+
+    res = gst_structure_to_string (s);
+    gst_structure_free (s);
+  } else {
+    res = g_strdup ("NULL");
+  }
 
   dest_value->data[0].v_pointer = res;
 }
@@ -8098,6 +8891,127 @@ gst_value_transform_object_string (const GValue * src_value,
   }
 
   dest_value->data[0].v_pointer = str;
+}
+
+/*********
+ * GStrv *
+ *********/
+
+static gchar *
+gst_value_serialize_strv (const GValue * value)
+{
+  const gchar **strv = g_value_get_boxed (value);
+  GString *str = g_string_new ("<");
+
+  while (*strv != NULL) {
+    const gchar *s = *strv;
+
+    /* Add separator if it's not the first string */
+    if (str->len > 1)
+      g_string_append_c (str, ',');
+
+    g_string_append_c (str, '\"');
+
+    /* Escape \ to \\ and " to \" */
+    while (*s != '\0') {
+      if (*s == '\"' || *s == '\\')
+        g_string_append_c (str, '\\');
+      g_string_append_c (str, *s);
+      s++;
+    }
+
+    g_string_append_c (str, '\"');
+
+    strv++;
+  }
+
+  g_string_append_c (str, '>');
+
+  return g_string_free (str, FALSE);
+}
+
+static gboolean
+_priv_gst_value_parse_strv (const gchar * s, const gchar ** after,
+    GValue * dest)
+{
+  /* Parse the format <"foo","bar"> with spaces allowed between delimiters,
+   * and \ for escaping. */
+  if (*s != '<')
+    return FALSE;
+  s++;
+
+  while (g_ascii_isspace (*s))
+    s++;
+
+  GPtrArray *strv = g_ptr_array_new_with_free_func (g_free);
+  while (*s != '>') {
+    if (*s != '\"')
+      goto error;
+    s++;
+
+    /* Find string end and check if we need to unescape it */
+    gboolean escaped = FALSE;
+    const gchar *start = s;
+    while (*s != '\"') {
+      if (*s == '\\') {
+        escaped = TRUE;
+        s++;
+      }
+      if (*s == '\0')
+        goto error;
+      s++;
+    }
+    s++;
+
+    /* Always copy the whole string and unescape inplace */
+    gchar *substr = g_strndup (start, s - start - 1);
+    if (escaped) {
+      gchar *p1 = substr;
+      const gchar *p2 = substr;
+      while (*p2 != '\0') {
+        if (*p2 == '\\')
+          p2++;
+        *p1 = *p2;
+        p1++;
+        p2++;
+      }
+      *p1 = '\0';
+    }
+
+    g_ptr_array_add (strv, substr);
+
+    while (g_ascii_isspace (*s))
+      s++;
+
+    if (*s == ',') {
+      s++;
+      while (g_ascii_isspace (*s))
+        s++;
+    }
+  }
+
+  g_ptr_array_add (strv, NULL);
+  g_value_take_boxed (dest, g_ptr_array_free (strv, FALSE));
+
+  *after = s + 1;
+
+  return TRUE;
+
+error:
+  g_ptr_array_free (strv, TRUE);
+  return FALSE;
+}
+
+static gboolean
+gst_value_deserialize_strv (GValue * dest, const gchar * s)
+{
+  /* If it's not starting with '<' assume it's a simple comma separated list
+   * with no escaping. This makes usage in gst-launch-1.0 easier. */
+  if (*s != '<') {
+    g_value_take_boxed (dest, g_strsplit (s, ",", -1));
+    return TRUE;
+  }
+  return _priv_gst_value_parse_strv (s, &s, dest);
 }
 
 static GTypeInfo _info = {
@@ -8244,14 +9158,15 @@ gst_g_thread_get_type (void)
   return G_TYPE_THREAD;
 }
 
-#define SERIAL_VTABLE(t,c,s,d) { t, c, s, d, NULL }
-#define SERIAL_VTABLE_PSPEC(t,c,s,d) { t, c, s, NULL, d }
+#define SERIAL_VTABLE(t,c,s,d,h) { t, c, s, d, NULL, h }
+#define SERIAL_VTABLE_PSPEC(t,c,s,d,h) { t, c, s, NULL, d, h }
 
 #define REGISTER_SERIALIZATION_CONST(_gtype, _type)                     \
 G_STMT_START {                                                          \
   static const GstValueTable gst_value =                                \
     SERIAL_VTABLE (_gtype, gst_value_compare_ ## _type,                 \
-    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type);    \
+    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type,     \
+    gst_value_hash_ ## _type);                                          \
   gst_value_register (&gst_value);                                      \
 } G_STMT_END
 
@@ -8259,7 +9174,8 @@ G_STMT_START {                                                          \
 G_STMT_START {                                                          \
   static GstValueTable gst_value =                                      \
     SERIAL_VTABLE (0, gst_value_compare_ ## _type,                      \
-    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type);    \
+    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type,     \
+    gst_value_hash_ ## _type);                                          \
   gst_value.type = _gtype;                                              \
   gst_value_register (&gst_value);                                      \
 } G_STMT_END
@@ -8268,7 +9184,8 @@ G_STMT_START {                                                          \
 G_STMT_START {                                                          \
   static GstValueTable gst_value =                                      \
     SERIAL_VTABLE_PSPEC (0, gst_value_compare_ ## _type,                \
-    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type);    \
+    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type,     \
+    gst_value_hash_ ## _type);                                          \
   gst_value.type = _gtype;                                              \
   gst_value_register (&gst_value);                                      \
 } G_STMT_END
@@ -8277,7 +9194,8 @@ G_STMT_START {                                                          \
 G_STMT_START {                                                          \
   static GstValueTable gst_value =                                      \
     SERIAL_VTABLE (0, NULL,                                             \
-    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type);    \
+    gst_value_serialize_ ## _type, gst_value_deserialize_ ## _type,     \
+    gst_value_hash_ ## _type);                                          \
   gst_value.type = _gtype;                                              \
   gst_value_register (&gst_value);                                      \
 } G_STMT_END
@@ -8286,7 +9204,7 @@ G_STMT_START {                                                          \
 G_STMT_START {                                                          \
   static GstValueTable gst_value =                                      \
     SERIAL_VTABLE (0, gst_value_compare_ ## _type,                      \
-        NULL, NULL);                                                    \
+        NULL, NULL, gst_value_hash_ ## _type);                                                    \
   gst_value.type = _gtype;                                              \
   gst_value_register (&gst_value);                                      \
 } G_STMT_END
@@ -8305,7 +9223,7 @@ _priv_gst_value_initialize (void)
   gst_value_table =
       g_array_sized_new (FALSE, FALSE, sizeof (GstValueTable),
       GST_VALUE_TABLE_DEFAULT_SIZE);
-  gst_value_hash = g_hash_table_new (NULL, NULL);
+  gst_value_hash_table = g_hash_table_new (NULL, NULL);
   gst_value_union_funcs = g_array_sized_new (FALSE, FALSE,
       sizeof (GstValueUnionInfo), GST_VALUE_UNION_TABLE_DEFAULT_SIZE);
   gst_value_intersect_funcs = g_array_sized_new (FALSE, FALSE,
@@ -8330,10 +9248,12 @@ _priv_gst_value_initialize (void)
   REGISTER_SERIALIZATION (gst_bitmask_get_type (), bitmask);
   REGISTER_SERIALIZATION (gst_structure_get_type (), structure);
   REGISTER_SERIALIZATION (gst_flagset_get_type (), flagset);
+  REGISTER_SERIALIZATION (G_TYPE_GTYPE, gtype);
 
   REGISTER_SERIALIZATION_NO_COMPARE (gst_segment_get_type (), segment);
   REGISTER_SERIALIZATION_NO_COMPARE (gst_caps_features_get_type (),
       caps_features);
+  REGISTER_SERIALIZATION_NO_COMPARE (G_TYPE_STRV, strv);
 
   REGISTER_SERIALIZATION_COMPARE_ONLY (gst_allocation_params_get_type (),
       allocation_params);
@@ -8341,25 +9261,17 @@ _priv_gst_value_initialize (void)
 
   REGISTER_SERIALIZATION_CONST (G_TYPE_DOUBLE, double);
   REGISTER_SERIALIZATION_CONST (G_TYPE_FLOAT, float);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_STRING, string);
   REGISTER_SERIALIZATION_CONST (G_TYPE_BOOLEAN, boolean);
   REGISTER_SERIALIZATION_CONST (G_TYPE_ENUM, enum);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_FLAGS, gflags);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_INT, int);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_INT64, int64);
   REGISTER_SERIALIZATION_CONST (G_TYPE_LONG, long);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_UINT, uint);
   REGISTER_SERIALIZATION_CONST (G_TYPE_UINT64, uint64);
   REGISTER_SERIALIZATION_CONST (G_TYPE_ULONG, ulong);
-
   REGISTER_SERIALIZATION_CONST (G_TYPE_UCHAR, uchar);
-
-  REGISTER_SERIALIZATION (G_TYPE_GTYPE, gtype);
 
   REGISTER_SERIALIZATION_WITH_PSPEC (gst_value_list_get_type (), value_list);
   REGISTER_SERIALIZATION_WITH_PSPEC (gst_value_array_get_type (), value_array);
@@ -8541,4 +9453,59 @@ gst_flagset_register (GType flags_type)
   g_free (class_name);
 
   return t;
+}
+
+/**
+ * gst_value_hash:
+ * @value: a #GValue to hash
+ * @res: (out): a location to store the hash value
+ *
+ * Compute a hash value of @value.
+ * #GValue considered as equals by gst_value_compare() will have the same hash value.
+ *
+ * Returns: %TRUE, or %FALSE if @value cannot be hashed.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_value_hash (const GValue * value, guint * res)
+{
+  GType type;
+  GstValueTable *table;
+
+  g_return_val_if_fail (res, FALSE);
+  *res = 0;
+
+  type = G_VALUE_TYPE (value);
+
+  table = gst_value_hash_lookup_type (type);
+
+  if (G_LIKELY (table && table->hash)) {
+    if (type == GST_TYPE_LIST && gst_value_list_get_size (value) == 1) {
+      /* { 1 } and 1 are considered as equals so hash the single element contained in the list */
+      const GValue *v = gst_value_list_get_value (value, 0);
+      return gst_value_hash (v, res);
+    } else if (type == GST_TYPE_INT_RANGE || type == GST_TYPE_INT64_RANGE) {
+      /* hash the list type as list and ranges of the same values are considered as equals */
+      type = GST_TYPE_LIST;
+    }
+    guint hash;
+
+    *res = g_int_hash ((gconstpointer) & type);
+    if (!table->hash (value, &hash))
+      return FALSE;
+    *res ^= hash;
+    return TRUE;
+  } else {
+    /* custom enums and flags are not registered through gst_value_register() and so don't have a table entry */
+    if G_VALUE_HOLDS_ENUM
+      (value) {
+      return gst_value_hash_enum (value, res);
+    } else if G_VALUE_HOLDS_FLAGS
+      (value) {
+      return gst_value_hash_gflags (value, res);
+      }
+  }
+
+  return FALSE;
 }

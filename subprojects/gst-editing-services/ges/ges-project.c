@@ -167,6 +167,9 @@ ges_project_add_formatter (GESProject * project, GESFormatter * formatter)
 {
   GESProjectPrivate *priv = GES_PROJECT (project)->priv;
 
+  g_return_if_fail (GES_IS_PROJECT (project));
+  g_return_if_fail (GES_IS_FORMATTER (formatter));
+
   ges_formatter_set_project (formatter, project);
   GES_PROJECT_LOCK (project);
   priv->formatters = g_list_append (priv->formatters, formatter);
@@ -510,6 +513,7 @@ _set_property (GESProject * project, guint property_id,
 {
   switch (property_id) {
     case PROP_URI:
+      /* G_PARAM_CONSTRUCT_ONLY */
       GES_PROJECT_LOCK (project);
       project->priv->uri = g_value_dup_string (value);
       GES_PROJECT_UNLOCK (project);
@@ -537,7 +541,8 @@ ges_project_class_init (GESProjectClass * klass)
    * The location of the project to use.
    */
   _properties[PROP_URI] = g_param_spec_string ("uri", "URI",
-      "uri of the project", NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+      "uri of the project", NULL,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, PROP_LAST, _properties);
 
@@ -799,6 +804,7 @@ new_asset_cb (GESAsset * source, GAsyncResult * res, GESProject * project)
 /**
  * ges_project_set_loaded:
  * @project: The #GESProject from which to emit the "project-loaded" signal
+ * @formatter: The #GESFormatter that loaded the project
  *
  * Emits the "loaded" signal. This method should be called by sublasses when
  * the project is fully loaded.
@@ -809,6 +815,10 @@ gboolean
 ges_project_set_loaded (GESProject * project, GESFormatter * formatter,
     GError * error)
 {
+  g_return_val_if_fail (GES_IS_PROJECT (project), FALSE);
+  g_return_val_if_fail (GES_IS_FORMATTER (formatter), FALSE);
+  g_return_val_if_fail (formatter->timeline, FALSE);
+
   if (error) {
     GST_ERROR_OBJECT (project, "Emit project error-loading %s", error->message);
     g_signal_emit (project, _signals[ERROR_LOADING], 0, formatter->timeline,
@@ -1027,6 +1037,7 @@ ges_project_add_asset (GESProject * project, GESAsset * asset)
 {
   gchar *internal_id;
   g_return_val_if_fail (GES_IS_PROJECT (project), FALSE);
+  g_return_val_if_fail (GES_IS_ASSET (asset), FALSE);
 
   GES_PROJECT_LOCK (project);
   internal_id = ges_project_internal_asset_id (asset);
@@ -1064,6 +1075,7 @@ ges_project_remove_asset (GESProject * project, GESAsset * asset)
   gchar *internal_id;
 
   g_return_val_if_fail (GES_IS_PROJECT (project), FALSE);
+  g_return_val_if_fail (GES_IS_ASSET (asset), FALSE);
 
   internal_id = ges_project_internal_asset_id (asset);
   GES_PROJECT_LOCK (project);
@@ -1293,11 +1305,17 @@ ges_project_load (GESProject * project, GESTimeline * timeline, GError ** error)
   g_return_val_if_fail (project->priv->uri, FALSE);
   g_return_val_if_fail (timeline->tracks == NULL, FALSE);
 
-  if (!_load_project (project, timeline, error))
-    return FALSE;
+  GESProject *previous = gst_object_ref (ges_timeline_get_project (timeline));
 
   ges_extractable_set_asset (GES_EXTRACTABLE (timeline), GES_ASSET (project));
+  if (!_load_project (project, timeline, error)) {
+    ges_extractable_set_asset (GES_EXTRACTABLE (timeline),
+        GES_ASSET (previous));
+    gst_object_unref (previous);
 
+    return FALSE;
+  }
+  gst_object_unref (previous);
   return TRUE;
 }
 

@@ -62,9 +62,10 @@ G_BEGIN_DECLS
  * @D3D12_FILTER_MIN_MAG_MIP_POINT
  * @D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT
  * @D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT
+ * @D3D12_FILTER_MIN_MAG_MIP_LINEAR
  * @D3D12_FILTER_ANISOTROPIC
  *
- * Default is #D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT.
+ * Default is #D3D12_FILTER_MIN_MAG_MIP_LINEAR.
  *
  * Since: 1.26
  */
@@ -116,6 +117,78 @@ GType gst_d3d12_converter_alpha_mode_get_type (void);
 #define GST_D3D12_CONVERTER_OPT_DEST_ALPHA_MODE "GstD3D12Converter.dest-alpha-mode"
 
 /**
+ * GST_D3D12_CONVERTER_OPT_PSO_SAMPLE_DESC_COUNT:
+ *
+ * #G_TYPE_UINT, D3D12_GRAPHICS_PIPELINE_STATE_DESC.SampleDesc.Count value to use.
+ * Default is 1.
+ *
+ * Since: 1.26
+ */
+#define GST_D3D12_CONVERTER_OPT_PSO_SAMPLE_DESC_COUNT "GstD3D12Converter.pso-sample-desc-count"
+
+/**
+ * GST_D3D12_CONVERTER_OPT_PSO_SAMPLE_DESC_QUALITY:
+ *
+ * #G_TYPE_UINT, D3D12_GRAPHICS_PIPELINE_STATE_DESC.SampleDesc.Quality value to use.
+ * Default is 0.
+ *
+ * Since: 1.26
+ */
+#define GST_D3D12_CONVERTER_OPT_PSO_SAMPLE_DESC_QUALITY "GstD3D12Converter.pso-sample-desc-quality"
+
+/**
+ * GstD3D12ConverterColorBalance:
+ * @GST_D3D12_CONVERTER_COLOR_BALANCE_DISABLED: Disable color-balance feature
+ * @GST_D3D12_CONVERTER_COLOR_BALANCE_ENABLED: Enable color-balance feature
+ *
+ * Since: 1.26
+ */
+typedef enum
+{
+  GST_D3D12_CONVERTER_COLOR_BALANCE_DISABLED,
+  GST_D3D12_CONVERTER_COLOR_BALANCE_ENABLED,
+} GstD3D12ConverterColorBalance;
+
+GST_D3D12_API
+GType gst_d3d12_converter_color_balance_get_type (void);
+#define GST_TYPE_D3D12_CONVERTER_COLOR_BALANCE (gst_d3d12_converter_color_balance_get_type())
+
+/**
+ * GST_D3D12_CONVERTER_OPT_COLOR_BALANCE:
+ *
+ * #GstD3D12ConverterColorBalance, an option to enable color-balance feature
+ *
+ * Since: 1.26
+ */
+#define GST_D3D12_CONVERTER_OPT_COLOR_BALANCE "GstD3D12Converter.color-balance"
+
+/**
+ * GstD3D12ConverterMipGen:
+ * @GST_D3D12_CONVERTER_MIP_GEN_DISABLED: Disable mipmap generating feature
+ * @GST_D3D12_CONVERTER_MIP_GEN_ENABLED: Enable mipmap generating feature
+ *
+ * Since: 1.26
+ */
+typedef enum
+{
+  GST_D3D12_CONVERTER_MIP_GEN_DISABLED,
+  GST_D3D12_CONVERTER_MIP_GEN_ENABLED,
+} GstD3D12ConverterMipGen;
+
+GST_D3D12_API
+GType gst_d3d12_converter_mip_gen_get_type (void);
+#define GST_TYPE_D3D12_CONVERTER_MIP_GEN (gst_d3d12_converter_mip_gen_get_type())
+
+/**
+ * GST_D3D12_CONVERTER_OPT_MIP_GEN:
+ *
+ * #GstD3D12ConverterMipGen, an option to enable mipmap genarating feature
+ *
+ * Since: 1.26
+ */
+#define GST_D3D12_CONVERTER_OPT_MIP_GEN "GstD3D12Converter.mip-gen"
+
+/**
  * GstD3D12Converter:
  *
  * Opaque GstD3D12Converter struct
@@ -153,6 +226,7 @@ GType               gst_d3d12_converter_get_type (void);
 
 GST_D3D12_API
 GstD3D12Converter * gst_d3d12_converter_new  (GstD3D12Device * device,
+                                              GstD3D12CmdQueue * queue,
                                               const GstVideoInfo * in_info,
                                               const GstVideoInfo * out_info,
                                               const D3D12_BLEND_DESC * blend_desc,
@@ -165,7 +239,7 @@ gboolean            gst_d3d12_converter_convert_buffer (GstD3D12Converter * conv
                                                         GstBuffer * out_buf,
                                                         GstD3D12FenceData * fence_data,
                                                         ID3D12GraphicsCommandList * command_list,
-                                                        ID3D12CommandQueue * queue);
+                                                        gboolean execute_gpu_wait);
 
 GST_D3D12_API
 gboolean            gst_d3d12_converter_update_blend_state (GstD3D12Converter * converter,

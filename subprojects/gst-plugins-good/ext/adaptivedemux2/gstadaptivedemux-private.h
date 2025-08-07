@@ -36,7 +36,6 @@
 G_BEGIN_DECLS
 
 #define NUM_LOOKBACK_FRAGMENTS 3
-#define MAX_DOWNLOAD_ERROR_COUNT 3
 
 /* Internal, so not using GST_FLOW_CUSTOM_SUCCESS_N */
 #define GST_ADAPTIVE_DEMUX_FLOW_SWITCH (GST_FLOW_CUSTOM_SUCCESS_2 + 2)
@@ -146,6 +145,12 @@ struct _GstAdaptiveDemuxPrivate
   guint32 current_selection_seqnum;
   /* Current output position (in running time) */
   GstClockTime global_output_position;
+  /* NOTE: The two following variables are to handle lost-sync internal flushing
+   * and transposing the base time */
+  /* Initial output position (in running time) */
+  GstClockTime initial_output_position;
+  /* Offset to apply to outgoing segments (in running time) */
+  GstClockTime base_offset;
   /* End of fields protected by output_lock */
 
   gint n_audio_streams, n_video_streams, n_subtitle_streams;
@@ -158,6 +163,14 @@ struct _GstAdaptiveDemuxPrivate
    * Head is the period being outputted, or to be outputted first
    * Tail is where new streams get added */
   GQueue *periods;
+
+  /* The maximum number of times HTTP request can be required before considering
+   * failed */
+  gint max_retries;
+  /* The backoff factor and max for the HTTP request retries */
+  gdouble retry_backoff_factor;
+  gdouble retry_backoff_max;
+
 };
 
 static inline gboolean gst_adaptive_demux_scheduler_lock(GstAdaptiveDemux *d)

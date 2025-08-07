@@ -32,6 +32,8 @@
  * @title: GstWebRTC Enumerations
  */
 
+G_BEGIN_DECLS
+
 #ifndef GST_WEBRTC_API
 # ifdef BUILDING_GST_WEBRTC
 #  define GST_WEBRTC_API GST_API_EXPORT         /* from config.h */
@@ -54,8 +56,6 @@
 #define GST_WEBRTC_DEPRECATED_FOR(f) G_DEPRECATED_FOR(f) GST_WEBRTC_API
 #endif
 
-#include <gst/webrtc/webrtc-enumtypes.h>
-
 /**
  * GstWebRTCDTLSTransport:
  */
@@ -70,12 +70,29 @@ typedef struct _GstWebRTCDTLSTransportClass GstWebRTCDTLSTransportClass;
 typedef struct _GstWebRTCICE GstWebRTCICE;
 typedef struct _GstWebRTCICEClass GstWebRTCICEClass;
 
-/**
- * GstWebRTCICECandidateStats:
- *
- * Since: 1.22
- */
 typedef struct _GstWebRTCICECandidateStats GstWebRTCICECandidateStats;
+
+/**
+ * GstWebRTCICETcpCandidateType:
+ * @GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_ACTIVE: An "active" TCP candidate is one for which the transport
+ *                                            will attempt to open an outbound connection but will not
+ *                                            receive incoming connection requests.
+ * @GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_PASSIVE: A "passive" TCP candidate is one for which the transport
+ *                                             will receive incoming connection attempts but not attempt
+ *                                             a connection.
+ * @GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_SO: An "so" candidate is one for which the transport will attempt
+ *                                        to open a connection simultaneously with its peer.
+ * @GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_NONE: Value used for non-TCP candidate type.
+ *
+ * Since: 1.28
+ */
+typedef enum /*< underscore_name=gst_webrtc_ice_tcp_candidate_type >*/
+{
+  GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_ACTIVE,
+  GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_PASSIVE,
+  GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_SO,
+  GST_WEBRTC_ICE_TCP_CANDIDATE_TYPE_NONE,
+} GstWebRTCICETcpCandidateType;
 
 /**
  * GstWebRTCICEStream:
@@ -148,6 +165,21 @@ typedef enum /*< underscore_name=gst_webrtc_dtls_transport_state >*/
   GST_WEBRTC_DTLS_TRANSPORT_STATE_CONNECTING,
   GST_WEBRTC_DTLS_TRANSPORT_STATE_CONNECTED,
 } GstWebRTCDTLSTransportState;
+
+/**
+ * GstWebRTCDTLSRole:
+ * @GST_WEBRTC_DTLS_ROLE_CLIENT: client
+ * @GST_WEBRTC_DTLS_ROLE_SERVER: server
+ * @GST_WEBRTC_DTLS_ROLE_UNKNOWN: unknown
+ *
+ * Since: 1.28
+ */
+typedef enum /*< underscore_name=gst_webrtc_dtls_role >*/
+{
+  GST_WEBRTC_DTLS_ROLE_CLIENT,
+  GST_WEBRTC_DTLS_ROLE_SERVER,
+  GST_WEBRTC_DTLS_ROLE_UNKNOWN
+} GstWebRTCDTLSRole;
 
 /**
  * GstWebRTCICEGatheringState:
@@ -447,7 +479,7 @@ typedef enum /*<underscore_name=gst_webrtc_ice_transport_policy>*/
  * GstWebRTCKind:
  * @GST_WEBRTC_KIND_UNKNOWN: Kind has not yet been set
  * @GST_WEBRTC_KIND_AUDIO: Kind is audio
- * @GST_WEBRTC_KIND_VIDEO: Kind is audio
+ * @GST_WEBRTC_KIND_VIDEO: Kind is video
  *
  * https://w3c.github.io/mediacapture-main/#dom-mediastreamtrack-kind
  *
@@ -515,5 +547,7 @@ typedef enum /*<underscore_name=gst_webrtc_error>*/
   GST_WEBRTC_ERROR_INVALID_MODIFICATION,
   GST_WEBRTC_ERROR_TYPE_ERROR,
 } GstWebRTCError;
+
+G_END_DECLS
 
 #endif /* __GST_WEBRTC_FWD_H__ */

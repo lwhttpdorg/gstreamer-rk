@@ -1288,7 +1288,7 @@ gst_deinterlace_update_qos (GstDeinterlace * self, gdouble proportion,
   if (G_LIKELY (timestamp != GST_CLOCK_TIME_NONE)) {
     if (G_UNLIKELY (diff > 0))
       self->earliest_time =
-          timestamp + 2 * diff + ((self->fields ==
+          timestamp + MIN (2 * diff, GST_SECOND) + ((self->fields ==
               GST_DEINTERLACE_ALL) ? self->field_duration : 2 *
           self->field_duration);
     else
@@ -2472,7 +2472,9 @@ dup_caps_with_alternate (GstCaps * caps)
   GstCapsFeatures *features;
 
   with_alternate = gst_caps_copy (caps);
-  features = gst_caps_features_new (GST_CAPS_FEATURE_FORMAT_INTERLACED, NULL);
+  features =
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_FORMAT_INTERLACED,
+      NULL);
   gst_caps_set_features_simple (with_alternate, features);
 
   gst_caps_set_simple (with_alternate, "interlace-mode", G_TYPE_STRING,
@@ -2733,6 +2735,11 @@ gst_deinterlace_do_bufferpool (GstDeinterlace * self, GstCaps * outcaps)
     /* no pool, we can make our own */
     GST_DEBUG_OBJECT (self, "no pool, making new pool");
     pool = gst_video_buffer_pool_new ();
+    {
+      gchar *name = g_strdup_printf ("%s-output-pool", GST_OBJECT_NAME (self));
+      g_object_set (pool, "name", name, NULL);
+      g_free (name);
+    }
   }
 
   /* now configure */
@@ -3170,6 +3177,11 @@ gst_deinterlace_propose_allocation (GstDeinterlace * self, GstQuery * query)
   size = GST_VIDEO_INFO_SIZE (&info);
 
   pool = gst_video_buffer_pool_new ();
+  {
+    gchar *name = g_strdup_printf ("%s-input-pool", GST_OBJECT_NAME (self));
+    g_object_set (pool, "name", name, NULL);
+    g_free (name);
+  }
 
   gst_query_add_allocation_pool (query, pool, size, 0, 0);
 
@@ -3351,6 +3363,7 @@ gst_deinterlace_src_query (GstPad * pad, GstObject * parent, GstQuery * query)
         }
         break;
       }
+      /* FALLTHROUGH */
     default:
       res = gst_pad_query_default (pad, parent, query);
       break;

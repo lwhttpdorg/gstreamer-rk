@@ -21,10 +21,27 @@
  */
 
 #include "gstonnxclient.h"
+#include <onnxruntime_cxx_api.h>
+
+#ifdef HAVE_VSI_NPU
+#include <core/providers/vsinpu/vsinpu_provider_factory.h>
+#endif
+
+#ifdef CPUPROVIDER_IN_SUBDIR
+#include <core/providers/cpu/cpu_provider_factory.h>
+#else
 #include <cpu_provider_factory.h>
+#endif
+
 #include <sstream>
 
 #define GST_CAT_DEFAULT onnx_inference_debug
+
+/* FIXME: to be replaced by ModelInfo files */
+#define GST_MODEL_OBJECT_DETECTOR_BOXES "ssd-mobilenet-v1-variant-1-out-boxes"
+#define GST_MODEL_OBJECT_DETECTOR_SCORES "ssd-mobilenet-v1-variant-1-out-scores"
+#define GST_MODEL_OBJECT_DETECTOR_NUM_DETECTIONS "generic-variant-1-out-count"
+#define GST_MODEL_OBJECT_DETECTOR_CLASSES "ssd-mobilenet-v1-variant-1-out-classes"
 
 namespace GstOnnxNamespace
 {
@@ -45,6 +62,32 @@ namespace GstOnnxNamespace
     return os;
   }
 
+const gint ONNX_TO_GST_TENSOR_DATATYPE[] = {
+  -1,                                   /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED*/
+  GST_TENSOR_DATA_TYPE_FLOAT32,         /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT*/
+  GST_TENSOR_DATA_TYPE_UINT8,           /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8*/
+  GST_TENSOR_DATA_TYPE_INT8,            /* ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8*/
+  GST_TENSOR_DATA_TYPE_UINT16,          /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16*/
+  GST_TENSOR_DATA_TYPE_INT16,           /* ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16*/
+  GST_TENSOR_DATA_TYPE_INT32,           /* ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32*/
+  GST_TENSOR_DATA_TYPE_INT64,           /* ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64*/
+  GST_TENSOR_DATA_TYPE_STRING,          /* ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING*/
+  GST_TENSOR_DATA_TYPE_BOOL,            /* ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL*/
+  GST_TENSOR_DATA_TYPE_FLOAT16,         /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16*/
+  GST_TENSOR_DATA_TYPE_FLOAT64,         /* ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE*/
+  GST_TENSOR_DATA_TYPE_UINT32,          /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32*/
+  GST_TENSOR_DATA_TYPE_UINT64,          /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64*/
+  GST_TENSOR_DATA_TYPE_COMPLEX64,       /* ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX64*/
+  GST_TENSOR_DATA_TYPE_COMPLEX128,      /* ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128*/
+  GST_TENSOR_DATA_TYPE_BFLOAT16,        /* ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16*/
+  GST_TENSOR_DATA_TYPE_FLOAT8E4M3FN,    /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E4M3FN*/
+  GST_TENSOR_DATA_TYPE_FLOAT8E4M3FNUZ,  /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E4M3FNUZ*/
+  GST_TENSOR_DATA_TYPE_FLOAT8E5M2,      /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E5M2*/
+  GST_TENSOR_DATA_TYPE_FLOAT8E5M2FNUZ,  /* ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E5M2FNUZ*/
+  GST_TENSOR_DATA_TYPE_UINT4,           /* ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT4*/
+  GST_TENSOR_DATA_TYPE_INT4,            /* ONNX_TENSOR_ELEMENT_DATA_TYPE_INT4*/
+};
+
 GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_parent),
       session (nullptr),
       width (0),
@@ -53,7 +96,7 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
       dest (nullptr),
       m_provider (GST_ONNX_EXECUTION_PROVIDER_CPU),
       inputImageFormat (GST_ML_INPUT_IMAGE_FORMAT_HWC),
-      inputDatatype (GST_TENSOR_TYPE_UINT8),
+      inputDatatype (GST_TENSOR_DATA_TYPE_UINT8),
       inputDatatypeSize (sizeof (uint8_t)),
       fixedInputImageSize (false),
       inputTensorOffset (0.0),
@@ -100,27 +143,27 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
   {
     inputDatatype = datatype;
     switch (inputDatatype) {
-      case GST_TENSOR_TYPE_UINT8:
+      case GST_TENSOR_DATA_TYPE_UINT8:
         inputDatatypeSize = sizeof (uint8_t);
         break;
-      case GST_TENSOR_TYPE_UINT16:
+      case GST_TENSOR_DATA_TYPE_UINT16:
         inputDatatypeSize = sizeof (uint16_t);
         break;
-      case GST_TENSOR_TYPE_UINT32:
+      case GST_TENSOR_DATA_TYPE_UINT32:
         inputDatatypeSize = sizeof (uint32_t);
         break;
-      case GST_TENSOR_TYPE_INT32:
+      case GST_TENSOR_DATA_TYPE_INT32:
         inputDatatypeSize = sizeof (int32_t);
         break;
-      case GST_TENSOR_TYPE_FLOAT16:
+      case GST_TENSOR_DATA_TYPE_FLOAT16:
         inputDatatypeSize = 2;
         break;
-      case GST_TENSOR_TYPE_FLOAT32:
+      case GST_TENSOR_DATA_TYPE_FLOAT32:
         inputDatatypeSize = sizeof (float);
         break;
     default:
         g_error ("Data type %d not handled", inputDatatype);
-	break;
+        break;
     };
   }
 
@@ -165,14 +208,45 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
     return session != nullptr;
   }
 
-  bool GstOnnxClient::createSession (std::string modelFile,
-      GstOnnxOptimizationLevel optim, GstOnnxExecutionProvider provider)
+  bool GstOnnxClient::setTensorDescDatatype(ONNXTensorElementDataType dt,
+                                            GstStructure *tensor_desc)
   {
+    GValue val = G_VALUE_INIT;
+    GstTensorDataType gst_dt;
+
+    g_value_init(&val, G_TYPE_STRING);
+
+    if (dt > ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED &&
+        dt <= ONNX_TENSOR_ELEMENT_DATA_TYPE_INT4) {
+      gst_dt = (GstTensorDataType)ONNX_TO_GST_TENSOR_DATATYPE [dt];
+      g_value_set_string (&val, gst_tensor_data_type_get_name(gst_dt));
+    } else {
+      GST_ERROR_OBJECT (debug_parent, "Unexpected datatype: %d", dt);
+      g_value_unset (&val);
+      return false;
+    }
+
+    gst_structure_take_value(tensor_desc, "type", &val);
+    g_value_unset(&val);
+    return true;
+  }
+
+  bool GstOnnxClient::createSession (std::string modelFile,
+      GstOnnxOptimizationLevel optim, GstOnnxExecutionProvider provider,
+                                     GstStructure * tensors)
+  {
+    OrtStatus *status;
     if (session)
       return true;
 
-    GraphOptimizationLevel onnx_optim;
-    switch (optim) {
+    try {
+      Ort::SessionOptions sessionOptions;
+      const auto & api = Ort::GetApi ();
+      // for debugging
+      //sessionOptions.SetIntraOpNumThreads (1);
+
+      GraphOptimizationLevel onnx_optim;
+      switch (optim) {
       case GST_ONNX_OPTIMIZATION_LEVEL_DISABLE_ALL:
         onnx_optim = GraphOptimizationLevel::ORT_DISABLE_ALL;
         break;
@@ -188,46 +262,66 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
       default:
         onnx_optim = GraphOptimizationLevel::ORT_ENABLE_EXTENDED;
         break;
-    };
+      };
 
-    try {
-      Ort::SessionOptions sessionOptions;
-      const auto & api = Ort::GetApi ();
-      // for debugging
-      //sessionOptions.SetIntraOpNumThreads (1);
       sessionOptions.SetGraphOptimizationLevel (onnx_optim);
+
       m_provider = provider;
       switch (m_provider) {
-        case GST_ONNX_EXECUTION_PROVIDER_CUDA:
+      case GST_ONNX_EXECUTION_PROVIDER_CUDA:
         try {
           OrtCUDAProviderOptionsV2 *cuda_options = nullptr;
           Ort::ThrowOnError (api.CreateCUDAProviderOptions (&cuda_options));
           std::unique_ptr < OrtCUDAProviderOptionsV2,
               decltype (api.ReleaseCUDAProviderOptions) >
-              rel_cuda_options (cuda_options, api.ReleaseCUDAProviderOptions);
+            rel_cuda_options (cuda_options, api.ReleaseCUDAProviderOptions);
           Ort::ThrowOnError (api.SessionOptionsAppendExecutionProvider_CUDA_V2
               (static_cast < OrtSessionOptions * >(sessionOptions),
                   rel_cuda_options.get ()));
-        }
-          catch (Ort::Exception & ortex) {
-            GST_WARNING
-                ("Failed to create CUDA provider - dropping back to CPU");
-            Ort::ThrowOnError (OrtSessionOptionsAppendExecutionProvider_CPU
-                (sessionOptions, 1));
-          }
-          break;
-        default:
+        } catch (Ort::Exception & ortex) {
+          GST_WARNING
+            ("Failed to create CUDA provider - dropping back to CPU");
           Ort::ThrowOnError (OrtSessionOptionsAppendExecutionProvider_CPU
               (sessionOptions, 1));
-          break;
-      };
-      env =
-          Ort::Env (OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING,
+        }
+        break;
+#ifdef HAVE_VSI_NPU
+      case GST_ONNX_EXECUTION_PROVIDER_VSI:
+        try {
+
+          status = OrtSessionOptionsAppendExecutionProvider_VSINPU(sessionOptions);
+          if (status != nullptr) {
+            GST_ERROR_OBJECT (debug_parent,
+                "Failed to set VSINPU AI execution provider: %s",
+                Ort::GetApi().GetErrorMessage(status));
+            return false;
+          }
+        }
+        catch (Ort::Exception & ortex) {
+          GST_ERROR_OBJECT (debug_parent,
+              "Failed to set VSINPU AI execution provider: %s", ortex.what ());
+
+          return false;
+        }
+
+        sessionOptions.DisableCpuMemArena();
+        break;
+#endif
+ 
+      default:
+        Ort::ThrowOnError (OrtSessionOptionsAppendExecutionProvider_CPU
+            (sessionOptions, 1));
+        break;
+      }
+
+      env = Ort::Env (OrtLoggingLevel::ORT_LOGGING_LEVEL_WARNING,
           "GstOnnxNamespace");
+      env.DisableTelemetryEvents();
       session = new Ort::Session (env, modelFile.c_str (), sessionOptions);
+
       auto inputTypeInfo = session->GetInputTypeInfo (0);
       std::vector < int64_t > inputDims =
-          inputTypeInfo.GetTensorTypeAndShapeInfo ().GetShape ();
+        inputTypeInfo.GetTensorTypeAndShapeInfo ().GetShape ();
       if (inputImageFormat == GST_ML_INPUT_IMAGE_FORMAT_HWC) {
         height = inputDims[1];
         width = inputDims[2];
@@ -240,23 +334,23 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
 
       fixedInputImageSize = width > 0 && height > 0;
       GST_DEBUG_OBJECT (debug_parent, "Number of Output Nodes: %d",
-          (gint) session->GetOutputCount ());
+                        (gint) session->GetOutputCount ());
 
       ONNXTensorElementDataType elementType =
-          inputTypeInfo.GetTensorTypeAndShapeInfo ().GetElementType ();
+        inputTypeInfo.GetTensorTypeAndShapeInfo ().GetElementType ();
 
       switch (elementType) {
-        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
-          setInputImageDatatype(GST_TENSOR_TYPE_UINT8);
-          break;
-        case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
-          setInputImageDatatype(GST_TENSOR_TYPE_FLOAT32);
-          break;
-        default:
-          GST_ERROR_OBJECT (debug_parent,
+      case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
+        setInputImageDatatype(GST_TENSOR_DATA_TYPE_UINT8);
+        break;
+      case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
+        setInputImageDatatype(GST_TENSOR_DATA_TYPE_FLOAT32);
+        break;
+      default:
+        GST_ERROR_OBJECT (debug_parent,
             "Only input tensors of type int8 and floatare supported");
-          return false;
-        }
+        return false;
+      }
 
       Ort::AllocatorWithDefaultOptions allocator;
       auto input_name = session->GetInputNameAllocated (0, allocator);
@@ -264,7 +358,8 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
 
       for (size_t i = 0; i < session->GetOutputCount (); ++i) {
         auto output_name = session->GetOutputNameAllocated (i, allocator);
-        GST_DEBUG_OBJECT (debug_parent, "Output name %lu:%s", i, output_name.get ());
+        GST_DEBUG_OBJECT (debug_parent, "Output name %lu:%s", i,
+            output_name.get ());
         outputNames.push_back (std::move (output_name));
       }
       genOutputNamesRaw ();
@@ -272,8 +367,8 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
       // look up tensor ids
       auto metaData = session->GetModelMetadata ();
       OrtAllocator *ortAllocator;
-      auto status =
-          Ort::GetApi ().GetAllocatorWithDefaultOptions (&ortAllocator);
+      status =
+        Ort::GetApi ().GetAllocatorWithDefaultOptions (&ortAllocator);
       if (status) {
         // Handle the error case
         const char *errorString = Ort::GetApi ().GetErrorMessage (status);
@@ -284,26 +379,92 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
 
         return false;
       }
-      for (auto & name:outputNamesRaw) {
-          Ort::AllocatedStringPtr res =
-              metaData.LookupCustomMetadataMapAllocated (name, ortAllocator);
-          if (res)
-            {
-              GQuark quark = g_quark_from_string (res.get ());
-              outputIds.push_back (quark);
-            } else {
-          GST_ERROR_OBJECT (debug_parent, "Failed to look up id for key %s", name);
 
+      size_t i = 0;
+      for (auto & name:outputNamesRaw) {
+        Ort::TypeInfo ti = session->GetOutputTypeInfo(i++);
+        auto type_shape = ti.GetTensorTypeAndShapeInfo();
+        auto card = type_shape.GetDimensionsCount();
+        auto type = type_shape.GetElementType();
+        Ort::AllocatedStringPtr res =
+          metaData.LookupCustomMetadataMapAllocated (name, ortAllocator);
+
+        if (res) {
+          GQuark quark = g_quark_from_string (res.get ());
+          outputIds.push_back (quark);
+        } else if (g_str_has_prefix (name, "scores")) {
+          GQuark quark = g_quark_from_static_string (GST_MODEL_OBJECT_DETECTOR_SCORES);
+          GST_INFO_OBJECT(debug_parent,
+              "No custom metadata for key '%s', assuming %s",
+              name, GST_MODEL_OBJECT_DETECTOR_SCORES);
+          outputIds.push_back (quark);
+        } else if (g_str_has_prefix(name, "boxes")) {
+          GQuark quark = g_quark_from_static_string (GST_MODEL_OBJECT_DETECTOR_BOXES);
+          GST_INFO_OBJECT(debug_parent,
+              "No custom metadata for key '%s', assuming %s",
+              name, GST_MODEL_OBJECT_DETECTOR_BOXES);
+          outputIds.push_back (quark);
+        } else if (g_str_has_prefix(name, "detection_classes")) {
+          GQuark quark = g_quark_from_static_string (GST_MODEL_OBJECT_DETECTOR_CLASSES);
+          GST_INFO_OBJECT(debug_parent,
+              "No custom metadata for key '%s', assuming %s",
+              name, GST_MODEL_OBJECT_DETECTOR_CLASSES);
+          outputIds.push_back (quark);
+        } else if (g_str_has_prefix(name, "num_detections")) {
+          GQuark quark = g_quark_from_static_string (GST_MODEL_OBJECT_DETECTOR_NUM_DETECTIONS);
+          GST_INFO_OBJECT(debug_parent,
+              "No custom metadata for key '%s', assuming %s",
+              name, GST_MODEL_OBJECT_DETECTOR_NUM_DETECTIONS);
+          outputIds.push_back (quark);
+        } else {
+          GST_ERROR_OBJECT (debug_parent, "Failed to look up id for key %s", name);
           return false;
         }
+
+        GST_DEBUG_OBJECT (debug_parent, "Tensor %zu (%s) has id \"%s\"", i, name,
+			  g_quark_to_string (outputIds.back ()));
+
+        /* tensor description */
+        GstStructure *tensor_desc = gst_structure_new_empty("tensor/strided");
+
+        /* Setting dims */
+        GValue val_dims = G_VALUE_INIT, val = G_VALUE_INIT;
+        gst_value_array_init(&val_dims, card);
+        g_value_init(&val, G_TYPE_INT);
+
+        for (auto &dim : type_shape.GetShape()) {
+          g_value_set_int(&val, dim > 0 ? dim : 0);
+          gst_value_array_append_value(&val_dims, &val);
+        }
+        gst_structure_take_value(tensor_desc, "dims", &val_dims);
+        g_value_unset(&val_dims);
+        g_value_unset(&val);
+
+        /* Setting datatype */
+        if (!setTensorDescDatatype(type, tensor_desc))
+          return false;
+
+        /* Setting tensors caps */
+        gst_structure_set(tensors, res.get(), GST_TYPE_CAPS,
+                          gst_caps_new_full(tensor_desc, NULL), NULL);
       }
-    }
-    catch (Ort::Exception & ortex) {
+
+    } catch (Ort::Exception & ortex) {
       GST_ERROR_OBJECT (debug_parent, "%s", ortex.what ());
       return false;
     }
 
+
     return true;
+  }
+
+  void GstOnnxClient::destroySession (void)
+  {
+    if (session == NULL)
+      return;
+
+    delete session;
+    session = NULL;
   }
 
   void GstOnnxClient::parseDimensions (GstVideoInfo vinfo)
@@ -323,16 +484,15 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
     height = newHeight;
   }
 
-// copy tensor data to a GstTensorMeta
-  GstTensorMeta *GstOnnxClient::copy_tensors_to_meta (std::vector < Ort::Value >
+  // copy tensor data to a GstTensorMeta
+  GstTensorMeta *
+  GstOnnxClient::copy_tensors_to_meta (std::vector < Ort::Value >
       &outputs, GstBuffer * buffer)
   {
     size_t num_tensors = outputNamesRaw.size ();
-    GstTensorMeta *tmeta = (GstTensorMeta *) gst_buffer_add_meta (buffer,
-        gst_tensor_meta_get_info (),
-        NULL);
+    GstTensorMeta *tmeta = gst_buffer_add_tensor_meta (buffer);
     tmeta->num_tensors = num_tensors;
-    tmeta->tensor = (GstTensor *) g_malloc (num_tensors * sizeof (GstTensor));
+    tmeta->tensors = g_new (GstTensor *, num_tensors);
     bool hasIds = outputIds.size () == num_tensors;
     for (size_t i = 0; i < num_tensors; i++) {
       Ort::Value outputTensor = std::move (outputs[i]);
@@ -340,14 +500,15 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
       ONNXTensorElementDataType tensorType =
           outputTensor.GetTensorTypeAndShapeInfo ().GetElementType ();
 
-      GstTensor *tensor = &tmeta->tensor[i];
+      auto tensorShape = outputTensor.GetTensorTypeAndShapeInfo ().GetShape ();
+      GstTensor *tensor = gst_tensor_alloc (tensorShape.size ());
+      tmeta->tensors[i] = tensor;
+
       if (hasIds)
         tensor->id = outputIds[i];
       else
-	tensor->id = 0;
-      auto tensorShape = outputTensor.GetTensorTypeAndShapeInfo ().GetShape ();
+        tensor->id = 0;
       tensor->num_dims = tensorShape.size ();
-      tensor->dims = g_new (int64_t, tensor->num_dims);
 
       for (size_t j = 0; j < tensorShape.size (); ++j)
         tensor->dims[j] = tensorShape[j];
@@ -356,25 +517,26 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
           outputTensor.GetTensorTypeAndShapeInfo ().GetElementCount ();
 
       if (tensorType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
-	size_t buffer_size = 0;
+        size_t buffer_size = 0;
 
         buffer_size = numElements * sizeof (float);
-	tensor->data = gst_buffer_new_allocate (NULL, buffer_size, NULL);
-	gst_buffer_fill (tensor->data, 0, outputTensor.GetTensorData < float >(),
+        tensor->data = gst_buffer_new_allocate (NULL, buffer_size, NULL);
+        gst_buffer_fill (tensor->data, 0, outputTensor.GetTensorData < float >(),
             buffer_size);
-        tensor->data_type = GST_TENSOR_TYPE_FLOAT32;
+        tensor->data_type = GST_TENSOR_DATA_TYPE_FLOAT32;
       } else if (tensorType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
-	size_t buffer_size = 0;
+        size_t buffer_size = 0;
 
         buffer_size = numElements * sizeof (int);
-	tensor->data = gst_buffer_new_allocate (NULL, buffer_size, NULL);
-	gst_buffer_fill (tensor->data, 0, outputTensor.GetTensorData < float >(),
+        tensor->data = gst_buffer_new_allocate (NULL, buffer_size, NULL);
+        gst_buffer_fill (tensor->data, 0, outputTensor.GetTensorData < float >(),
             buffer_size);
-        tensor->data_type = GST_TENSOR_TYPE_INT32;
+        tensor->data_type = GST_TENSOR_DATA_TYPE_INT32;
       } else {
-	GST_ERROR_OBJECT (debug_parent, "Output tensor is not FLOAT32 or INT32, not supported");
-	gst_buffer_remove_meta (buffer, (GstMeta*) tmeta);
-	return NULL;
+        GST_ERROR_OBJECT (debug_parent,
+            "Output tensor is not FLOAT32 or INT32, not supported");
+        gst_buffer_remove_meta (buffer, (GstMeta *) tmeta);
+        return NULL;
       }
     }
 
@@ -383,7 +545,8 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
   }
 
   std::vector < Ort::Value > GstOnnxClient::run (uint8_t * img_data,
-      GstVideoInfo vinfo) {
+      GstVideoInfo vinfo)
+  {
     std::vector < Ort::Value > modelOutput;
     doRun (img_data, vinfo, modelOutput);
 
@@ -412,7 +575,7 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
 
     std::ostringstream buffer;
     buffer << inputDims;
-    GST_DEBUG_OBJECT (debug_parent, "Input dimensions: %s", buffer.str ().c_str ());
+    GST_LOG_OBJECT (debug_parent, "Input dimensions: %s", buffer.str ().c_str ());
 
     // copy video frame
     uint8_t *srcPtr[3] = { img_data, img_data + 1, img_data + 2 };
@@ -456,7 +619,7 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
     std::vector < Ort::Value > inputTensors;
 
     switch (inputDatatype) {
-      case GST_TENSOR_TYPE_UINT8:
+      case GST_TENSOR_DATA_TYPE_UINT8:
         uint8_t *src_data;
         if (inputTensorOffset == 00 && inputTensorScale == 1.0) {
           src_data = img_data;
@@ -471,7 +634,7 @@ GstOnnxClient::GstOnnxClient (GstElement *debug_parent):debug_parent(debug_paren
               memoryInfo, src_data, inputTensorSize, inputDims.data (),
               inputDims.size ()));
         break;
-      case GST_TENSOR_TYPE_FLOAT32: {
+      case GST_TENSOR_DATA_TYPE_FLOAT32: {
         convert_image_remove_alpha ((float*)dest, inputImageFormat , srcPtr,
         srcSamplesPerPixel, stride, (float)inputTensorOffset, (float)
         inputTensorScale);

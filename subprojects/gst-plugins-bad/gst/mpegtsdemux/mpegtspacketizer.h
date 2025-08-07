@@ -259,6 +259,8 @@ struct _MpegTSPacketizer2 {
 
   /* clock skew calculation */
   gboolean       calculate_skew;
+  /* skew_correction: apply skew correction to values */
+  gboolean       skew_correction;
 
   /* offset/bitrate calculator */
   gboolean       calculate_offset;
@@ -309,6 +311,7 @@ typedef struct
   guint8  scram_afc_cc;
   guint8 *payload;
 
+  guint8 *m2ts_header_start;
   guint8 *data_start;
   guint8 *data_end;
   guint8 *data;

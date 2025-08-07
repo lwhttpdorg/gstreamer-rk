@@ -330,7 +330,7 @@ error:
  * @remaining will be set to the amount of bytes remaining in the read
  * range.
  *
- * Returns: The number of bytes read of 0 on error.
+ * Returns: The number of bytes read or 0 on error.
  *
  * Since: 1.4
  */
@@ -383,7 +383,14 @@ error:
           gst_sparse_file_io_error_from_errno (errno), "Error reading file: %s",
           g_strerror (errno));
     } else if (feof (file->file)) {
+      if (res == 0) {
+        g_set_error_literal (error, GST_SPARSE_FILE_IO_ERROR,
+            GST_SPARSE_FILE_IO_ERROR_FAILED, "Error reading file: EOF");
+      }
       return res;
+    } else {
+      g_set_error_literal (error, GST_SPARSE_FILE_IO_ERROR,
+          GST_SPARSE_FILE_IO_ERROR_FAILED, "Error reading file");
     }
     return 0;
   }

@@ -482,7 +482,7 @@ gst_encode_base_bin_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_PROFILE:
       gst_encode_base_bin_set_profile (ebin,
-          (GstEncodingProfile *) g_value_get_object (value));
+          (GstEncodingProfile *) g_value_dup_object (value));
       break;
     case PROP_QUEUE_BUFFERS_MAX:
       ebin->queue_buffers_max = g_value_get_uint (value);
@@ -831,8 +831,18 @@ _create_compatible_processor (GList * all_processors,
 {
   GList *processors1, *processors, *tmp;
   GstElement *processor = NULL;
-  GstElementFactory *factory = NULL;
   GstCaps *format = NULL;
+  GstCaps *encoding_format = NULL;
+  GstStructure *s;
+  const gchar *encoding_media_type;
+
+  encoding_format = gst_encoding_profile_get_format (sprof);
+  if (G_UNLIKELY (gst_caps_is_empty (encoding_format))) {
+    return NULL;
+  }
+
+  s = gst_caps_get_structure (encoding_format, 0);
+  encoding_media_type = gst_structure_get_name (s);
 
   if (encoder) {
     GstPadTemplate *template = gst_element_get_pad_template (encoder, "src");
@@ -843,7 +853,7 @@ _create_compatible_processor (GList * all_processors,
 
   if (!format || gst_caps_is_any (format)) {
     gst_clear_caps (&format);
-    format = gst_encoding_profile_get_format (sprof);
+    format = gst_caps_ref (encoding_format);
   }
 
   GST_DEBUG ("Getting list of processors for format %" GST_PTR_FORMAT, format);
@@ -864,29 +874,52 @@ _create_compatible_processor (GList * all_processors,
   }
 
   for (tmp = processors; tmp; tmp = tmp->next) {
-    /* FIXME : We're only picking the first one so far */
-    /* FIXME : signal the user if he wants this */
-    factory = (GstElementFactory *) tmp->data;
+    GstElementFactory *candidate_factory = GST_ELEMENT_FACTORY_CAST (tmp->data);
+    GstPadTemplate *tmpl;
+    GstCaps *processor_caps;
+    gboolean is_compatible = FALSE;
+
+    processor = gst_element_factory_create (candidate_factory, NULL);
+    tmpl = gst_element_get_pad_template (processor, "sink");
+    processor_caps = gst_pad_template_get_caps (tmpl);
+
+    if (gst_caps_is_any (processor_caps)) {
+      is_compatible = TRUE;
+    } else if (!gst_caps_is_empty (processor_caps)) {
+      GstStructure *structure = gst_caps_get_structure (processor_caps, 0);
+      if (!strcmp (encoding_media_type, gst_structure_get_name (structure))) {
+        is_compatible = TRUE;
+      }
+    }
+
+    gst_clear_caps (&processor_caps);
+
+    if (!is_compatible) {
+      GST_DEBUG ("Processor %" GST_PTR_FORMAT " is not compatible with format %"
+          GST_PTR_FORMAT, processor, encoding_format);
+      gst_clear_object (&processor);
+      continue;
+    }
+
+    /* FIXME : signal the user if he wants this parser */
     break;
   }
-
-  if (factory)
-    processor = gst_element_factory_create (factory, NULL);
 
   gst_plugin_feature_list_free (processors);
 
 beach:
-  if (format)
-    gst_caps_unref (format);
+  gst_clear_caps (&format);
+  gst_clear_caps (&encoding_format);
 
   return processor;
 }
 
 static gboolean
-_set_properties (GQuark property_id, const GValue * value, GObject * element)
+_set_properties (const GstIdStr * property, const GValue * value,
+    GObject * element)
 {
-  GST_DEBUG_OBJECT (element, "Setting %s", g_quark_to_string (property_id));
-  g_object_set_property (element, g_quark_to_string (property_id), value);
+  GST_DEBUG_OBJECT (element, "Setting %s", gst_id_str_as_str (property));
+  g_object_set_property (element, gst_id_str_as_str (property), value);
 
   return TRUE;
 }
@@ -905,8 +938,8 @@ set_element_properties_from_encoding_profile (GstEncodingProfile * profile,
     return;
 
   if (!gst_structure_has_name (properties, "element-properties-map")) {
-    gst_structure_foreach (properties,
-        (GstStructureForeachFunc) _set_properties, element);
+    gst_structure_foreach_id_str (properties,
+        (GstStructureForeachIdStrFunc) _set_properties, element);
     goto done;
   }
 
@@ -914,7 +947,7 @@ set_element_properties_from_encoding_profile (GstEncodingProfile * profile,
   if (!factory) {
     GST_INFO_OBJECT (profile, "No factory for underlying element, "
         "not setting properties");
-    return;
+    goto done;
   }
 
   v = gst_structure_get_value (properties, "map");
@@ -938,8 +971,8 @@ set_element_properties_from_encoding_profile (GstEncodingProfile * profile,
     GST_DEBUG_OBJECT (GST_OBJECT_PARENT (element),
         "Setting %" GST_PTR_FORMAT " on %" GST_PTR_FORMAT, tmp_properties,
         element);
-    gst_structure_foreach (tmp_properties,
-        (GstStructureForeachFunc) _set_properties, element);
+    gst_structure_foreach_id_str (tmp_properties,
+        (GstStructureForeachIdStrFunc) _set_properties, element);
     goto done;
   }
 
@@ -1100,7 +1133,7 @@ static inline GstPad *
 get_compatible_muxer_sink_pad (GstEncodeBaseBin * ebin,
     GstEncodingProfile * sprof, GstCaps * sinkcaps)
 {
-  GstPad *sinkpad;
+  GstPad *sinkpad = NULL;
   GList *padl, *compatible_templates = NULL;
 
   GST_DEBUG_OBJECT (ebin, "Finding muxer pad for caps: %" GST_PTR_FORMAT,
@@ -1489,7 +1522,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
     const gchar * sinkpadname, GstCaps * sinkcaps, gboolean * encoder_not_found)
 {
   StreamGroup *sgroup = NULL;
-  GstPad *sinkpad, *srcpad = NULL, *muxerpad = NULL;
+  GstPad *sinkpad = NULL, *srcpad = NULL, *muxerpad = NULL;
   /* Element we will link to the encoder */
   GstElement *last = NULL;
   GstElement *encoder = NULL;
@@ -1506,7 +1539,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
 
   sgroup = g_new0 (StreamGroup, 1);
   sgroup->ebin = ebin;
-  sgroup->profile = sprof;
+  sgroup->profile = gst_object_ref (sprof);
 
   /* NOTE for people reading this code:
    *
@@ -1718,7 +1751,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       gst_bin_add ((GstBin *) ebin, sgroup->smartencoder);
       srcpad = gst_element_get_static_pad (sgroup->smartencoder, "src");
       fast_pad_link (srcpad, sinkpad);
-      gst_object_unref (srcpad);
+      gst_clear_object (&srcpad);
+      gst_clear_object (&sinkpad);
       tosync = g_list_append (tosync, sgroup->smartencoder);
       sinkpad = gst_element_get_static_pad (sgroup->smartencoder, "sink");
     }
@@ -1733,9 +1767,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
   /* Go straight to splitter */
   if (G_UNLIKELY (fast_pad_link (srcpad, sinkpad) != GST_PAD_LINK_OK))
     goto passthrough_link_failure;
-  gst_object_unref (sinkpad);
-  gst_object_unref (srcpad);
-  srcpad = NULL;
+  gst_clear_object (&sinkpad);
+  gst_clear_object (&srcpad);
 
   /* Path 2 : Conversion / Encoding */
 
@@ -1753,9 +1786,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
     srcpad = gst_element_get_static_pad (sgroup->encoder, "src");
     if (G_UNLIKELY (fast_pad_link (srcpad, sinkpad) != GST_PAD_LINK_OK))
       goto encoder_link_failure;
-    gst_object_unref (sinkpad);
-    gst_object_unref (srcpad);
-    srcpad = NULL;
+    gst_clear_object (&sinkpad);
+    gst_clear_object (&srcpad);
   }
 
 
@@ -1907,6 +1939,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
   }
 
   /* Link to stream splitter */
+  gst_clear_object (&sinkpad);
+  gst_clear_object (&srcpad);
   sinkpad = gst_element_get_static_pad (last, "sink");
   srcpad =
       local_element_request_pad (sgroup->splitter, NULL, "encodingsrc", NULL);
@@ -1914,9 +1948,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
     goto no_splitter_srcpad;
   if (G_UNLIKELY (fast_pad_link (srcpad, sinkpad) != GST_PAD_LINK_OK))
     goto splitter_encoding_failure;
-  gst_object_unref (sinkpad);
-  gst_object_unref (srcpad);
-  srcpad = NULL;
+  gst_clear_object (&sinkpad);
+  gst_clear_object (&srcpad);
 
   /* End of Stream 2 setup */
 
@@ -2021,18 +2054,20 @@ cleanup:
     gst_caps_unref (format);
   if (restriction)
     gst_caps_unref (restriction);
-  if (srcpad)
-    gst_object_unref (srcpad);
+  gst_clear_object (&sinkpad);
+  gst_clear_object (&srcpad);
   stream_group_free (ebin, sgroup);
   g_list_free (tosync);
   return NULL;
 }
 
 static gboolean
-_gst_caps_match_foreach (GQuark field_id, const GValue * value, gpointer data)
+_gst_caps_match_foreach (const GstIdStr * fieldname, const GValue * value,
+    gpointer data)
 {
   GstStructure *structure = data;
-  const GValue *other_value = gst_structure_id_get_value (structure, field_id);
+  const GValue *other_value =
+      gst_structure_id_str_get_value (structure, fieldname);
 
   if (G_UNLIKELY (other_value == NULL))
     return FALSE;
@@ -2058,7 +2093,7 @@ _gst_caps_match (const GstCaps * caps_a, const GstCaps * caps_b)
     for (j = 0; j < gst_caps_get_size (caps_b); j++) {
       GstStructure *structure_b = gst_caps_get_structure (caps_b, j);
 
-      res = gst_structure_foreach (structure_a, _gst_caps_match_foreach,
+      res = gst_structure_foreach_id_str (structure_a, _gst_caps_match_foreach,
           structure_b);
       if (res)
         goto end;
@@ -2428,7 +2463,9 @@ stream_group_free (GstEncodeBaseBin * ebin, StreamGroup * sgroup)
   if (sgroup->parser) {
     gst_element_set_state (sgroup->parser, GST_STATE_NULL);
     gst_element_unlink (sgroup->parser, sgroup->outfilter);
-    gst_element_unlink (sgroup->combiner, sgroup->parser);
+    if (sgroup->combiner) {
+      gst_element_unlink (sgroup->combiner, sgroup->parser);
+    }
     gst_bin_remove ((GstBin *) ebin, sgroup->parser);
   }
 
@@ -2527,6 +2564,8 @@ stream_group_free (GstEncodeBaseBin * ebin, StreamGroup * sgroup)
   if (sgroup->outfilter)
     gst_bin_remove ((GstBin *) ebin, sgroup->outfilter);
 
+  gst_clear_object (&sgroup->profile);
+
   g_free (sgroup);
 }
 
@@ -2573,8 +2612,7 @@ gst_encode_base_bin_tear_down_profile (GstEncodeBaseBin * ebin)
   }
 
   /* free/clear profile */
-  gst_encoding_profile_unref (ebin->profile);
-  ebin->profile = NULL;
+  gst_clear_object (&ebin->profile);
 }
 
 static gboolean
@@ -2590,7 +2628,6 @@ gst_encode_base_bin_setup_profile (GstEncodeBaseBin * ebin,
       gst_encoding_profile_get_type_nick (profile));
 
   ebin->profile = profile;
-  gst_object_ref (ebin->profile);
 
   /* Create elements */
   res = create_elements_and_pads (ebin);
@@ -2611,6 +2648,7 @@ gst_encode_base_bin_set_profile (GstEncodeBaseBin * ebin,
 
   if (G_UNLIKELY (ebin->active)) {
     GST_WARNING_OBJECT (ebin, "Element already active, can't change profile");
+    gst_clear_object (&profile);
     return FALSE;
   }
 

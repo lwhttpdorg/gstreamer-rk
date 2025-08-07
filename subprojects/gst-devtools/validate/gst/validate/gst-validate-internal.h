@@ -56,6 +56,7 @@ G_GNUC_INTERNAL gchar** gst_validate_scenario_get_include_paths(const gchar* rel
 G_GNUC_INTERNAL void _priv_validate_override_registry_deinit(void);
 
 G_GNUC_INTERNAL GstValidateReportingDetails gst_validate_runner_get_default_reporting_details (GstValidateRunner *runner);
+G_GNUC_INTERNAL void gst_validate_runner_set_monitor_all_pipelines (GstValidateRunner *runner, gboolean monitor_all_pipelines);
 
 #define GST_VALIDATE_VALIDATE_TEST_SUFFIX ".validatetest"
 G_GNUC_INTERNAL GstValidateMonitor * gst_validate_get_monitor (GObject *object);
@@ -64,6 +65,7 @@ G_GNUC_INTERNAL void gst_validate_deinit_runner (void);
 G_GNUC_INTERNAL void gst_validate_report_deinit (void);
 G_GNUC_INTERNAL gboolean gst_validate_send (JsonNode * root);
 G_GNUC_INTERNAL void gst_validate_set_test_file_globals (GstStructure* meta, const gchar* testfile, gboolean use_fakesinks);
+G_GNUC_INTERNAL gboolean gst_validate_structure_file_field_is_metadata (const GstIdStr *field_id);
 G_GNUC_INTERNAL gboolean gst_validate_get_test_file_scenario (GList** structs, const gchar** scenario_name, gchar** original_name);
 G_GNUC_INTERNAL GstValidateScenario* gst_validate_scenario_from_structs (GstValidateRunner* runner, GstElement* pipeline, GList* structures,
     const gchar* origin_file);
@@ -77,6 +79,8 @@ gst_validate_pipeline_monitor_new_full (GstPipeline * pipeline,
 
 G_GNUC_INTERNAL gboolean gst_validate_extra_checks_init (void);
 G_GNUC_INTERNAL gboolean gst_validate_flow_init (void);
+G_GNUC_INTERNAL void _priv_validate_flow_deinit (void);
+
 G_GNUC_INTERNAL gboolean is_tty (void);
 
 /* MediaDescriptor structures */

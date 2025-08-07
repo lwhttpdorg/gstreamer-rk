@@ -27,6 +27,7 @@
 #include <gst/vulkan/vulkan.h>
 
 #include "gst/vulkan/gstvkdecoder-private.h"
+#include "gst/vulkan/gstvkvideoutils-private.h"
 
 static GstVulkanInstance *instance;
 static GstVulkanDevice *device;
@@ -112,7 +113,8 @@ get_output_buffer (GstVulkanDecoder * dec, VkFormat vk_format,
   GstStructure *config;
 
   gst_caps_set_features_simple (caps,
-      gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_VULKAN_IMAGE, NULL));
+      gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_VULKAN_IMAGE,
+          NULL));
 
   profile_caps = gst_vulkan_decoder_profile_caps (dec);
   fail_unless (profile_caps);
@@ -131,7 +133,7 @@ get_output_buffer (GstVulkanDecoder * dec, VkFormat vk_format,
 
   gst_vulkan_image_buffer_pool_config_set_allocation_params (config, usage,
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-      VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR, VK_ACCESS_TRANSFER_WRITE_BIT);
+      VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR, VK_ACCESS_NONE);
   gst_vulkan_image_buffer_pool_config_set_decode_caps (config, profile_caps);
 
   gst_caps_unref (profile_caps);
@@ -188,9 +190,8 @@ download_and_check_output_buffer (GstVulkanDecoder * dec, VkFormat vk_format,
       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
   gst_vulkan_operation_add_frame_barrier (exec, pic->out,
-      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, NULL);
+      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, NULL);
 
   barriers = gst_vulkan_operation_retrieve_image_barriers (exec);
   /* *INDENT-OFF* */

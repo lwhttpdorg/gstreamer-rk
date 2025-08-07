@@ -37,6 +37,10 @@
 #include <atomic>
 #include "gstnvencobject.h"
 
+#ifdef HAVE_GST_D3D12
+#include "gstcudainterop_d3d12.h"
+#endif
+
 #ifdef G_OS_WIN32
 #include <wrl.h>
 
@@ -59,7 +63,17 @@ enum
 {
   PROP_0,
   PROP_CC_INSERT,
+  PROP_EXTERN_POOL,
+  PROP_EMIT_FRAME_STATS
 };
+
+enum
+{
+  SIGNAL_FRAME_STATS,
+  LAST_SIGNAL
+};
+
+static guint gst_nv_encoder_signals[LAST_SIGNAL] = { 0 };
 
 #define DEFAULT_CC_INSERT GST_NV_ENCODER_SEI_INSERT
 
@@ -69,6 +83,15 @@ struct _GstNvEncoderPrivate
   {
     memset (&init_params, 0, sizeof (NV_ENC_INITIALIZE_PARAMS));
     memset (&config, 0, sizeof (NV_ENC_CONFIG));
+    emit_frame_stats = FALSE;
+    frame_stats = gst_structure_new ("application/x-nvenc-stats",
+        "frame-idx", G_TYPE_UINT, 0, "frame-avg-qp", G_TYPE_UINT, 0, NULL);
+  }
+
+   ~_GstNvEncoderPrivate ()
+  {
+    gst_clear_object (&extern_pool);
+    gst_structure_free (frame_stats);
   }
 
   GstCudaContext *context = nullptr;
@@ -85,6 +108,11 @@ struct _GstNvEncoderPrivate
   GstGLContext *other_gl_context = nullptr;
 
   gboolean gl_interop = FALSE;
+#endif
+
+#ifdef HAVE_GST_D3D12
+  GstD3D12Device *device_12 = nullptr;
+  GstCudaD3D12Interop *interop_12 = nullptr;
 #endif
 
   std::shared_ptr < GstNvEncObject > object;
@@ -112,8 +140,13 @@ struct _GstNvEncoderPrivate
 
   std::atomic < GstFlowReturn > last_flow;
 
+  GstVideoInfo extern_pool_info;
+
   /* properties */
   GstNvEncoderSeiInsertMode cc_insert = DEFAULT_CC_INSERT;
+  GstBufferPool *extern_pool = nullptr;
+  gboolean emit_frame_stats;
+  GstStructure *frame_stats;
 };
 
 /**
@@ -174,6 +207,50 @@ gst_nv_encoder_class_init (GstNvEncoderClass * klass)
           "Closed Caption Insert mode",
           GST_TYPE_NV_ENCODER_SEI_INSERT_MODE, DEFAULT_CC_INSERT,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  /**
+   * GstNvEncoder:extern-cuda-bufferpool:
+   *
+   * GstCudaBufferPool prepared by application. Application can pass
+   * a buffer pool instance prepared in advance, to avoid
+   * global device synchronization caused by CUDA memory allocation.
+   *
+   * The buffer pool should be configured with stream-ordered-allocation disabled
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_EXTERN_POOL,
+      g_param_spec_object ("extern-cuda-bufferpool", "Extern CUDA Buffer Pool",
+          "GstCudaBufferPool prepared by application",
+          GST_TYPE_OBJECT,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
+              GST_PARAM_MUTABLE_READY)));
+
+  /**
+   * GstNvEncoder:emit-frame-stats-signal:
+   *
+   * Whether to emit the 'frame-stats' signal for each encoded frame.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (object_class, PROP_EMIT_FRAME_STATS,
+      g_param_spec_boolean ("emit-frame-stats", "Emit Frame stats Signal",
+          "Emit the 'frame-stats' signal for each encoded frame",
+          FALSE, (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  /**
+   * GstNvEncoder::frame-stats:
+   *
+   * Emitted for each encoded frame if the 'emit-frame-stats' property is TRUE.
+   * The signal provides a #GstStructure containing per-frame statistics such as
+   * "frame-idx" (frame index) and "frame-avg-qp" (average quantization parameter).
+   *
+   * Since: 1.28
+   */
+  gst_nv_encoder_signals[SIGNAL_FRAME_STATS] =
+      g_signal_new ("frame-stats", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, 0, nullptr, nullptr, nullptr, G_TYPE_NONE, 1,
+      GST_TYPE_STRUCTURE | G_SIGNAL_TYPE_STATIC_SCOPE);
 
   element_class->set_context = GST_DEBUG_FUNCPTR (gst_nv_encoder_set_context);
 
@@ -238,6 +315,34 @@ gst_nv_encoder_set_property (GObject * object, guint prop_id,
     case PROP_CC_INSERT:
       priv->cc_insert = (GstNvEncoderSeiInsertMode) g_value_get_enum (value);
       break;
+    case PROP_EXTERN_POOL:
+      gst_clear_object (&priv->extern_pool);
+      priv->extern_pool = (GstBufferPool *) g_value_dup_object (value);
+      if (priv->extern_pool) {
+        if (!GST_IS_CUDA_BUFFER_POOL (priv->extern_pool)) {
+          GST_ERROR_OBJECT (self, "Not a CUDA buffer pool");
+          gst_clear_object (&priv->extern_pool);
+        } else if (!gst_buffer_pool_set_active (priv->extern_pool, TRUE)) {
+          GST_ERROR_OBJECT (self, "Set active failed");
+          gst_clear_object (&priv->extern_pool);
+        } else {
+          auto config = gst_buffer_pool_get_config (priv->extern_pool);
+          GstCaps *caps;
+          gst_buffer_pool_config_get_params (config,
+              &caps, nullptr, nullptr, nullptr);
+          auto is_valid = gst_video_info_from_caps (&priv->extern_pool_info,
+              caps);
+          gst_structure_free (config);
+          if (!is_valid) {
+            GST_ERROR_OBJECT (self, "Invalid buffer pool");
+            gst_clear_object (&priv->extern_pool);
+          }
+        }
+      }
+      break;
+    case PROP_EMIT_FRAME_STATS:
+      priv->emit_frame_stats = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -254,6 +359,12 @@ gst_nv_encoder_get_property (GObject * object, guint prop_id, GValue * value,
   switch (prop_id) {
     case PROP_CC_INSERT:
       g_value_set_enum (value, priv->cc_insert);
+      break;
+    case PROP_EXTERN_POOL:
+      g_value_set_object (value, priv->extern_pool);
+      break;
+    case PROP_EMIT_FRAME_STATS:
+      g_value_set_boolean (value, priv->emit_frame_stats);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -285,6 +396,10 @@ gst_nv_encoder_set_context (GstElement * element, GstContext * context)
         if (priv->gl_display)
           gst_gl_display_filter_gl_api (priv->gl_display, SUPPORTED_GL_APIS);
       }
+#endif
+#ifdef HAVE_GST_D3D12
+      gst_d3d12_handle_set_context_for_adapter_luid (element,
+          context, priv->dxgi_adapter_luid, &priv->device_12);
 #endif
       break;
     default:
@@ -472,6 +587,10 @@ gst_nv_encoder_close (GstVideoEncoder * encoder)
   gst_clear_object (&priv->gl_context);
   gst_clear_object (&priv->other_gl_context);
 #endif
+#ifdef HAVE_GST_D3D12
+  gst_clear_object (&priv->interop_12);
+  gst_clear_object (&priv->device_12);
+#endif
 
   return TRUE;
 }
@@ -609,6 +728,12 @@ gst_nv_encoder_handle_context_query (GstNvEncoder * self, GstQuery * query)
       if (ret)
         return ret;
     }
+#endif
+#ifdef HAVE_GST_D3D12
+      if (gst_d3d12_handle_context_query (GST_ELEMENT (self), query,
+              priv->device_12)) {
+        return TRUE;
+      }
 #endif
       ret = gst_cuda_handle_context_query (GST_ELEMENT (self),
           query, priv->context);
@@ -757,6 +882,10 @@ gst_nv_encoder_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
   if (use_cuda_pool && priv->stream) {
     /* Set our stream on buffer pool config so that CUstream can be shared */
     gst_buffer_pool_config_set_cuda_stream (config, priv->stream);
+
+    /* Encoder does not seem to support stream ordered allocation */
+    if (!priv->extern_pool)
+      gst_buffer_pool_config_set_cuda_stream_ordered_alloc (config, FALSE);
   }
 
   if (!gst_buffer_pool_set_config (pool, config)) {
@@ -774,43 +903,6 @@ gst_nv_encoder_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)
   gst_object_unref (pool);
 
   return TRUE;
-}
-
-static NV_ENC_PIC_STRUCT
-gst_nv_encoder_get_pic_struct (GstNvEncoder * self, GstBuffer * buffer)
-{
-  GstNvEncoderPrivate *priv = self->priv;
-  GstVideoInfo *info = &priv->input_state->info;
-
-  if (!GST_VIDEO_INFO_IS_INTERLACED (info))
-    return NV_ENC_PIC_STRUCT_FRAME;
-
-  if (GST_VIDEO_INFO_INTERLACE_MODE (info) == GST_VIDEO_INTERLACE_MODE_MIXED) {
-    if (!GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED)) {
-      return NV_ENC_PIC_STRUCT_FRAME;
-    }
-
-    if (GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_TFF))
-      return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
-
-    return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
-  }
-
-  switch (GST_VIDEO_INFO_FIELD_ORDER (info)) {
-    case GST_VIDEO_FIELD_ORDER_TOP_FIELD_FIRST:
-      return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
-      break;
-    case GST_VIDEO_FIELD_ORDER_BOTTOM_FIELD_FIRST:
-      return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
-      break;
-    default:
-      break;
-  }
-
-  if (GST_BUFFER_FLAG_IS_SET (buffer, GST_VIDEO_BUFFER_FLAG_TFF))
-    return NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM;
-
-  return NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
 }
 
 static GstVideoCodecFrame *
@@ -880,7 +972,7 @@ gst_nv_encoder_thread_func (GstNvEncoder * self)
     status = gst_nv_enc_task_lock_bitstream (task, &bitstream);
     if (status != NV_ENC_SUCCESS) {
       gst_nv_enc_task_unref (task);
-      gst_video_encoder_finish_frame (encoder, frame);
+      gst_video_encoder_release_frame (encoder, frame);
       GST_ELEMENT_ERROR (self, STREAM, ENCODE, (NULL),
           ("Failed to lock bitstream, status: %" GST_NVENC_STATUS_FORMAT,
               GST_NVENC_STATUS_ARGS (status)));
@@ -891,6 +983,7 @@ gst_nv_encoder_thread_func (GstNvEncoder * self)
     if (priv->last_flow != GST_FLOW_OK) {
       gst_nv_enc_task_unlock_bitstream (task);
       gst_nv_enc_task_unref (task);
+      gst_video_encoder_release_frame (encoder, frame);
       continue;
     }
 
@@ -913,6 +1006,14 @@ gst_nv_encoder_thread_func (GstNvEncoder * self)
 
     gst_nv_enc_task_unlock_bitstream (task);
     gst_nv_enc_task_unref (task);
+
+    if (priv->emit_frame_stats) {
+      gst_structure_set (priv->frame_stats,
+          "frame-idx", G_TYPE_UINT, bitstream.frameIdx,
+          "frame-avg-qp", G_TYPE_UINT, bitstream.frameAvgQP, NULL);
+      g_signal_emit (self, gst_nv_encoder_signals[SIGNAL_FRAME_STATS], 0,
+          priv->frame_stats);
+    }
 
     priv->last_flow = gst_video_encoder_finish_frame (encoder, frame);
     if (priv->last_flow != GST_FLOW_OK) {
@@ -1048,6 +1149,9 @@ gst_nv_encoder_create_pool (GstNvEncoder * self, GstVideoCodecState * state)
       GST_VIDEO_INFO_SIZE (&state->info), 0, 0);
   if (priv->selected_device_mode == GST_NV_ENCODER_DEVICE_CUDA && priv->stream)
     gst_buffer_pool_config_set_cuda_stream (config, priv->stream);
+
+  /* Encoder does not seem to support stream ordered allocation */
+  gst_buffer_pool_config_set_cuda_stream_ordered_alloc (config, FALSE);
 
   if (!gst_buffer_pool_set_config (pool, config)) {
     GST_ERROR_OBJECT (self, "Failed to set pool config");
@@ -1273,6 +1377,20 @@ gst_nv_encoder_set_format (GstVideoEncoder * encoder,
       priv->gl_interop = TRUE;
     } else {
       priv->gl_interop = FALSE;
+    }
+  }
+#endif
+
+#ifdef HAVE_GST_D3D12
+  {
+    auto features = gst_caps_get_features (state->caps, 0);
+    gst_clear_object (&priv->interop_12);
+    if (gst_caps_features_contains (features,
+            GST_CAPS_FEATURE_MEMORY_D3D12_MEMORY) &&
+        gst_d3d12_ensure_element_data_for_adapter_luid (GST_ELEMENT (self),
+            priv->dxgi_adapter_luid, &priv->device_12)) {
+      priv->interop_12 = gst_cuda_d3d12_interop_new (priv->context,
+          priv->device_12, &state->info, TRUE);
     }
   }
 #endif
@@ -1512,6 +1630,9 @@ gst_nv_encoder_prepare_task_input_cuda (GstNvEncoder * self,
   GstCudaStream *stream;
   GstNvEncResource *resource = nullptr;
   const GstVideoInfo *info = &priv->input_state->info;
+  gboolean sync_done = FALSE;
+  guint out_stride = 0;
+  gboolean is_extern_mem = FALSE;
 
   mem = gst_buffer_peek_memory (buffer, 0);
 
@@ -1548,6 +1669,52 @@ gst_nv_encoder_prepare_task_input_cuda (GstNvEncoder * self,
   }
 #endif
 
+#ifdef HAVE_GST_D3D12
+  if (priv->interop_12) {
+    if (gst_is_d3d12_memory (mem)) {
+      auto dmem = GST_D3D12_MEMORY_CAST (mem);
+      if (!gst_d3d12_device_is_equal (dmem->device, priv->device_12)) {
+        GST_DEBUG_OBJECT (self, "Different d3d12 device");
+        gst_clear_object (&priv->interop_12);
+      }
+    } else {
+      GST_WARNING_OBJECT (self, "Not a d3d12 buffer");
+      gst_clear_object (&priv->interop_12);
+    }
+  }
+
+  if (priv->interop_12) {
+    GstBuffer *copy = nullptr;
+    gst_buffer_pool_acquire_buffer (priv->internal_pool, &copy, nullptr);
+    if (!copy) {
+      GST_ERROR_OBJECT (self, "Couldn't acquire buffer");
+      return GST_FLOW_ERROR;
+    }
+
+    if (!gst_cuda_d3d12_interop_upload_async (priv->interop_12,
+            copy, buffer, priv->stream)) {
+      GST_WARNING_OBJECT (self, "Couldn't upload d3d12 to cuda");
+      gst_buffer_unref (copy);
+      gst_clear_object (&priv->interop_12);
+    } else {
+      mem = gst_buffer_peek_memory (copy, 0);
+
+      status = object->AcquireResource (mem, &resource);
+      if (status != NV_ENC_SUCCESS) {
+        GST_ERROR_OBJECT (self, "Failed to get resource, status %"
+            GST_NVENC_STATUS_FORMAT, GST_NVENC_STATUS_ARGS (status));
+        gst_buffer_unref (copy);
+
+        return GST_FLOW_ERROR;
+      }
+
+      gst_nv_enc_task_set_resource (task, copy, resource);
+
+      return GST_FLOW_OK;
+    }
+  }
+#endif
+
   if (!gst_is_cuda_memory (mem)) {
     GST_LOG_OBJECT (self, "Not a CUDA buffer, system copy");
     return gst_nv_encoder_copy_system (self, info, buffer, task);
@@ -1559,22 +1726,136 @@ gst_nv_encoder_prepare_task_input_cuda (GstNvEncoder * self,
     return gst_nv_encoder_copy_system (self, info, buffer, task);
   }
 
-  status = object->AcquireResource (mem, &resource);
+  out_stride = cmem->info.stride[0];
+
+  if (gst_cuda_memory_is_stream_ordered (mem)) {
+    GstBuffer *copy = nullptr;
+    GstVideoFrame in_frame;
+    CUDA_MEMCPY2D copy_params = { };
+    GstMemory *out_mem;
+    GstMapInfo out_map;
+    guint8 *out_data;
+
+    stream = gst_cuda_memory_get_stream (cmem);
+
+    GST_LOG_OBJECT (self, "Stream ordered allocation needs memory copy");
+
+    if (!gst_video_frame_map (&in_frame, info, buffer,
+            (GstMapFlags) (GST_MAP_READ | GST_MAP_CUDA))) {
+      GST_ERROR_OBJECT (self, "Couldn't map input buffer");
+      gst_buffer_unref (copy);
+      return GST_FLOW_ERROR;
+    }
+
+    if (priv->extern_pool) {
+      auto cuda_pool = GST_CUDA_BUFFER_POOL (priv->extern_pool);
+      if (cuda_pool->context == priv->context) {
+        gst_buffer_pool_acquire_buffer (priv->extern_pool, &copy, nullptr);
+        if (copy) {
+          auto copy_mem = gst_buffer_peek_memory (copy, 0);
+          if (gst_cuda_memory_is_stream_ordered (copy_mem)) {
+            GST_LOG_OBJECT (self, "External pool uses stream ordered alloc");
+            gst_clear_buffer (&copy);
+          } else if (gst_memory_get_sizes (mem, nullptr, nullptr) >
+              gst_memory_get_sizes (copy_mem, nullptr, nullptr)) {
+            GST_LOG_OBJECT (self, "Too small extern pool buffer");
+            gst_clear_buffer (&copy);
+          } else {
+            is_extern_mem = TRUE;
+          }
+        }
+      }
+    }
+
+    if (!copy)
+      gst_buffer_pool_acquire_buffer (priv->internal_pool, &copy, nullptr);
+
+    if (!copy) {
+      GST_ERROR_OBJECT (self, "Couldn't allocate internal buffer");
+      return GST_FLOW_ERROR;
+    }
+
+    out_mem = gst_buffer_peek_memory (copy, 0);
+
+    if (!gst_memory_map (out_mem,
+            &out_map, (GstMapFlags) (GST_MAP_WRITE | GST_MAP_CUDA))) {
+      GST_ERROR_OBJECT (self, "Couldn't map output buffer");
+      gst_video_frame_unmap (&in_frame);
+      gst_buffer_unref (copy);
+      return GST_FLOW_ERROR;
+    }
+
+    out_data = (guint8 *) out_map.data;
+    if (is_extern_mem)
+      out_stride = in_frame.info.stride[0];
+    else
+      out_stride = GST_CUDA_MEMORY_CAST (out_mem)->info.stride[0];
+
+    for (guint i = 0; i < GST_VIDEO_FRAME_N_PLANES (&in_frame); i++) {
+      copy_params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+      copy_params.srcDevice = (CUdeviceptr)
+          GST_VIDEO_FRAME_PLANE_DATA (&in_frame, i);
+      copy_params.srcPitch = GST_VIDEO_FRAME_PLANE_STRIDE (&in_frame, i);
+
+      copy_params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+      copy_params.dstDevice = (CUdeviceptr) out_data;
+      copy_params.dstPitch = out_stride;
+
+      copy_params.WidthInBytes = GST_VIDEO_INFO_COMP_WIDTH (info, i) *
+          GST_VIDEO_INFO_COMP_PSTRIDE (info, i);
+      copy_params.Height = GST_VIDEO_INFO_COMP_HEIGHT (info, i);
+
+      auto cuda_ret = CuMemcpy2DAsync (&copy_params,
+          gst_cuda_stream_get_handle (stream));
+      if (!gst_cuda_result (cuda_ret)) {
+        GST_ERROR_OBJECT (self, "Copy failed");
+        gst_video_frame_unmap (&in_frame);
+        gst_memory_unmap (out_mem, &out_map);
+
+        gst_buffer_unref (copy);
+        return GST_FLOW_ERROR;
+      }
+
+      out_data += GST_VIDEO_INFO_COMP_HEIGHT (info, i) * out_stride;
+    }
+
+    gst_video_frame_unmap (&in_frame);
+    gst_memory_unmap (out_mem, &out_map);
+
+    if (stream && stream != priv->stream) {
+      CuStreamSynchronize (gst_cuda_stream_get_handle (stream));
+      sync_done = TRUE;
+    }
+
+    buffer = copy;
+    mem = gst_buffer_peek_memory (copy, 0);
+    cmem = GST_CUDA_MEMORY_CAST (mem);
+  } else {
+    buffer = gst_buffer_ref (buffer);
+  }
+
+  if (is_extern_mem) {
+    status = object->AcquireResourceWithSize (mem, info->width, info->height,
+        out_stride, &resource);
+  } else {
+    status = object->AcquireResource (mem, &resource);
+  }
 
   if (status != NV_ENC_SUCCESS) {
     GST_ERROR_OBJECT (self, "Failed to get resource, status %"
         GST_NVENC_STATUS_FORMAT, GST_NVENC_STATUS_ARGS (status));
+    gst_buffer_unref (buffer);
 
     return GST_FLOW_ERROR;
   }
 
   stream = gst_cuda_memory_get_stream (cmem);
-  if (stream != priv->stream) {
+  if (stream != priv->stream && !sync_done) {
     /* different stream, needs sync */
     gst_cuda_memory_sync (cmem);
   }
 
-  gst_nv_enc_task_set_resource (task, gst_buffer_ref (buffer), resource);
+  gst_nv_enc_task_set_resource (task, buffer, resource);
 
   return GST_FLOW_OK;
 }
@@ -1904,14 +2185,14 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
   if (priv->last_flow != GST_FLOW_OK) {
     GST_INFO_OBJECT (self, "Last flow was %s",
         gst_flow_get_name (priv->last_flow));
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
 
     return priv->last_flow;
   }
 
   if (!priv->object && !gst_nv_encoder_init_session (self, in_buf)) {
     GST_ERROR_OBJECT (self, "Encoder object was not configured");
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
 
     return GST_FLOW_NOT_NEGOTIATED;
   }
@@ -1920,7 +2201,7 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
   switch (reconfig) {
     case GST_NV_ENCODER_RECONFIGURE_BITRATE:
       if (!gst_nv_encoder_reconfigure_session (self)) {
-        gst_video_encoder_finish_frame (encoder, frame);
+        gst_video_encoder_release_frame (encoder, frame);
         return GST_FLOW_NOT_NEGOTIATED;
       }
       break;
@@ -1928,7 +2209,7 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
     {
       gst_nv_encoder_drain (self, TRUE);
       if (!gst_nv_encoder_init_session (self, nullptr)) {
-        gst_video_encoder_finish_frame (encoder, frame);
+        gst_video_encoder_release_frame (encoder, frame);
         return GST_FLOW_NOT_NEGOTIATED;
       }
       break;
@@ -1947,14 +2228,16 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
   if (priv->last_flow != GST_FLOW_OK) {
     GST_INFO_OBJECT (self, "Last flow was %s",
         gst_flow_get_name (priv->last_flow));
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
+    if (task)
+      gst_nv_enc_task_unref (task);
 
     return priv->last_flow;
   }
 
   if (ret != GST_FLOW_OK) {
     GST_DEBUG_OBJECT (self, "AcquireTask returned %s", gst_flow_get_name (ret));
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
     return ret;
   }
 
@@ -1965,7 +2248,7 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
   if (ret != GST_FLOW_OK) {
     GST_ERROR_OBJECT (self, "Failed to upload frame");
     gst_nv_enc_task_unref (task);
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
 
     return ret;
   }
@@ -1976,11 +2259,15 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
         gst_nv_enc_task_get_sei_payload (task));
   }
 
-  status = priv->object->Encode (frame,
-      gst_nv_encoder_get_pic_struct (self, in_buf), task);
+  auto pic_struct = NV_ENC_PIC_STRUCT_FRAME;
+  if (klass->get_pic_struct) {
+    pic_struct = klass->get_pic_struct (self, &priv->input_state->info, in_buf);
+  }
+
+  status = priv->object->Encode (frame, pic_struct, task);
   if (status != NV_ENC_SUCCESS) {
     GST_ERROR_OBJECT (self, "Failed to encode frame");
-    gst_video_encoder_finish_frame (encoder, frame);
+    gst_video_encoder_release_frame (encoder, frame);
 
     return GST_FLOW_ERROR;
   }

@@ -718,6 +718,10 @@ gst_buffer_copy_into (GstBuffer * dest, GstBuffer * src,
               "failed to copy meta %p of API type %s", meta,
               g_type_name (info->api));
         }
+      } else {
+        GST_CAT_WARNING (GST_CAT_BUFFER,
+            "No transform function for meta %p of API type %s\n", (void *) meta,
+            g_type_name (info->api));
       }
     }
   }
@@ -1928,6 +1932,26 @@ gst_buffer_unmap (GstBuffer * buffer, GstMapInfo * info)
   _gst_buffer_map_info_clear ((GstBufferMapInfo *) info);
 }
 
+static gsize
+_find_mapping (GstBuffer * buffer, gsize * offset)
+{
+  gsize i, len;
+
+  len = GST_BUFFER_MEM_LEN (buffer);
+  for (i = 0; i < len; i++) {
+    gsize size = GST_BUFFER_MEM_PTR (buffer, i)->size;
+    if (size > *offset) {
+      /* we have enough */
+      break;
+    }
+
+    /* offset past buffer, skip */
+    *offset -= size;
+  }
+
+  return i;
+}
+
 /**
  * gst_buffer_fill:
  * @buffer: a #GstBuffer.
@@ -1957,24 +1981,22 @@ gst_buffer_fill (GstBuffer * buffer, gsize offset, gconstpointer src,
 
   len = GST_BUFFER_MEM_LEN (buffer);
   left = size;
+  i = 0;
 
-  for (i = 0; i < len && left > 0; i++) {
+  if (offset)
+    i = _find_mapping (buffer, &offset);
+
+  for (; i < len && left > 0; i++) {
     GstMapInfo info;
     gsize tocopy;
     GstMemory *mem;
 
     mem = _get_mapped (buffer, i, &info, GST_MAP_WRITE);
-    if (info.size > offset) {
-      /* we have enough */
-      tocopy = MIN (info.size - offset, left);
-      memcpy ((guint8 *) info.data + offset, ptr, tocopy);
-      left -= tocopy;
-      ptr += tocopy;
-      offset = 0;
-    } else {
-      /* offset past buffer, skip */
-      offset -= info.size;
-    }
+    tocopy = MIN (info.size - offset, left);
+    memcpy ((guint8 *) info.data + offset, ptr, tocopy);
+    left -= tocopy;
+    ptr += tocopy;
+    offset = 0;
     gst_memory_unmap (mem, &info);
   }
   return size - left;
@@ -1986,7 +2008,7 @@ gst_buffer_fill (GstBuffer * buffer, gsize offset, gconstpointer src,
  * @offset: the offset to extract
  * @dest: (out caller-allocates) (array length=size) (element-type guint8):
  *     the destination address
- * @size: the size to extract
+ * @size: (in): the size to extract
  *
  * Copies @size bytes starting from @offset in @buffer to @dest.
  *
@@ -2008,24 +2030,22 @@ gst_buffer_extract (GstBuffer * buffer, gsize offset, gpointer dest, gsize size)
 
   len = GST_BUFFER_MEM_LEN (buffer);
   left = size;
+  i = 0;
 
-  for (i = 0; i < len && left > 0; i++) {
+  if (offset)
+    i = _find_mapping (buffer, &offset);
+
+  for (; i < len && left > 0; i++) {
     GstMapInfo info;
     gsize tocopy;
     GstMemory *mem;
 
     mem = _get_mapped (buffer, i, &info, GST_MAP_READ);
-    if (info.size > offset) {
-      /* we have enough */
-      tocopy = MIN (info.size - offset, left);
-      memcpy (ptr, (guint8 *) info.data + offset, tocopy);
-      left -= tocopy;
-      ptr += tocopy;
-      offset = 0;
-    } else {
-      /* offset past buffer, skip */
-      offset -= info.size;
-    }
+    tocopy = MIN (info.size - offset, left);
+    memcpy (ptr, (guint8 *) info.data + offset, tocopy);
+    left -= tocopy;
+    ptr += tocopy;
+    offset = 0;
     gst_memory_unmap (mem, &info);
   }
   return size - left;
@@ -2061,6 +2081,10 @@ gst_buffer_memcmp (GstBuffer * buffer, gsize offset, gconstpointer mem,
     return -1;
 
   len = GST_BUFFER_MEM_LEN (buffer);
+  i = 0;
+
+  if (offset)
+    i = _find_mapping (buffer, &offset);
 
   for (i = 0; i < len && size > 0 && res == 0; i++) {
     GstMapInfo info;
@@ -2068,17 +2092,11 @@ gst_buffer_memcmp (GstBuffer * buffer, gsize offset, gconstpointer mem,
     GstMemory *mem;
 
     mem = _get_mapped (buffer, i, &info, GST_MAP_READ);
-    if (info.size > offset) {
-      /* we have enough */
-      tocmp = MIN (info.size - offset, size);
-      res = memcmp (ptr, (guint8 *) info.data + offset, tocmp);
-      size -= tocmp;
-      ptr += tocmp;
-      offset = 0;
-    } else {
-      /* offset past buffer, skip */
-      offset -= info.size;
-    }
+    tocmp = MIN (info.size - offset, size);
+    res = memcmp (ptr, (guint8 *) info.data + offset, tocmp);
+    size -= tocmp;
+    ptr += tocmp;
+    offset = 0;
     gst_memory_unmap (mem, &info);
   }
   return res;
@@ -2110,6 +2128,10 @@ gst_buffer_memset (GstBuffer * buffer, gsize offset, guint8 val, gsize size)
 
   len = GST_BUFFER_MEM_LEN (buffer);
   left = size;
+  i = 0;
+
+  if (offset)
+    i = _find_mapping (buffer, &offset);
 
   for (i = 0; i < len && left > 0; i++) {
     GstMapInfo info;
@@ -2117,16 +2139,10 @@ gst_buffer_memset (GstBuffer * buffer, gsize offset, guint8 val, gsize size)
     GstMemory *mem;
 
     mem = _get_mapped (buffer, i, &info, GST_MAP_WRITE);
-    if (info.size > offset) {
-      /* we have enough */
-      toset = MIN (info.size - offset, left);
-      memset ((guint8 *) info.data + offset, val, toset);
-      left -= toset;
-      offset = 0;
-    } else {
-      /* offset past buffer, skip */
-      offset -= info.size;
-    }
+    toset = MIN (info.size - offset, left);
+    memset ((guint8 *) info.data + offset, val, toset);
+    left -= toset;
+    offset = 0;
     gst_memory_unmap (mem, &info);
   }
   return size - left;
@@ -2490,8 +2506,8 @@ gst_buffer_iterate_meta_filtered (GstBuffer * buffer, gpointer * state,
 /**
  * gst_buffer_foreach_meta:
  * @buffer: a #GstBuffer
- * @func: (scope call): a #GstBufferForeachMetaFunc to call
- * @user_data: (closure): user data passed to @func
+ * @func: (scope call) (closure user_data): a #GstBufferForeachMetaFunc to call
+ * @user_data: user data passed to @func
  *
  * Calls @func with @user_data for each meta in @buffer.
  *
@@ -2759,6 +2775,7 @@ gst_buffer_add_reference_timestamp_meta (GstBuffer * buffer,
   meta->reference = gst_caps_ref (reference);
   meta->timestamp = timestamp;
   meta->duration = duration;
+  meta->info = NULL;
 
   return meta;
 }
@@ -2766,7 +2783,7 @@ gst_buffer_add_reference_timestamp_meta (GstBuffer * buffer,
 /**
  * gst_buffer_get_reference_timestamp_meta:
  * @buffer: a #GstBuffer
- * @reference: (allow-none): a reference #GstCaps
+ * @reference: (nullable): a reference #GstCaps
  *
  * Finds the first #GstReferenceTimestampMeta on @buffer that conforms to
  * @reference. Conformance is tested by checking if the meta's reference is a
@@ -2804,17 +2821,39 @@ static gboolean
 _gst_reference_timestamp_meta_transform (GstBuffer * dest, GstMeta * meta,
     GstBuffer * buffer, GQuark type, gpointer data)
 {
-  GstReferenceTimestampMeta *dmeta, *smeta;
+  const GstReferenceTimestampMeta *smeta, *ometa;
+  GstReferenceTimestampMeta *dmeta;
+  gpointer iter = NULL;
 
   /* we copy over the reference timestamp meta, independent of transformation
    * that happens. If it applied to the original buffer, it still applies to
    * the new buffer as it refers to the time when the media was captured */
-  smeta = (GstReferenceTimestampMeta *) meta;
+  smeta = (const GstReferenceTimestampMeta *) meta;
+
+  while ((ometa = (const GstReferenceTimestampMeta *)
+          gst_buffer_iterate_meta_filtered (dest, &iter,
+              GST_REFERENCE_TIMESTAMP_META_API_TYPE))) {
+    if (ometa->timestamp == smeta->timestamp
+        && ometa->duration == smeta->duration
+        && gst_caps_is_equal (ometa->reference, smeta->reference)
+        && ((ometa->info == NULL && smeta->info == NULL) ||
+            (ometa->info != NULL && smeta->info != NULL
+                && gst_structure_is_equal (ometa->info, smeta->info))
+        )) {
+      GST_CAT_TRACE (gst_reference_timestamp_meta_debug,
+          "Not copying reference timestamp metadata from buffer %p to %p because equal meta already exists",
+          buffer, dest);
+      return TRUE;
+    }
+  }
+
   dmeta =
       gst_buffer_add_reference_timestamp_meta (dest, smeta->reference,
       smeta->timestamp, smeta->duration);
   if (!dmeta)
     return FALSE;
+  if (smeta->info)
+    dmeta->info = gst_structure_copy (smeta->info);
 
   GST_CAT_DEBUG (gst_reference_timestamp_meta_debug,
       "copy reference timestamp metadata from buffer %p to %p", buffer, dest);
@@ -2828,6 +2867,8 @@ _gst_reference_timestamp_meta_free (GstReferenceTimestampMeta * meta,
 {
   if (meta->reference)
     gst_caps_unref (meta->reference);
+  if (meta->info)
+    gst_structure_free (meta->info);
 }
 
 static gboolean
@@ -2845,6 +2886,7 @@ _gst_reference_timestamp_meta_init (GstReferenceTimestampMeta * meta,
   meta->reference = NULL;
   meta->timestamp = GST_CLOCK_TIME_NONE;
   meta->duration = GST_CLOCK_TIME_NONE;
+  meta->info = NULL;
 
   return TRUE;
 }
@@ -2873,13 +2915,23 @@ timestamp_meta_serialize (const GstMeta * meta, GstByteArrayInterface * data,
 {
   const GstReferenceTimestampMeta *rtmeta =
       (const GstReferenceTimestampMeta *) meta;
+  gchar *info_str = rtmeta->info ? gst_structure_serialize_full (rtmeta->info,
+      GST_SERIALIZE_FLAG_STRICT) : NULL;
+  gsize info_str_len = info_str ? strlen (info_str) : 0;
+
+  if (rtmeta->info && !info_str) {
+    GST_WARNING ("Failed serializing GstReferenceTimestampMeta");
+    return FALSE;
+  }
+
   gchar *caps_str = gst_caps_to_string (rtmeta->reference);
   gsize caps_str_len = strlen (caps_str);
 
-  gsize size = 16 + caps_str_len + 1;
+  gsize size = 16 + caps_str_len + 1 + (info_str ? info_str_len + 1 : 0);
   guint8 *ptr = gst_byte_array_interface_append (data, size);
   if (ptr == NULL) {
     g_free (caps_str);
+    g_free (info_str);
     return FALSE;
   }
 
@@ -2887,6 +2939,9 @@ timestamp_meta_serialize (const GstMeta * meta, GstByteArrayInterface * data,
   GST_WRITE_UINT64_LE (ptr + 8, rtmeta->duration);
   memcpy (ptr + 16, caps_str, caps_str_len + 1);
   g_free (caps_str);
+  if (info_str)
+    memcpy (ptr + 16 + caps_str_len + 1, info_str, info_str_len + 1);
+  g_free (info_str);
 
   return TRUE;
 }
@@ -2895,19 +2950,31 @@ static GstMeta *
 timestamp_meta_deserialize (const GstMetaInfo * info, GstBuffer * buffer,
     const guint8 * data, gsize size, guint8 version)
 {
-  /* Sanity check: caps_str must be 0-terminated. */
+  /* Sanity check: caps_str / info_str must be 0-terminated. */
   if (version != 0 || size < 2 * sizeof (guint64) + 1 || data[size - 1] != '\0')
     return NULL;
 
   guint64 timestamp = GST_READ_UINT64_LE (data);
   guint64 duration = GST_READ_UINT64_LE (data + 8);
   const gchar *caps_str = (const gchar *) data + 16;
+  gsize caps_str_len = strlen (caps_str);
   GstCaps *reference = gst_caps_from_string (caps_str);
-  GstMeta *meta = (GstMeta *) gst_buffer_add_reference_timestamp_meta (buffer,
+
+  /* Have additional data afterward the reference, which is for the optional
+   * info structure */
+  GstStructure *rtinfo = NULL;
+  if (size > 16 + caps_str_len + 1) {
+    const gchar *info_str = (const gchar *) data + 16 + caps_str_len + 1;
+    rtinfo = gst_structure_from_string (info_str, NULL);
+  }
+
+  GstReferenceTimestampMeta *meta =
+      gst_buffer_add_reference_timestamp_meta (buffer,
       reference, timestamp, duration);
   gst_caps_unref (reference);
+  meta->info = rtinfo;
 
-  return meta;
+  return (GstMeta *) meta;
 }
 
 /**

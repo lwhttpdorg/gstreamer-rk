@@ -46,6 +46,7 @@
 #include <memory>
 #include <vector>
 #include <queue>
+#include <atomic>
 #include <gst/d3dshader/gstd3dshader.h>
 
 /* *INDENT-OFF* */
@@ -120,13 +121,13 @@ enum
   PROP_PATTERN,
   PROP_ALPHA,
   PROP_ALPHA_MODE,
+  PROP_ASYNC_DEPTH,
 };
 
 #define DEFAULT_ADAPTER -1
 #define DEFAULT_PATTERN GST_D3D12_TEST_SRC_SMPTE
 #define DEFAULT_ALPHA 1.0f
-
-#define ASYNC_DEPTH 2
+#define DEFAULT_ASYNC_DEPTH 0
 
 struct ColorValue
 {
@@ -226,19 +227,16 @@ struct RenderContext
 {
   RenderContext (GstD3D12Device * dev)
   {
-    event_handle = CreateEventEx (nullptr, nullptr, 0, EVENT_ALL_ACCESS);
     device = (GstD3D12Device *) gst_object_ref (dev);
     auto device_handle = gst_d3d12_device_get_device_handle (device);
-    ca_pool = gst_d3d12_command_allocator_pool_new (device_handle,
+    ca_pool = gst_d3d12_cmd_alloc_pool_new (device_handle,
         D3D12_COMMAND_LIST_TYPE_DIRECT);
   }
 
   ~RenderContext ()
   {
     gst_d3d12_device_fence_wait (device, D3D12_COMMAND_LIST_TYPE_DIRECT,
-        fence_val, event_handle);
-
-    CloseHandle (event_handle);
+        fence_val);
 
     {
       GstD3D12Device11on12LockGuard lk (device);
@@ -282,7 +280,7 @@ struct RenderContext
 
   ComPtr<ID3D12GraphicsCommandList> cl;
   std::queue<guint64> scheduled;
-  GstD3D12CommandAllocatorPool *ca_pool;
+  GstD3D12CmdAllocPool *ca_pool;
 
   D3D12_VIEWPORT viewport;
   D3D12_RECT scissor_rect;
@@ -290,7 +288,6 @@ struct RenderContext
   StaticColor static_color[2];
   std::vector < std::shared_ptr < GstD3D12TestSrcQuad >> quad;
   GstD3D12TestSrcPattern pattern;
-  HANDLE event_handle;
   guint64 fence_val = 0;
 };
 
@@ -325,6 +322,7 @@ struct GstD3D12TestSrcPrivate
   gint64 accum_frames = 0;
   GstClockTime accum_rtime = 0;
   GstClockTime running_time = 0;
+  std::atomic<guint> async_depth = { DEFAULT_ASYNC_DEPTH };
 };
 /* *INDENT-ON* */
 
@@ -373,9 +371,7 @@ static const D3D12_ROOT_SIGNATURE_FLAGS g_rs_flags =
     D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
     D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
     D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
-    D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS;
+    D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
 
 static gboolean
@@ -549,9 +545,12 @@ setup_snow_render (GstD3D12TestSrc * self, RenderContext * ctx,
   D3D12_RESOURCE_DESC buffer_desc =
       CD3DX12_RESOURCE_DESC::Buffer (sizeof (UvVertexData) * 4
       + sizeof (indices));
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   ComPtr < ID3D12Resource > vertex_index_upload;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS (&vertex_index_upload));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -573,8 +572,7 @@ setup_snow_render (GstD3D12TestSrc * self, RenderContext * ctx,
 
   heap_prop = CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_DEFAULT);
   ComPtr < ID3D12Resource > vertex_index_buf;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
       IID_PPV_ARGS (&vertex_index_buf));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -940,9 +938,12 @@ setup_smpte_render (GstD3D12TestSrc * self, RenderContext * ctx)
   D3D12_RESOURCE_DESC buffer_desc =
       CD3DX12_RESOURCE_DESC::Buffer (sizeof (ColorVertexData) * 4 * 20
       + sizeof (WORD) * 6 * 20);
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   ComPtr < ID3D12Resource > vertex_index_upload;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS (&vertex_index_upload));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -965,8 +966,7 @@ setup_smpte_render (GstD3D12TestSrc * self, RenderContext * ctx)
 
   heap_prop = CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_DEFAULT);
   ComPtr < ID3D12Resource > vertex_index_buf;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
       IID_PPV_ARGS (&vertex_index_buf));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -1121,9 +1121,12 @@ setup_checker_render (GstD3D12TestSrc * self, RenderContext * ctx,
   D3D12_RESOURCE_DESC buffer_desc =
       CD3DX12_RESOURCE_DESC::Buffer (sizeof (UvVertexData) * 4
       + sizeof (indices));
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   ComPtr < ID3D12Resource > vertex_index_upload;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
       IID_PPV_ARGS (&vertex_index_upload));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -1145,8 +1148,7 @@ setup_checker_render (GstD3D12TestSrc * self, RenderContext * ctx,
 
   heap_prop = CD3DX12_HEAP_PROPERTIES (D3D12_HEAP_TYPE_DEFAULT);
   ComPtr < ID3D12Resource > vertex_index_buf;
-  hr = device->CreateCommittedResource (&heap_prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&heap_prop, heap_flags,
       &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
       IID_PPV_ARGS (&vertex_index_buf));
   if (!gst_d3d12_result (hr, self->device)) {
@@ -1183,13 +1185,6 @@ setup_d2d_render (GstD3D12TestSrc * self, RenderContext * ctx)
 {
   auto priv = self->priv;
   HRESULT hr;
-
-  static const D3D_FEATURE_LEVEL feature_levels[] = {
-    D3D_FEATURE_LEVEL_12_1,
-    D3D_FEATURE_LEVEL_12_0,
-    D3D_FEATURE_LEVEL_11_1,
-    D3D_FEATURE_LEVEL_11_0,
-  };
 
   if (!priv->d2d_factory) {
     ComPtr < ID2D1Factory > d2d_factory;
@@ -1392,6 +1387,18 @@ gst_d3d12_test_src_class_init (GstD3D12TestSrcClass * klass)
           (GParamFlags) (G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
               G_PARAM_STATIC_STRINGS)));
 
+  /**
+   * GstD3D12TestSrc:async-depth:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_ASYNC_DEPTH,
+      g_param_spec_uint ("async-depth", "Async Depth",
+          "Number of in-flight GPU commands which can be scheduled without "
+          "synchronization (0 = unlimited)", 0, G_MAXINT, DEFAULT_ASYNC_DEPTH,
+          (GParamFlags) (GST_PARAM_MUTABLE_PLAYING |
+              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   element_class->set_context =
       GST_DEBUG_FUNCPTR (gst_d3d12_test_src_set_context);
 
@@ -1460,6 +1467,9 @@ gst_d3d12_test_src_set_property (GObject * object, guint prop_id,
     case PROP_ALPHA:
       priv->alpha = g_value_get_float (value);
       break;
+    case PROP_ASYNC_DEPTH:
+      priv->async_depth = g_value_get_uint (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1485,6 +1495,9 @@ gst_d3d12_test_src_get_property (GObject * object, guint prop_id,
       break;
     case PROP_ALPHA:
       g_value_set_float (value, priv->alpha);
+      break;
+    case PROP_ASYNC_DEPTH:
+      g_value_set_uint (value, priv->async_depth);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1577,11 +1590,18 @@ gst_d3d12_test_src_setup_context (GstD3D12TestSrc * self, GstCaps * caps)
 
   gst_video_info_set_format (&draw_info, GST_VIDEO_FORMAT_BGRA,
       priv->info.width, priv->info.height);
-  ctx->conv = gst_d3d12_converter_new (self->device,
+  ctx->conv = gst_d3d12_converter_new (self->device, nullptr,
       &draw_info, &priv->info, nullptr, nullptr, config);
 
   if (!ctx->conv) {
     GST_ERROR_OBJECT (self, "Failed to create converter");
+    return FALSE;
+  }
+
+  GstD3D12Format device_format;
+  if (!gst_d3d12_device_get_format (self->device,
+          GST_VIDEO_INFO_FORMAT (&priv->info), &device_format)) {
+    GST_ERROR_OBJECT (self, "Couldn't get device foramt");
     return FALSE;
   }
 
@@ -1594,7 +1614,10 @@ gst_d3d12_test_src_setup_context (GstD3D12TestSrc * self, GstCaps * caps)
       D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
       D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS);
   D3D12_CLEAR_VALUE clear_value = { };
-  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (self->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   clear_value.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
   clear_value.Color[0] = 0.0f;
   clear_value.Color[1] = 0.0f;
@@ -1656,10 +1679,20 @@ gst_d3d12_test_src_setup_context (GstD3D12TestSrc * self, GstCaps * caps)
     ctx->convert_pool = gst_d3d12_buffer_pool_new (self->device);
     config = gst_buffer_pool_get_config (ctx->convert_pool);
     gst_buffer_pool_config_set_params (config, caps, priv->info.size, 0, 0);
+
+    D3D12_RESOURCE_FLAGS resource_flags =
+        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+
+    if ((device_format.format_flags & GST_D3D12_FORMAT_FLAG_OUTPUT_UAV)
+        == GST_D3D12_FORMAT_FLAG_OUTPUT_UAV) {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    } else {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    }
+
     auto params = gst_d3d12_allocation_params_new (self->device, &priv->info,
-        GST_D3D12_ALLOCATION_FLAG_DEFAULT,
-        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
-        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, D3D12_HEAP_FLAG_NONE);
+        GST_D3D12_ALLOCATION_FLAG_DEFAULT, resource_flags,
+        D3D12_HEAP_FLAG_NONE);
     gst_buffer_pool_config_set_d3d12_allocation_params (config, params);
     gst_d3d12_allocation_params_free (params);
 
@@ -1810,6 +1843,13 @@ gst_d3d12_test_src_decide_allocation (GstBaseSrc * bsrc, GstQuery * query)
 
   gst_video_info_from_caps (&vinfo, caps);
 
+  GstD3D12Format device_format;
+  if (!gst_d3d12_device_get_format (self->device,
+          GST_VIDEO_INFO_FORMAT (&vinfo), &device_format)) {
+    GST_ERROR_OBJECT (self, "Couldn't get device foramt");
+    return FALSE;
+  }
+
   if (gst_query_get_n_allocation_pools (query) > 0) {
     gst_query_parse_nth_allocation_pool (query, 0, &pool, &size, &min, &max);
     update_pool = TRUE;
@@ -1844,14 +1884,19 @@ gst_d3d12_test_src_decide_allocation (GstBaseSrc * bsrc, GstQuery * query)
 
   if (priv->downstream_supports_d3d12) {
     D3D12_RESOURCE_FLAGS resource_flags =
-        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS |
-        D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+    if ((device_format.format_flags & GST_D3D12_FORMAT_FLAG_OUTPUT_UAV)
+        == GST_D3D12_FORMAT_FLAG_OUTPUT_UAV) {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    } else {
+      resource_flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    }
 
     auto params = gst_buffer_pool_config_get_d3d12_allocation_params (config);
     if (!params) {
       params = gst_d3d12_allocation_params_new (self->device, &vinfo,
           GST_D3D12_ALLOCATION_FLAG_DEFAULT, resource_flags,
-          D3D12_HEAP_FLAG_NONE);
+          D3D12_HEAP_FLAG_SHARED);
     } else {
       gst_d3d12_allocation_params_set_resource_flags (params, resource_flags);
       gst_d3d12_allocation_params_unset_resource_flags (params,
@@ -2141,35 +2186,19 @@ gst_d3d12_test_src_create (GstBaseSrc * bsrc, guint64 offset,
   if (ret != GST_FLOW_OK)
     return ret;
 
-  auto completed = gst_d3d12_device_get_completed_value (self->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT);
-  while (!priv->ctx->scheduled.empty ()) {
-    if (priv->ctx->scheduled.front () > completed)
-      break;
-
-    priv->ctx->scheduled.pop ();
-  }
-
-  if (priv->ctx->scheduled.size () >= ASYNC_DEPTH) {
-    auto fence_to_wait = priv->ctx->scheduled.front ();
-    priv->ctx->scheduled.pop ();
-    gst_d3d12_device_fence_wait (self->device,
-        D3D12_COMMAND_LIST_TYPE_DIRECT, fence_to_wait, priv->ctx->event_handle);
-  }
-
-  GstD3D12CommandAllocator *gst_ca;
-  if (!gst_d3d12_command_allocator_pool_acquire (priv->ctx->ca_pool, &gst_ca)) {
+  GstD3D12CmdAlloc *gst_ca;
+  if (!gst_d3d12_cmd_alloc_pool_acquire (priv->ctx->ca_pool, &gst_ca)) {
     GST_ERROR_OBJECT (self, "Couldn't acquire command allocator");
     gst_clear_buffer (&convert_buffer);
     return GST_FLOW_ERROR;
   }
 
-  auto ca = gst_d3d12_command_allocator_get_handle (gst_ca);
+  auto ca = gst_d3d12_cmd_alloc_get_handle (gst_ca);
 
   auto hr = ca->Reset ();
   if (!gst_d3d12_result (hr, self->device)) {
     GST_ERROR_OBJECT (self, "Couldn't reset command allocator");
-    gst_d3d12_command_allocator_unref (gst_ca);
+    gst_d3d12_cmd_alloc_unref (gst_ca);
     gst_clear_buffer (&convert_buffer);
     return GST_FLOW_ERROR;
   }
@@ -2180,7 +2209,7 @@ gst_d3d12_test_src_create (GstBaseSrc * bsrc, guint64 offset,
         ca, nullptr, IID_PPV_ARGS (&priv->ctx->cl));
     if (!gst_d3d12_result (hr, self->device)) {
       GST_ERROR_OBJECT (self, "Couldn't reset command list");
-      gst_d3d12_command_allocator_unref (gst_ca);
+      gst_d3d12_cmd_alloc_unref (gst_ca);
       gst_clear_buffer (&convert_buffer);
       return GST_FLOW_ERROR;
     }
@@ -2188,7 +2217,7 @@ gst_d3d12_test_src_create (GstBaseSrc * bsrc, guint64 offset,
     hr = priv->ctx->cl->Reset (ca, nullptr);
     if (!gst_d3d12_result (hr, self->device)) {
       GST_ERROR_OBJECT (self, "Couldn't reset command list");
-      gst_d3d12_command_allocator_unref (gst_ca);
+      gst_d3d12_cmd_alloc_unref (gst_ca);
       gst_clear_buffer (&convert_buffer);
       return GST_FLOW_ERROR;
     }
@@ -2197,14 +2226,13 @@ gst_d3d12_test_src_create (GstBaseSrc * bsrc, guint64 offset,
   auto cl = priv->ctx->cl;
   GstD3D12FenceData *fence_data;
   gst_d3d12_fence_data_pool_acquire (priv->fence_data_pool, &fence_data);
-  gst_d3d12_fence_data_add_notify_mini_object (fence_data, gst_ca);
+  gst_d3d12_fence_data_push (fence_data, FENCE_NOTIFY_MINI_OBJECT (gst_ca));
 
   pts = priv->accum_rtime + priv->running_time;
   gst_d3d12_test_src_draw_pattern (self, pts, cl.Get ());
-
   if (!gst_d3d12_converter_convert_buffer (priv->ctx->conv,
           priv->ctx->render_buffer, convert_buffer, fence_data, cl.Get (),
-          nullptr)) {
+          FALSE)) {
     GST_ERROR_OBJECT (self, "Couldn't build convert command");
     gst_clear_buffer (&convert_buffer);
     gst_d3d12_fence_data_unref (fence_data);
@@ -2222,19 +2250,40 @@ gst_d3d12_test_src_create (GstBaseSrc * bsrc, guint64 offset,
 
   ID3D12CommandList *cmd_list[] = { priv->ctx->cl.Get () };
 
-  if (!gst_d3d12_device_execute_command_lists (self->device,
-          D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list, &priv->ctx->fence_val)) {
+  hr = gst_d3d12_device_execute_command_lists (self->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT, 1, cmd_list, &priv->ctx->fence_val);
+  if (!gst_d3d12_result (hr, self->device)) {
     GST_ERROR_OBJECT (self, "Couldn't execute command list");
     gst_d3d12_fence_data_unref (fence_data);
     return GST_FLOW_ERROR;
   }
 
-  gst_d3d12_buffer_after_write (convert_buffer, priv->ctx->fence_val);
+  gst_d3d12_buffer_set_fence (convert_buffer,
+      gst_d3d12_device_get_fence_handle (self->device,
+          D3D12_COMMAND_LIST_TYPE_DIRECT), priv->ctx->fence_val, FALSE);
 
   gst_d3d12_device_set_fence_notify (self->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT, priv->ctx->fence_val, fence_data);
+      D3D12_COMMAND_LIST_TYPE_DIRECT, priv->ctx->fence_val,
+      FENCE_NOTIFY_MINI_OBJECT (fence_data));
 
   priv->ctx->scheduled.push (priv->ctx->fence_val);
+
+  auto completed = gst_d3d12_device_get_completed_value (self->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT);
+  while (!priv->ctx->scheduled.empty ()) {
+    if (priv->ctx->scheduled.front () > completed)
+      break;
+
+    priv->ctx->scheduled.pop ();
+  }
+
+  auto async_depth = priv->async_depth.load ();
+  if (async_depth > 0 && priv->ctx->scheduled.size () > async_depth) {
+    auto fence_to_wait = priv->ctx->scheduled.front ();
+    priv->ctx->scheduled.pop ();
+    gst_d3d12_device_fence_wait (self->device,
+        D3D12_COMMAND_LIST_TYPE_DIRECT, fence_to_wait);
+  }
 
   if (priv->downstream_supports_d3d12) {
     buffer = convert_buffer;

@@ -48,6 +48,17 @@ python module to use with Gst 0.10"
     warnings.warn(warn_msg, RuntimeWarning)
 
 
+class Float(float):
+    '''
+    A wrapper to force conversion to G_TYPE_FLOAT instead of G_TYPE_DOUBLE when
+    used in e.g. Gst.ValueArray.
+    '''
+    __gtype__ = GObject.TYPE_FLOAT
+
+
+__all__.append('Float')
+
+
 # Ensuring that PyGObject loads the URIHandler interface
 # so we can force our own implementation soon enough (in gstmodule.c)
 class URIHandler(Gst.URIHandler):
@@ -99,7 +110,104 @@ Bin = override(Bin)
 __all__.append('Bin')
 
 
-class Caps(Gst.Caps):
+class NotWritableMiniObject(Exception):
+    pass
+
+
+__all__.append('NotWritableMiniObject')
+
+
+class MiniObject:
+    def make_writable(self):
+        return _gi_gst.mini_object_make_writable(self)
+
+    def is_writable(self):
+        return _gi_gst.mini_object_is_writable(self)
+
+    @property
+    def flags(self):
+        return _gi_gst.mini_object_flags(self)
+
+    @flags.setter
+    def flags(self, flags):
+        _gi_gst.mini_object_set_flags(self, flags)
+
+
+class NotWritableQuery(Exception):
+    pass
+
+
+__all__.append('NotWritableQuery')
+
+
+class Query(MiniObject, Gst.Query):
+    def get_structure(self):
+        s = _gi_gst.query_get_structure(self)
+        return s._set_parent(self) if s is not None else None
+
+    def writable_structure(self):
+        return StructureWrapper(_gi_gst.query_writable_structure(self)._set_parent(self))
+
+
+Query = override(Query)
+__all__.append('Query')
+
+
+class NotWritableEvent(Exception):
+    pass
+
+
+__all__.append('NotWritableEvent')
+
+
+class Event(MiniObject, Gst.Event):
+    def get_structure(self):
+        s = _gi_gst.event_get_structure(self)
+        return s._set_parent(self) if s is not None else None
+
+    def writable_structure(self):
+        return StructureWrapper(_gi_gst.event_writable_structure(self)._set_parent(self))
+
+
+Event = override(Event)
+__all__.append('Event')
+
+
+class NotWritableContext(Exception):
+    pass
+
+
+__all__.append('NotWritableContext')
+
+
+class Context(MiniObject, Gst.Context):
+    def get_structure(self):
+        s = _gi_gst.context_get_structure(self)
+        return s._set_parent(self) if s is not None else None
+
+    def writable_structure(self):
+        return StructureWrapper(_gi_gst.context_writable_structure(self)._set_parent(self))
+
+
+Context = override(Context)
+__all__.append('Context')
+
+
+class NotWritableCaps(Exception):
+    pass
+
+
+__all__.append('NotWritableCaps')
+
+
+class NotWritableStructure(Exception):
+    pass
+
+
+__all__.append('NotWritableStructure')
+
+
+class Caps(MiniObject, Gst.Caps):
 
     def __nonzero__(self):
         return not self.is_empty()
@@ -107,9 +215,11 @@ class Caps(Gst.Caps):
     def __new__(cls, *args):
         if not args:
             return Caps.new_empty()
-        elif len(args) > 1:
+        if len(args) > 1:
             raise TypeError("wrong arguments when creating GstCaps object")
-        elif isinstance(args[0], str):
+
+        assert len(args) == 1
+        if isinstance(args[0], str):
             return Caps.from_string(args[0])
         elif isinstance(args[0], Caps):
             return args[0].copy()
@@ -134,10 +244,18 @@ class Caps(Gst.Caps):
     def __getitem__(self, index):
         if index >= self.get_size():
             raise IndexError('structure index out of range')
-        return self.get_structure(index)
+
+        return Gst.Caps.get_structure(self, index)
 
     def __len__(self):
         return self.get_size()
+
+    def get_structure(self, index):
+        s = _gi_gst.caps_get_structure(self, index)
+        return s._set_parent(self) if s is not None else None
+
+    def writable_structure(self, index):
+        return StructureWrapper(_gi_gst.caps_writable_structure(self, index)._set_parent(self))
 
 
 Caps = override(Caps)
@@ -307,24 +425,30 @@ class Structure(Gst.Structure):
             if kwargs:
                 raise TypeError("wrong arguments when creating GstStructure, first argument"
                                 " must be the structure name.")
-            return Structure.new_empty()
+            struct = Structure.new_empty()
+            return struct
         elif len(args) > 1:
             raise TypeError("wrong arguments when creating GstStructure object")
         elif isinstance(args[0], str):
             if not kwargs:
-                return Structure.from_string(args[0])[0]
+                struct = Structure.from_string(args[0])[0]
+                return struct
             struct = Structure.new_empty(args[0])
             for k, v in kwargs.items():
                 struct[k] = v
 
             return struct
         elif isinstance(args[0], Structure):
-            return args[0].copy()
+            struct = args[0].copy()
+            return struct
 
         raise TypeError("wrong arguments when creating GstStructure object")
 
     def __init__(self, *args, **kwargs):
         pass
+
+    def __ptr__(self):
+        return _gi_gst._get_object_ptr(self)
 
     def __getitem__(self, key):
         return self.get_value(key)
@@ -342,8 +466,26 @@ class Structure(Gst.Structure):
     def __setitem__(self, key, value):
         return self.set_value(key, value)
 
+    def set_value(self, key, value):
+        if not _gi_gst.structure_is_writable(self):
+            raise NotWritableStructure("Trying to write to a not writable structure."
+                                       " Make sure to use the right APIs to have access to structure"
+                                       " in a writable way.")
+
+        return Gst.Structure.set_value(self, key, value)
+
     def __str__(self):
         return self.to_string()
+
+    def _set_parent(self, parent):
+        self.__parent__ = parent
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _type, _value, _tb):
+        self._set_parent(None)
 
 
 Structure = override(Structure)
@@ -583,8 +725,26 @@ __all__.append('FractionRange')
 
 
 class ValueArray(Gst.ValueArray):
-    def __init__(self, array):
+    def __init__(self, array=[]):
         self.array = list(array)
+
+    def append(self, item):
+        self.array.append(item)
+
+    def prepend(self, item):
+        self.array = [item] + self.array
+
+    @staticmethod
+    def append_value(this, item):
+        this.append(item)
+
+    @staticmethod
+    def prepend_value(this, item):
+        this.prepend(item)
+
+    @staticmethod
+    def get_size(this):
+        return len(this.array)
 
     def __getitem__(self, index):
         return self.array[index]
@@ -607,8 +767,26 @@ __all__.append('ValueArray')
 
 
 class ValueList(Gst.ValueList):
-    def __init__(self, array):
+    def __init__(self, array=[]):
         self.array = list(array)
+
+    def append(self, item):
+        self.array.append(item)
+
+    def prepend(self, item):
+        self.array = [item] + self.array
+
+    @staticmethod
+    def append_value(this, item):
+        this.append(item)
+
+    @staticmethod
+    def prepend_value(this, item):
+        this.prepend(item)
+
+    @staticmethod
+    def get_size(this):
+        return len(this.array)
 
     def __getitem__(self, index):
         return self.array[index]
@@ -682,6 +860,19 @@ def pairwise(iterable):
     return zip(a, b)
 
 
+class StructureWrapper:
+    """A Gst.Structure wrapper to force usage of a context manager.
+    """
+    def __init__(self, structure):
+        self.__structure = structure
+
+    def __enter__(self):
+        return self.__structure
+
+    def __exit__(self, _type, _value, _tb):
+        self.__structure._set_parent(None)
+
+
 class MapInfo:
     def __init__(self):
         self.memory = None
@@ -712,7 +903,54 @@ class MapInfo:
 __all__.append("MapInfo")
 
 
-class Buffer(Gst.Buffer):
+class Buffer(MiniObject, Gst.Buffer):
+    @property
+    def flags(self):
+        return _gi_gst.mini_object_flags(self)
+
+    @flags.setter
+    def flags(self, flags):
+        _gi_gst.mini_object_set_flags(self, flags)
+
+    @property
+    def dts(self):
+        return _gi_gst.buffer_get_dts(self)
+
+    @dts.setter
+    def dts(self, dts):
+        _gi_gst.buffer_set_dts(self, dts)
+
+    @property
+    def pts(self):
+        return _gi_gst.buffer_get_pts(self)
+
+    @pts.setter
+    def pts(self, pts):
+        _gi_gst.buffer_set_pts(self, pts)
+
+    @property
+    def duration(self):
+        return _gi_gst.buffer_get_duration(self)
+
+    @duration.setter
+    def duration(self, duration):
+        _gi_gst.buffer_set_duration(self, duration)
+
+    @property
+    def offset(self):
+        return _gi_gst.buffer_get_offset(self)
+
+    @offset.setter
+    def offset(self, offset):
+        _gi_gst.buffer_set_offset(self, offset)
+
+    @property
+    def offset_end(self):
+        return _gi_gst.buffer_get_offset_end(self)
+
+    @offset_end.setter
+    def offset_end(self, offset_end):
+        _gi_gst.buffer_set_offset_end(self, offset_end)
 
     def map_range(self, idx, length, flags):
         mapinfo = MapInfo()

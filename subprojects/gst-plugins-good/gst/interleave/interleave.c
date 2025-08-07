@@ -76,6 +76,8 @@
 #include <gst/audio/audio.h>
 #include <gst/audio/audio-enumtypes.h>
 
+#include "gst/glib-compat-private.h"
+
 GST_DEBUG_CATEGORY_STATIC (gst_interleave_debug);
 #define GST_CAT_DEFAULT gst_interleave_debug
 
@@ -299,7 +301,7 @@ gst_interleave_channel_positions_to_mask (GValueArray * positions,
   for (i = 0; i < channels; i++) {
     default_ordering_map[i] = i;
   }
-  g_qsort_with_data (default_ordering_map, channels,
+  g_sort_array (default_ordering_map, channels,
       sizeof (*default_ordering_map), compare_positions, pos);
 
   ret = gst_audio_channel_positions_to_mask (pos, channels, FALSE, mask);
@@ -730,7 +732,10 @@ gst_interleave_sink_getcaps (GstPad * pad, GstInterleave * self,
   /* If we already have caps on one of the sink pads return them */
   if (self->sinkcaps) {
     result = gst_caps_copy (self->sinkcaps);
+    GST_OBJECT_UNLOCK (self);
   } else {
+    GST_OBJECT_UNLOCK (self);
+
     /* get the downstream possible caps */
     peercaps = gst_pad_peer_query_caps (self->src, NULL);
 
@@ -753,8 +758,6 @@ gst_interleave_sink_getcaps (GstPad * pad, GstInterleave * self,
     }
     __set_channels (result, 1);
   }
-
-  GST_OBJECT_UNLOCK (self);
 
   if (filter != NULL) {
     GstCaps *caps = result;
@@ -1275,7 +1278,7 @@ gst_interleave_collected (GstCollectPads * pads, GstInterleave * self)
             segment.stop *= width;
           if (segment.position != -1)
             segment.position *= width;
-          /* fallthrough for the samples case */
+          /* FALLTHROUGH */
         case GST_FORMAT_DEFAULT:
           segment.start =
               gst_util_uint64_scale_int (segment.start, GST_SECOND, self->rate);

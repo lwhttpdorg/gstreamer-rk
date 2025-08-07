@@ -1,5 +1,6 @@
 /* GStreamer
  * Copyright (C) 2022 Collabora Ltd
+ * Copyright (C) 2024 Intel Corporation
  *
  * analyticmeta.c
  *
@@ -515,6 +516,96 @@ GST_START_TEST (test_cyclic_relation_meta)
 
 GST_END_TEST;
 
+GST_START_TEST (test_copy_metas)
+{
+  GstBuffer *buf, *buf2;
+  GstAnalyticsRelationMeta *rmeta, *rmeta2;
+  gboolean ret;
+  GstAnalyticsODMtd od_mtd1, od_mtd2;
+  gpointer state = NULL;
+  GstAnalyticsMtd mtd1, mtd2;
+  gint x, y, w, h;
+  gfloat conf;
+
+  buf = gst_buffer_new ();
+
+  rmeta = gst_buffer_add_analytics_relation_meta (buf);
+
+  GQuark type = g_quark_from_string ("dog");
+  ret = gst_analytics_relation_meta_add_od_mtd (rmeta, type, 10, 10,
+      10, 10, 1.0, &od_mtd1);
+  fail_unless (ret == TRUE);
+
+  ret = gst_analytics_relation_meta_add_od_mtd (rmeta, type, 20, 20,
+      20, 20, 1.0, &od_mtd2);
+  fail_unless (ret == TRUE);
+
+  fail_unless_equals_int (gst_analytics_relation_get_length (rmeta), 2);
+
+  ret = gst_analytics_relation_meta_set_relation (rmeta,
+      GST_ANALYTICS_REL_TYPE_RELATE_TO, od_mtd1.id, od_mtd2.id);
+  fail_unless (ret == TRUE);
+
+
+  /* Lets copy it into a new buffer */
+  buf2 = gst_buffer_new ();
+  ret = gst_buffer_copy_into (buf2, buf, GST_BUFFER_COPY_META, 0, -1);
+  fail_unless (ret == TRUE);
+
+  rmeta2 = gst_buffer_get_analytics_relation_meta (buf2);
+  fail_unless (rmeta2 != NULL);
+
+  fail_unless_equals_int (gst_analytics_relation_get_length (rmeta2), 2);
+
+  /* First meta */
+  ret = gst_analytics_relation_meta_iterate (rmeta2, &state,
+      GST_ANALYTICS_MTD_TYPE_ANY, &mtd1);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_int (od_mtd1.id, mtd1.id);
+
+
+  ret = gst_analytics_od_mtd_get_confidence_lvl (&mtd1, &conf);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_float (conf, 1.0);
+
+  ret = gst_analytics_od_mtd_get_location (&mtd1, &x, &y, &w, &h, &conf);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_int (x, 10);
+  fail_unless_equals_int (y, 10);
+  fail_unless_equals_int (w, 10);
+  fail_unless_equals_int (h, 10);
+
+  /* Second meta */
+  ret = gst_analytics_relation_meta_iterate (rmeta2, &state,
+      GST_ANALYTICS_MTD_TYPE_ANY, &mtd2);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_int (od_mtd2.id, mtd2.id);
+
+  ret = gst_analytics_od_mtd_get_confidence_lvl (&mtd2, &conf);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_float (conf, 1.0);
+
+  ret = gst_analytics_od_mtd_get_location (&mtd2, &x, &y, &w, &h, &conf);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_int (x, 20);
+  fail_unless_equals_int (y, 20);
+  fail_unless_equals_int (w, 20);
+  fail_unless_equals_int (h, 20);
+
+  fail_unless_equals_int (gst_analytics_relation_meta_get_relation (rmeta,
+          mtd1.id, mtd2.id), GST_ANALYTICS_REL_TYPE_RELATE_TO);
+
+  /* No third meta */
+  ret = gst_analytics_relation_meta_iterate (rmeta2, &state,
+      GST_ANALYTICS_MTD_TYPE_ANY, &mtd1);
+  fail_unless (ret == FALSE);
+
+  gst_buffer_unref (buf);
+  gst_buffer_unref (buf2);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_add_od_meta)
 {
   /* Verity we can add Object Detection relatable metadata to a relation
@@ -536,6 +627,34 @@ GST_START_TEST (test_add_od_meta)
   gfloat loc_conf_lvl = 0.6f;
   ret = gst_analytics_relation_meta_add_od_mtd (rmeta, type, x, y,
       w, h, loc_conf_lvl, &od_mtd);
+  fail_unless (ret == TRUE);
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_add_oriented_od_meta)
+{
+  /* Verity we can add Oriented Object Detection relatable metadata to a relation
+   * metadata */
+  GstBuffer *buf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsODMtd od_mtd;
+  gboolean ret;
+  buf = gst_buffer_new ();
+
+  rmeta = gst_buffer_add_analytics_relation_meta_full (buf, &init_params);
+
+  GQuark type = g_quark_from_string ("dog");
+  gint x = 20;
+  gint y = 20;
+  gint w = 10;
+  gint h = 15;
+  gfloat r = 0.785f;
+  gfloat loc_conf_lvl = 0.6f;
+  ret = gst_analytics_relation_meta_add_oriented_od_mtd (rmeta, type, x, y,
+      w, h, r, loc_conf_lvl, &od_mtd);
   fail_unless (ret == TRUE);
   gst_buffer_unref (buf);
 }
@@ -580,6 +699,160 @@ GST_START_TEST (test_od_meta_fields)
   gst_analytics_od_mtd_get_confidence_lvl (&od_mtd, &_loc_conf_lvl);
 
   fail_unless (_loc_conf_lvl == loc_conf_lvl);
+
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_oriented_od_meta_fields)
+{
+  /* Verify we can readback fields of object detection metadata */
+  GstBuffer *buf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsODMtd od_mtd;
+  gboolean ret;
+  buf = gst_buffer_new ();
+
+  rmeta = gst_buffer_add_analytics_relation_meta_full (buf, &init_params);
+
+  GQuark type = g_quark_from_string ("dog");
+  gint x = 21;
+  gint y = 20;
+  gint w = 10;
+  gint h = 15;
+  gfloat r = 0.785f;
+  gfloat loc_conf_lvl = 0.6f;
+  ret = gst_analytics_relation_meta_add_oriented_od_mtd (rmeta, type, x, y,
+      w, h, r, loc_conf_lvl, &od_mtd);
+
+  fail_unless (ret == TRUE);
+
+  gint _x, _y, _w, _h;
+  gfloat _r, _loc_conf_lvl;
+  gst_analytics_od_mtd_get_oriented_location (&od_mtd, &_x, &_y, &_w, &_h, &_r,
+      &_loc_conf_lvl);
+
+  fail_unless (_x == x);
+  fail_unless (_y == y);
+  fail_unless (_w == w);
+  fail_unless (_h == h);
+  fail_unless (_r == r);
+  fail_unless (_loc_conf_lvl == loc_conf_lvl);
+
+  _loc_conf_lvl = -200.0;       // dirty this var by setting invalid value.
+  gst_analytics_od_mtd_get_confidence_lvl (&od_mtd, &_loc_conf_lvl);
+
+  fail_unless (_loc_conf_lvl == loc_conf_lvl);
+
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_add_non_oriented_get_oriented_od_meta_fields)
+{
+  /* Verify we can readback fields of object detection metadata */
+  GstBuffer *buf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsODMtd od_mtd;
+  gboolean ret;
+  buf = gst_buffer_new ();
+
+  rmeta = gst_buffer_add_analytics_relation_meta_full (buf, &init_params);
+
+  GQuark type = g_quark_from_string ("dog");
+  gint x = 21;
+  gint y = 20;
+  gint w = 10;
+  gint h = 15;
+  gfloat loc_conf_lvl = 0.6f;
+  ret = gst_analytics_relation_meta_add_od_mtd (rmeta, type, x, y,
+      w, h, loc_conf_lvl, &od_mtd);
+
+  fail_unless (ret == TRUE);
+
+  gint _x, _y, _w, _h;
+  gfloat _r, _loc_conf_lvl;
+  gst_analytics_od_mtd_get_oriented_location (&od_mtd, &_x, &_y, &_w, &_h, &_r,
+      &_loc_conf_lvl);
+
+  fail_unless (_x == x);
+  fail_unless (_y == y);
+  fail_unless (_w == w);
+  fail_unless (_h == h);
+  fail_unless (_r == 0);
+  fail_unless (_loc_conf_lvl == loc_conf_lvl);
+
+  _loc_conf_lvl = -200.0;       // dirty this var by setting invalid value.
+  gst_analytics_od_mtd_get_confidence_lvl (&od_mtd, &_loc_conf_lvl);
+
+  fail_unless (_loc_conf_lvl == loc_conf_lvl);
+
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_add_oriented_get_non_oriented_od_meta_fields)
+{
+  /* Verify we can readback fields of object detection metadata */
+  GstBuffer *buf;
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsODMtd od_mtd;
+  gboolean ret;
+  gint _x, _y, _w, _h;
+  gfloat _loc_conf_lvl;
+
+  buf = gst_buffer_new ();
+  rmeta = gst_buffer_add_analytics_relation_meta (buf);
+
+  struct
+  {
+    gint x, y, w, h;
+    gfloat r;
+    gint expected_x, expected_y, expected_w, expected_h;
+  } test_cases[] = {
+    {500, 300, 200, 100, 0.0f, 500, 300, 200, 100},
+    {600, 400, 200, 100, 0.785f, 594, 344, 212, 212},
+    {400, 400, 150, 100, 1.570f, 425, 375, 100, 150},
+    {400, 300, 200, 100, 2.268f, 397, 241, 206, 218},
+    {400, 400, 200, 100, 3.142f, 400, 400, 200, 100},
+    {300, 300, 150, 100, 4.712f, 325, 275, 100, 150},
+    {500, 400, 1, 100, 0.785f, 465, 415, 71, 71},
+    {400, 500, 100, 1, 2.268f, 417, 461, 65, 77},
+    {400, 400, 100, 100, 6.283f, 400, 400, 100, 100},
+  };
+
+  gfloat loc_conf_lvl = 0.9f;
+  for (gsize i = 0; i < G_N_ELEMENTS (test_cases); i++) {
+    gint x = test_cases[i].x;
+    gint y = test_cases[i].y;
+    gint w = test_cases[i].w;
+    gint h = test_cases[i].h;
+    gfloat r = test_cases[i].r;
+
+    gint expected_x = test_cases[i].expected_x;
+    gint expected_y = test_cases[i].expected_y;
+    gint expected_w = test_cases[i].expected_w;
+    gint expected_h = test_cases[i].expected_h;
+
+    ret =
+        gst_analytics_relation_meta_add_oriented_od_mtd (rmeta,
+        g_quark_from_string ("dog"), x, y, w, h, r, loc_conf_lvl, &od_mtd);
+    fail_unless (ret == TRUE);
+
+    gst_analytics_od_mtd_get_location (&od_mtd, &_x, &_y, &_w, &_h,
+        &_loc_conf_lvl);
+
+    fail_unless (_x == expected_x);
+    fail_unless (_y == expected_y);
+    fail_unless (_w == expected_w);
+    fail_unless (_h == expected_h);
+    fail_unless (_loc_conf_lvl == loc_conf_lvl);
+  }
 
   gst_buffer_unref (buf);
 }
@@ -906,10 +1179,11 @@ GST_START_TEST (test_add_tracking_meta)
   GstBuffer *buf1, *buf2;
   GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
   GstAnalyticsRelationMeta *rmeta;
-  GstAnalyticsTrackingMtd tracking_mtd;
-  guint tracking_id;
-  GstClockTime tracking_observation_time_1;
-  gboolean ret;
+  GstAnalyticsTrackingMtd tracking_mtd, tracking_mtd2;
+  guint64 tracking_id, ret_trk_id;
+  GstClockTime time_1, time_2, time_ret_f, time_ret_l;
+  gboolean ret, found = FALSE, lost;
+  gpointer state = NULL;
 
   /* Verify we can add multiple trackings to relation metadata
    */
@@ -917,9 +1191,9 @@ GST_START_TEST (test_add_tracking_meta)
   buf1 = gst_buffer_new ();
   rmeta = gst_buffer_add_analytics_relation_meta_full (buf1, &init_params);
   tracking_id = 1;
-  tracking_observation_time_1 = GST_BUFFER_TIMESTAMP (buf1);
+  time_1 = GST_BUFFER_TIMESTAMP (buf1);
   ret = gst_analytics_relation_meta_add_tracking_mtd (rmeta, tracking_id,
-      tracking_observation_time_1, &tracking_mtd);
+      time_1, &tracking_mtd);
   fail_unless (ret == TRUE);
 
   gst_buffer_unref (buf1);
@@ -928,10 +1202,859 @@ GST_START_TEST (test_add_tracking_meta)
   rmeta = gst_buffer_add_analytics_relation_meta_full (buf2, &init_params);
   tracking_id = 1;
   ret = gst_analytics_relation_meta_add_tracking_mtd (rmeta, tracking_id,
+      time_1, &tracking_mtd);
+  fail_unless (ret == TRUE);
+
+  /* add itermadiate tracking point to very first and last are correct */
+  time_2 = GST_BUFFER_TIMESTAMP (buf2) + 1;
+  ret = gst_analytics_tracking_mtd_update_last_seen (&tracking_mtd, time_2);
+
+  /* add last tracking point */
+  time_2 += 1;
+  ret = gst_analytics_tracking_mtd_update_last_seen (&tracking_mtd, time_2);
+
+  /* Verify we can retrieve tracking mtd */
+  found = gst_analytics_relation_meta_iterate (rmeta, &state,
+      GST_ANALYTICS_MTD_TYPE_ANY, &tracking_mtd2);
+
+  /* Verify retrieved mtd is correct */
+  fail_unless (found == TRUE);
+  fail_unless (tracking_mtd2.id == tracking_mtd.id);
+  fail_unless (tracking_mtd2.meta == tracking_mtd.meta);
+
+  /* Verify specific tracking mtd data */
+  gst_analytics_tracking_mtd_get_info (&tracking_mtd2, &ret_trk_id, &time_ret_f,
+      &time_ret_l, &lost);
+  fail_unless (tracking_id == ret_trk_id);
+  fail_unless (time_1 == time_ret_f);
+  fail_unless (time_2 == time_ret_l);
+  fail_unless (lost == FALSE);
+
+  /* Set tracking lost */
+  gst_analytics_tracking_mtd_set_lost (&tracking_mtd);
+
+  /* Verify tracking lost was updated but other tracking data are still
+   * available */
+  gst_analytics_tracking_mtd_get_info (&tracking_mtd2, &ret_trk_id, &time_ret_f,
+      &time_ret_l, &lost);
+
+  fail_unless (tracking_id == ret_trk_id);
+  fail_unless (time_1 == time_ret_f);
+  fail_unless (time_2 == time_ret_l);
+  fail_unless (lost == TRUE);
+
+  gst_buffer_unref (buf2);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_od_trk_relation)
+{
+  /* Verify we retrive tracking from relation with OD */
+  GstBuffer *buf1;
+  guint64 tracking_id;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsTrackingMtd tracking_mtd, tracking_mtd2;
+  GstClockTime tracking_observation_time_1;
+  gboolean ret, found = FALSE;
+  gpointer state = NULL;
+  GQuark type = g_quark_from_string ("dog");
+  gint x = 20;
+  gint y = 20;
+  gint w = 10;
+  gint h = 15;
+  gfloat loc_conf_lvl = 0.6f;
+  GstAnalyticsODMtd od_mtd, od_mtd2;
+
+
+  /* creating a buffer where we add a relation-meta */
+  buf1 = gst_buffer_new ();
+  rmeta = gst_buffer_add_analytics_relation_meta_full (buf1, &init_params);
+  tracking_id = 1;
+  tracking_observation_time_1 = GST_BUFFER_TIMESTAMP (buf1);
+  ret = gst_analytics_relation_meta_add_tracking_mtd (rmeta, tracking_id,
       tracking_observation_time_1, &tracking_mtd);
   fail_unless (ret == TRUE);
 
-  gst_buffer_unref (buf2);
+  /* adding object-detection to rmeta */
+  ret = gst_analytics_relation_meta_add_od_mtd (rmeta, type, x, y,
+      w, h, loc_conf_lvl, &od_mtd);
+
+  /* set relation from object-detection to tracking */
+  gst_analytics_relation_meta_set_relation (rmeta,
+      GST_ANALYTICS_REL_TYPE_RELATE_TO, od_mtd.id, tracking_mtd.id);
+
+  /* query for related mtd of any type on od_mtd */
+  found = gst_analytics_relation_meta_get_direct_related (rmeta, od_mtd.id,
+      GST_ANALYTICS_REL_TYPE_RELATE_TO, GST_ANALYTICS_MTD_TYPE_ANY, &state,
+      &tracking_mtd2);
+
+  fail_unless (found == TRUE);
+  fail_unless (tracking_mtd2.id == tracking_mtd.id);
+  fail_unless (tracking_mtd2.meta == tracking_mtd.meta);
+
+  state = NULL;
+  /* query for related mtd of any type on tracking. */
+  found = gst_analytics_relation_meta_get_direct_related (rmeta,
+      tracking_mtd.id, GST_ANALYTICS_REL_TYPE_RELATE_TO,
+      GST_ANALYTICS_MTD_TYPE_ANY, &state, &od_mtd2);
+
+  /* since relation are directed and we only set a relation from
+   * object-detection to tracking, we shouldn't find any relation */
+  fail_unless (found == FALSE);
+
+  /* set relation from tracking to object-detection */
+  gst_analytics_relation_meta_set_relation (rmeta,
+      GST_ANALYTICS_REL_TYPE_RELATE_TO, tracking_mtd.id, od_mtd.id);
+
+  state = NULL;
+  /* query for related mtd of any type on tracking. */
+  found = gst_analytics_relation_meta_get_direct_related (rmeta,
+      tracking_mtd.id, GST_ANALYTICS_REL_TYPE_RELATE_TO,
+      GST_ANALYTICS_MTD_TYPE_ANY, &state, &od_mtd2);
+
+  /* now we should find as it was added */
+  fail_unless (found == TRUE);
+  fail_unless (od_mtd2.id == od_mtd.id);
+  fail_unless (od_mtd2.meta == od_mtd.meta);
+
+  gst_buffer_unref (buf1);
+}
+
+GST_END_TEST;
+
+
+GST_START_TEST (test_verify_mtd_clear)
+{
+  /* This test use segmentation mtd but it's a general functionality of
+   * analytics-meta that _mtd_clear is called when buffer is freed.
+   * _mtd_clear should be called regardless if the buffer where relation-meta
+   * is attached is from a pool or not. This test verify that _mtd_clear is
+   * called when buffer where relation-meta is attached it not from a pool.
+   */
+  GstBuffer *vbuf, *mbuf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstBufferPool *mpool;
+  GstCaps *caps;
+  GstStructure *config;
+  GstVideoInfo minfo;
+  GstAnalyticsSegmentationMtd smtd;
+  GstBufferPoolAcquireParams pool_acq_params = { 0, };
+  pool_acq_params.flags = GST_BUFFER_POOL_ACQUIRE_FLAG_DONTWAIT;
+
+  vbuf = gst_buffer_new ();
+  rmeta = gst_buffer_add_analytics_relation_meta_full (vbuf, &init_params);
+
+  /* Create pool for segmentation masks */
+  gst_video_info_init (&minfo);
+  gst_video_info_set_format (&minfo, GST_VIDEO_FORMAT_GRAY8, 32, 32);
+  caps = gst_video_info_to_caps (&minfo);
+  mpool = gst_video_buffer_pool_new ();
+  config = gst_buffer_pool_get_config (mpool);
+
+  /* Here we intentionnaly create a pool of only one element to validate the
+   * buffer used to store the masks is returned to the pool when the video
+   * buffer to which it is attached is unreffed with the intention of having
+   * gst_buffer_pool_acquire_buffer (mpool,...) fail if it didn't happen.*/
+  gst_buffer_pool_config_set_params (config, caps, minfo.size, 0, 1);
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+  gst_buffer_pool_set_config (mpool, config);
+  gst_buffer_pool_set_active (mpool, TRUE);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_buffer_pool_acquire_buffer (mpool, &mbuf,
+          &pool_acq_params) == GST_FLOW_OK);
+
+  /* Here we pretend the masks contain 2 region types [2,3] */
+  static const gsize region_count = 2;
+  guint region_ids[] = { 2, 3 };
+
+  gst_analytics_relation_meta_add_segmentation_mtd (rmeta, mbuf,
+      GST_SEGMENTATION_TYPE_INSTANCE, region_count, region_ids, 0, 0, 0, 0,
+      &smtd);
+
+  /* This _unref will dispose vbuf and also mbuf to mpool
+   * because GstAnalyticsSegmentationMtd define a
+   * GstAnalyticsMtdImpl::mtd_meta_clear */
+  gst_buffer_unref (vbuf);
+
+  /* This will succeed because mbuf was returned to the pool. If this
+   * test fail it highlight a memory managemnt failure in analytics-meta.*/
+  fail_unless (gst_buffer_pool_acquire_buffer (mpool, &mbuf,
+          &pool_acq_params) == GST_FLOW_OK);
+
+  gst_buffer_unref (mbuf);
+  gst_buffer_pool_set_active (mpool, FALSE);
+  gst_object_unref (mpool);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_add_segmentation_meta)
+{
+  /*
+   * This a very simple test that add a segmentation analytics-meta
+   * to a buffer. In this test the masks have the same resolution as
+   * the buffer. It verify that masks (GstBuffer) memory management by
+   * validating the GstBuffer was returned to the pool by
+   */
+  GstBuffer *vbuf, *mbuf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstBufferPool *vpool, *mpool;
+  GstCaps *caps;
+  GstStructure *config;
+  GstVideoInfo vinfo, minfo;
+  GstAnalyticsSegmentationMtd smtd;
+
+  /* Create a pool for video frames */
+  gst_video_info_init (&vinfo);
+  vpool = gst_video_buffer_pool_new ();
+  config = gst_buffer_pool_get_config (vpool);
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_RGBA, 32, 32);
+  caps = gst_video_info_to_caps (&vinfo);
+  gst_buffer_pool_config_set_params (config, caps, vinfo.size, 0, 0);
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+  gst_buffer_pool_set_config (vpool, config);
+  gst_buffer_pool_set_active (vpool, TRUE);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_buffer_pool_acquire_buffer (vpool, &vbuf, NULL) ==
+      GST_FLOW_OK);
+
+  rmeta = gst_buffer_add_analytics_relation_meta_full (vbuf, &init_params);
+
+  /* Create pool for segmentation masks */
+  gst_video_info_init (&minfo);
+  gst_video_info_set_format (&minfo, GST_VIDEO_FORMAT_GRAY8, 32, 32);
+  caps = gst_video_info_to_caps (&minfo);
+  mpool = gst_video_buffer_pool_new ();
+  config = gst_buffer_pool_get_config (mpool);
+
+  /* Here we intentionnaly create a pool of only one element to validate the
+   * buffer used to store the masks is returned to the pool when the video
+   * buffer to which it is attached is unreffed with the intention of having
+   * gst_buffer_pool_acquire_buffer (mpool,...) fail if it didn't happen.*/
+  gst_buffer_pool_config_set_params (config, caps, minfo.size, 0, 1);
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+  gst_buffer_pool_set_config (mpool, config);
+  gst_buffer_pool_set_active (mpool, TRUE);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_buffer_pool_acquire_buffer (mpool, &mbuf, NULL) ==
+      GST_FLOW_OK);
+
+  /* Here we pretend the masks contain 2 region types [2,3] */
+  static const gsize region_count = 2;
+  guint region_ids[] = { 2, 3 };
+
+  gst_analytics_relation_meta_add_segmentation_mtd (rmeta, mbuf,
+      GST_SEGMENTATION_TYPE_INSTANCE, region_count, region_ids, 0, 0, 0, 0,
+      &smtd);
+
+  /* This _unref will return vbuf to vpool and also mbuf to mpool
+   * because GstAnalyticsSegmentationMtd define a
+   * GstAnalyticsMtdImpl::mtd_meta_clear */
+  gst_buffer_unref (vbuf);
+
+  /* This will succeed because mbuf was returned to the pool. If this
+   * test fail it highlight a memory managemnt failure in analytics-meta.*/
+  fail_unless (gst_buffer_pool_acquire_buffer (mpool, &mbuf, NULL) ==
+      GST_FLOW_OK);
+
+  gst_buffer_unref (mbuf);
+  gst_buffer_pool_set_active (mpool, FALSE);
+  gst_object_unref (mpool);
+  gst_buffer_pool_set_active (vpool, FALSE);
+  gst_object_unref (vpool);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_associate_segmentation_meta)
+{
+  /* This test verify that classification can be associated to segmentation.
+   * More specifically we use a grayscale image that contain 2 set of
+   * imbricated pattern. The segmentation problem is simplified by having a
+   * specific value for each region. In a sense the original image is already
+   * segmented to avoid to do a real segmentation, since the goal of this test
+   * is to very segmentation analytics-meta API.
+   *
+   * Original image: 32x24 grayscale
+   * Segmentation input: 16x16 grayscale
+   * Segmentation output: 16x16 tensor (where each value correspond to a region
+   * id in the input)
+   */
+
+  GstBuffer *vbuf, *mbuf;
+  GstAnalyticsRelationMetaInitParams init_params = { 5, 150 };
+  GstAnalyticsRelationMeta *rmeta;
+  GstBufferPool *vpool, *mpool;
+  GstCaps *caps;
+  GstStructure *config;
+  GstVideoInfo vinfo, minfo;
+  GstAnalyticsSegmentationMtd smtd;
+  GstAnalyticsClsMtd clsmtd;
+
+  /* Create a pool for video frames */
+  gst_video_info_init (&vinfo);
+  vpool = gst_video_buffer_pool_new ();
+  config = gst_buffer_pool_get_config (vpool);
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_GRAY8, 32, 24);
+  caps = gst_video_info_to_caps (&vinfo);
+  gst_buffer_pool_config_set_params (config, caps, vinfo.size, 0, 0);
+  gst_buffer_pool_set_config (vpool, config);
+  gst_buffer_pool_set_active (vpool, TRUE);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_buffer_pool_acquire_buffer (vpool, &vbuf, NULL) ==
+      GST_FLOW_OK);
+
+  /* This image a 32 x 24, GRAY8  that contain  └ and ┐ that are imbricated.
+   * └ is formed by pixels values of: 9 and 7.
+   * ┐ is formed by pixels values of: 8 and 6.
+   * 9 and 8 are imbricated and 7 and 6 are impbricated. Pixel values [6,7,8,9],
+   * have no importance.
+   */
+
+  guint8 img[] = {
+    /*        0|0|0|0|0|0|0|0|0|0|1|1|1|1|1|1|1|1|1|1|2|2|2|2|2|2|2|2|2|2|3|3  */
+    /*        0|1|2|3|4|5|6|7|8|9|0|1|2|3|4|5|6|7|8|9|0|1|2|3|4|5|6|7|8|9|0|1  */
+    /* 0  */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 1  */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 2  */ 0, 0, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 3  */ 0, 0, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 4  */ 0, 0, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 5  */ 0, 0, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 6  */ 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 7  */ 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 8  */ 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 9  */ 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 10 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 11 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 12 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 6, 6,
+    6, 6, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 13 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 6, 6,
+    6, 6, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 14 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 6, 6,
+    6, 6, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 15 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 6, 6,
+    6, 6, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 16 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7,
+    7, 7, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 17 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7,
+    7, 7, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 18 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7,
+    7, 7, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 19 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 7, 7, 7, 7,
+    7, 7, 6, 6, 6, 6, 0, 0, 0, 0,
+    /* 20 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 21 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 22 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 23 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+  };
+
+  /* Pre-processing step 1 will convert the original image to segmentation
+   * processing format.
+   *
+   * Decimation (32x24) -> (16x12)
+   0|0|0|0|0|0|0|0|0|0|1|1|1|1|1|1|
+   0|1|2|3|4|5|6|7|8|9|0|1|2|3|4|5|
+
+   0      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   1      0,9,9,8,8,8,8,0,0,0,0,0,0,0,0,0,
+   2      0,9,9,8,8,8,8,0,0,0,0,0,0,0,0,0,
+   3      0,9,9,9,9,8,8,0,0,0,0,0,0,0,0,0,
+   4      0,9,9,9,9,8,8,0,0,0,0,0,0,0,0,0,
+   5      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   6      0,0,0,0,0,0,0,0,7,7,6,6,6,6,0,0,
+   7      0,0,0,0,0,0,0,0,7,7,6,6,6,6,0,0,
+   8      0,0,0,0,0,0,0,0,7,7,7,7,6,6,0,0,
+   9      0,0,0,0,0,0,0,0,7,7,7,7,6,6,0,0,
+   10     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   11     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, */
+
+
+  /* Pre-processing step 2: Add padding match segmentation input format
+   * Padding top-bottom (16x12) -> (16x16)
+   *
+   0|0|0|0|0|0|0|0|0|0|1|1|1|1|1|1|
+   0|1|2|3|4|5|6|7|8|9|0|1|2|3|4|5|
+
+   0      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  Padding line
+   1      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  Padding line
+   1      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   3      0,9,9,8,8,8,8,0,0,0,0,0,0,0,0,0,
+   4      0,9,9,8,8,8,8,0,0,0,0,0,0,0,0,0,
+   5      0,9,9,9,9,8,8,0,0,0,0,0,0,0,0,0,
+   6      0,9,9,9,9,8,8,0,0,0,0,0,0,0,0,0,
+   7      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   8      0,0,0,0,0,0,0,0,7,7,6,6,6,6,0,0,
+   9      0,0,0,0,0,0,0,0,7,7,6,6,6,6,0,0,
+   10     0,0,0,0,0,0,0,0,7,7,7,7,6,6,0,0,
+   11     0,0,0,0,0,0,0,0,7,7,7,7,6,6,0,0,
+   12     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   13     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+   14     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  Padding line
+   15     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  Padding line */
+
+
+  /* Post-processing remove area of the output that correspond to padding
+   * area in the input. In the following array 2, 3, 4, 5 correspond to
+   * segmented region ids.*/
+  guint8 post_proc_segmasks[] = {
+    /*        0|0|0|0|0|0|0|0|0|0|1|1|1|1|1|1| */
+    /*        0|1|2|3|4|5|6|7|8|9|0|1|2|3|4|5| */
+    /* 0  */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 1  */ 0, 2, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 2  */ 0, 2, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 3  */ 0, 2, 2, 2, 2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 4  */ 0, 2, 2, 2, 2, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 5  */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 6  */ 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 5, 5, 5, 5, 0, 0,
+    /* 7  */ 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 5, 5, 5, 5, 0, 0,
+    /* 8  */ 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 5, 5, 0, 0,
+    /* 9  */ 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 5, 5, 0, 0,
+    /* 10 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /* 11 */ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+  };
+
+  /* Creating analytics-relation meta to host analytics results */
+  rmeta = gst_buffer_add_analytics_relation_meta_full (vbuf, &init_params);
+
+  /* Create pool for segmentation masks */
+  gst_video_info_init (&minfo);
+  gst_video_info_set_format (&minfo, GST_VIDEO_FORMAT_GRAY8, 32, 24);
+  caps = gst_video_info_to_caps (&minfo);
+  mpool = gst_video_buffer_pool_new ();
+  config = gst_buffer_pool_get_config (mpool);
+
+  gst_buffer_pool_config_set_params (config, caps, minfo.size, 1, 0);
+  gst_buffer_pool_config_add_option (config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+  gst_buffer_pool_set_config (mpool, config);
+  gst_buffer_pool_set_active (mpool, TRUE);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_buffer_pool_acquire_buffer (mpool, &mbuf, NULL) ==
+      GST_FLOW_OK);
+
+  gst_buffer_fill (mbuf, 0, post_proc_segmasks, 16 * 12);
+
+  /* Masks contain 5 region types [0,1,2,3,4]. We intentionnally change the
+   * order of region ids relative to their appearance in the output to
+   * show that API does not depend on any order or continuity. */
+  static const gsize region_count = 5;
+  guint region_ids[5];
+
+  /* Confidence levels are irrelevant in this context. */
+  gfloat confi[] = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+  GQuark classes[5];
+
+  /* It's important that region index and classification index match. This
+   * is how a region is associated to a specific class.
+   *
+   * Region-id-0 correspond to region-index-0 is associated to class
+   * "background".
+   * Region-id-5 correspond to region-index-1 is associated to class
+   * "top-right-corner".  ┐
+   * Region-id-2 correspond to region-index-2 is associated to class
+   * "bottom-left-corner". └
+   * Region-id-3 correspond to region-index-3 is associated to class
+   * "top-right-corner". ┐
+   * Region-id-4 correspond to region-index-4 is associated to class
+   * "bottom-left-corner". └  */
+  region_ids[0] = 0;
+  classes[0] = g_quark_from_string ("background");
+
+  region_ids[1] = 5;
+  classes[1] = g_quark_from_string ("top-right-corner");
+
+  region_ids[2] = 2;
+  classes[2] = g_quark_from_string ("bottom-left-corner");
+
+  region_ids[3] = 3;
+  classes[3] = g_quark_from_string ("top-right-corner");
+
+  region_ids[4] = 4;
+  classes[4] = g_quark_from_string ("bottom-left-corner");
+
+  gst_analytics_relation_meta_add_segmentation_mtd (rmeta, mbuf,
+      GST_SEGMENTATION_TYPE_INSTANCE, region_count, region_ids, 0, 0, 0, 0,
+      &smtd);
+
+  gst_analytics_relation_meta_add_cls_mtd (rmeta, region_count, confi,
+      classes, &clsmtd);
+
+  gst_analytics_relation_meta_set_relation (rmeta,
+      GST_ANALYTICS_REL_TYPE_RELATE_TO, smtd.id, clsmtd.id);
+
+
+  /* Generate a truth vector for segmented region and associated class. */
+  guint8 truth_vector_segmentation_id[768];
+  GQuark truth_vector_segmentation_classes[768];
+
+  for (gsize i = 0; i < 768; i++) {
+    if (img[i] == 9) {
+      truth_vector_segmentation_id[i] = 2;
+      truth_vector_segmentation_classes[i] =
+          g_quark_from_string ("bottom-left-corner");
+    } else if (img[i] == 8) {
+      truth_vector_segmentation_id[i] = 3;
+      truth_vector_segmentation_classes[i] =
+          g_quark_from_string ("top-right-corner");
+    } else if (img[i] == 7) {
+      truth_vector_segmentation_id[i] = 4;
+      truth_vector_segmentation_classes[i] =
+          g_quark_from_string ("bottom-left-corner");
+    } else if (img[i] == 6) {
+      truth_vector_segmentation_id[i] = 5;
+      truth_vector_segmentation_classes[i] =
+          g_quark_from_string ("top-right-corner");
+    } else {
+      truth_vector_segmentation_id[i] = 0;
+      truth_vector_segmentation_classes[i] = g_quark_from_string ("background");
+    }
+  }
+
+  /* Verify segmentation analytics-meta and associated classification
+   * match truth vectors */
+  gsize idx;
+  GstBufferMapInfo mmap_info;   /* mask map info */
+  gst_buffer_map (mbuf, &mmap_info, GST_MAP_READ);
+  for (gsize r = 0; r < 24; r++) {
+    gsize mr = r / 2;
+    for (gsize c = 0; c < 32; c++) {
+      gsize mc = c / 2;
+      gsize mask_idx = mr * 16 + mc;
+      gsize img_idx = r * 32 + c;
+
+      fail_unless (mmap_info.data[mask_idx] ==
+          truth_vector_segmentation_id[img_idx]);
+
+      /* Retrieve segmentation region index */
+      fail_unless (gst_analytics_segmentation_mtd_get_region_index (&smtd,
+              &idx, mmap_info.data[mask_idx]) == TRUE);
+
+      /* Check that the _get_region_id() API is consistent */
+      fail_unless (gst_analytics_segmentation_mtd_get_region_id (&smtd,
+              idx) == mmap_info.data[mask_idx]);
+
+      /* Retrieve classification associated with region */
+      fail_unless (gst_analytics_relation_meta_get_direct_related (rmeta,
+              smtd.id, GST_ANALYTICS_REL_TYPE_RELATE_TO,
+              gst_analytics_cls_mtd_get_mtd_type (), NULL, &clsmtd));
+
+      /* Retrive class associated with segmentation region */
+      fail_unless (gst_analytics_cls_mtd_get_length (&clsmtd) ==
+          gst_analytics_segmentation_mtd_get_region_count (&smtd));
+
+      /* Retrieve class associated with segmentation region */
+      fail_unless (gst_analytics_cls_mtd_get_quark (&clsmtd, idx) ==
+          truth_vector_segmentation_classes[img_idx]);
+    }
+  }
+  gst_buffer_unmap (mbuf, &mmap_info);
+
+
+  /* This _unref will return vbuf to vpool and also mbuf to mpool
+   * because GstAnalyticsSegmentationMtd define a
+   * GstAnalyticsMtdImpl::mtd_meta_clear */
+  gst_buffer_unref (vbuf);
+
+  gst_buffer_pool_set_active (mpool, FALSE);
+  gst_object_unref (mpool);
+  gst_buffer_pool_set_active (vpool, FALSE);
+  gst_object_unref (vpool);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_iou_int)
+{
+  gint bb1_x = 30, bb1_y = 30, bb1_w = 10, bb1_h = 10;
+  gint bb2_x = 35, bb2_y = 30, bb2_w = 10, bb2_h = 10;
+  gfloat iou;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 40;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 0.0 / 200.0);
+
+  bb2_x = 30;
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 25;
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 25;
+  bb2_y = 30;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 25;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 30;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 30;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 30;
+  bb2_y = 30;
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 100.0 / 100.0);
+
+  bb1_x = 0;
+  bb1_y = 0;
+  bb1_w = 10;
+  bb1_h = 10;
+
+  bb2_x = -5;
+  bb2_y = 0;
+  bb2_w = 10;
+  bb2_h = 10;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 100.0);
+
+  bb2_y = -5;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 100.0);
+
+  bb1_x = -5;
+  bb1_y = -5;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 25.0);
+
+  bb1_x = -5;
+  bb1_y = 0;
+
+  bb2_x = 0;
+  bb2_y = -5;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 75.0);
+
+  bb2_y = -10;
+
+  iou = gst_analytics_image_util_iou_int (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 0.0 / 100.0);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_iou_float)
+{
+  gfloat bb1_x = 30.0, bb1_y = 30.0, bb1_w = 10.0, bb1_h = 10.0;
+  gfloat bb2_x = 35.0, bb2_y = 30.0, bb2_w = 10.0, bb2_h = 10.0;
+  gfloat iou;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 40;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 0.0 / 200.0);
+
+  bb2_x = 30;
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 25;
+  bb2_y = 35;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 25;
+  bb2_y = 30;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 25;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 175.0);
+
+  bb2_x = 30;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 30;
+  bb2_y = 25;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 150.0);
+
+  bb2_x = 30;
+  bb2_y = 30;
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 100.0 / 100.0);
+
+  bb1_x = 0;
+  bb1_y = 0;
+  bb1_w = 10;
+  bb1_h = 10;
+
+  bb2_x = -5;
+  bb2_y = 0;
+  bb2_w = 10;
+  bb2_h = 10;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 50.0 / 100.0);
+
+  bb2_y = -5;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 100.0);
+
+  bb1_x = -5;
+  bb1_y = -5;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 25.0);
+
+  bb1_x = -5;
+  bb1_y = 0;
+
+  bb2_x = 0;
+  bb2_y = -5;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 25.0 / 75.0);
+
+  bb2_y = -10;
+
+  iou = gst_analytics_image_util_iou_float (bb1_x, bb1_y, bb1_w, bb1_h, bb2_x,
+      bb2_y, bb2_w, bb2_h);
+  fail_unless_equals_float (iou, 0.0 / 100.0);
+
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_get_tensor)
+{
+  GstBuffer *buf, *tensor_data;
+  GstTensorMeta *tmeta;
+  GstTensor *tensor;
+  const GstTensor *tensor2;
+  GstTensor **tensors;
+  GQuark tensor_id = g_quark_from_string ("tensor-encoding-1");
+  gsize dims[] = { 1 };
+  gsize index;
+
+  /* Verify we can add a tensor-meta to a buffer */
+
+  /* Create tensor data */
+  guint8 *data = g_malloc0 (1);
+  *data = 28;
+
+  /* Wrap tensor data into a GstBuffer */
+  tensor_data = gst_buffer_new_wrapped_full (0, data, 1, 0, 1, data, g_free);
+
+  /* Create a new buffer where we attach tensor-meta */
+  buf = gst_buffer_new ();
+  tmeta = gst_buffer_add_tensor_meta (buf);
+
+  /* Create a tensor */
+  tensor = gst_tensor_new_simple (tensor_id, GST_TENSOR_DATA_TYPE_UINT8,
+      tensor_data, GST_TENSOR_DIM_ORDER_COL_MAJOR, 1, dims);
+
+  /* Create an array of tensor to fullfil GstTensor API */
+  tensors = g_new (GstTensor *, 1);
+  tensors[0] = tensor;
+
+  /* Set tensor-meta's tensors */
+  gst_tensor_meta_set (tmeta, 1, tensors);
+
+  /* Retieve tensor using index interface */
+  index = gst_tensor_meta_get_index_from_id (tmeta, tensor_id);
+
+  fail_unless (index == 0);
+
+  tensor2 = gst_tensor_meta_get (tmeta, index);
+
+  /* Verify tensor retrieved */
+  fail_unless (tensor == tensor2);
+
+  /* Retrieve tensor using tensor-id directly */
+  tensor2 = gst_tensor_meta_get_by_id (tmeta, tensor_id);
+
+  fail_unless (tensor == tensor2);
+
+  gst_buffer_unref (buf);
 }
 
 GST_END_TEST;
@@ -946,6 +2069,9 @@ analyticmeta_suite (void)
   TCase *tc_chain_od;
   TCase *tc_chain_od_cls;
   TCase *tc_chain_tracking;
+  TCase *tc_chain_segmentation;
+  TCase *tc_chain_util;
+  TCase *tc_chain_tensors;
 
   s = suite_create ("Analytic Meta Library");
 
@@ -964,11 +2090,19 @@ analyticmeta_suite (void)
   tcase_add_test (tc_chain_relation, test_query_relation_meta_cases);
   tcase_add_test (tc_chain_relation, test_path_relation_meta);
   tcase_add_test (tc_chain_relation, test_cyclic_relation_meta);
+  tcase_add_test (tc_chain_relation, test_verify_mtd_clear);
+  tcase_add_test (tc_chain_relation, test_copy_metas);
 
   tc_chain_od = tcase_create ("Object Detection Mtd");
   suite_add_tcase (s, tc_chain_od);
   tcase_add_test (tc_chain_od, test_add_od_meta);
+  tcase_add_test (tc_chain_od, test_add_oriented_od_meta);
   tcase_add_test (tc_chain_od, test_od_meta_fields);
+  tcase_add_test (tc_chain_od, test_oriented_od_meta_fields);
+  tcase_add_test (tc_chain_od,
+      test_add_non_oriented_get_oriented_od_meta_fields);
+  tcase_add_test (tc_chain_od,
+      test_add_oriented_get_non_oriented_od_meta_fields);
 
   tc_chain_od_cls = tcase_create ("Object Detection <-> Classification Mtd");
   suite_add_tcase (s, tc_chain_od_cls);
@@ -978,6 +2112,22 @@ analyticmeta_suite (void)
   tc_chain_tracking = tcase_create ("Tracking Mtd");
   suite_add_tcase (s, tc_chain_tracking);
   tcase_add_test (tc_chain_tracking, test_add_tracking_meta);
+  tcase_add_test (tc_chain_tracking, test_od_trk_relation);
+
+  tc_chain_segmentation = tcase_create ("Segmentation Mtd");
+  suite_add_tcase (s, tc_chain_segmentation);
+  tcase_add_test (tc_chain_segmentation, test_add_segmentation_meta);
+  tcase_add_test (tc_chain_segmentation, test_associate_segmentation_meta);
+
+  tc_chain_util = tcase_create ("Utility");
+  suite_add_tcase (s, tc_chain_util);
+  tcase_add_test (tc_chain_util, test_iou_int);
+  tcase_add_test (tc_chain_util, test_iou_float);
+
+  tc_chain_tensors = tcase_create ("TensorMeta");
+  suite_add_tcase (s, tc_chain_tensors);
+  tcase_add_test (tc_chain_tensors, test_get_tensor);
+
   return s;
 }
 

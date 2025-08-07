@@ -51,7 +51,7 @@ SCRIPT="\
 HALF_MEMORY="$(grep MemTotal /proc/meminfo | awk '{print $2}' | xargs -I {} echo "scale=0; 1+{}/1024^2/2" | bc)G"
 
 echo Running tests in virtual machine ...
-virtme-run \
+sudo virtme-run \
   --memory=${HALF_MEMORY} \
   --rw \
   --pwd \
@@ -59,7 +59,7 @@ virtme-run \
   --script-sh "sh -c \"$SCRIPT\"" \
   -a visl.stable_output=true \
   -a visl.codec_variability=true \
-  --show-boot-console --show-command \
+  --show-boot-console --show-command --force-9p \
   --qemu-opts -cpu host,pdcm=off -smp 8
 VM_RESULT=$?
 if [ $VM_RESULT != 0 ]; then

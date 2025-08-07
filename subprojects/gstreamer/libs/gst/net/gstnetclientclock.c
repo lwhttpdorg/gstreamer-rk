@@ -63,6 +63,8 @@
 #include "gstnetclientclock.h"
 #include "gstnetutils.h"
 
+#include "gst/glib-compat-private.h"
+
 #include <gio/gio.h>
 
 #include <string.h>
@@ -145,7 +147,6 @@ struct _GstNetClientInternalClock
   GstClockTime minimum_update_interval;
   GstClockTime last_remote_poll_interval;
   GstClockTime last_remote_time;
-  GstClockTime remote_avg_old;
   guint skipped_updates;
   GstClockTime last_rtts[MEDIAN_PRE_FILTERING_WINDOW];
   gint last_rtts_missing;
@@ -233,7 +234,6 @@ gst_net_client_internal_clock_init (GstNetClientInternalClock * self)
   self->skipped_updates = 0;
   self->last_rtts_missing = MEDIAN_PRE_FILTERING_WINDOW;
   self->marked_corrupted = FALSE;
-  self->remote_avg_old = 0;
 }
 
 static void
@@ -331,6 +331,7 @@ gst_net_client_internal_clock_constructed (GObject * object)
 
   if (!gst_net_client_internal_clock_start (self)) {
     g_warning ("failed to start clock '%s'", GST_OBJECT_NAME (self));
+    self->marked_corrupted = TRUE;
   }
 
   /* all systems go, cap'n */
@@ -427,7 +428,7 @@ gst_net_client_internal_clock_observe_times (GstNetClientInternalClock * self,
     self->last_rtts_missing--;
   } else {
     memcpy (&last_rtts, &self->last_rtts, sizeof (last_rtts));
-    g_qsort_with_data (&last_rtts,
+    g_sort_array (&last_rtts,
         MEDIAN_PRE_FILTERING_WINDOW, sizeof (GstClockTime),
         (GCompareDataFunc) compare_clock_time, NULL);
 
@@ -528,20 +529,6 @@ gst_net_client_internal_clock_observe_times (GstNetClientInternalClock * self,
       (GST_CLOCK_DIFF (remote_avg, min_guess) < (GstClockTimeDiff) (max_discont)
       && GST_CLOCK_DIFF (time_before,
           remote_avg) < (GstClockTimeDiff) (max_discont));
-
-  /* Check if new remote_avg is less than before to detect if signal lost
-   * sync due to the remote clock has restarted. Then the new remote time will
-   * be less than the previous time which should not happen if increased in a
-   * monotonic way. Also, only perform this check on a synchronized clock to
-   * avoid startup issues.
-   */
-  if (synched) {
-    if (remote_avg < self->remote_avg_old) {
-      gst_clock_set_synced (GST_CLOCK (self), FALSE);
-    } else {
-      self->remote_avg_old = remote_avg;
-    }
-  }
 
   if (gst_clock_add_observation_unapplied (GST_CLOCK_CAST (self),
           local_avg, remote_avg, &r_squared, &internal_time, &external_time,
@@ -664,6 +651,7 @@ corrupted:
     self->marked_corrupted = TRUE;
   }
   GST_OBJECT_UNLOCK (self);
+  gst_clock_set_synced (GST_CLOCK (self), FALSE);
   return;
 }
 
@@ -1194,41 +1182,44 @@ static void
 gst_net_client_clock_finalize (GObject * object)
 {
   GstNetClientClock *self = GST_NET_CLIENT_CLOCK (object);
-  GList *l;
 
-  if (self->priv->synced_id)
-    g_signal_handler_disconnect (self->priv->internal_clock,
-        self->priv->synced_id);
-  self->priv->synced_id = 0;
+  if (self->priv->internal_clock) {
+    GList *l;
 
-  G_LOCK (clocks_lock);
-  for (l = clocks; l; l = l->next) {
-    ClockCache *cache = l->data;
+    if (self->priv->synced_id)
+      g_signal_handler_disconnect (self->priv->internal_clock,
+          self->priv->synced_id);
+    self->priv->synced_id = 0;
 
-    if (cache->clock == self->priv->internal_clock) {
-      cache->clocks = g_list_remove (cache->clocks, self);
+    G_LOCK (clocks_lock);
+    for (l = clocks; l; l = l->next) {
+      ClockCache *cache = l->data;
 
-      if (cache->clocks) {
-        update_clock_cache (cache);
-      } else {
-        GstClock *sysclock = gst_system_clock_obtain ();
-        GstClockTime time = gst_clock_get_time (sysclock);
-        GstNetClientInternalClock *internal_clock =
-            GST_NET_CLIENT_INTERNAL_CLOCK (cache->clock);
+      if (cache->clock == self->priv->internal_clock) {
+        cache->clocks = g_list_remove (cache->clocks, self);
 
-        /* only defer deletion if the clock is not marked corrupted */
-        if (!internal_clock->marked_corrupted)
-          time += 60 * GST_SECOND;
+        if (cache->clocks) {
+          update_clock_cache (cache);
+        } else {
+          GstClock *sysclock = gst_system_clock_obtain ();
+          GstClockTime time = gst_clock_get_time (sysclock);
+          GstNetClientInternalClock *internal_clock =
+              GST_NET_CLIENT_INTERNAL_CLOCK (cache->clock);
 
-        cache->remove_id = gst_clock_new_single_shot_id (sysclock, time);
-        gst_clock_id_wait_async (cache->remove_id, remove_clock_cache, cache,
-            NULL);
-        gst_object_unref (sysclock);
+          /* only defer deletion if the clock is not marked corrupted */
+          if (!internal_clock->marked_corrupted)
+            time += 60 * GST_SECOND;
+
+          cache->remove_id = gst_clock_new_single_shot_id (sysclock, time);
+          gst_clock_id_wait_async (cache->remove_id, remove_clock_cache, cache,
+              NULL);
+          gst_object_unref (sysclock);
+        }
+        break;
       }
-      break;
     }
+    G_UNLOCK (clocks_lock);
   }
-  G_UNLOCK (clocks_lock);
 
   g_free (self->priv->address);
   self->priv->address = NULL;
@@ -1375,7 +1366,6 @@ static void
 gst_net_client_clock_constructed (GObject * object)
 {
   GstNetClientClock *self = GST_NET_CLIENT_CLOCK (object);
-  GstClock *internal_clock;
   GList *l;
   ClockCache *cache = NULL;
 
@@ -1388,7 +1378,7 @@ gst_net_client_clock_constructed (GObject * object)
         GST_NET_CLIENT_INTERNAL_CLOCK (tmp->clock);
 
     if (internal_clock->marked_corrupted)
-      break;
+      continue;
 
     if (strcmp (internal_clock->address, self->priv->address) == 0 &&
         internal_clock->port == self->priv->port) {
@@ -1403,34 +1393,49 @@ gst_net_client_clock_constructed (GObject * object)
   }
 
   if (!cache) {
-    cache = g_new0 (ClockCache, 1);
+    GstNetClientInternalClock *internal_clock;
 
-    cache->clock =
+    internal_clock =
         g_object_new (GST_TYPE_NET_CLIENT_INTERNAL_CLOCK, "address",
         self->priv->address, "port", self->priv->port, "is-ntp",
         self->priv->is_ntp, NULL);
-    gst_object_ref_sink (cache->clock);
-    clocks = g_list_prepend (clocks, cache);
+    gst_object_ref_sink (internal_clock);
 
-    /* Not actually leaked but is cached for a while before being disposed,
-     * see gst_net_client_clock_finalize, so pretend it is to not confuse
-     * tests. */
-    GST_OBJECT_FLAG_SET (cache->clock, GST_OBJECT_FLAG_MAY_BE_LEAKED);
+    if (internal_clock->marked_corrupted) {
+      GST_WARNING_OBJECT (self, "Internal clock couldn't start");
+      gst_object_unref (internal_clock);
+    } else {
+      cache = g_new0 (ClockCache, 1);
+
+      cache->clock = GST_CLOCK (internal_clock);
+      clocks = g_list_prepend (clocks, cache);
+
+      /* Not actually leaked but is cached for a while before being disposed,
+       * see gst_net_client_clock_finalize, so pretend it is to not confuse
+       * tests. */
+      GST_OBJECT_FLAG_SET (cache->clock, GST_OBJECT_FLAG_MAY_BE_LEAKED);
+    }
   }
 
-  cache->clocks = g_list_prepend (cache->clocks, self);
+  if (cache) {
+    cache->clocks = g_list_prepend (cache->clocks, self);
 
-  GST_OBJECT_LOCK (cache->clock);
-  if (gst_clock_is_synced (cache->clock))
-    gst_clock_set_synced (GST_CLOCK (self), TRUE);
-  self->priv->synced_id =
-      g_signal_connect (cache->clock, "synced",
-      G_CALLBACK (gst_net_client_clock_synced_cb), self);
-  GST_OBJECT_UNLOCK (cache->clock);
+    GST_OBJECT_LOCK (cache->clock);
+    if (gst_clock_is_synced (cache->clock))
+      gst_clock_set_synced (GST_CLOCK (self), TRUE);
+    self->priv->synced_id =
+        g_signal_connect (cache->clock, "synced",
+        G_CALLBACK (gst_net_client_clock_synced_cb), self);
+    GST_OBJECT_UNLOCK (cache->clock);
+
+    self->priv->internal_clock = cache->clock;
+  }
 
   G_UNLOCK (clocks_lock);
 
-  self->priv->internal_clock = internal_clock = cache->clock;
+  /* Mark clock as unsynced if creation of the internal clock failed */
+  if (!cache)
+    gst_clock_set_synced (GST_CLOCK (self), FALSE);
 
   /* all systems go, cap'n */
 }
@@ -1439,6 +1444,9 @@ static GstClockTime
 gst_net_client_clock_get_internal_time (GstClock * clock)
 {
   GstNetClientClock *self = GST_NET_CLIENT_CLOCK (clock);
+
+  if (!self->priv->internal_clock)
+    return self->priv->base_time;
 
   if (!gst_clock_is_synced (self->priv->internal_clock)) {
     GstClockTime now = gst_clock_get_internal_time (self->priv->internal_clock);
@@ -1530,4 +1538,37 @@ gst_ntp_clock_new (const gchar * name, const gchar * remote_address,
   gst_object_ref_sink (ret);
 
   return ret;
+}
+
+static void
+_free_clock_cache (gpointer data)
+{
+  ClockCache *cache = data;
+
+  g_assert (cache->clocks == NULL);
+
+  if (cache->remove_id) {
+    gst_clock_id_unschedule (cache->remove_id);
+    gst_clock_id_unref (cache->remove_id);
+  }
+
+  gst_object_unref (cache->clock);
+  g_free (cache);
+}
+
+/**
+ * gst_net_client_clock_deinit:
+ *
+ * Clears any cached #GstNetClientClock clocks.
+ * All references should be released beforehand.
+ * Mainly used for testing.
+ *
+ * Since: 1.28
+ */
+void
+gst_net_client_clock_deinit (void)
+{
+  G_LOCK (clocks_lock);
+  g_list_free_full (g_steal_pointer (&clocks), _free_clock_cache);
+  G_UNLOCK (clocks_lock);
 }

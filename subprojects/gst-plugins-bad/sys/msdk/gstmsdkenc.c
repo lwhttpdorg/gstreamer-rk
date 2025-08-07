@@ -189,6 +189,7 @@ ensure_bitrate_control (GstMsdkEnc * thiz)
 
     case MFX_RATECONTROL_LA_ICQ:
       option2->LookAheadDepth = thiz->lookahead_depth;
+      /* FALLTHROUGH */
     case MFX_RATECONTROL_ICQ:
       mfx->ICQQuality = CLAMP (thiz->qpi, 1, 51);
       break;
@@ -500,11 +501,6 @@ gst_msdkenc_init_encoder (GstMsdkEnc * thiz)
   guint i;
   mfxExtVideoSignalInfo ext_vsi;
 
-  if (thiz->initialized) {
-    GST_DEBUG_OBJECT (thiz, "Already initialized");
-    return TRUE;
-  }
-
   if (!thiz->context) {
     GST_WARNING_OBJECT (thiz, "No MSDK Context");
     return FALSE;
@@ -522,6 +518,12 @@ gst_msdkenc_init_encoder (GstMsdkEnc * thiz)
   }
 
   GST_OBJECT_LOCK (thiz);
+  if (thiz->initialized) {
+    GST_DEBUG_OBJECT (thiz, "Already initialized");
+    GST_OBJECT_UNLOCK (thiz);
+    return TRUE;
+  }
+
   session = gst_msdk_context_get_session (thiz->context);
   thiz->codename = msdk_get_platform_codename (session);
 
@@ -1206,7 +1208,8 @@ gst_msdk_create_va_pool (GstMsdkEnc * thiz, GstVideoInfo * info,
   if (thiz->use_dmabuf && thiz->modifier != DRM_FORMAT_MOD_INVALID) {
     aligned_caps = gst_msdkcaps_video_info_to_drm_caps (info, thiz->modifier);
     gst_caps_set_features (aligned_caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_DMABUF, NULL));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_DMABUF,
+            NULL));
   } else
     aligned_caps = gst_video_info_to_caps (info);
 
@@ -1426,7 +1429,8 @@ gst_msdkenc_set_format (GstVideoEncoder * encoder, GstVideoCodecState * state)
   if (!thiz->use_va && sinkpad_can_dmabuf (thiz)) {
     thiz->input_state->caps = gst_caps_make_writable (thiz->input_state->caps);
     gst_caps_set_features (thiz->input_state->caps, 0,
-        gst_caps_features_new (GST_CAPS_FEATURE_MEMORY_DMABUF, NULL));
+        gst_caps_features_new_static_str (GST_CAPS_FEATURE_MEMORY_DMABUF,
+            NULL));
     thiz->use_dmabuf = TRUE;
     thiz->modifier = get_msdkcaps_get_modifier (state->caps);
   }

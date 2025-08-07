@@ -1545,6 +1545,304 @@ gst_codec_utils_h265_caps_set_level_tier_and_profile (GstCaps * caps,
 }
 
 /**
+ * gst_codec_utils_h266_get_profile:
+ * @ptl_record: (array length=len): Pointer to the VvcPTLRecord structure as defined in ISO/IEC 14496-15.
+ * @len: Length of the data available in @ptl_record
+ *
+ * Converts the profile indication (general_profile_idc) in the stream's
+ * ptl_record structure into a string.
+ *
+ * Returns: (nullable): The profile as a const string, or %NULL if there is an error.
+ *
+ * Since: 1.26
+ */
+const gchar *
+gst_codec_utils_h266_get_profile (const guint8 * ptl_record, guint len)
+{
+  gint profile_idc;
+
+  g_return_val_if_fail (ptl_record != NULL, NULL);
+
+  if (len < 2)
+    return NULL;
+
+  GST_MEMDUMP ("VvcPTLRecord", ptl_record, len);
+
+  profile_idc = (ptl_record[1] & 0xFE) >> 1;
+
+  if (!profile_idc)
+    return NULL;
+
+  switch (profile_idc) {
+    case 1:
+      return "main-10";
+      break;
+    case 2:
+      return "main-12";
+      break;
+    case 10:
+      return "main-12-intra";
+      break;
+    case 17:
+      return "multilayer-main-10";
+      break;
+    case 33:
+      return "main-444-10";
+      break;
+    case 34:
+      return "main-444-12";
+      break;
+    case 35:
+      return "main-444-16";
+      break;
+    case 42:
+      return "main-444-12-intra";
+      break;
+    case 43:
+      return "main-444-16-intra";
+      break;
+    case 49:
+      return "multilayer-main-444-10";
+      break;
+    case 65:
+      return "main-10-still-picture";
+      break;
+    case 66:
+      return "main-12-still-picture";
+      break;
+    case 97:
+      return "main-444-10-still-picture";
+      break;
+    case 98:
+      return "main-444-12-still-picture";
+      break;
+    case 99:
+      return "main-444-16-still-picture";
+      break;
+    default:
+      return NULL;
+  }
+}
+
+/**
+ * gst_codec_utils_h266_get_tier:
+ * @ptl_record: (array length=len): Pointer to the VvcPTLRecord structure as defined in ISO/IEC 14496-15.
+ * @len: Length of the data available in @ptl_record.
+ *
+ * Converts the tier indication (general_tier_flag) in the stream's
+ * ptl_record structure into a string.
+ *
+ * Returns: (nullable): The tier as a const string, or %NULL if there is an error.
+ *
+ * Since: 1.26
+ */
+const gchar *
+gst_codec_utils_h266_get_tier (const guint8 * ptl_record, guint len)
+{
+  const gchar *tier = NULL;
+  gint tier_flag = 0;
+
+  g_return_val_if_fail (ptl_record != NULL, NULL);
+
+  if (len < 2)
+    return NULL;
+
+  GST_MEMDUMP ("VvcPTLRecord", ptl_record, len);
+
+  tier_flag = ptl_record[1] & 0x01;
+
+  if (tier_flag)
+    tier = "high";
+  else
+    tier = "main";
+
+  return tier;
+}
+
+/**
+ * gst_codec_utils_h266_get_level:
+ * @ptl_record: (array length=len): Pointer to the VvcPTLRecord structure as defined in ISO/IEC 14496-15.
+ * @len: Length of the data available in @ptl_record.
+ *
+ * Converts the level indication (general_level_idc) in the stream's
+ * ptl_record structure into a string.
+ *
+ * Returns: (nullable): The level as a const string, or %NULL if there is an error.
+ *
+ * Since: 1.26
+ */
+const gchar *
+gst_codec_utils_h266_get_level (const guint8 * ptl_record, guint len)
+{
+  guint8 level_idc;
+
+  g_return_val_if_fail (ptl_record != NULL, NULL);
+
+  if (len < 3)
+    return NULL;
+
+  GST_MEMDUMP ("VvcPTLRecord", ptl_record, len);
+
+  level_idc = ptl_record[2];
+
+  if (!level_idc)
+    return NULL;
+
+  switch (level_idc) {
+    case 16:
+      return "1";
+      break;
+    case 32:
+      return "2";
+      break;
+    case 35:
+      return "2.1";
+      break;
+    case 48:
+      return "3";
+      break;
+    case 51:
+      return "3.1";
+      break;
+    case 64:
+      return "4";
+      break;
+    case 67:
+      return "4.1";
+      break;
+    case 80:
+      return "5";
+      break;
+    case 83:
+      return "5.1";
+      break;
+    case 86:
+      return "5.2";
+      break;
+    case 96:
+      return "6";
+      break;
+    case 99:
+      return "6.1";
+      break;
+    case 102:
+      return "6.2";
+      break;
+    case 105:
+      return "6.3";
+      break;
+    default:
+      return NULL;
+  }
+}
+
+/**
+ * gst_codec_utils_h266_get_level_idc:
+ * @level: A level string from caps
+ *
+ * Transform a level string from the caps into the level_idc
+ *
+ * Returns: the level_idc or 0 if the level is unknown
+ *
+ * Since: 1.26
+ */
+guint8
+gst_codec_utils_h266_get_level_idc (const gchar * level)
+{
+  g_return_val_if_fail (level != NULL, 0);
+
+  if (!strcmp (level, "1"))
+    return 16;
+  else if (!strcmp (level, "2"))
+    return 32;
+  else if (!strcmp (level, "2.1"))
+    return 35;
+  else if (!strcmp (level, "3"))
+    return 48;
+  else if (!strcmp (level, "3.1"))
+    return 51;
+  else if (!strcmp (level, "4"))
+    return 64;
+  else if (!strcmp (level, "4.1"))
+    return 67;
+  else if (!strcmp (level, "5"))
+    return 80;
+  else if (!strcmp (level, "5.1"))
+    return 83;
+  else if (!strcmp (level, "5.2"))
+    return 86;
+  else if (!strcmp (level, "6"))
+    return 96;
+  else if (!strcmp (level, "6.1"))
+    return 99;
+  else if (!strcmp (level, "6.2"))
+    return 102;
+  else if (!strcmp (level, "6.3"))
+    return 105;
+
+
+  GST_WARNING ("Invalid level %s", level);
+  return 0;
+}
+
+/**
+ * gst_codec_utils_h266_caps_set_level_tier_and_profile:
+ * @caps: the #GstCaps to which the level, tier and profile are to be added
+ * @decoder_configuration: (array length=len): Pointer to the VvcDecoderConfigurationRecord struct as defined in ISO/IEC 14496-15
+ * @len: Length of the data available in @decoder_configuration.
+ *
+ * Sets the level, tier and profile in @caps if it can be determined from
+ * @decoder_configuration. See gst_codec_utils_h266_get_level(),
+ * gst_codec_utils_h266_get_tier() and gst_codec_utils_h266_get_profile()
+ * for more details on the parameters.
+ *
+ * Returns: %TRUE if the level, tier, profile could be set, %FALSE otherwise.
+ *
+ * Since: 1.26
+ */
+gboolean
+gst_codec_utils_h266_caps_set_level_tier_and_profile (GstCaps * caps,
+    const guint8 * decoder_configuration, guint len)
+{
+  const gchar *level, *tier, *profile;
+  gboolean ptl_present_flag;
+  const guint8 *ptl_record;
+
+  g_return_val_if_fail (GST_IS_CAPS (caps), FALSE);
+  g_return_val_if_fail (GST_CAPS_IS_SIMPLE (caps), FALSE);
+  g_return_val_if_fail (GST_SIMPLE_CAPS_HAS_NAME (caps, "video/x-h266"), FALSE);
+  g_return_val_if_fail (decoder_configuration != NULL, FALSE);
+
+  if (len < 5)
+    return FALSE;
+
+  ptl_present_flag = decoder_configuration[0] & 0x01;
+  if (!ptl_present_flag)
+    return FALSE;
+
+  ptl_record = decoder_configuration + 4;
+  len -= 4;
+
+  level = gst_codec_utils_h266_get_level (ptl_record, len);
+  if (level != NULL)
+    gst_caps_set_simple (caps, "level", G_TYPE_STRING, level, NULL);
+
+  tier = gst_codec_utils_h266_get_tier (ptl_record, len);
+  if (tier != NULL)
+    gst_caps_set_simple (caps, "tier", G_TYPE_STRING, tier, NULL);
+
+  profile = gst_codec_utils_h266_get_profile (ptl_record, len);
+  if (profile != NULL)
+    gst_caps_set_simple (caps, "profile", G_TYPE_STRING, profile, NULL);
+
+  GST_LOG ("profile : %s", (profile) ? profile : "---");
+  GST_LOG ("tier    : %s", (tier) ? tier : "---");
+  GST_LOG ("level   : %s", (level) ? level : "---");
+
+  return (level != NULL && tier != NULL && profile != NULL);
+}
+
+/**
  * gst_codec_utils_av1_get_seq_level_idx:
  * @level: A level string from caps
  *
@@ -2417,6 +2715,232 @@ done:
   return ret;
 }
 
+/**
+ * gst_codec_utils_av1_create_caps_from_av1c:
+ * @av1c: (transfer none): a #GstBuffer containing a AV1CodecConfigurationRecord
+ *
+ * Parses the provided @av1c and returns the corresponding caps
+ *
+ * Since: 1.26
+ *
+ * Returns: (transfer full) (nullable): The parsed AV1 caps, or %NULL if there
+ * is an error
+ */
+GstCaps *
+gst_codec_utils_av1_create_caps_from_av1c (GstBuffer * av1c)
+{
+  GstMapInfo map;
+  GstCaps *ret = NULL;
+  const gchar *profile, *chroma_format;
+  guint bit_depth_luma = 8;
+  gint presentation_delay = -1;
+
+  g_return_val_if_fail (av1c, NULL);
+
+  if (!gst_buffer_map (av1c, &map, GST_MAP_READ))
+    return NULL;
+
+  if (map.size < 4) {
+    GST_WARNING ("av1c too small");
+    goto done;
+  }
+
+  /*
+   *  unsigned int (1) marker = 1;
+   *  unsigned int (7) version = 1;
+   */
+  if (map.data[0] != 0x81) {
+    GST_WARNING ("Wrong av1c marker/version: 0x%02x", map.data[0]);
+    goto done;
+  }
+
+  /*
+   *  unsigned int (3) seq_profile;
+   *  unsigned int (5) seq_level_idx_0;
+   */
+  switch (map.data[1] >> 5) {
+    case 0:
+      profile = "main";
+      break;
+    case 1:
+      profile = "high";
+      break;
+    case 2:
+      profile = "professional";
+      break;
+    default:
+      GST_WARNING ("Invalid seq_profile %d", map.data[1] >> 5);
+      goto done;
+  }
+
+  /* FIXME : Add level processing */
+
+  /*
+   *  unsigned int (1) seq_tier_0;
+   *  unsigned int (1) high_bitdepth;
+   *  unsigned int (1) twelve_bit;
+   *  unsigned int (1) monochrome;
+   *  unsigned int (1) chroma_subsampling_x;
+   *  unsigned int (1) chroma_subsampling_y;
+   *  unsigned int (2) chroma_sample_position;
+   */
+  if ((map.data[2] & 0x60) == 0x60) {
+    bit_depth_luma = 12;
+  } else if ((map.data[2] & 0x60) == 0x40) {
+    bit_depth_luma = 10;
+  }
+
+  switch (map.data[2] & 0x1c) {
+    case 0x1c:
+      chroma_format = "4:0:0";
+      break;
+    case 0x0c:
+      chroma_format = "4:2:0";
+      break;
+    case 0x08:
+      chroma_format = "4:2:2";
+      break;
+    case 0x00:
+      chroma_format = "4:4:4";
+      break;
+    default:
+      GST_WARNING ("invalid chroma format values");
+      goto done;
+  }
+
+  /*
+   *  unsigned int (3) reserved = 0;
+   *
+   *  unsigned int (1) initial_presentation_delay_present;
+   *  if (initial_presentation_delay_present) {
+   *    unsigned int (4) initial_presentation_delay_minus_one;
+   *  } else {
+   *    unsigned int (4) reserved = 0;
+   *  }
+   */
+  if (map.data[3] & 0x10)
+    presentation_delay = map.data[3] & 0xf;
+
+  ret = gst_caps_new_simple ("video/x-av1", "profile", G_TYPE_STRING, profile,
+      "bit-depth-luma", G_TYPE_UINT, bit_depth_luma,
+      "chroma-format", G_TYPE_STRING, chroma_format, NULL);
+
+  if (presentation_delay != -1)
+    gst_caps_set_simple (ret, "presentation-delay", G_TYPE_INT,
+        presentation_delay, NULL);
+
+  /* FIXME : Extract more information from optional configOBU */
+
+done:
+  gst_buffer_unmap (av1c, &map);
+
+  return ret;
+}
+
+/**
+ * gst_codec_utils_av1_create_av1c_from_caps:
+ * @caps: a video/x-av1 #GstCaps
+ *
+ * Creates the corresponding AV1 Codec Configuration Record
+ *
+ * Since: 1.26
+ *
+ * Returns: (transfer full) (nullable): The AV1 Codec Configuration Record, or
+ * %NULL if there was an error.
+ */
+
+GstBuffer *
+gst_codec_utils_av1_create_av1c_from_caps (GstCaps * caps)
+{
+  gint presentation_delay = -1;
+  GstBuffer *av1_codec_data = NULL;
+  GstStructure *structure;
+  GstMapInfo map;
+  const gchar *tmp;
+  guint tmp2;
+
+  g_return_val_if_fail (caps, NULL);
+
+  structure = gst_caps_get_structure (caps, 0);
+  if (!structure || !gst_structure_has_name (structure, "video/x-av1")) {
+    GST_WARNING ("Caps provided are not video/x-av1");
+    return NULL;
+  }
+
+  gst_structure_get_int (structure, "presentation-delay", &presentation_delay);
+
+  av1_codec_data = gst_buffer_new_allocate (NULL, 4, NULL);
+  gst_buffer_map (av1_codec_data, &map, GST_MAP_WRITE);
+
+  /*
+   *  unsigned int (1) marker = 1;
+   *  unsigned int (7) version = 1;
+   *  unsigned int (3) seq_profile;
+   *  unsigned int (5) seq_level_idx_0;
+   *  unsigned int (1) seq_tier_0;
+   *  unsigned int (1) high_bitdepth;
+   *  unsigned int (1) twelve_bit;
+   *  unsigned int (1) monochrome;
+   *  unsigned int (1) chroma_subsampling_x;
+   *  unsigned int (1) chroma_subsampling_y;
+   *  unsigned int (2) chroma_sample_position;
+   *  unsigned int (3) reserved = 0;
+   *
+   *  unsigned int (1) initial_presentation_delay_present;
+   *  if (initial_presentation_delay_present) {
+   *    unsigned int (4) initial_presentation_delay_minus_one;
+   *  } else {
+   *    unsigned int (4) reserved = 0;
+   *  }
+   */
+
+  map.data[0] = 0x81;
+  map.data[1] = 0x00;
+  if ((tmp = gst_structure_get_string (structure, "profile"))) {
+    if (strcmp (tmp, "main") == 0)
+      map.data[1] |= (0 << 5);
+    if (strcmp (tmp, "high") == 0)
+      map.data[1] |= (1 << 5);
+    if (strcmp (tmp, "professional") == 0)
+      map.data[1] |= (2 << 5);
+  }
+  /* FIXME: level set to 1 */
+  map.data[1] |= 0x01;
+  /* FIXME: tier set to 0 */
+
+  if (gst_structure_get_uint (structure, "bit-depth-luma", &tmp2)) {
+    if (tmp2 == 10) {
+      map.data[2] |= 0x40;
+    } else if (tmp2 == 12) {
+      map.data[2] |= 0x60;
+    }
+  }
+
+  /* Assume 4:2:0 if nothing else is given */
+  map.data[2] |= 0x0C;
+  if ((tmp = gst_structure_get_string (structure, "chroma-format"))) {
+    if (strcmp (tmp, "4:0:0") == 0)
+      map.data[2] |= 0x1C;
+    if (strcmp (tmp, "4:2:0") == 0)
+      map.data[2] |= 0x0C;
+    if (strcmp (tmp, "4:2:2") == 0)
+      map.data[2] |= 0x08;
+    if (strcmp (tmp, "4:4:4") == 0)
+      map.data[2] |= 0x00;
+  }
+
+  /* FIXME: keep chroma-site unknown */
+
+  if (presentation_delay != -1) {
+    map.data[3] = 0x10 | (MAX (0xF, presentation_delay) & 0xF);
+  }
+
+  gst_buffer_unmap (av1_codec_data, &map);
+
+  return av1_codec_data;
+}
+
+
 static gboolean
 h264_caps_structure_get_profile_flags_level (GstStructure * caps_st,
     guint8 * profile, guint8 * flags, guint8 * level)
@@ -2998,6 +3522,8 @@ gst_codec_utils_caps_get_mime_codec (GstCaps * caps)
       GST_DEBUG ("h265 caps parsing failed");
       mime_codec = g_strdup ("hev1");
     }
+  } else if (g_strcmp0 (media_type, "video/x-h266") == 0) {
+    mime_codec = g_strdup ("vvc1");
   } else if (g_strcmp0 (media_type, "video/x-av1") == 0) {
     mime_codec = av1_caps_get_mime_codec (caps);
   } else if (g_strcmp0 (media_type, "video/x-vp8") == 0) {
@@ -3166,6 +3692,13 @@ gst_codec_utils_caps_from_mime_codec_single (const gchar * codec)
       /* FIXME : Extract information from the following component */
       break;
     }
+    case GST_MAKE_FOURCC ('v', 'v', 'c', '1'):
+    case GST_MAKE_FOURCC ('v', 'v', 'i', '1'):
+    {
+      /* H.266 */
+      caps = gst_caps_new_empty_simple ("video/x-h266");
+      break;
+    }
       /* Following are not defined in rfc 6831 but are registered MP4RA codecs */
     case GST_MAKE_FOURCC ('a', 'c', '-', '3'):
       /* ETSI TS 102 366 v1.4.1 - Digital Audio Compression (AC-3, Enhanced AC-3) Standard, Annex F */
@@ -3175,6 +3708,7 @@ gst_codec_utils_caps_from_mime_codec_single (const gchar * codec)
       GST_FIXME
           ("Signalling of ATMOS ('ec+3') isn't defined yet. Falling back to EAC3 caps");
       /* withdrawn, unused, do not use (was enhanced AC-3 audio with JOC) */
+      /* FALLTHROUGH */
     case GST_MAKE_FOURCC ('e', 'c', '-', '3'):
       /* ETSI TS 102 366 v1.4.1 - Digital Audio Compression (AC-3, Enhanced AC-3) Standard, Annex F */
       caps = gst_caps_new_empty_simple ("audio/x-eac3");
@@ -3214,6 +3748,9 @@ gst_codec_utils_caps_from_mime_codec_single (const gchar * codec)
       caps =
           gst_caps_new_simple ("audio/x-adpcm", "layout", G_TYPE_STRING, "g726",
           NULL);
+      break;
+    case GST_MAKE_FOURCC ('m', 'j', 'p', 'g'):
+      caps = gst_caps_new_empty_simple ("image/jpeg");
       break;
     default:
       GST_WARNING ("Unknown codec '%s' please file a bug", codec);

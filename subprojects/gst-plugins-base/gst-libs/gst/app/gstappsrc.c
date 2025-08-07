@@ -195,6 +195,9 @@ struct _GstAppSrcPrivate
   GstAppLeakyType leaky_type;
 
   Callbacks *callbacks;
+
+  guint64 in, out, dropped;
+  gboolean silent;
 };
 
 GST_DEBUG_CATEGORY_STATIC (app_src_debug);
@@ -234,6 +237,7 @@ enum
 #define DEFAULT_PROP_DURATION      GST_CLOCK_TIME_NONE
 #define DEFAULT_PROP_HANDLE_SEGMENT_CHANGE FALSE
 #define DEFAULT_PROP_LEAKY_TYPE    GST_APP_LEAKY_TYPE_NONE
+#define DEFAULT_SILENT             TRUE
 
 enum
 {
@@ -257,6 +261,10 @@ enum
   PROP_DURATION,
   PROP_HANDLE_SEGMENT_CHANGE,
   PROP_LEAKY_TYPE,
+  PROP_IN,
+  PROP_OUT,
+  PROP_DROPPED,
+  PROP_SILENT,
   PROP_LAST
 };
 
@@ -572,8 +580,52 @@ gst_app_src_class_init (GstAppSrcClass * klass)
           "Whether to drop buffers once the internal queue is full",
           GST_TYPE_APP_LEAKY_TYPE,
           DEFAULT_PROP_LEAKY_TYPE,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
+          G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING |
           G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstAppSrc:in:
+   *
+   * Number of input buffers that were queued.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_IN,
+      g_param_spec_uint64 ("in", "In",
+          "Number of input buffers", 0, G_MAXUINT64, 0,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstAppSrc:out:
+   *
+   * Number of output buffers that were dequeued.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_OUT,
+      g_param_spec_uint64 ("out", "Out", "Number of output buffers", 0,
+          G_MAXUINT64, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstAppSrc:dropped:
+   *
+   * Number of buffers that were dropped.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_DROPPED,
+      g_param_spec_uint64 ("dropped", "Dropped", "Number of dropped buffers", 0,
+          G_MAXUINT64, 0, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstAppSrc:silent:
+   *
+   * Don't emit notify for input, output and dropped buffers.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_SILENT,
+      g_param_spec_boolean ("silent", "silent",
+          "Don't emit notify for dropped buffers",
+          DEFAULT_SILENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstAppSrc::need-data:
@@ -763,6 +815,7 @@ gst_app_src_init (GstAppSrc * appsrc)
   priv->min_percent = DEFAULT_PROP_MIN_PERCENT;
   priv->handle_segment_change = DEFAULT_PROP_HANDLE_SEGMENT_CHANGE;
   priv->leaky_type = DEFAULT_PROP_LEAKY_TYPE;
+  priv->silent = DEFAULT_SILENT;
 
   gst_base_src_set_live (GST_BASE_SRC (appsrc), DEFAULT_PROP_IS_LIVE);
 }
@@ -795,6 +848,7 @@ gst_app_src_flush_queued (GstAppSrc * src, gboolean retain_last_caps)
   gst_queue_status_info_reset (&priv->queue_status_info);
   priv->need_discont_upstream = FALSE;
   priv->need_discont_downstream = FALSE;
+  priv->in = priv->out = priv->dropped = 0;
 }
 
 static void
@@ -925,7 +979,10 @@ gst_app_src_set_property (GObject * object, guint prop_id,
       priv->handle_segment_change = g_value_get_boolean (value);
       break;
     case PROP_LEAKY_TYPE:
-      priv->leaky_type = g_value_get_enum (value);
+      gst_app_src_set_leaky_type (appsrc, g_value_get_enum (value));
+      break;
+    case PROP_SILENT:
+      priv->silent = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1007,7 +1064,25 @@ gst_app_src_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_boolean (value, priv->handle_segment_change);
       break;
     case PROP_LEAKY_TYPE:
-      g_value_set_enum (value, priv->leaky_type);
+      g_value_set_enum (value, gst_app_src_get_leaky_type (appsrc));
+      break;
+    case PROP_IN:
+      g_mutex_lock (&appsrc->priv->mutex);
+      g_value_set_uint64 (value, appsrc->priv->in);
+      g_mutex_unlock (&appsrc->priv->mutex);
+      break;
+    case PROP_OUT:
+      g_mutex_lock (&appsrc->priv->mutex);
+      g_value_set_uint64 (value, appsrc->priv->out);
+      g_mutex_unlock (&appsrc->priv->mutex);
+      break;
+    case PROP_DROPPED:
+      g_mutex_lock (&appsrc->priv->mutex);
+      g_value_set_uint64 (value, appsrc->priv->dropped);
+      g_mutex_unlock (&appsrc->priv->mutex);
+      break;
+    case PROP_SILENT:
+      g_value_set_boolean (value, appsrc->priv->silent);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1027,6 +1102,10 @@ gst_app_src_send_event (GstElement * element, GstEvent * event)
       gst_app_src_flush_queued (appsrc, TRUE);
       priv->is_eos = FALSE;
       g_mutex_unlock (&priv->mutex);
+
+      if (!priv->silent) {
+        g_object_notify (G_OBJECT (appsrc), "dropped");
+      }
       break;
     default:
       if (GST_EVENT_IS_SERIALIZED (event)) {
@@ -1091,6 +1170,7 @@ gst_app_src_start (GstBaseSrc * bsrc)
    * in random-access mode. */
   priv->offset = -1;
   priv->flushing = FALSE;
+  priv->in = priv->out = priv->dropped = 0;
   g_mutex_unlock (&priv->mutex);
 
   gst_base_src_set_format (bsrc, priv->format);
@@ -1115,7 +1195,12 @@ gst_app_src_stop (GstBaseSrc * bsrc)
   priv->posted_latency_msg = FALSE;
   gst_app_src_flush_queued (appsrc, TRUE);
   g_cond_broadcast (&priv->cond);
+  priv->in = priv->out = priv->dropped = 0;
   g_mutex_unlock (&priv->mutex);
+
+  if (!priv->silent) {
+    g_object_notify (G_OBJECT (appsrc), "dropped");
+  }
 
   return TRUE;
 }
@@ -1262,8 +1347,12 @@ gst_app_src_do_seek (GstBaseSrc * src, GstSegment * segment)
     gst_segment_copy_into (segment, &priv->last_segment);
     gst_segment_copy_into (segment, &priv->current_segment);
     priv->pending_custom_segment = FALSE;
-    g_mutex_unlock (&priv->mutex);
     priv->is_eos = FALSE;
+    g_mutex_unlock (&priv->mutex);
+
+    if (!priv->silent) {
+      g_object_notify (G_OBJECT (appsrc), "dropped");
+    }
   } else {
     GST_WARNING_OBJECT (appsrc, "seek failed");
   }
@@ -1569,6 +1658,8 @@ gst_app_src_create (GstBaseSrc * bsrc, guint64 offset, guint size,
          * instead of outputting it */
         if (priv->need_discont_downstream) {
           buffer = gst_buffer_make_writable (buffer);
+          /* In case it reallocates the buffer */
+          obj = GST_MINI_OBJECT (buffer);
           GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
           priv->need_discont_downstream = FALSE;
         }
@@ -1580,6 +1671,7 @@ gst_app_src_create (GstBaseSrc * bsrc, guint64 offset, guint size,
         }
 
         priv->pushed_buffer = TRUE;
+        priv->out += 1;
         *buf = buffer;
       } else if (GST_IS_BUFFER_LIST (obj)) {
         GstBufferList *buffer_list;
@@ -1594,6 +1686,8 @@ gst_app_src_create (GstBaseSrc * bsrc, guint64 offset, guint size,
           GstBuffer *buffer;
 
           buffer_list = gst_buffer_list_make_writable (buffer_list);
+          /* In case it reallocates the bufferlist */
+          obj = GST_MINI_OBJECT (buffer_list);
           buffer = gst_buffer_list_get_writable (buffer_list, 0);
           GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DISCONT);
           priv->need_discont_downstream = FALSE;
@@ -1605,6 +1699,7 @@ gst_app_src_create (GstBaseSrc * bsrc, guint64 offset, guint size,
           push_delayed_events (appsrc);
         }
 
+        priv->out += gst_buffer_list_length (buffer_list);
         gst_base_src_submit_buffer_list (bsrc, buffer_list);
         priv->pushed_buffer = TRUE;
         *buf = NULL;
@@ -1707,6 +1802,7 @@ gst_app_src_create (GstBaseSrc * bsrc, guint64 offset, guint size,
     priv->wait_status &= ~STREAM_WAITING;
   }
   g_mutex_unlock (&priv->mutex);
+
   return ret;
 
   /* ERRORS */
@@ -2214,9 +2310,19 @@ gst_app_src_set_latencies (GstAppSrc * appsrc, gboolean do_min, guint64 min,
 void
 gst_app_src_set_leaky_type (GstAppSrc * appsrc, GstAppLeakyType leaky)
 {
+  GstAppSrcPrivate *priv;
+
   g_return_if_fail (GST_IS_APP_SRC (appsrc));
 
-  appsrc->priv->leaky_type = leaky;
+  priv = appsrc->priv;
+
+  g_mutex_lock (&priv->mutex);
+  if (priv->leaky_type != leaky) {
+    priv->leaky_type = leaky;
+    /* signal the change */
+    g_cond_signal (&priv->cond);
+  }
+  g_mutex_unlock (&priv->mutex);
 }
 
 /**
@@ -2233,9 +2339,18 @@ gst_app_src_set_leaky_type (GstAppSrc * appsrc, GstAppLeakyType leaky)
 GstAppLeakyType
 gst_app_src_get_leaky_type (GstAppSrc * appsrc)
 {
+  GstAppSrcPrivate *priv;
+  GstAppLeakyType leaky_type;
+
   g_return_val_if_fail (GST_IS_APP_SRC (appsrc), GST_APP_LEAKY_TYPE_NONE);
 
-  return appsrc->priv->leaky_type;
+  priv = appsrc->priv;
+
+  g_mutex_lock (&priv->mutex);
+  leaky_type = priv->leaky_type;
+  g_mutex_unlock (&priv->mutex);
+
+  return leaky_type;
 }
 
 /**
@@ -2466,10 +2581,21 @@ gst_app_src_push_internal (GstAppSrc * appsrc, GstBuffer * buffer,
           break;
         }
 
-        GST_WARNING_OBJECT (appsrc, "Dropping old item %" GST_PTR_FORMAT, item);
+        GST_DEBUG_OBJECT (appsrc, "Dropping old item %" GST_PTR_FORMAT, item);
 
         gst_app_src_update_queued_pop (appsrc, item, FALSE);
+
+        if (GST_IS_BUFFER_LIST (item))
+          priv->dropped += gst_buffer_list_length (buflist);
+        else
+          priv->dropped += 1;
         gst_mini_object_unref (item);
+
+        if (!priv->silent) {
+          g_mutex_unlock (&priv->mutex);
+          g_object_notify (G_OBJECT (appsrc), "dropped");
+          g_mutex_lock (&priv->mutex);
+        }
 
         priv->need_discont_downstream = TRUE;
         continue;
@@ -2526,6 +2652,7 @@ gst_app_src_push_internal (GstAppSrc * appsrc, GstBuffer * buffer,
     if (!steal_ref)
       gst_buffer_list_ref (buflist);
     gst_vec_deque_push_tail (priv->queue, buflist);
+    priv->in += gst_buffer_list_length (buflist);
   } else {
     /* Mark the buffer as DISCONT if we previously dropped a buffer instead of
      * queueing it */
@@ -2544,6 +2671,7 @@ gst_app_src_push_internal (GstAppSrc * appsrc, GstBuffer * buffer,
     if (!steal_ref)
       gst_buffer_ref (buffer);
     gst_vec_deque_push_tail (priv->queue, buffer);
+    priv->in += 1;
   }
 
   gst_app_src_update_queued_push (appsrc,
@@ -2584,6 +2712,12 @@ eos:
 dropped:
   {
     GST_DEBUG_OBJECT (appsrc, "dropped new buffer %p, we are full", buffer);
+
+    if (buflist)
+      priv->dropped += gst_buffer_list_length (buflist);
+    else
+      priv->dropped += 1;
+
     if (steal_ref) {
       if (buflist)
         gst_buffer_list_unref (buflist);
@@ -2591,6 +2725,11 @@ dropped:
         gst_buffer_unref (buffer);
     }
     g_mutex_unlock (&priv->mutex);
+
+    if (!priv->silent) {
+      g_object_notify (G_OBJECT (appsrc), "dropped");
+    }
+
     return GST_FLOW_OK;
   }
 }

@@ -2441,6 +2441,7 @@ rtp_session_process_rb (RTPSession * sess, RTPSource * source,
     GstRTCPPacket * packet, RTPPacketInfo * pinfo)
 {
   guint count, i;
+  guint32 sender_ssrc = source->ssrc;
 
   count = gst_rtcp_packet_get_rb_count (packet);
   for (i = 0; i < count; i++) {
@@ -2452,7 +2453,8 @@ rtp_session_process_rb (RTPSession * sess, RTPSource * source,
     gst_rtcp_packet_get_rb (packet, i, &ssrc, &fractionlost,
         &packetslost, &exthighestseq, &jitter, &lsr, &dlsr);
 
-    GST_DEBUG ("RB %d: SSRC %08x, jitter %" G_GUINT32_FORMAT, i, ssrc, jitter);
+    GST_DEBUG ("RB %d from SSRC %08x: SSRC %08x, jitter %" G_GUINT32_FORMAT, i,
+        sender_ssrc, ssrc, jitter);
 
     /* find our own source */
     src = find_source (sess, ssrc);
@@ -2461,18 +2463,20 @@ rtp_session_process_rb (RTPSession * sess, RTPSource * source,
 
     if (src->internal && RTP_SOURCE_IS_ACTIVE (src)) {
       /* only deal with report blocks for our session, we update the stats of
-       * the sender of the RTCP message. We could also compare our stats against
+       * the ssrc the RTCP message is about. We could also compare our stats against
        * the other sender to see if we are better or worse. */
-      /* FIXME, need to keep track who the RB block is from */
-      rtp_source_process_rb (source, ssrc, pinfo->ntpnstime, fractionlost,
-          packetslost, exthighestseq, jitter, lsr, dlsr);
+      rtp_source_process_rb (src, ssrc, sender_ssrc, pinfo->ntpnstime,
+          fractionlost, packetslost, exthighestseq, jitter, lsr, dlsr);
+      /* deprecated: it is also stored in the non-internal source */
+      rtp_source_process_rb (source, ssrc, sender_ssrc, pinfo->ntpnstime,
+          fractionlost, packetslost, exthighestseq, jitter, lsr, dlsr);
     }
   }
   on_ssrc_active (sess, source);
 }
 
 /* A Sender report contains statistics about how the sender is doing. This
- * includes timing informataion such as the relation between RTP and NTP
+ * includes timing information such as the relation between RTP and NTP
  * timestamps and the number of packets/bytes it sent to us.
  *
  * In this report is also included a set of report blocks related to how this
@@ -2998,8 +3002,12 @@ rtp_session_process_twcc (RTPSession * sess, guint32 sender_ssrc,
 
   RTP_SESSION_UNLOCK (sess);
   if (sess->callbacks.notify_twcc)
-    sess->callbacks.notify_twcc (sess, twcc_packets_s, twcc_stats_s,
-        sess->notify_twcc_user_data);
+    sess->callbacks.notify_twcc (sess, g_steal_pointer (&twcc_packets_s),
+        g_steal_pointer (&twcc_stats_s), sess->notify_twcc_user_data);
+  else {
+    gst_structure_free (twcc_packets_s);
+    gst_structure_free (twcc_stats_s);
+  }
   RTP_SESSION_LOCK (sess);
 }
 
@@ -3819,7 +3827,7 @@ typedef struct
   gboolean timeout_inactive_sources;
 } ReportData;
 
-static void
+static gboolean
 session_start_rtcp (RTPSession * sess, ReportData * data)
 {
   GstRTCPPacket *packet = &data->packet;
@@ -3844,8 +3852,13 @@ session_start_rtcp (RTPSession * sess, ReportData * data)
     gst_rtcp_buffer_add_packet (rtcp, GST_RTCP_TYPE_SR, packet);
 
     /* get latest stats */
-    rtp_source_get_new_sr (own, data->ntpnstime, data->running_time,
-        &ntptime, &rtptime, &packet_count, &octet_count);
+    if (!rtp_source_get_new_sr (own, data->ntpnstime, data->running_time,
+            &ntptime, &rtptime, &packet_count, &octet_count)) {
+      gst_rtcp_buffer_unmap (&data->rtcpbuf);
+      gst_buffer_unref (data->rtcp);
+      data->rtcp = NULL;
+      return FALSE;
+    }
     /* store stats */
     rtp_source_process_sr (own, data->current_time, ntptime, rtptime,
         packet_count, octet_count);
@@ -3861,6 +3874,8 @@ session_start_rtcp (RTPSession * sess, ReportData * data)
     gst_rtcp_buffer_add_packet (rtcp, GST_RTCP_TYPE_RR, packet);
     gst_rtcp_packet_rr_set_ssrc (packet, own->ssrc);
   }
+
+  return TRUE;
 }
 
 /* construct a Sender or Receiver Report */
@@ -4541,7 +4556,10 @@ generate_rtcp (const gchar * key, RTPSource * source, ReportData * data)
   data->source = source;
 
   /* open packet */
-  session_start_rtcp (sess, data);
+  if (!session_start_rtcp (sess, data)) {
+    GST_WARNING ("source %08x can not generate RTCP", source->ssrc);
+    return;
+  }
 
   if (source->marked_bye) {
     /* send BYE */

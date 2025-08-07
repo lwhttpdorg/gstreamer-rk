@@ -6,10 +6,24 @@ hlsl_sources = [
   ['PSMain_color', 'ps'],
   ['PSMain_sample_premul', 'ps'],
   ['PSMain_sample', 'ps'],
+  ['PSMain_sample_scrgb_tonemap', 'ps'],
+  ['PSMain_sample_scrgb', 'ps'],
   ['PSMain_snow', 'ps'],
   ['VSMain_color', 'vs'],
   ['VSMain_coord', 'vs'],
   ['VSMain_pos', 'vs'],
+  ['CSMain_mipgen', 'cs'],
+  ['CSMain_mipgen_vuya', 'cs'],
+  ['CSMain_mipgen_ayuv', 'cs'],
+  ['CSMain_mipgen_gray', 'cs'],
+  ['CSMain_yadif_1_10', 'cs'],
+  ['CSMain_yadif_1_12', 'cs'],
+  ['CSMain_yadif_1', 'cs'],
+  ['CSMain_yadif_2', 'cs'],
+  ['CSMain_yadif_4', 'cs'],
+  ['CSMain_fisheye_equirect', 'cs'],
+  ['CSMain_fisheye_panorama', 'cs'],
+  ['CSMain_fisheye_perspective', 'cs'],
 ]
 
 shader_model = '5_0'
@@ -58,8 +72,19 @@ plugin_vs_collection = custom_target('plugin_hlsl_vs',
         '--output', '@OUTPUT@'
     ])
 
+plugin_cs_collection = custom_target('plugin_hlsl_cs',
+    input : plugin_hlsl_precompiled,
+    output : 'plugin_hlsl_cs.h',
+    command : [header_collector,
+        '--input', meson.current_build_dir(),
+        '--prefix', 'CSMain_',
+        '--name', 'g_plugin_cs_table',
+        '--output', '@OUTPUT@'
+    ])
+
 hlsl_precompiled += [
   plugin_hlsl_precompiled,
   plugin_ps_collection,
   plugin_vs_collection,
+  plugin_cs_collection,
 ]

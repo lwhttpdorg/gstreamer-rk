@@ -44,8 +44,8 @@ test_defines = [
 
 pluginsdirs = []
 if gst_dep.type_name() == 'pkgconfig'
-  pbase = dependency('gstreamer-plugins-base-' + apiversion, required : false)
-  pbad = dependency('gstreamer-plugins-bad-' + apiversion, required : false)
+  pbase = dependency('gstreamer-plugins-base-' + api_version, required : false)
+  pbad = dependency('gstreamer-plugins-bad-' + api_version, required : false)
 
   pluginsdirs = [gst_dep.get_variable('pluginsdir'),
                  pbase.get_variable('pluginsdir'),
@@ -102,6 +102,7 @@ if gstvalidate_dep.found() and not get_option('tools').disabled()
     'check_keyframes_in_compositor_two_sources': true,
     'check-clip-positioning': true,
     'set-layer-on-command-line': true,
+    'check-zorder': true,
   }
 
   foreach scenario, is_validatetest: scenarios

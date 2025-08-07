@@ -60,8 +60,8 @@ struct _Qt6GLWindowPrivate
   GstBuffer *buffer;
   GstVideoInfo v_info;
   GstVideoFrame mapped_frame;
-  GstGLBaseMemoryAllocator *gl_allocator;
-  GstGLAllocationParams *gl_params;
+  GLenum internal_format;
+  GstBufferPool *pool;
 
   gboolean initted;
   gboolean updated;
@@ -99,9 +99,10 @@ Qt6GLWindow::Qt6GLWindow (QWindow * parent, QQuickWindow *src)
 
   this->priv->display = gst_qml6_get_gl_display(FALSE);
   this->priv->result = TRUE;
+  this->priv->internal_format = GL_RGBA;
 
   connect (source, SIGNAL(beforeRendering()), this, SLOT(beforeRendering()), Qt::DirectConnection);
-  connect (source, SIGNAL(afterRendering()), this, SLOT(afterRendering()), Qt::DirectConnection);
+  connect (source, SIGNAL(afterFrameEnd()), this, SLOT(afterFrameEnd()), Qt::DirectConnection);
   if (source->isSceneGraphInitialized())
     source->scheduleRenderJob(new RenderJob(std::bind(&Qt6GLWindow::onSceneGraphInitialized, this)), QQuickWindow::BeforeSynchronizingStage);
   else
@@ -120,13 +121,9 @@ Qt6GLWindow::~Qt6GLWindow()
   gst_clear_object (&this->priv->other_context);
   gst_clear_buffer (&this->priv->buffer);
   gst_clear_buffer (&this->priv->produced_buffer);
+  gst_clear_object (&this->priv->pool);
   gst_clear_object (&this->priv->display);
   gst_clear_object (&this->priv->context);
-  gst_clear_object (&this->priv->gl_allocator);
-
-  if (this->priv->gl_params)
-    gst_gl_allocation_params_free (this->priv->gl_params);
-  this->priv->gl_params = NULL;
 
   g_free (this->priv);
   this->priv = NULL;
@@ -143,46 +140,43 @@ Qt6GLWindow::beforeRendering()
     return;
   }
 
+  if (this->priv->buffer) {
+    GST_ERROR ("A rendering already started, something went wrong.");
+    g_mutex_unlock (&this->priv->lock);
+    return;
+  }
+
   QSize size = source->size();
-
-  if (!this->priv->gl_allocator)
-    this->priv->gl_allocator =
-        (GstGLBaseMemoryAllocator *) gst_gl_memory_allocator_get_default (this->priv->context);
-
-  if (GST_VIDEO_INFO_WIDTH (&this->priv->v_info) != size.width()
+  if (!this->priv->pool
+      || GST_VIDEO_INFO_WIDTH (&this->priv->v_info) != size.width()
       || GST_VIDEO_INFO_HEIGHT (&this->priv->v_info) != size.height()) {
     this->priv->new_caps = TRUE;
-
     gst_video_info_set_format (&this->priv->v_info, GST_VIDEO_FORMAT_RGBA,
         size.width(), size.height());
+    gst_clear_object (&this->priv->pool);
 
-    if (this->priv->gl_params) {
-      GstGLVideoAllocationParams *gl_vid_params = (GstGLVideoAllocationParams *) this->priv->gl_params;
-      if (GST_VIDEO_INFO_WIDTH (gl_vid_params->v_info) != source->width()
-            || GST_VIDEO_INFO_HEIGHT (gl_vid_params->v_info) != source->height())
-        this->priv->gl_params = NULL;
-      gst_clear_buffer (&this->priv->buffer);
-    }
+    GST_LOG ("resolution change, skipping frames until we have a new pool");
+    g_cond_signal (&this->priv->update_cond);
+    g_mutex_unlock (&this->priv->lock);
+    return;
   }
 
-  if (!this->priv->gl_params) {
-    this->priv->gl_params = (GstGLAllocationParams *)
-        gst_gl_video_allocation_params_new (this->priv->context, NULL,
-        &this->priv->v_info, 0, NULL, GST_GL_TEXTURE_TARGET_2D, GST_GL_RGBA);
-  }
-
-  if (!this->priv->buffer) {
-    GstGLMemory *gl_mem =
-        (GstGLMemory *) gst_gl_base_memory_alloc (this->priv->gl_allocator,
-        this->priv->gl_params);
-    this->priv->buffer = gst_buffer_new ();
-    gst_buffer_append_memory (this->priv->buffer, (GstMemory *) gl_mem);
+  GstFlowReturn ret = gst_buffer_pool_acquire_buffer (this->priv->pool,
+      &this->priv->buffer, NULL);
+  if (ret == GST_FLOW_FLUSHING) {
+    g_mutex_unlock (&this->priv->lock);
+    return;
+  } else if (ret != GST_FLOW_OK) {
+    GST_WARNING ("failed to acquire buffer");
+    g_mutex_unlock (&this->priv->lock);
+    return;
   }
 
   if (!gst_video_frame_map (&this->priv->mapped_frame, &this->priv->v_info,
         this->priv->buffer, (GstMapFlags) (GST_MAP_WRITE | GST_MAP_GL))) {
     GST_WARNING ("failed map video frame");
     gst_clear_buffer (&this->priv->buffer);
+    g_mutex_unlock (&this->priv->lock);
     return;
   }
 
@@ -199,12 +193,13 @@ Qt6GLWindow::beforeRendering()
 }
 
 void
-Qt6GLWindow::afterRendering()
+Qt6GLWindow::afterFrameEnd()
 {
   gboolean ret;
   guint width, height;
   const GstGLFuncs *gl;
   GstGLSyncMeta *sync_meta;
+  GLenum fbo_target;
 
   g_mutex_lock (&this->priv->lock);
 
@@ -220,13 +215,15 @@ Qt6GLWindow::afterRendering()
   gst_gl_context_activate (this->priv->other_context, TRUE);
   gl = this->priv->other_context->gl_vtable;
 
+  fbo_target = gl->BlitFramebuffer ? GL_READ_FRAMEBUFFER : GL_FRAMEBUFFER;
+
   if (!this->priv->useDefaultFbo) {
-      gst_video_frame_unmap (&this->priv->mapped_frame);
     ret = TRUE;
   } else {
-    gl->BindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
-    ret = gst_gl_context_check_framebuffer_status (this->priv->other_context, GL_READ_FRAMEBUFFER);
+    gl->BindFramebuffer (fbo_target, 0);
+
+    ret = gst_gl_context_check_framebuffer_status (this->priv->other_context, fbo_target);
     if (!ret) {
       GST_ERROR ("FBO errors");
       goto errors;
@@ -249,12 +246,29 @@ Qt6GLWindow::afterRendering()
           0, 0, width, height,
           GL_COLOR_BUFFER_BIT, GL_LINEAR);
     } else {
-      gl->CopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, width, height, 0);
+      gl->CopyTexImage2D (GL_TEXTURE_2D, 0, this->priv->internal_format, 0, 0, width, height, 0);
+
+      GLenum err = gl->GetError ();
+      if (err && this->priv->internal_format == GL_RGBA) {
+        this->priv->internal_format = GL_RGB;
+        GST_WARNING ("Falling back to GL_RGB (opaque) when copying QML texture.");
+        gl->CopyTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, 0, 0, width, height, 0);
+        err = gl->GetError ();
+      }
+
+      if (err) {
+        GST_ERROR ("CopyTexImage2D() failed with error: 0x%X", err);
+        ret = FALSE;
+        goto errors;
+      }
     }
   }
 
   gst_video_frame_unmap (&this->priv->mapped_frame);
-  gl->BindFramebuffer (GL_FRAMEBUFFER, 0);
+  gl->BindFramebuffer (fbo_target, 0);
+
+  if (gl->BlitFramebuffer)
+      gl->BindFramebuffer (GL_DRAW_FRAMEBUFFER, 0);
 
   if (this->priv->context) {
     sync_meta = gst_buffer_get_gl_sync_meta (this->priv->buffer);
@@ -270,6 +284,7 @@ done:
   gst_gl_context_activate (this->priv->other_context, FALSE);
 
   this->priv->result = ret;
+  gst_clear_buffer (&this->priv->produced_buffer);
   this->priv->produced_buffer = this->priv->buffer;
   this->priv->buffer = NULL;
   this->priv->updated = TRUE;
@@ -297,6 +312,7 @@ Qt6GLWindow::onSceneGraphInitialized()
 
   this->priv->initted = gst_qml6_get_gl_wrapcontext (this->priv->display,
       &this->priv->other_context, &this->priv->context);
+  this->priv->internal_format = GL_RGBA;
 
   if (this->priv->initted && this->priv->other_context) {
     const GstGLFuncs *gl;
@@ -400,7 +416,7 @@ qt6_gl_window_is_scenegraph_initialized (Qt6GLWindow * qt6_gl_window)
 }
 
 GstBuffer *
-qt6_gl_window_take_buffer (Qt6GLWindow * qt6_gl_window, GstCaps ** updated_caps)
+qt6_gl_window_take_buffer (Qt6GLWindow * qt6_gl_window, gboolean * updated_caps)
 {
   g_return_val_if_fail (qt6_gl_window != NULL, FALSE);
   g_return_val_if_fail (qt6_gl_window->priv->initted, FALSE);
@@ -414,17 +430,16 @@ qt6_gl_window_take_buffer (Qt6GLWindow * qt6_gl_window, GstCaps ** updated_caps)
     return NULL;
   }
 
-  while (!qt6_gl_window->priv->produced_buffer && qt6_gl_window->priv->result)
+  while (!qt6_gl_window->priv->produced_buffer && qt6_gl_window->priv->result
+      && !qt6_gl_window->priv->new_caps)
     g_cond_wait (&qt6_gl_window->priv->update_cond, &qt6_gl_window->priv->lock);
 
   ret = qt6_gl_window->priv->produced_buffer;
   qt6_gl_window->priv->produced_buffer = NULL;
 
-  if (qt6_gl_window->priv->new_caps) {
-    *updated_caps = gst_video_info_to_caps (&qt6_gl_window->priv->v_info);
-    gst_caps_set_features (*updated_caps, 0,
-        gst_caps_features_from_string (GST_CAPS_FEATURE_MEMORY_GL_MEMORY));
+  if (!ret && qt6_gl_window->priv->new_caps) {
     qt6_gl_window->priv->new_caps = FALSE;
+    *updated_caps = TRUE;
   }
 
   g_mutex_unlock (&qt6_gl_window->priv->lock);
@@ -466,5 +481,16 @@ qt6_gl_window_unlock_stop(Qt6GLWindow* qt6_gl_window)
   qt6_gl_window->priv->result = TRUE;
   g_cond_signal(&qt6_gl_window->priv->update_cond);
 
+  g_mutex_unlock(&qt6_gl_window->priv->lock);
+}
+
+void
+qt6_gl_window_set_pool (Qt6GLWindow * qt6_gl_window, GstBufferPool * pool)
+{
+  g_mutex_lock(&qt6_gl_window->priv->lock);
+  GST_DEBUG("using pool %" GST_PTR_FORMAT, pool);
+  if (qt6_gl_window->priv->pool)
+    gst_object_unref (qt6_gl_window->priv->pool);
+  qt6_gl_window->priv->pool = pool;
   g_mutex_unlock(&qt6_gl_window->priv->lock);
 }

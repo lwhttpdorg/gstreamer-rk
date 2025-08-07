@@ -130,6 +130,7 @@ gst_d3d12_allocation_params_new (GstD3D12Device * device,
   ret->aligned_info = *info;
   ret->d3d12_format = d3d12_format;
   ret->array_size = 1;
+  ret->mip_levels = 1;
   ret->flags = flags;
   ret->heap_flags = heap_flags;
   ret->resource_flags = resource_flags;
@@ -300,6 +301,26 @@ gst_d3d12_allocation_params_set_array_size (GstD3D12AllocationParams * params,
   return TRUE;
 }
 
+/**
+ * gst_d3d12_allocation_params_set_mip_levels:
+ * @params: a #GstD3D12AllocationParams
+ * @mip_levels: a texture mip levels
+ *
+ * Returns: %TRUE if successful
+ *
+ * Since: 1.26
+ */
+gboolean
+gst_d3d12_allocation_params_set_mip_levels (GstD3D12AllocationParams * params,
+    guint mip_levels)
+{
+  g_return_val_if_fail (params, FALSE);
+
+  params->mip_levels = mip_levels;
+
+  return TRUE;
+}
+
 /* *INDENT-OFF* */
 struct GstD3D12MemoryTokenData
 {
@@ -326,15 +347,8 @@ struct D3D11Interop
 
 struct _GstD3D12MemoryPrivate
 {
-  _GstD3D12MemoryPrivate ()
-  {
-    event_handle = CreateEventEx (nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-  }
-
   ~_GstD3D12MemoryPrivate ()
   {
-    CloseHandle (event_handle);
-
     if (nt_handle)
       CloseHandle (nt_handle);
 
@@ -346,12 +360,13 @@ struct _GstD3D12MemoryPrivate
 
   ComPtr<ID3D12DescriptorHeap> srv_heap;
   ComPtr<ID3D12DescriptorHeap> rtv_heap;
+  ComPtr<ID3D12DescriptorHeap> uav_heap;
 
   gpointer staging_ptr = nullptr;
 
   D3D12_RESOURCE_DESC desc;
+  D3D12_HEAP_FLAGS heap_flags;
 
-  HANDLE event_handle = nullptr;
   HANDLE nt_handle = nullptr;
   std::map<gint64, std::unique_ptr<GstD3D12MemoryTokenData>> token_map;
   std::vector<std::shared_ptr<D3D11Interop>> shared_texture11;
@@ -372,8 +387,8 @@ struct _GstD3D12MemoryPrivate
   gpointer user_data = nullptr;
   GDestroyNotify notify = nullptr;
 
-  ComPtr<ID3D12Fence> external_fence;
-  UINT64 external_fence_val = 0;
+  ComPtr<ID3D12Fence> fence;
+  UINT64 fence_val = 0;
 };
 /* *INDENT-ON* */
 
@@ -398,9 +413,12 @@ gst_d3d12_memory_ensure_staging_resource (GstD3D12Memory * dmem)
       CD3DX12_HEAP_PROPERTIES (D3D12_CPU_PAGE_PROPERTY_WRITE_BACK,
       D3D12_MEMORY_POOL_L0);
   D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer (priv->size);
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  if (gst_d3d12_device_non_zeroed_supported (dmem->device))
+    heap_flags = D3D12_HEAP_FLAG_CREATE_NOT_ZEROED;
+
   ComPtr < ID3D12Resource > staging;
-  hr = device->CreateCommittedResource (&prop,
-      D3D12_HEAP_FLAG_CREATE_NOT_ZEROED,
+  hr = device->CreateCommittedResource (&prop, heap_flags,
       &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS (&staging));
   if (!gst_d3d12_result (hr, dmem->device)) {
     GST_ERROR_OBJECT (dmem->device, "Couldn't create staging resource");
@@ -415,45 +433,25 @@ gst_d3d12_memory_ensure_staging_resource (GstD3D12Memory * dmem)
 }
 
 static void
-gst_d3d12_memory_set_external_fence_unlocked (GstD3D12Memory * dmem,
-    ID3D12Fence * fence, guint64 fence_val)
+gst_d3d12_memory_set_fence_unlocked (GstD3D12Memory * dmem,
+    ID3D12Fence * fence, guint64 fence_val, gboolean wait)
 {
   auto priv = dmem->priv;
-  HRESULT hr;
 
-  if (priv->external_fence) {
-    auto completed = priv->external_fence->GetCompletedValue ();
-    if (completed < priv->external_fence_val) {
-      hr = priv->external_fence->SetEventOnCompletion (priv->external_fence_val,
-          priv->event_handle);
-      if (SUCCEEDED (hr))
-        WaitForSingleObjectEx (priv->event_handle, INFINITE, FALSE);
+  if (priv->fence && priv->fence.Get () != fence && wait) {
+    auto completed = priv->fence->GetCompletedValue ();
+    if (completed < priv->fence_val) {
+      auto hr = priv->fence->SetEventOnCompletion (priv->fence_val, nullptr);
+      /* For debugging */
+      gst_d3d12_result (hr, dmem->device);
     }
-
-    priv->external_fence = nullptr;
-    priv->external_fence_val = 0;
   }
 
-  if (fence) {
-    priv->external_fence = fence;
-    priv->external_fence_val = fence_val;
-  }
-}
-
-static void
-gst_d3d12_memory_wait_gpu (GstD3D12Memory * dmem,
-    D3D12_COMMAND_LIST_TYPE command_type, guint64 fence_value)
-{
-  auto priv = dmem->priv;
-
-  gst_d3d12_memory_set_external_fence_unlocked (dmem, nullptr, 0);
-
-  auto completed = gst_d3d12_device_get_completed_value (dmem->device,
-      command_type);
-  if (completed < fence_value) {
-    gst_d3d12_device_fence_wait (dmem->device, command_type,
-        fence_value, priv->event_handle);
-  }
+  priv->fence = fence;
+  if (fence)
+    priv->fence_val = fence_val;
+  else
+    priv->fence_val = 0;
 }
 
 static gboolean
@@ -479,27 +477,26 @@ gst_d3d12_memory_download (GstD3D12Memory * dmem)
     copy_args.push_back (args);
   }
 
-  if (priv->external_fence) {
-    auto cq = gst_d3d12_device_get_command_queue (dmem->device,
-        D3D12_COMMAND_LIST_TYPE_COPY);
-    gst_d3d12_command_queue_execute_wait (cq, priv->external_fence.Get (),
-        priv->external_fence_val);
-  }
-
-  auto cq = gst_d3d12_device_get_command_queue (dmem->device,
-      D3D12_COMMAND_LIST_TYPE_DIRECT);
-  auto direct_fence = gst_d3d12_command_queue_get_fence_handle (cq);
-
   guint64 fence_val = 0;
+  guint num_fences_to_wait = 0;
+  ID3D12Fence *fences_to_wait[] = { priv->fence.Get () };
+  guint64 fence_values_to_wait[] = { priv->fence_val };
+  if (priv->fence)
+    num_fences_to_wait = 1;
+
   /* Use async copy queue when downloading */
   if (!gst_d3d12_device_copy_texture_region (dmem->device, copy_args.size (),
-          copy_args.data (), nullptr, direct_fence, dmem->fence_value,
-          D3D12_COMMAND_LIST_TYPE_COPY, &fence_val)) {
+          copy_args.data (), nullptr, num_fences_to_wait, fences_to_wait,
+          fence_values_to_wait, D3D12_COMMAND_LIST_TYPE_COPY, &fence_val)) {
     GST_ERROR_OBJECT (dmem->device, "Couldn't download texture to staging");
     return FALSE;
   }
 
-  gst_d3d12_memory_wait_gpu (dmem, D3D12_COMMAND_LIST_TYPE_COPY, fence_val);
+  gst_d3d12_device_fence_wait (dmem->device, D3D12_COMMAND_LIST_TYPE_COPY,
+      fence_val);
+
+  priv->fence = nullptr;
+  priv->fence_val = 0;
 
   GST_MEMORY_FLAG_UNSET (dmem, GST_D3D12_MEMORY_TRANSFER_NEED_DOWNLOAD);
 
@@ -529,13 +526,22 @@ gst_d3d12_memory_upload (GstD3D12Memory * dmem)
     copy_args.push_back (args);
   }
 
+  guint num_fences_to_wait = 0;
+  ID3D12Fence *fences_to_wait[] = { priv->fence.Get () };
+  guint64 fence_values_to_wait[] = { priv->fence_val };
+  if (fences_to_wait[0])
+    num_fences_to_wait = 1;
+
   if (!gst_d3d12_device_copy_texture_region (dmem->device, copy_args.size (),
-          copy_args.data (), nullptr, priv->external_fence.Get (),
-          priv->external_fence_val, D3D12_COMMAND_LIST_TYPE_DIRECT,
-          &dmem->fence_value)) {
+          copy_args.data (), nullptr, num_fences_to_wait, fences_to_wait,
+          fence_values_to_wait, D3D12_COMMAND_LIST_TYPE_DIRECT,
+          &priv->fence_val)) {
     GST_ERROR_OBJECT (dmem->device, "Couldn't upload texture");
     return FALSE;
   }
+
+  priv->fence = gst_d3d12_device_get_fence_handle (dmem->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT);
 
   GST_MEMORY_FLAG_UNSET (dmem, GST_D3D12_MEMORY_TRANSFER_NEED_UPLOAD);
 
@@ -641,9 +647,11 @@ gst_d3d12_memory_sync (GstD3D12Memory * mem)
 {
   g_return_val_if_fail (gst_is_d3d12_memory (GST_MEMORY_CAST (mem)), FALSE);
 
+  auto priv = mem->priv;
+
+  std::lock_guard < std::mutex > lk (priv->lock);
   gst_d3d12_memory_upload (mem);
-  gst_d3d12_memory_wait_gpu (mem,
-      D3D12_COMMAND_LIST_TYPE_DIRECT, mem->fence_value);
+  gst_d3d12_memory_set_fence_unlocked (mem, nullptr, 0, TRUE);
 
   return TRUE;
 }
@@ -675,14 +683,14 @@ gst_d3d12_memory_init_once (void)
  * gst_d3d12_memory_get_resource_handle:
  * @mem: a #GstD3D12Memory
  *
- * Returns: (transfer none) (nullable): ID3D12Resource handle
+ * Returns: (transfer none): ID3D12Resource handle
  *
  * Since: 1.26
  */
 ID3D12Resource *
 gst_d3d12_memory_get_resource_handle (GstD3D12Memory * mem)
 {
-  g_return_val_if_fail (gst_is_d3d12_memory (GST_MEMORY_CAST (mem)), FALSE);
+  g_return_val_if_fail (gst_is_d3d12_memory (GST_MEMORY_CAST (mem)), nullptr);
 
   return mem->priv->resource.Get ();
 }
@@ -802,7 +810,7 @@ gst_d3d12_memory_get_shader_resource_view_heap (GstD3D12Memory * mem)
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = { };
     srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srv_desc.Texture2D.MipLevels = 1;
+    srv_desc.Texture2D.MipLevels = priv->desc.MipLevels;
 
     auto cpu_handle =
         CD3DX12_CPU_DESCRIPTOR_HANDLE (GetCPUDescriptorHandleForHeapStart
@@ -818,6 +826,67 @@ gst_d3d12_memory_get_shader_resource_view_heap (GstD3D12Memory * mem)
   }
 
   return priv->srv_heap.Get ();
+}
+
+/**
+ * gst_d3d12_memory_get_unordered_access_view_heap:
+ * @mem: a #GstD3D12Memory
+ *
+ * Gets shader invisible unordered access view descriptor heap.
+ * Caller needs to copy returned descriptor heap to another shader visible
+ * descriptor heap in order for resource to be used in shader.
+ *
+ * Returns: (transfer none) (nullable): ID3D12DescriptorHeap handle or %NULL
+ * if the resource was allocated without unordered access view enabled
+ *
+ * Since: 1.26
+ */
+ID3D12DescriptorHeap *
+gst_d3d12_memory_get_unordered_access_view_heap (GstD3D12Memory * mem)
+{
+  auto priv = mem->priv;
+  auto allocator = GST_MEMORY_CAST (mem)->allocator;
+  if ((priv->desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0) {
+    GST_LOG_OBJECT (allocator,
+        "Unordered access view is not allowed, configured flags 0x%x",
+        (guint) priv->desc.Flags);
+    return nullptr;
+  }
+
+  std::lock_guard < std::mutex > lk (priv->lock);
+  if (!priv->uav_heap) {
+    D3D12_DESCRIPTOR_HEAP_DESC desc = { };
+    desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    desc.NumDescriptors = priv->num_subresources;
+    desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+    auto device = gst_d3d12_device_get_device_handle (mem->device);
+
+    ComPtr < ID3D12DescriptorHeap > uav_heap;
+    auto hr = device->CreateDescriptorHeap (&desc, IID_PPV_ARGS (&uav_heap));
+    if (!gst_d3d12_result (hr, mem->device)) {
+      GST_ERROR_OBJECT (allocator, "Couldn't create descriptor heap");
+      return nullptr;
+    }
+
+    priv->uav_heap = uav_heap;
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = { };
+    uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    auto cpu_handle =
+        CD3DX12_CPU_DESCRIPTOR_HANDLE (GetCPUDescriptorHandleForHeapStart
+        (uav_heap));
+
+    for (guint i = 0; i < priv->num_subresources; i++) {
+      uav_desc.Format = priv->resource_formats[i];
+      uav_desc.Texture2D.PlaneSlice = i;
+      device->CreateUnorderedAccessView (priv->resource.Get (), nullptr,
+          &uav_desc, cpu_handle);
+      cpu_handle.Offset (priv->srv_inc_size);
+    }
+  }
+
+  return priv->uav_heap.Get ();
 }
 
 /**
@@ -895,6 +964,9 @@ gst_d3d12_memory_get_nt_handle_unlocked (GstD3D12Memory * mem, HANDLE * handle)
     return TRUE;
   }
 
+  if ((priv->heap_flags & D3D12_HEAP_FLAG_SHARED) != D3D12_HEAP_FLAG_SHARED)
+    return FALSE;
+
   auto device = gst_d3d12_device_get_device_handle (mem->device);
   auto hr = device->CreateSharedHandle (priv->resource.Get (), nullptr,
       GENERIC_ALL, nullptr, &priv->nt_handle);
@@ -908,7 +980,7 @@ gst_d3d12_memory_get_nt_handle_unlocked (GstD3D12Memory * mem, HANDLE * handle)
 /**
  * gst_d3d12_memory_get_nt_handle:
  * @mem: a #GstD3D12Memory
- * @handle: (out) (transfer none) a sharable NT handle
+ * @handle: (out) (transfer none): a sharable NT handle
  *
  * Gets NT handle created via ID3D12Device::CreateSharedHandle().
  * Returned NT handle is owned by @mem, thus caller should not close
@@ -982,49 +1054,62 @@ gst_d3d12_memory_get_token_data (GstD3D12Memory * mem, gint64 token)
 }
 
 /**
- * gst_d3d12_memory_set_external_fence:
+ * gst_d3d12_memory_set_fence:
  * @mem: a #GstD3D12Memory
  * @fence: (allow-none): a ID3D12Fence
- * @fence_val: fence value
+ * @fence_value: fence value
+ * @wait: waits for previously configured fence if any
  *
- * Sets external fence handle to @mem. Later memory map operation will wait
- * for @fence if needed
+ * Replace fence object of @mem with new @fence.
+ * This method will block calling thread for synchronization
+ * if @wait is %TRUE and configured fence is different from new @fence
  *
  * Since: 1.26
  */
 void
-gst_d3d12_memory_set_external_fence (GstD3D12Memory * mem, ID3D12Fence * fence,
-    guint64 fence_val)
+gst_d3d12_memory_set_fence (GstD3D12Memory * mem, ID3D12Fence * fence,
+    guint64 fence_value, gboolean wait)
 {
+  g_return_if_fail (gst_is_d3d12_memory (GST_MEMORY_CAST (mem)));
+  g_return_if_fail (gst_mini_object_is_writable ((GstMiniObject *) mem));
+
   auto priv = mem->priv;
 
   std::lock_guard < std::mutex > lk (priv->lock);
-  gst_d3d12_memory_set_external_fence_unlocked (mem, fence, fence_val);
+  gst_d3d12_memory_set_fence_unlocked (mem, fence, fence_value, wait);
 }
 
 /**
- * gst_d3d12_memory_get_external_fence:
+ * gst_d3d12_memory_get_fence:
  * @mem: a #GstD3D12Memory
- * @fence: (out) (transfer full) (nullable): a ID3D12Fence
- * @fence_val: (out): fence value
+ * @fence: (out) (transfer full) (allow-none): a ID3D12Fence
+ * @fence_value: (out) (allow-none): fence value
  *
- * Gets configured external fence and fence value
+ * Gets configured fence and fence value. Valid operations against returned
+ * fence object are ID3D12Fence::GetCompletedValue() and
+ * ID3D12Fence::SetEventOnCompletion(). Caller should not try to update
+ * completed value via ID3D12Fence::Signal() since the fence is likely
+ * owned by external component and shared only for read-only operations.
  *
- * Returns: %TRUE if external fence was configured in @mem
+ * Returns: %TRUE if @mem has configured fence object
  *
  * Since: 1.26
  */
 gboolean
-gst_d3d12_memory_get_external_fence (GstD3D12Memory * mem, ID3D12Fence ** fence,
-    guint64 * fence_val)
+gst_d3d12_memory_get_fence (GstD3D12Memory * mem, ID3D12Fence ** fence,
+    guint64 * fence_value)
 {
   auto priv = mem->priv;
 
   std::lock_guard < std::mutex > lk (priv->lock);
-  if (priv->external_fence) {
-    *fence = priv->external_fence.Get ();
-    (*fence)->AddRef ();
-    *fence_val = priv->external_fence_val;
+  if (priv->fence) {
+    if (fence) {
+      *fence = priv->fence.Get ();
+      (*fence)->AddRef ();
+    }
+
+    if (fence_value)
+      *fence_value = priv->fence_val;
 
     return TRUE;
   }
@@ -1064,8 +1149,12 @@ gst_d3d12_memory_get_d3d11_texture (GstD3D12Memory * mem,
     return (*it)->texture11.Get ();
 
   HANDLE shared_handle;
-  if (!gst_d3d12_memory_get_nt_handle_unlocked (mem, &shared_handle))
+  /* d3d11 interop requires rtv binding and shared heap */
+  if ((priv->desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) !=
+      D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET ||
+      !gst_d3d12_memory_get_nt_handle_unlocked (mem, &shared_handle)) {
     return nullptr;
+  }
 
   ComPtr < ID3D11Device1 > device11_1;
   auto hr = device11->QueryInterface (IID_PPV_ARGS (&device11_1));
@@ -1177,22 +1266,29 @@ gst_d3d12_memory_copy (GstMemory * mem, gssize offset, gssize size)
   gst_memory_unmap (mem, &info);
 
   ComPtr < ID3D12Fence > fence_to_wait;
-  guint64 fence_value_to_wait;
+  guint64 fence_value_to_wait[1];
   {
     std::lock_guard < std::mutex > lk (mem_priv->lock);
-    fence_to_wait = mem_priv->external_fence;
-    fence_value_to_wait = mem_priv->external_fence_val;
+    fence_to_wait = mem_priv->fence;
+    fence_value_to_wait[0] = mem_priv->fence_val;
   }
 
   GstD3D12FenceData *fence_data;
   gst_d3d12_device_acquire_fence_data (dmem->device, &fence_data);
-  gst_d3d12_fence_data_add_notify_mini_object (fence_data,
-      gst_memory_ref (mem));
+  gst_d3d12_fence_data_push (fence_data,
+      FENCE_NOTIFY_MINI_OBJECT (gst_memory_ref (mem)));
+
+  ID3D12Fence *fences_to_wait[] = { fence_to_wait.Get () };
+  guint num_fences_to_wait = 0;
+  if (fence_to_wait)
+    num_fences_to_wait = 1;
 
   gst_d3d12_device_copy_texture_region (dmem->device,
-      copy_args.size (), copy_args.data (), fence_data, fence_to_wait.Get (),
-      fence_value_to_wait, D3D12_COMMAND_LIST_TYPE_DIRECT,
-      &dst_dmem->fence_value);
+      copy_args.size (), copy_args.data (), fence_data, num_fences_to_wait,
+      fences_to_wait, fence_value_to_wait, D3D12_COMMAND_LIST_TYPE_DIRECT,
+      &dst_priv->fence_val);
+  dst_priv->fence = gst_d3d12_device_get_fence_handle (dmem->device,
+      D3D12_COMMAND_LIST_TYPE_DIRECT);
 
   GST_MINI_OBJECT_FLAG_SET (dst, GST_D3D12_MEMORY_TRANSFER_NEED_DOWNLOAD);
 
@@ -1233,8 +1329,7 @@ gst_d3d12_allocator_free (GstAllocator * allocator, GstMemory * mem)
 
   GST_LOG_OBJECT (allocator, "Free memory %p", mem);
 
-  gst_d3d12_memory_wait_gpu (dmem, D3D12_COMMAND_LIST_TYPE_DIRECT,
-      dmem->fence_value);
+  gst_d3d12_memory_set_fence_unlocked (dmem, nullptr, 0, TRUE);
 
   if (dmem->priv->notify)
     dmem->priv->notify (dmem->priv->user_data);
@@ -1282,6 +1377,7 @@ gst_d3d12_allocator_alloc_wrapped (GstD3D12Allocator * allocator,
   auto desc = GetDesc (resource);
   guint8 num_subresources =
       D3D12GetFormatPlaneCount (device_handle, desc.Format);
+  D3D12_HEAP_FLAGS heap_flags;
 
   if (num_subresources == 0) {
     GST_ERROR_OBJECT (allocator, "Couldn't get format info");
@@ -1293,11 +1389,18 @@ gst_d3d12_allocator_alloc_wrapped (GstD3D12Allocator * allocator,
     return nullptr;
   }
 
+  auto hr = resource->GetHeapProperties (nullptr, &heap_flags);
+  if (!gst_d3d12_result (hr, device)) {
+    GST_ERROR_OBJECT (allocator, "Couldn't get heap property");
+    return nullptr;
+  }
+
   auto mem = g_new0 (GstD3D12Memory, 1);
   mem->priv = new GstD3D12MemoryPrivate ();
 
   auto priv = mem->priv;
   priv->desc = desc;
+  priv->heap_flags = heap_flags;
   priv->num_subresources = num_subresources;
   priv->resource = resource;
   gst_d3d12_dxgi_format_get_resource_format (priv->desc.Format,
@@ -1335,6 +1438,7 @@ gst_d3d12_allocator_alloc_wrapped (GstD3D12Allocator * allocator,
   /* Then calculate staging memory size and copyable layout */
   UINT64 size;
   desc.DepthOrArraySize = 1;
+  desc.MipLevels = 1;
   device_handle->GetCopyableFootprints (&desc, 0,
       num_subresources, 0, priv->layout, nullptr, nullptr, &size);
   priv->size = size;
@@ -1826,7 +1930,7 @@ gst_d3d12_pool_allocator_acquire_memory_internal (GstD3D12PoolAllocator * self,
  * @heap_flags: a D3D12_HEAP_FLAGS
  * @desc: a D3D12_RESOURCE_DESC
  * @initial_state: initial resource state
- * @optimized_clear_value: (allow-none) optimized clear value
+ * @optimized_clear_value: (allow-none): optimized clear value
  *
  * Returns: (transfer full) (nullable): a new #GstD3D12PoolAllocator instance
  *

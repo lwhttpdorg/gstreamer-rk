@@ -42,6 +42,7 @@ base_tests = [
   [ 'elements/audioresample.c', get_option('audioresample').disabled()],
   [ 'elements/compositor.c', get_option('compositor').disabled()],
   [ 'elements/decodebin.c', get_option('playback').disabled()],
+  [ 'elements/opus.c', not opus_dep.found() ],
   [ 'elements/overlaycomposition.c', get_option('overlaycomposition').disabled()],
   [ 'elements/playbin.c', get_option('playback').disabled()],
   [ 'elements/playsink.c', get_option('playback').disabled()],
@@ -102,7 +103,6 @@ if build_gstgl and host_machine.system() != 'windows'
     [ 'libs/gstglsl.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
     [ 'libs/gstglslstage.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
     [ 'libs/gstglupload.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
-    [ 'libs/gstglvideomixerelement.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
     [ 'elements/glimagesink.c', not build_gstgl, [gstgl_dep, gstglproto_dep]],
     [ 'elements/glbin.c', not build_gstgl ],
     [ 'pipelines/gl-launch-lines.c', not build_gstgl ],
@@ -128,11 +128,6 @@ test_defines = [
   '-DGST_TEST_FILE="' + fsmod.as_posix(meson.current_source_dir()) + '/../files/partialframe.mjpeg"', # for libs/discoverer
   '-DGST_USE_UNSTABLE_API',
 ]
-
-valgrind_dep = dependency('valgrind', required: false)
-if valgrind_dep.found()
-  test_defines += ['-DHAVE_VALGRIND']
-endif
 
 if build_gstgl
   test_defines += ['-DTEST_GST_GL_ABI_CHECK']

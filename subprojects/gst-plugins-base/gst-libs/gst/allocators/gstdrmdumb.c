@@ -189,6 +189,7 @@ gst_drm_height_from_drm (guint32 drmfmt, guint32 height)
     case DRM_FORMAT_YUV422:
     case DRM_FORMAT_NV12:
     case DRM_FORMAT_NV21:
+    case DRM_FORMAT_NV15:
     case DRM_FORMAT_P010:
     case DRM_FORMAT_P016:
       ret = height * 3 / 2;
@@ -224,8 +225,11 @@ gst_drm_bpp_from_drm (guint32 drm_fourcc)
     case DRM_FORMAT_NV24:
       bpp = 8;
       break;
-    case DRM_FORMAT_P010:
+    case DRM_FORMAT_NV15:
       bpp = 10;
+      break;
+    case DRM_FORMAT_P010:
+      bpp = 16;
       break;
     case DRM_FORMAT_UYVY:
     case DRM_FORMAT_YUYV:
@@ -486,7 +490,7 @@ gst_drm_dumb_allocator_class_init (GstDRMDumbAllocatorClass * klass)
    */
   g_props[PROP_DRM_FD] = g_param_spec_int ("drm-fd", "DRM fd",
       "DRM file descriptor", -1, G_MAXINT, -1,
-      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT_ONLY);
 
   /**
    * GstDRMDumbAllocator:drm-device-path: (type filename):

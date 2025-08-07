@@ -44,7 +44,7 @@ typedef struct _GstV4l2ObjectClassHelper GstV4l2ObjectClassHelper;
 
 /* size of v4l2 buffer pool in streaming case, obj->info needs to be valid */
 #define GST_V4L2_MIN_BUFFERS(obj) \
-    ((GST_VIDEO_INFO_INTERLACE_MODE (&obj->info) == \
+    ((GST_VIDEO_INFO_INTERLACE_MODE (&obj->info.vinfo) == \
       GST_VIDEO_INTERLACE_MODE_ALTERNATE) ? \
       /* 2x buffers needed with each field in its own buffer */ \
       4 : 2)
@@ -82,11 +82,14 @@ typedef int ioctl_req_t;
 typedef gulong ioctl_req_t;
 #endif
 
-#define GST_V4L2_WIDTH(o)        (GST_VIDEO_INFO_WIDTH (&(o)->info))
-#define GST_V4L2_HEIGHT(o)       (GST_VIDEO_INFO_HEIGHT (&(o)->info))
+#define GST_V4L2_WIDTH(o)        (GST_VIDEO_INFO_WIDTH (&(o)->info.vinfo))
+#define GST_V4L2_HEIGHT(o)       (GST_VIDEO_INFO_HEIGHT (&(o)->info.vinfo))
+#define GST_V4L2_FIELD_HEIGHT(o) (GST_VIDEO_INFO_FIELD_HEIGHT (&(o)->info.vinfo))
 #define GST_V4L2_PIXELFORMAT(o)  ((o)->fmtdesc->pixelformat)
-#define GST_V4L2_FPS_N(o)        (GST_VIDEO_INFO_FPS_N (&(o)->info))
-#define GST_V4L2_FPS_D(o)        (GST_VIDEO_INFO_FPS_D (&(o)->info))
+#define GST_V4L2_FPS_N(o)        (GST_VIDEO_INFO_FPS_N (&(o)->info.vinfo))
+#define GST_V4L2_FPS_D(o)        (GST_VIDEO_INFO_FPS_D (&(o)->info.vinfo))
+#define GST_V4L2_SIZE(o)         (GST_VIDEO_INFO_SIZE (&(o)->info.vinfo))
+#define GST_V4L2_N_PLANES(o)     (GST_VIDEO_INFO_N_PLANES (&(o)->info.vinfo))
 
 /* simple check whether the device is open */
 #define GST_V4L2_IS_OPEN(o)      ((o)->video_fd > 0)
@@ -145,10 +148,11 @@ struct _GstV4l2Object {
   /* the current format */
   struct v4l2_fmtdesc *fmtdesc;
   struct v4l2_format format;
-  GstVideoInfo info;
+  GstVideoInfoDmaDrm info;
   GstVideoAlignment align;
   GstVideoTransferFunction transfer;
   gsize plane_size[GST_VIDEO_MAX_PLANES];
+  GstVideoColorMatrix matrix;
 
   /* Features */
   gboolean need_video_meta;
@@ -228,7 +232,7 @@ struct _GstV4l2Object {
    * on slow USB firmwares. When this is set, gst_v4l2_set_format() will modify
    * the caps to reflect what was negotiated during fixation */
   gboolean skip_try_fmt_probes;
-  
+
   guint max_width;
   guint max_height;
 };
@@ -295,6 +299,9 @@ GstCaps*     gst_v4l2_object_get_raw_caps (void);
 
 GstCaps*     gst_v4l2_object_get_codec_caps (void);
 
+GstCaps*     gst_v4l2_object_probe_template_caps (const gchar * device, gint video_fd,
+                                                  enum v4l2_buf_type type);
+
 gboolean     gst_v4l2_object_set_format  (GstV4l2Object * v4l2object, GstCaps * caps, GstV4l2Error * error);
 gboolean     gst_v4l2_object_try_format  (GstV4l2Object * v4l2object, GstCaps * caps, GstV4l2Error * error);
 gboolean     gst_v4l2_object_try_import  (GstV4l2Object * v4l2object, GstBuffer * buffer);
@@ -311,7 +318,7 @@ gboolean     gst_v4l2_object_stop        (GstV4l2Object * v4l2object);
 GstCaps *    gst_v4l2_object_probe_caps  (GstV4l2Object * v4l2object, GstCaps * filter);
 GstCaps *    gst_v4l2_object_get_caps    (GstV4l2Object * v4l2object, GstCaps * filter);
 
-gboolean     gst_v4l2_object_acquire_format (GstV4l2Object * v4l2object, GstVideoInfo * info);
+gboolean     gst_v4l2_object_acquire_format (GstV4l2Object * v4l2object, GstVideoInfoDmaDrm * info);
 
 gboolean     gst_v4l2_object_setup_padding (GstV4l2Object * obj);
 
@@ -321,7 +328,7 @@ gboolean     gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery *
 
 GstBufferPool * gst_v4l2_object_get_buffer_pool (GstV4l2Object * v4l2object);
 
-GstStructure * gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc);
+GstVideoFormat gst_v4l2_object_v4l2fourcc_to_video_format (guint32 fourcc);
 
 GstFlowReturn  gst_v4l2_object_poll (GstV4l2Object * v4l2object, GstClockTime timeout);
 gboolean       gst_v4l2_object_subscribe_event (GstV4l2Object * v4l2object, guint32 event);

@@ -18,6 +18,39 @@ dwrite_sources = [
   'plugin.cpp',
 ]
 
+dwrite_headers = [
+  'gstdwritetimeoverlay.h',
+  'gstdwriterender_d3d11.h',
+  'gstdwritebaseoverlay.h',
+  'gstdwritebitmapmemory.h',
+  'gstdwriterender_d3d12.h',
+  'gstdwritebitmappool.h',
+  'gstdwriteoverlayobject.h',
+  'gstdwriterender_bitmap.h',
+  'gstdwriterender.h',
+  'gstdwrite-utils.h',
+  'gstdwrite-effect.h',
+  'gstdwritetextoverlay.h',
+  'gstdwrite-renderer.h',
+  'gstdwrite-enums.h',
+  'gstdwritesubtitlemux.h',
+  'gstdwriteclockoverlay.h',
+  'gstdwritesubtitleoverlay.h',
+]
+
+d3d12_sources = [
+  'gstdwriterender_d3d12.cpp'
+]
+
+doc_sources = []
+foreach s: dwrite_sources + d3d12_sources + dwrite_headers
+  doc_sources += meson.current_source_dir() / s
+endforeach
+
+plugin_sources += {
+  'dwrite': pathsep.join(doc_sources)
+}
+
 extra_args = ['-DGST_USE_UNSTABLE_API']
 extra_deps = []
 
@@ -49,7 +82,9 @@ endif
 
 if cc.has_header('d2d1_3.h') and cc.has_header('dwrite_3.h')
   # DWRITE_GLYPH_IMAGE_FORMATS enum requires NTDDI_WIN10_RS1
-  extra_args += ['-DWINVER=0x0A00',
+  extra_args += ['-U_WIN32_WINNT',
+                 '-UWINVER',
+                 '-DWINVER=0x0A00',
                  '-D_WIN32_WINNT=0x0A00',
                  '-DNTDDI_VERSION=0x0A000002',
                  '-DHAVE_DWRITE_COLOR_FONT']
@@ -67,10 +102,10 @@ endif
 
 subdir('libcaption')
 
-if gstd3d12_dep.found() and cc.has_header('d3d11on12.h')
+if gstd3d12_dep.found() and cc.has_header('d3d11on12.h') and cc.has_header('d3d12video.h')
   extra_args += ['-DHAVE_GST_D3D12']
   extra_deps += [gstd3d12_dep]
-  dwrite_sources += ['gstdwriterender_d3d12.cpp']
+  dwrite_sources += d3d12_sources
 endif
 
 gstdwrite = library('gstdwrite',

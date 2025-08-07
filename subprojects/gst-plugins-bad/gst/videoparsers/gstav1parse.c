@@ -58,8 +58,8 @@
  * ## Example launch line to generate annex B format AV1 stream:
  * ```
  * gst-launch-1.0 filesrc location=sample.av1 ! ivfparse ! av1parse !  \
- *   video/x-av1,alignment=\(string\)tu,stream-format=\(string\)annexb ! \
- *   filesink location=matroskamux ! filesink location=trans.mkv
+ *   video/x-av1,alignment=\(string\)tu,stream-format=\(string\)obu-stream ! \
+ *   matroskamux ! filesink location=trans.mkv
  * ```
  *
  * Since: 1.20
@@ -73,6 +73,7 @@
 #include <gst/base/gstbitwriter.h>
 #include <gst/codecparsers/gstav1parser.h>
 #include <gst/video/video.h>
+#include <gst/pbutils/pbutils.h>
 #include "gstvideoparserselements.h"
 #include "gstav1parse.h"
 
@@ -85,7 +86,7 @@ GST_DEBUG_CATEGORY (av1_parse_debug);
 
 /* We combine the stream format and the alignment
    together. When stream format is annexb, the
-   alignment must be TU. */
+   alignment must be TU or byte. */
 typedef enum
 {
   GST_AV1_PARSE_ALIGN_ERROR = -1,
@@ -95,11 +96,14 @@ typedef enum
   GST_AV1_PARSE_ALIGN_FRAME,
   GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT,
   GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B,
+  GST_AV1_PARSE_ALIGN_ANNEX_B,
 } GstAV1ParseAligment;
 
 struct _GstAV1Parse
 {
   GstBaseParse parent;
+
+  gboolean first_frame;
 
   gint width;
   gint height;
@@ -136,10 +140,23 @@ struct _GstAV1Parse
   gboolean header;
   gboolean keyframe;
   gboolean show_frame;
+  gboolean seen_non_padding;
 
   GstClockTime buffer_pts;
   GstClockTime buffer_dts;
   GstClockTime buffer_duration;
+
+  GstVideoMasteringDisplayInfo mastering_display_info;
+  guint mastering_display_info_state;
+
+  GstVideoContentLightLevel content_light_level;
+  guint content_light_level_state;
+};
+
+enum
+{
+  GST_AV1_PARSE_OBU_EXPIRED = 0,
+  GST_AV1_PARSE_OBU_PARSED = 1,
 };
 
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
@@ -329,12 +346,18 @@ gst_av1_parse_reset (GstAV1Parse * self)
   self->show_frame = FALSE;
   self->last_parsed_offset = 0;
   self->highest_spatial_id = 0;
+  self->first_frame = TRUE;
+  self->seen_non_padding = FALSE;
   gst_av1_parse_reset_obu_data_state (self);
   g_clear_pointer (&self->colorimetry, g_free);
   g_clear_pointer (&self->parser, gst_av1_parser_free);
   gst_adapter_clear (self->cache_out);
   gst_adapter_clear (self->frame_cache);
   gst_av1_parse_reset_tu_timestamp (self);
+  gst_video_mastering_display_info_init (&self->mastering_display_info);
+  self->mastering_display_info_state = GST_AV1_PARSE_OBU_EXPIRED;
+  gst_video_content_light_level_init (&self->content_light_level);
+  self->content_light_level_state = GST_AV1_PARSE_OBU_EXPIRED;
 }
 
 static void
@@ -532,6 +555,7 @@ gst_av1_parse_alignment_to_steam_format_string (GstAV1ParseAligment align)
     case GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT:
     case GST_AV1_PARSE_ALIGN_FRAME:
       return "obu-stream";
+    case GST_AV1_PARSE_ALIGN_ANNEX_B:
     case GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B:
       return "annexb";
     default:
@@ -547,6 +571,7 @@ gst_av1_parse_alignment_to_string (GstAV1ParseAligment align)
 {
   switch (align) {
     case GST_AV1_PARSE_ALIGN_BYTE:
+    case GST_AV1_PARSE_ALIGN_ANNEX_B:
       return "byte";
     case GST_AV1_PARSE_ALIGN_OBU:
       return "obu";
@@ -572,11 +597,12 @@ gst_av1_parse_alignment_from_string (const gchar * align,
 
   if (stream_format) {
     if (g_strcmp0 (stream_format, "annexb") == 0) {
-      if (align && g_strcmp0 (align, "tu") != 0) {
-        /* annex b stream must align to TU. */
-        return GST_AV1_PARSE_ALIGN_ERROR;
-      } else {
+      if (align && g_strcmp0 (align, "tu") == 0) {
         return GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B;
+      } else if (align && g_strcmp0 (align, "none") == 0) {
+        return GST_AV1_PARSE_ALIGN_ANNEX_B;
+      } else {
+        return GST_AV1_PARSE_ALIGN_ERROR;
       }
     } else if (g_strcmp0 (stream_format, "obu-stream") != 0) {
       /* unrecognized */
@@ -637,6 +663,10 @@ gst_av1_parse_caps_has_alignment (GstCaps * caps, GstAV1ParseAligment alignment)
       break;
     case GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B:
       cmp_align_str = "tu";
+      cmp_stream_str = "annexb";
+      break;
+    case GST_AV1_PARSE_ALIGN_ANNEX_B:
+      cmp_align_str = "none";
       cmp_stream_str = "annexb";
       break;
     default:
@@ -731,6 +761,8 @@ gst_av1_parse_update_src_caps (GstAV1Parse * self, GstCaps * caps)
   const gchar *profile = NULL;
   const gchar *level = NULL;
   const gchar *tier = NULL;
+  const gchar *mdi_str = NULL;
+  const gchar *cll_str = NULL;
 
   if (G_UNLIKELY (!gst_pad_has_current_caps (GST_BASE_PARSE_SRC_PAD (self))))
     self->update_caps = TRUE;
@@ -847,6 +879,28 @@ gst_av1_parse_update_src_caps (GstAV1Parse * self, GstCaps * caps)
       GST_WARNING_OBJECT (self, "Invalid max level idx %d",
           self->max_seq_level_idx);
     }
+  }
+
+  if (s)
+    mdi_str = gst_structure_get_string (s, "mastering-display-info");
+  if (mdi_str) {
+    gst_caps_set_simple (final_caps, "mastering-display-info", G_TYPE_STRING,
+        mdi_str, NULL);
+  } else if (self->mastering_display_info_state != GST_AV1_PARSE_OBU_EXPIRED &&
+      !gst_video_mastering_display_info_add_to_caps
+      (&self->mastering_display_info, final_caps)) {
+    GST_WARNING_OBJECT (self, "Couldn't set mastering display info to caps");
+  }
+
+  if (s)
+    cll_str = gst_structure_get_string (s, "content-light-level");
+  if (mdi_str) {
+    gst_caps_set_simple (final_caps, "content-light-level", G_TYPE_STRING,
+        cll_str, NULL);
+  } else if (self->content_light_level_state != GST_AV1_PARSE_OBU_EXPIRED &&
+      !gst_video_content_light_level_add_to_caps
+      (&self->content_light_level, final_caps)) {
+    GST_WARNING_OBJECT (self, "Couldn't set content light level to caps");
   }
 
   src_caps = gst_pad_get_current_caps (GST_BASE_PARSE_SRC_PAD (self));
@@ -1030,10 +1084,12 @@ gst_av1_parse_set_sink_caps (GstBaseParse * parse, GstCaps * caps)
 
   self->in_align = align;
 
-  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT)
+  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
+      || self->in_align == GST_AV1_PARSE_ALIGN_ANNEX_B)
     self->detect_annex_b = TRUE;
 
-  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B) {
+  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B
+      || self->in_align == GST_AV1_PARSE_ALIGN_ANNEX_B) {
     gst_av1_parser_reset (self->parser, TRUE);
   } else {
     gst_av1_parser_reset (self->parser, FALSE);
@@ -1143,9 +1199,11 @@ gst_av1_parse_push_data (GstAV1Parse * self, GstBaseParseFrame * frame,
     gst_buffer_unref (buf);
 
     gst_av1_parse_update_src_caps (self, NULL);
-    GST_LOG_OBJECT (self, "comsumed %d, output one buffer with size %"
+    GST_LOG_OBJECT (self, "consumed %d, output one buffer with size %"
         G_GSSIZE_FORMAT, finish_sz, sz);
     ret = gst_base_parse_finish_frame (GST_BASE_PARSE (self), frame, finish_sz);
+
+    self->seen_non_padding = FALSE;
   }
 
   return ret;
@@ -1502,13 +1560,34 @@ new_tu:
   if (ret) {
     if (self->within_one_frame)
       GST_WARNING_OBJECT (self,
-          "Start a new temporal unit with incompleted frame.");
+          "Start a new temporal unit with incomplete frame.");
 
     gst_av1_parse_reset_obu_data_state (self);
     gst_av1_parse_reset_tu_timestamp (self);
   }
 
   return ret;
+}
+
+static guint64
+fixed_scale (guint in, guint fracbits, guint scale, guint max_bits)
+{
+  guint fracmax = 1 << fracbits;
+  guint fracmask = fracmax - 1;
+  guint whole;
+  guint64 out;
+
+  out = in & fracmask;
+  out = gst_util_uint64_scale_int (scale, out, fracmask);
+  whole = in >> fracbits;
+  out += scale * whole;
+
+  if (max_bits == 16)
+    out = MIN (out, G_MAXUINT16);
+  else if (max_bits == 32)
+    out = MIN (out, G_MAXUINT32);
+
+  return out;
 }
 
 /* frame_complete will be set true if it is the frame edge. */
@@ -1589,17 +1668,26 @@ gst_av1_parse_handle_one_obu (GstAV1Parse * self, GstAV1OBU * obu,
      start a TU. We only check TD here. */
   if (obu->obu_type == GST_AV1_OBU_TEMPORAL_DELIMITER) {
     gst_av1_parse_reset_obu_data_state (self);
-    gst_av1_parse_reset_tu_timestamp (self);
+
+    /* Let the leading padding OBUs be the part of the new TD. */
+    if (!self->seen_non_padding)
+      goto out;
 
     if (check_new_tu) {
       *check_new_tu = TRUE;
       res = GST_AV1_PARSER_OK;
-      goto out;
     }
+
+    /* Start a new TD should also complete the current frame. */
+    *frame_complete = TRUE;
+
+    goto out;
   }
 
-  if (obu->obu_type == GST_AV1_OBU_SEQUENCE_HEADER)
+  if (obu->obu_type == GST_AV1_OBU_SEQUENCE_HEADER) {
     self->header = TRUE;
+    goto out;
+  }
 
   if (obu->obu_type == GST_AV1_OBU_FRAME_HEADER
       || obu->obu_type == GST_AV1_OBU_FRAME
@@ -1659,6 +1747,67 @@ gst_av1_parse_handle_one_obu (GstAV1Parse * self, GstAV1OBU * obu,
     }
   }
 
+  if (obu->obu_type == GST_AV1_OBU_METADATA) {
+    switch (metadata.metadata_type) {
+      case GST_AV1_METADATA_TYPE_HDR_CLL:
+      {
+        GstVideoContentLightLevel new_cll;
+
+        new_cll.max_content_light_level = metadata.hdr_cll.max_cll;
+        new_cll.max_frame_average_light_level = metadata.hdr_cll.max_fall;
+
+        if (self->content_light_level_state == GST_AV1_PARSE_OBU_EXPIRED) {
+          self->update_caps = TRUE;
+        } else if (new_cll.max_content_light_level !=
+            self->content_light_level.max_content_light_level ||
+            new_cll.max_frame_average_light_level !=
+            self->content_light_level.max_frame_average_light_level) {
+          self->update_caps = TRUE;
+        }
+
+        self->content_light_level = new_cll;
+        self->content_light_level_state = GST_AV1_PARSE_OBU_PARSED;
+        break;
+      }
+      case GST_AV1_METADATA_TYPE_HDR_MDCV:
+      {
+        GstVideoMasteringDisplayInfo new_minfo;
+        GstAV1MetadataHdrMdcv *mdcv = &metadata.hdr_mdcv;
+        gint i;
+
+        for (i = 0; i < 3; i++) {
+          new_minfo.display_primaries[i].x =
+              fixed_scale (mdcv->primary_chromaticity_x[i], 16, 50000, 16);
+
+          new_minfo.display_primaries[i].y =
+              fixed_scale (mdcv->primary_chromaticity_y[i], 16, 50000, 16);
+        }
+
+        new_minfo.white_point.x =
+            fixed_scale (mdcv->white_point_chromaticity_x, 16, 50000, 16);
+        new_minfo.white_point.y =
+            fixed_scale (mdcv->white_point_chromaticity_y, 16, 50000, 16);
+        new_minfo.max_display_mastering_luminance =
+            fixed_scale (mdcv->luminance_max, 8, 10000, 32);
+        new_minfo.min_display_mastering_luminance =
+            fixed_scale (mdcv->luminance_min, 14, 10000, 32);
+
+        if (self->mastering_display_info_state == GST_AV1_PARSE_OBU_EXPIRED) {
+          self->update_caps = TRUE;
+        } else if (!gst_video_mastering_display_info_is_equal
+            (&self->mastering_display_info, &new_minfo)) {
+          self->update_caps = TRUE;
+        }
+
+        self->mastering_display_info = new_minfo;
+        self->mastering_display_info_state = GST_AV1_PARSE_OBU_PARSED;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
 out:
   if (res != GST_AV1_PARSER_OK) {
     /* Some verbose OBU can be skip */
@@ -1669,6 +1818,9 @@ out:
       res = GST_AV1_PARSER_OK;
     }
   }
+
+  if (obu->obu_type != GST_AV1_OBU_PADDING)
+    self->seen_non_padding = TRUE;
 
   return res;
 }
@@ -1758,6 +1910,7 @@ gst_av1_parse_handle_obu_to_obu (GstBaseParse * parse,
 
   GST_LOG_OBJECT (self, "Output one buffer with size %d", consumed);
   ret = gst_base_parse_finish_frame (parse, frame, consumed);
+  self->seen_non_padding = FALSE;
   *skipsize = 0;
 
 out:
@@ -1816,29 +1969,6 @@ again:
     if (res != GST_AV1_PARSER_OK)
       break;
 
-    if (obu.obu_type == GST_AV1_OBU_TEMPORAL_DELIMITER
-        && consumed_before_push > 0) {
-      GST_DEBUG_OBJECT (self, "Encounter TD inside one %s aligned"
-          " buffer, should not happen normally.",
-          gst_av1_parse_alignment_to_string (self->in_align));
-
-      if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B)
-        gst_av1_parser_reset_annex_b (self->parser);
-
-      /* Not include this TD obu, it should belong to the next TU or frame,
-         we push all the data we already got. */
-      gst_av1_parse_create_subframe (frame, &subframe, buffer);
-      ret = gst_av1_parse_push_data (self, &subframe,
-          consumed_before_push, TRUE);
-      if (ret != GST_FLOW_OK)
-        goto out;
-
-      /* Begin to find the next. */
-      frame_complete = FALSE;
-      consumed_before_push = 0;
-      continue;
-    }
-
     gst_av1_parse_cache_one_obu (self, buffer, &obu,
         map_info.data + offset, consumed, frame_complete);
 
@@ -1896,8 +2026,8 @@ again:
 
   /* If the total buffer exhausted but frame is not complete, we just
      push the left data and consider it as a frame. */
-  if (consumed_before_push > 0 && !frame_complete
-      && self->align == GST_AV1_PARSE_ALIGN_FRAME) {
+  if (consumed_before_push > 0 && !frame_complete && self->seen_non_padding &&
+      self->align == GST_AV1_PARSE_ALIGN_FRAME) {
     g_assert (offset >= map_info.size);
     /* Warning and still consider the frame is complete */
     GST_WARNING_OBJECT (self, "Exhaust the buffer but still incomplete frame,"
@@ -1905,7 +2035,8 @@ again:
         gst_av1_parse_alignment_to_string (self->in_align));
   }
 
-  ret = gst_av1_parse_push_data (self, frame, consumed_before_push, TRUE);
+  if (self->seen_non_padding)
+    ret = gst_av1_parse_push_data (self, frame, consumed_before_push, TRUE);
 
 out:
   gst_buffer_unmap (buffer, &map_info);
@@ -1946,20 +2077,15 @@ again:
     if (res != GST_AV1_PARSER_OK)
       break;
 
-    /* Take the DTS from the first OBU of the TU */
-    if (!GST_CLOCK_TIME_IS_VALID (self->buffer_dts))
-      self->buffer_dts = GST_BUFFER_DTS (buffer);
-
     check_new_tu = FALSE;
-    if (self->align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
-        || self->align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B) {
-      res = gst_av1_parse_handle_one_obu (self, &obu, &frame_complete,
-          &check_new_tu);
-    } else {
-      res = gst_av1_parse_handle_one_obu (self, &obu, &frame_complete, NULL);
-    }
+    res = gst_av1_parse_handle_one_obu (self, &obu, &frame_complete,
+        &check_new_tu);
     if (res != GST_AV1_PARSER_OK)
       break;
+
+    /* Take the DTS from the first OBU of the TU */
+    if (!GST_CLOCK_TIME_IS_VALID (self->buffer_dts) || check_new_tu)
+      self->buffer_dts = GST_BUFFER_DTS (buffer);
 
     if (check_new_tu && (gst_adapter_available (self->cache_out) ||
             gst_adapter_available (self->frame_cache))) {
@@ -2151,6 +2277,7 @@ again:
 
 out:
   gst_av1_parse_reset_obu_data_state (self);
+  self->seen_non_padding = FALSE;
   gst_buffer_unmap (buffer, &map_info);
   gst_buffer_unref (buffer);
   return ret;
@@ -2183,6 +2310,7 @@ gst_av1_parse_handle_frame (GstBaseParse * parse,
     GST_LOG_OBJECT (self, "parsing new frame");
     gst_adapter_clear (self->cache_out);
     gst_adapter_clear (self->frame_cache);
+    self->seen_non_padding = FALSE;
     self->last_parsed_offset = 0;
     self->header = FALSE;
     self->keyframe = FALSE;
@@ -2199,6 +2327,8 @@ gst_av1_parse_handle_frame (GstBaseParse * parse,
     upstream_caps =
         gst_pad_peer_query_caps (GST_BASE_PARSE_SINK_PAD (self), NULL);
     if (upstream_caps) {
+      gboolean detect_annex_b = FALSE;
+
       if (!gst_caps_is_empty (upstream_caps)
           && !gst_caps_is_any (upstream_caps)) {
         GstAV1ParseAligment align;
@@ -2221,8 +2351,11 @@ gst_av1_parse_handle_frame (GstBaseParse * parse,
 
       gst_caps_unref (upstream_caps);
 
-      gst_av1_parser_reset (self->parser,
-          self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B);
+      if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT_ANNEX_B
+          || self->in_align == GST_AV1_PARSE_ALIGN_ANNEX_B)
+        detect_annex_b = TRUE;
+
+      gst_av1_parser_reset (self->parser, detect_annex_b);
     }
 
     if (self->in_align != GST_AV1_PARSE_ALIGN_NONE) {
@@ -2235,7 +2368,8 @@ gst_av1_parse_handle_frame (GstBaseParse * parse,
     }
   }
 
-  if (self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
+  if ((self->in_align == GST_AV1_PARSE_ALIGN_TEMPORAL_UNIT
+          || self->in_align == GST_AV1_PARSE_ALIGN_ANNEX_B)
       && self->detect_annex_b) {
     /* Only happend at the first time of handle_frame, try to
        recognize the annex b stream format. */
@@ -2286,8 +2420,36 @@ gst_av1_parse_pre_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
   if (!frame->buffer)
     return GST_FLOW_OK;
 
+  if (self->first_frame) {
+    GstTagList *taglist;
+    GstCaps *caps;
+
+    /* codec tag */
+    caps = gst_pad_get_current_caps (GST_BASE_PARSE_SRC_PAD (parse));
+    if (caps == NULL) {
+      if (GST_PAD_IS_FLUSHING (GST_BASE_PARSE_SRC_PAD (self))) {
+        GST_INFO_OBJECT (self, "Src pad is flushing");
+        return GST_FLOW_FLUSHING;
+      } else {
+        GST_INFO_OBJECT (self, "Src pad is not negotiated!");
+        return GST_FLOW_NOT_NEGOTIATED;
+      }
+    }
+
+    taglist = gst_tag_list_new_empty ();
+    gst_pb_utils_add_codec_description_to_tag_list (taglist,
+        GST_TAG_VIDEO_CODEC, caps);
+    gst_caps_unref (caps);
+
+    gst_base_parse_merge_tags (parse, taglist, GST_TAG_MERGE_REPLACE);
+    gst_tag_list_unref (taglist);
+
+    /* also signals the end of first-frame processing */
+    self->first_frame = FALSE;
+  }
+
   if (self->align == GST_AV1_PARSE_ALIGN_FRAME) {
-    /* Input buffers may may contain more than one frames inside its buffer.
+    /* Input buffers may contain more than one frames inside its buffer.
        When splitting a TU into frames, the base parse class only assign the
        PTS to the first frame and leave the others PTS invalid. But in fact,
        all decode only frames should have invalid PTS while showable frames

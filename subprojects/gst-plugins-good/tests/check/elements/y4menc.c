@@ -21,6 +21,8 @@
  */
 
 #include <gst/check/gstcheck.h>
+#include <gst/check/gstharness.h>
+#include <gst/video/video.h>
 
 /* For ease of programming we use globals to keep refs for our floating
  * src and sink pads we create; otherwise we always have to do get_pad,
@@ -83,7 +85,7 @@ GST_START_TEST (test_y4m)
   GstCaps *caps;
   int i, num_buffers, size;
   const gchar *data0 = "YUV4MPEG2 W384 H288 Ip F25:1 A1:1\n";
-  const gchar *data1 = "YUV4MPEG2 C420 W384 H288 Ip F25:1 A1:1\n";
+  const gchar *data1 = "YUV4MPEG2 C420jpeg W384 H288 Ip F25:1 A1:1\n";
   const gchar *data2 = "FRAME\n";
 
   y4menc = setup_y4menc ();
@@ -151,6 +153,48 @@ GST_START_TEST (test_y4m)
 
 GST_END_TEST;
 
+#include "y4mdata.c"
+
+GST_START_TEST (test_y4m_i420_padded_square)
+{
+  GstHarness *h;
+  GstBuffer *inbuf, *outbuf;
+  GstFlowReturn ret;
+  GstVideoInfo info;
+  gsize len;
+  guint cmp;
+
+  h = gst_harness_new ("y4menc");
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=I420,width=15,height=15,framerate=(fraction)30/1");
+  gst_harness_set_sink_caps_str (h, "application/x-yuv4mpeg,y4mversion=2");
+
+  gst_video_info_set_format (&info, GST_VIDEO_FORMAT_I420, 15, 15);
+
+  inbuf = gst_buffer_new_and_alloc (GST_VIDEO_INFO_SIZE (&info));
+  fail_unless (inbuf);
+  len = gst_buffer_fill (inbuf, 0, red_box_i420_15x15_yuv,
+      red_box_i420_15x15_yuv_len);
+  fail_unless (len == red_box_i420_15x15_yuv_len);
+
+  ret = gst_harness_push (h, inbuf);
+  fail_unless (ret == GST_FLOW_OK, "GstFlowReturn was %s",
+      gst_flow_get_name (ret));
+
+  outbuf = gst_harness_pull (h);
+  fail_unless (outbuf);
+
+  cmp = gst_buffer_memcmp (outbuf, 0, red_box_y4m, red_box_y4m_len);
+  fail_unless (cmp == 0);
+
+  gst_buffer_unref (outbuf);
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 static Suite *
 y4menc_suite (void)
 {
@@ -159,6 +203,7 @@ y4menc_suite (void)
 
   suite_add_tcase (s, tc_chain);
   tcase_add_test (tc_chain, test_y4m);
+  tcase_add_test (tc_chain, test_y4m_i420_padded_square);
 
   return s;
 }

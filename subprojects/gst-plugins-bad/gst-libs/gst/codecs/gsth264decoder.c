@@ -62,6 +62,8 @@
 #include "gsth264decoder.h"
 #include "gsth264picture-private.h"
 
+#include "gst/glib-compat-private.h"
+
 GST_DEBUG_CATEGORY (gst_h264_decoder_debug);
 #define GST_CAT_DEFAULT gst_h264_decoder_debug
 
@@ -1321,7 +1323,8 @@ gst_h264_decoder_parse_slice (GstH264Decoder * self, GstH264NalUnit * nalu)
         ret = klass->new_picture (self, priv->current_frame, picture);
 
       if (ret != GST_FLOW_OK) {
-        GST_WARNING_OBJECT (self, "subclass does not want accept new picture");
+        GST_WARNING_OBJECT (self,
+            "subclass does not want to accept new picture");
         priv->current_picture = NULL;
         gst_h264_picture_unref (picture);
         return ret;
@@ -2180,10 +2183,46 @@ gst_h264_decoder_finish_picture (GstH264Decoder * self,
   if (picture->second_field && picture->other_field &&
       GST_CODEC_PICTURE_FRAME_NUMBER (picture) !=
       GST_CODEC_PICTURE_FRAME_NUMBER (picture->other_field)) {
-    GstVideoCodecFrame *frame = gst_video_decoder_get_frame (decoder,
+    GstVideoCodecFrame *second_field = gst_video_decoder_get_frame (decoder,
         GST_CODEC_PICTURE_FRAME_NUMBER (picture));
+    GstVideoCodecFrame *first_field = gst_video_decoder_get_frame (decoder,
+        GST_CODEC_PICTURE_FRAME_NUMBER (picture->other_field));
 
-    gst_video_decoder_release_frame (decoder, frame);
+    /* Update frame duration. since we output a frame for two input field
+     * pictures, output buffer duration should be first-field-duration +
+     * second-field-duration */
+    if (first_field) {
+      if (GST_CLOCK_TIME_IS_VALID (first_field->pts) &&
+          GST_CLOCK_TIME_IS_VALID (second_field->pts)) {
+        GstClockTime first_field_end_time = first_field->pts;
+        GstClockTime frame_end_time = second_field->pts;
+        GstClockTime frame_duration;
+
+        if (GST_CLOCK_TIME_IS_VALID (first_field->duration))
+          first_field_end_time += first_field->duration;
+
+        if (GST_CLOCK_TIME_IS_VALID (second_field->duration))
+          frame_end_time += second_field->duration;
+
+        frame_end_time = MAX (first_field_end_time, frame_end_time);
+        if (frame_end_time >= first_field->pts) {
+          frame_duration = frame_end_time - first_field->pts;
+
+          GST_LOG_OBJECT (self, "Updating frame duration %"
+              GST_TIME_FORMAT " -> %" GST_TIME_FORMAT,
+              GST_TIME_ARGS (first_field->duration),
+              GST_TIME_ARGS (frame_duration));
+
+          first_field->duration = frame_duration;
+        }
+      }
+      gst_video_codec_frame_unref (first_field);
+    } else {
+      GST_ERROR_OBJECT (self, "Couldn't get first field codec frame %u",
+          GST_CODEC_PICTURE_FRAME_NUMBER (picture->other_field));
+    }
+
+    gst_video_decoder_release_frame (decoder, second_field);
   }
 
   /* C.4.4 */
@@ -2628,7 +2667,7 @@ construct_ref_pic_lists_p (GstH264Decoder * self,
   pos = priv->ref_pic_list_p0->len;
   gst_h264_dpb_get_pictures_long_term_ref (priv->dpb,
       FALSE, priv->ref_pic_list_p0);
-  g_qsort_with_data (&g_array_index (priv->ref_pic_list_p0, gpointer, pos),
+  g_sort_array (&g_array_index (priv->ref_pic_list_p0, gpointer, pos),
       priv->ref_pic_list_p0->len - pos, sizeof (gpointer),
       (GCompareDataFunc) long_term_pic_num_asc_compare, NULL);
 
@@ -2877,14 +2916,14 @@ construct_ref_pic_lists_b (GstH264Decoder * self,
   GST_DEBUG_OBJECT (self, "split point %i", pos);
 
   /* and sort [1] descending, thus finishing sequence [1] [2]. */
-  g_qsort_with_data (priv->ref_pic_list_b0->data, pos, sizeof (gpointer),
+  g_sort_array (priv->ref_pic_list_b0->data, pos, sizeof (gpointer),
       (GCompareDataFunc) poc_desc_compare, NULL);
 
   /* Now add [3] and sort by ascending long_term_pic_num. */
   pos = priv->ref_pic_list_b0->len;
   gst_h264_dpb_get_pictures_long_term_ref (priv->dpb,
       FALSE, priv->ref_pic_list_b0);
-  g_qsort_with_data (&g_array_index (priv->ref_pic_list_b0, gpointer, pos),
+  g_sort_array (&g_array_index (priv->ref_pic_list_b0, gpointer, pos),
       priv->ref_pic_list_b0->len - pos, sizeof (gpointer),
       (GCompareDataFunc) long_term_pic_num_asc_compare, NULL);
 
@@ -2905,14 +2944,14 @@ construct_ref_pic_lists_b (GstH264Decoder * self,
       (GCompareFunc) poc_desc_compare);
 
   /* and sort [1] ascending. */
-  g_qsort_with_data (priv->ref_pic_list_b1->data, pos, sizeof (gpointer),
+  g_sort_array (priv->ref_pic_list_b1->data, pos, sizeof (gpointer),
       (GCompareDataFunc) poc_asc_compare, NULL);
 
   /* Now add [3] and sort by ascending long_term_pic_num */
   pos = priv->ref_pic_list_b1->len;
   gst_h264_dpb_get_pictures_long_term_ref (priv->dpb,
       FALSE, priv->ref_pic_list_b1);
-  g_qsort_with_data (&g_array_index (priv->ref_pic_list_b1, gpointer, pos),
+  g_sort_array (&g_array_index (priv->ref_pic_list_b1, gpointer, pos),
       priv->ref_pic_list_b1->len - pos, sizeof (gpointer),
       (GCompareDataFunc) long_term_pic_num_asc_compare, NULL);
 
@@ -2974,7 +3013,7 @@ construct_ref_field_pic_lists_b (GstH264Decoder * self,
   GST_DEBUG_OBJECT (self, "split point %i", pos);
 
   /* and sort [1] descending, thus finishing sequence [1] [2]. */
-  g_qsort_with_data (priv->ref_frame_list_0_short_term->data, pos,
+  g_sort_array (priv->ref_frame_list_0_short_term->data, pos,
       sizeof (gpointer), (GCompareDataFunc) poc_desc_compare, NULL);
 
   /* refFrameList1ShortTerm (8.2.4.2.4) [[1] [2]], where:
@@ -2995,7 +3034,7 @@ construct_ref_field_pic_lists_b (GstH264Decoder * self,
       (GCompareFunc) poc_desc_compare);
 
   /* and sort [1] ascending. */
-  g_qsort_with_data (priv->ref_frame_list_1_short_term->data, pos,
+  g_sort_array (priv->ref_frame_list_1_short_term->data, pos,
       sizeof (gpointer), (GCompareDataFunc) poc_asc_compare, NULL);
 
   /* 8.2.4.2.2 refFrameList0LongTerm,:

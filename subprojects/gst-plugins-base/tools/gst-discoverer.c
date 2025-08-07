@@ -51,7 +51,7 @@ typedef struct
 } PrivStruct;
 
 static gboolean
-structure_remove_buffers_ip (GQuark field_id, GValue * value,
+structure_remove_buffers_ip (const GstIdStr * fieldname, GValue * value,
     gpointer user_data)
 {
   if (G_VALUE_HOLDS (value, GST_TYPE_BUFFER))
@@ -75,7 +75,7 @@ static gboolean
 caps_remove_buffers_ip (GstCapsFeatures * features, GstStructure * structure,
     gpointer user_data)
 {
-  gst_structure_filter_and_map_in_place (structure,
+  gst_structure_filter_and_map_in_place_id_str (structure,
       structure_remove_buffers_ip, NULL);
 
   return TRUE;
@@ -222,7 +222,7 @@ format_channel_mask (GstDiscovererAudioInfo * ainfo)
 
   channel_mask = gst_discoverer_audio_info_get_channel_mask (ainfo);
 
-  if (channel_mask != 0) {
+  if (channel_mask != 0 && channels <= 64) {
     gst_audio_channel_positions_from_mask (channels, channel_mask, position);
 
     for (i = 0; i < channels; i++) {

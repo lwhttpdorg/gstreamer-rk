@@ -127,7 +127,9 @@
 #include "vtenc.h"
 
 #include "coremediabuffer.h"
+#ifdef HAVE_IOS
 #include "corevideobuffer.h"
+#endif
 #include "vtutil.h"
 #include "helpers.h"
 #include <gst/pbutils/codec-utils.h>
@@ -192,6 +194,9 @@ enum
   PROP_MAX_KEYFRAME_INTERVAL,
   PROP_MAX_KEYFRAME_INTERVAL_DURATION,
   PROP_PRESERVE_ALPHA,
+  PROP_RATE_CONTROL,
+  PROP_DATA_RATE_LIMITS,
+  PROP_MAX_FRAME_DELAY,
 };
 
 typedef struct _GstVTEncFrame GstVTEncFrame;
@@ -202,7 +207,8 @@ struct _GstVTEncFrame
   GstVideoFrame videoframe;
 };
 
-static GstElementClass *parent_class = NULL;
+#define parent_class gst_vtenc_parent_class
+G_DEFINE_TYPE (GstVTEnc, gst_vtenc, GST_TYPE_VIDEO_ENCODER);
 
 static void gst_vtenc_get_property (GObject * obj, guint prop_id,
     GValue * value, GParamSpec * pspec);
@@ -212,7 +218,7 @@ static void gst_vtenc_finalize (GObject * obj);
 
 static gboolean gst_vtenc_start (GstVideoEncoder * enc);
 static gboolean gst_vtenc_stop (GstVideoEncoder * enc);
-static void gst_vtenc_loop (GstVTEnc * self);
+static void gst_vtenc_output_loop (GstVTEnc * self);
 static gboolean gst_vtenc_set_format (GstVideoEncoder * enc,
     GstVideoCodecState * input_state);
 static GstFlowReturn gst_vtenc_handle_frame (GstVideoEncoder * enc,
@@ -233,8 +239,10 @@ static void gst_vtenc_session_configure_max_keyframe_interval (GstVTEnc * self,
     VTCompressionSessionRef session, gint interval);
 static void gst_vtenc_session_configure_max_keyframe_interval_duration
     (GstVTEnc * self, VTCompressionSessionRef session, gdouble duration);
+static void gst_vtenc_session_configure_max_frame_delay (GstVTEnc * self,
+    VTCompressionSessionRef session, int delay);
 static void gst_vtenc_session_configure_bitrate (GstVTEnc * self,
-    VTCompressionSessionRef session, guint bitrate);
+    VTCompressionSessionRef session);
 static OSStatus gst_vtenc_session_configure_property_int (GstVTEnc * self,
     VTCompressionSessionRef session, CFStringRef name, gint value);
 static OSStatus gst_vtenc_session_configure_property_double (GstVTEnc * self,
@@ -263,6 +271,24 @@ static void gst_pixel_buffer_release_cb (void *releaseRefCon,
     const void *planeAddresses[]);
 #endif
 
+#define GST_TYPE_VTENC_RATE_CONTROL (gst_vtenc_rate_control_get_type())
+static GType
+gst_vtenc_rate_control_get_type (void)
+{
+  static GType rc_type = 0;
+
+  static const GEnumValue rc_types[] = {
+    {GST_VTENC_RATE_CONTROL_ABR, "Average Bitrate", "abr"},
+    {GST_VTENC_RATE_CONTROL_CBR, "Constant Bitrate", "cbr"},
+    {0, NULL, NULL},
+  };
+
+  if (!rc_type) {
+    rc_type = g_enum_register_static ("GstVtencRateControl", rc_types);
+  }
+  return rc_type;
+}
+
 static GstStaticCaps sink_caps =
 GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ AYUV64, UYVY, NV12, I420 }"));
 
@@ -283,8 +309,7 @@ gst_vtenc_base_init (GstVTEncClass * klass)
   description = g_strdup_printf ("%s encoder", codec_details->name);
 
   gst_element_class_set_metadata (element_class, longname,
-      "Codec/Encoder/Video/Hardware", description,
-      "Ole André Vadla Ravnås <oleavr@soundrop.com>, Dominik Röttsches <dominik.rottsches@intel.com>");
+      "Codec/Encoder/Video/Hardware", description, codec_details->authors);
 
   g_free (longname);
   g_free (description);
@@ -399,15 +424,9 @@ gst_vtenc_base_init (GstVTEncClass * klass)
 static void
 gst_vtenc_class_init (GstVTEncClass * klass)
 {
-  GObjectClass *gobject_class;
-  GstElementClass *element_class;
-  GstVideoEncoderClass *gstvideoencoder_class;
-
-  gobject_class = (GObjectClass *) klass;
-  element_class = (GstElementClass *) klass;
-  gstvideoencoder_class = (GstVideoEncoderClass *) klass;
-
-  parent_class = g_type_class_peek_parent (klass);
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
+  GstVideoEncoderClass *gstvideoencoder_class = GST_VIDEO_ENCODER_CLASS (klass);
 
   gobject_class->get_property = gst_vtenc_get_property;
   gobject_class->set_property = gst_vtenc_set_property;
@@ -415,13 +434,14 @@ gst_vtenc_class_init (GstVTEncClass * klass)
 
   element_class->change_state = GST_DEBUG_FUNCPTR (gst_vtenc_change_state);
 
-  gstvideoencoder_class->start = gst_vtenc_start;
-  gstvideoencoder_class->stop = gst_vtenc_stop;
-  gstvideoencoder_class->set_format = gst_vtenc_set_format;
-  gstvideoencoder_class->handle_frame = gst_vtenc_handle_frame;
-  gstvideoencoder_class->finish = gst_vtenc_finish;
-  gstvideoencoder_class->flush = gst_vtenc_flush;
-  gstvideoencoder_class->sink_event = gst_vtenc_sink_event;
+  gstvideoencoder_class->start = GST_DEBUG_FUNCPTR (gst_vtenc_start);
+  gstvideoencoder_class->stop = GST_DEBUG_FUNCPTR (gst_vtenc_stop);
+  gstvideoencoder_class->set_format = GST_DEBUG_FUNCPTR (gst_vtenc_set_format);
+  gstvideoencoder_class->handle_frame =
+      GST_DEBUG_FUNCPTR (gst_vtenc_handle_frame);
+  gstvideoencoder_class->finish = GST_DEBUG_FUNCPTR (gst_vtenc_finish);
+  gstvideoencoder_class->flush = GST_DEBUG_FUNCPTR (gst_vtenc_flush);
+  gstvideoencoder_class->sink_event = GST_DEBUG_FUNCPTR (gst_vtenc_sink_event);
 
   g_object_class_install_property (gobject_class, PROP_BITRATE,
       g_param_spec_uint ("bitrate", "Bitrate",
@@ -461,11 +481,87 @@ gst_vtenc_class_init (GstVTEncClass * klass)
           G_MAXUINT64, VTENC_DEFAULT_MAX_KEYFRAME_INTERVAL_DURATION,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * vtenc_h264:rate-control
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h264_hw:rate-control
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h265:rate-control
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h265_hw:rate-control
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_prores:rate-control
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_RATE_CONTROL,
+      g_param_spec_enum ("rate-control", "Rate Control",
+          "Desired rate control for the encoder", GST_TYPE_VTENC_RATE_CONTROL,
+          GST_VTENC_RATE_CONTROL_ABR,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * vtenc_h264:data-rate-limits
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h264_hw:data-rate-limits
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h265:data-rate-limits
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_h265_hw:data-rate-limits
+   *
+   * Since: 1.26
+   */
+  /**
+   * vtenc_prores:data-rate-limits
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_DATA_RATE_LIMITS,
+      g_param_spec_string ("data-rate-limits", "Data Rate Limits",
+          "Desired bitrate in kbps averaged over a duration in seconds: "
+          "bitrate,duration (0,0 = disabled)", "0,0",
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+
   /*
    * H264 doesn't support alpha components, and H265 uses a separate element for encoding
-   * with alpha, so only add the property for prores
+   * with alpha, so only add the preserve-alpha property for ProRes.
+   *
+   * MaxFrameDelayCount seems to only be supported with ProRes
    */
   if (g_strcmp0 (G_OBJECT_CLASS_NAME (klass), "vtenc_prores") == 0) {
+    /**
+     * vtenc_prores:max-frame-delay
+     *
+     * Maximum frames allowed in the compression window (-1 = unlimited)
+     *
+     * Since: 1.26
+     */
+    g_object_class_install_property (gobject_class, PROP_MAX_FRAME_DELAY,
+        g_param_spec_int ("max-frame-delay", "Maximum Frame Delay",
+            "Maximum frames allowed in the compression window (-1 = unlimited)",
+            -1, G_MAXINT, -1,
+            G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
     /**
      * vtenc_prores:preserve-alpha
      *
@@ -480,6 +576,9 @@ gst_vtenc_class_init (GstVTEncClass * klass)
             VTENC_DEFAULT_PRESERVE_ALPHA,
             G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   }
+
+  gst_type_mark_as_plugin_api (GST_TYPE_VTENC, 0);
+  gst_type_mark_as_plugin_api (GST_TYPE_VTENC_RATE_CONTROL, 0);
 }
 
 static void
@@ -526,152 +625,6 @@ gst_vtenc_finalize (GObject * obj)
   G_OBJECT_CLASS (parent_class)->finalize (obj);
 }
 
-static guint
-gst_vtenc_get_bitrate (GstVTEnc * self)
-{
-  guint result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->bitrate;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_bitrate (GstVTEnc * self, guint bitrate)
-{
-  GST_OBJECT_LOCK (self);
-
-  self->bitrate = bitrate;
-
-  if (self->session != NULL)
-    gst_vtenc_session_configure_bitrate (self, self->session, bitrate);
-
-  GST_OBJECT_UNLOCK (self);
-}
-
-static gboolean
-gst_vtenc_get_allow_frame_reordering (GstVTEnc * self)
-{
-  gboolean result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->allow_frame_reordering;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_allow_frame_reordering (GstVTEnc * self,
-    gboolean allow_frame_reordering)
-{
-  GST_OBJECT_LOCK (self);
-  self->allow_frame_reordering = allow_frame_reordering;
-  if (self->session != NULL) {
-    gst_vtenc_session_configure_allow_frame_reordering (self,
-        self->session, allow_frame_reordering);
-  }
-  GST_OBJECT_UNLOCK (self);
-}
-
-static gboolean
-gst_vtenc_get_realtime (GstVTEnc * self)
-{
-  gboolean result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->realtime;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_realtime (GstVTEnc * self, gboolean realtime)
-{
-  GST_OBJECT_LOCK (self);
-  self->realtime = realtime;
-  if (self->session != NULL)
-    gst_vtenc_session_configure_realtime (self, self->session, realtime);
-  GST_OBJECT_UNLOCK (self);
-}
-
-static gdouble
-gst_vtenc_get_quality (GstVTEnc * self)
-{
-  gdouble result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->quality;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_quality (GstVTEnc * self, gdouble quality)
-{
-  GST_OBJECT_LOCK (self);
-  self->quality = quality;
-  GST_INFO_OBJECT (self, "setting quality %f", quality);
-  if (self->session != NULL) {
-    gst_vtenc_session_configure_property_double (self, self->session,
-        kVTCompressionPropertyKey_Quality, quality);
-  }
-  GST_OBJECT_UNLOCK (self);
-}
-
-static gint
-gst_vtenc_get_max_keyframe_interval (GstVTEnc * self)
-{
-  gint result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->max_keyframe_interval;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_max_keyframe_interval (GstVTEnc * self, gint interval)
-{
-  GST_OBJECT_LOCK (self);
-  self->max_keyframe_interval = interval;
-  if (self->session != NULL) {
-    gst_vtenc_session_configure_max_keyframe_interval (self, self->session,
-        interval);
-  }
-  GST_OBJECT_UNLOCK (self);
-}
-
-static GstClockTime
-gst_vtenc_get_max_keyframe_interval_duration (GstVTEnc * self)
-{
-  GstClockTime result;
-
-  GST_OBJECT_LOCK (self);
-  result = self->max_keyframe_interval_duration;
-  GST_OBJECT_UNLOCK (self);
-
-  return result;
-}
-
-static void
-gst_vtenc_set_max_keyframe_interval_duration (GstVTEnc * self,
-    GstClockTime interval)
-{
-  GST_OBJECT_LOCK (self);
-  self->max_keyframe_interval_duration = interval;
-  if (self->session != NULL) {
-    gst_vtenc_session_configure_max_keyframe_interval_duration (self,
-        self->session, interval / ((gdouble) GST_SECOND));
-  }
-  GST_OBJECT_UNLOCK (self);
-}
-
 static void
 gst_vtenc_get_property (GObject * obj, guint prop_id, GValue * value,
     GParamSpec * pspec)
@@ -680,23 +633,34 @@ gst_vtenc_get_property (GObject * obj, guint prop_id, GValue * value,
 
   switch (prop_id) {
     case PROP_BITRATE:
-      g_value_set_uint (value, gst_vtenc_get_bitrate (self) / 1000);
+      g_value_set_uint (value, self->bitrate / 1000);
       break;
     case PROP_ALLOW_FRAME_REORDERING:
-      g_value_set_boolean (value, gst_vtenc_get_allow_frame_reordering (self));
+      g_value_set_boolean (value, self->allow_frame_reordering);
       break;
     case PROP_REALTIME:
-      g_value_set_boolean (value, gst_vtenc_get_realtime (self));
+      g_value_set_boolean (value, self->realtime);
       break;
     case PROP_QUALITY:
-      g_value_set_double (value, gst_vtenc_get_quality (self));
+      g_value_set_double (value, self->quality);
       break;
     case PROP_MAX_KEYFRAME_INTERVAL:
-      g_value_set_int (value, gst_vtenc_get_max_keyframe_interval (self));
+      g_value_set_int (value, self->max_keyframe_interval);
       break;
     case PROP_MAX_KEYFRAME_INTERVAL_DURATION:
-      g_value_set_uint64 (value,
-          gst_vtenc_get_max_keyframe_interval_duration (self));
+      g_value_set_uint64 (value, self->max_keyframe_interval_duration);
+      break;
+    case PROP_RATE_CONTROL:
+      g_value_set_enum (value, self->rate_control);
+      break;
+    case PROP_DATA_RATE_LIMITS:
+      GST_OBJECT_LOCK (self);
+      g_value_take_string (value, g_strdup_printf ("%u,%.5f",
+              self->max_bitrate / 1000, self->bitrate_window));
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_MAX_FRAME_DELAY:
+      g_value_set_int (value, self->max_frame_delay);
       break;
     case PROP_PRESERVE_ALPHA:
       g_value_set_boolean (value, self->preserve_alpha);
@@ -708,30 +672,66 @@ gst_vtenc_get_property (GObject * obj, guint prop_id, GValue * value,
 }
 
 static void
+gst_vtenc_flag_reconfigure (GstVTEnc * self)
+{
+  if (self->session != NULL)
+    g_atomic_int_set (&self->require_reconfigure, TRUE);
+}
+
+static void
 gst_vtenc_set_property (GObject * obj, guint prop_id, const GValue * value,
     GParamSpec * pspec)
 {
   GstVTEnc *self = GST_VTENC_CAST (obj);
 
+  GST_OBJECT_LOCK (self);
+
   switch (prop_id) {
     case PROP_BITRATE:
-      gst_vtenc_set_bitrate (self, g_value_get_uint (value) * 1000);
+      self->bitrate = g_value_get_uint (value) * 1000;
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_ALLOW_FRAME_REORDERING:
-      gst_vtenc_set_allow_frame_reordering (self, g_value_get_boolean (value));
+      self->allow_frame_reordering = g_value_get_boolean (value);
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_REALTIME:
-      gst_vtenc_set_realtime (self, g_value_get_boolean (value));
+      self->realtime = g_value_get_boolean (value);
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_QUALITY:
-      gst_vtenc_set_quality (self, g_value_get_double (value));
+      self->quality = g_value_get_double (value);
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_MAX_KEYFRAME_INTERVAL:
-      gst_vtenc_set_max_keyframe_interval (self, g_value_get_int (value));
+      self->max_keyframe_interval = g_value_get_int (value);
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_MAX_KEYFRAME_INTERVAL_DURATION:
-      gst_vtenc_set_max_keyframe_interval_duration (self,
-          g_value_get_uint64 (value));
+      self->max_keyframe_interval_duration = g_value_get_uint64 (value);
+      gst_vtenc_flag_reconfigure (self);
+      break;
+    case PROP_RATE_CONTROL:
+      self->rate_control = g_value_get_enum (value);
+      gst_vtenc_flag_reconfigure (self);
+      break;
+    case PROP_DATA_RATE_LIMITS:
+    {
+      guint max_bitrate;
+      float window;
+      const char *s = g_value_get_string (value);
+      if (s && sscanf (s, "%u,%f", &max_bitrate, &window) == 2) {
+        self->max_bitrate = max_bitrate * 1000;
+        self->bitrate_window = window;
+        gst_vtenc_flag_reconfigure (self);
+      } else {
+        g_warning ("Failed to parse data rate limits: '%s'", s);
+      }
+    }
+      break;
+    case PROP_MAX_FRAME_DELAY:
+      self->max_frame_delay = g_value_get_int (value);
+      gst_vtenc_flag_reconfigure (self);
       break;
     case PROP_PRESERVE_ALPHA:
       self->preserve_alpha = g_value_get_boolean (value);
@@ -740,6 +740,8 @@ gst_vtenc_set_property (GObject * obj, guint prop_id, const GValue * value,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, prop_id, pspec);
       break;
   }
+
+  GST_OBJECT_UNLOCK (self);
 }
 
 static gboolean
@@ -843,6 +845,8 @@ gst_vtenc_start (GstVideoEncoder * enc)
 
   self->is_flushing = FALSE;
   self->downstream_ret = GST_FLOW_OK;
+  g_atomic_int_set (&self->require_restart, FALSE);
+  g_atomic_int_set (&self->require_reconfigure, FALSE);
 
   self->output_queue = gst_vec_deque_new (VTENC_OUTPUT_QUEUE_SIZE);
   /* Set clear_func to unref all remaining frames in gst_vec_deque_free() */
@@ -852,7 +856,7 @@ gst_vtenc_start (GstVideoEncoder * enc)
   /* Create the output task, but pause it immediately */
   self->pause_task = TRUE;
   if (!gst_pad_start_task (GST_VIDEO_ENCODER_SRC_PAD (enc),
-          (GstTaskFunction) gst_vtenc_loop, self, NULL)) {
+          (GstTaskFunction) gst_vtenc_output_loop, self, NULL)) {
     GST_ERROR_OBJECT (self, "failed to start output thread");
     return FALSE;
   }
@@ -910,7 +914,7 @@ gst_vtenc_h264_parse_profile_level_key (GstVTEnc * self, const gchar * profile,
     profile = "main";
   if (level_arg == NULL)
     level_arg = "AutoLevel";
-  strncpy (level, level_arg, sizeof (level));
+  strlcpy (level, level_arg, sizeof (level));
 
   if (!strcmp (profile, "constrained-baseline") ||
       !strcmp (profile, "baseline")) {
@@ -1096,6 +1100,9 @@ gst_vtenc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   self->session = session;
   GST_OBJECT_UNLOCK (self);
 
+  g_atomic_int_set (&self->require_restart, FALSE);
+  g_atomic_int_set (&self->require_reconfigure, FALSE);
+
   return session != NULL;
 }
 
@@ -1156,7 +1163,6 @@ gst_vtenc_negotiate_downstream (GstVTEnc * self, CMSampleBufferRef sbuf)
       guint8 *codec_data;
       gsize codec_data_size;
       GstBuffer *codec_data_buf;
-      guint8 sps[12];
 
       fmt = CMSampleBufferGetFormatDescription (sbuf);
       atoms = CMFormatDescriptionGetExtension (fmt,
@@ -1182,10 +1188,27 @@ gst_vtenc_negotiate_downstream (GstVTEnc * self, CMSampleBufferRef sbuf)
 
       if (self->details->format_id == kCMVideoCodecType_HEVC ||
           self->details->format_id == kCMVideoCodecType_HEVCWithAlpha) {
-        sps[0] = codec_data[1];
-        sps[11] = codec_data[12];
-        gst_codec_utils_h265_caps_set_level_tier_and_profile (caps, sps, 12);
+        if (codec_data_size < 1 + 12) {
+          GST_ERROR_OBJECT (self,
+              "Codec data malformed, can't parse profile and level");
+          gst_buffer_unref (codec_data_buf);
+          gst_caps_unref (caps);
+          return FALSE;
+        }
+
+        gst_codec_utils_h265_caps_set_level_tier_and_profile (caps,
+            &codec_data[1], 12);
       } else {
+        guint8 sps[3];
+
+        if (codec_data_size < 1 + 3) {
+          GST_ERROR_OBJECT (self,
+              "Codec data malformed, can't parse profile and level");
+          gst_buffer_unref (codec_data_buf);
+          gst_caps_unref (caps);
+          return FALSE;
+        }
+
         sps[0] = codec_data[1];
         sps[1] = codec_data[2] & ~0xDF;
         sps[2] = codec_data[3];
@@ -1226,7 +1249,7 @@ gst_vtenc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   return gst_vtenc_encode_frame (self, frame);
 
 not_negotiated:
-  gst_video_codec_frame_unref (frame);
+  gst_video_encoder_release_frame (enc, frame);
   return GST_FLOW_NOT_NEGOTIATED;
 }
 
@@ -1356,6 +1379,14 @@ gst_vtenc_set_colorimetry (GstVTEnc * self, VTCompressionSessionRef session)
         GST_WARNING_OBJECT (self, "macOS version is too old, the SMPTE2084 "
             "transfer function is not available");
       break;
+    case GST_VIDEO_TRANSFER_ARIB_STD_B67:
+      if (__builtin_available (macOS 10.13, *))
+        transfer = kCVImageBufferTransferFunction_ITU_R_2100_HLG;
+      else
+        GST_WARNING_OBJECT (self,
+            "macOS version is too old, the ITU-R BT.2100-1 "
+            "transfer function is not available");
+      break;
     default:
       GST_WARNING_OBJECT (self, "Unsupported color transfer %u", cm.transfer);
   }
@@ -1451,11 +1482,10 @@ gst_vtenc_create_session (GstVTEnc * self)
   VTCompressionSessionRef session = NULL;
   CFMutableDictionaryRef encoder_spec = NULL, pb_attrs = NULL;
   OSStatus status;
-
-#if !HAVE_IOS
   const GstVTEncoderDetails *codec_details =
       GST_VTENC_CLASS_GET_CODEC_DETAILS (G_OBJECT_GET_CLASS (self));
 
+#ifndef HAVE_IOS
   /* Apple's M1 hardware encoding fails when provided with an interlaced ProRes source.
    * It's most likely a bug in VideoToolbox, as no such limitation has been officially mentioned anywhere.
    * For now let's disable HW encoding entirely when such case occurs. */
@@ -1531,9 +1561,11 @@ gst_vtenc_create_session (GstVTEnc * self)
         self->max_keyframe_interval);
     gst_vtenc_session_configure_max_keyframe_interval_duration (self, session,
         self->max_keyframe_interval_duration / ((gdouble) GST_SECOND));
+    if (codec_details->format_id == GST_kCMVideoCodecType_Some_AppleProRes)
+      gst_vtenc_session_configure_max_frame_delay (self, session,
+          self->max_frame_delay);
 
-    gst_vtenc_session_configure_bitrate (self, session,
-        gst_vtenc_get_bitrate (self));
+    gst_vtenc_session_configure_bitrate (self, session);
   }
 
   /* Force encoder to not preserve alpha with 4444(XQ) ProRes formats if
@@ -1584,11 +1616,12 @@ gst_vtenc_create_session (GstVTEnc * self)
       g_assert_not_reached ();
   }
 
-  gst_vtenc_session_configure_realtime (self, session,
-      gst_vtenc_get_realtime (self));
+  gst_vtenc_session_configure_realtime (self, session, self->realtime);
   gst_vtenc_session_configure_allow_frame_reordering (self, session,
-      gst_vtenc_get_allow_frame_reordering (self));
-  gst_vtenc_set_quality (self, self->quality);
+      self->allow_frame_reordering);
+  if (codec_details->format_id != GST_kCMVideoCodecType_Some_AppleProRes)
+    gst_vtenc_session_configure_property_double (self, session,
+        kVTCompressionPropertyKey_Quality, self->quality);
 
   if (self->dump_properties) {
     gst_vtenc_session_dump_properties (self, session);
@@ -1617,6 +1650,7 @@ beach:
 static void
 gst_vtenc_destroy_session (GstVTEnc * self, VTCompressionSessionRef * session)
 {
+  GST_DEBUG_OBJECT (self, "Destroying VT session");
   VTCompressionSessionInvalidate (*session);
   if (*session != NULL) {
     CFRelease (*session);
@@ -1711,11 +1745,79 @@ gst_vtenc_session_configure_max_keyframe_interval_duration (GstVTEnc * self,
 }
 
 static void
-gst_vtenc_session_configure_bitrate (GstVTEnc * self,
-    VTCompressionSessionRef session, guint bitrate)
+gst_vtenc_session_configure_max_frame_delay (GstVTEnc * self,
+    VTCompressionSessionRef session, int delay)
 {
+  if (delay < 0)
+    delay = kVTUnlimitedFrameDelayCount;
   gst_vtenc_session_configure_property_int (self, session,
-      kVTCompressionPropertyKey_AverageBitRate, bitrate);
+      kVTCompressionPropertyKey_MaxFrameDelayCount, delay);
+}
+
+static void
+gst_vtenc_session_configure_bitrate (GstVTEnc * self,
+    VTCompressionSessionRef session)
+{
+  gboolean emulate_cbr = FALSE;
+  double bitrate_window = self->bitrate_window;
+  guint max_bitrate = self->max_bitrate;
+  guint bitrate = self->bitrate;
+  CFStringRef key = kVTCompressionPropertyKey_AverageBitRate;
+
+  if (self->rate_control == GST_VTENC_RATE_CONTROL_CBR) {
+#ifdef __aarch64__
+    /*
+     * In addition to the OS requirements, CBR also requires Apple Silicon
+     */
+    if (__builtin_available (macOS 13.0, iOS 16.0, *)) {
+      key = kVTCompressionPropertyKey_ConstantBitRate;
+    } else
+#endif
+    {
+      GST_INFO_OBJECT (self, "CBR is unsupported on your system, emulating "
+          "with custom data rate limits");
+      emulate_cbr = TRUE;
+      max_bitrate = bitrate;
+      gst_util_fraction_to_double (self->video_info.fps_d,
+          self->video_info.fps_n, &bitrate_window);
+    }
+  }
+
+  if (max_bitrate > 0 && bitrate_window > 0) {
+    if (self->rate_control == GST_VTENC_RATE_CONTROL_CBR &&
+        self->max_bitrate > 0 && self->bitrate_window > 0)
+      GST_INFO_OBJECT (self, "Ignoring data-rate-limits property, CBR mode is "
+          "enabled");
+
+    if (key == kVTCompressionPropertyKey_AverageBitRate) {
+      /* Convert to bytes */
+      int size = (max_bitrate * bitrate_window) / 8;
+
+      CFNumberRef cf_size = CFNumberCreate (NULL, kCFNumberIntType, &size);
+      CFNumberRef cf_window = CFNumberCreate (NULL, kCFNumberFloatType,
+          &bitrate_window);
+
+      CFTypeRef values[2] = { cf_size, cf_window };
+      CFArrayRef data = CFArrayCreate (NULL, values, 2, &kCFTypeArrayCallBacks);
+
+      OSStatus code = VTSessionSetProperty (session,
+          kVTCompressionPropertyKey_DataRateLimits, data);
+      if (code != noErr)
+        GST_WARNING_OBJECT (self,
+            "FAILED: kVTCompressionPropertyKey_DataRateLimits %i, %f => %i",
+            size, self->bitrate_window, code);
+      else
+        GST_DEBUG_OBJECT (self, "kVTCompressionPropertyKey_DataRateLimits "
+            "%i, %f => %i", size, self->bitrate_window, code);
+
+      CFRelease (cf_size);
+      CFRelease (cf_window);
+      CFRelease (data);
+    }
+  }
+
+  if (!emulate_cbr)
+    gst_vtenc_session_configure_property_int (self, session, key, bitrate);
 }
 
 static void
@@ -1747,7 +1849,10 @@ gst_vtenc_session_configure_property_int (GstVTEnc * self,
   CFRelease (num);
 
   CFStringGetCString (name, name_str, sizeof (name_str), kCFStringEncodingUTF8);
-  GST_DEBUG_OBJECT (self, "%s(%d) => %d", name_str, value, (int) status);
+  if (status != noErr)
+    GST_WARNING_OBJECT (self, "FAILED: %s(%d) => %d", name_str, value, status);
+  else
+    GST_DEBUG_OBJECT (self, "%s(%d) => %d", name_str, value, status);
 
   return status;
 }
@@ -1765,7 +1870,10 @@ gst_vtenc_session_configure_property_double (GstVTEnc * self,
   CFRelease (num);
 
   CFStringGetCString (name, name_str, sizeof (name_str), kCFStringEncodingUTF8);
-  GST_DEBUG_OBJECT (self, "%s(%f) => %d", name_str, value, (int) status);
+  if (status != noErr)
+    GST_WARNING_OBJECT (self, "FAILED: %s(%f) => %d", name_str, value, status);
+  else
+    GST_DEBUG_OBJECT (self, "%s(%f) => %d", name_str, value, status);
 
   return status;
 }
@@ -1792,7 +1900,7 @@ gst_vtenc_update_latency (GstVTEnc * self)
   }
 
   CFNumberGetValue (value, kCFNumberSInt32Type, &frames);
-  if (self->latency_frames == -1 || self->latency_frames != frames) {
+  if (MAX (self->latency_frames, frames) != self->latency_frames) {
     self->latency_frames = frames;
     if (self->video_info.fps_d == 0 || self->video_info.fps_n == 0) {
       /* FIXME: Assume 25fps. This is better than reporting no latency at
@@ -1825,6 +1933,94 @@ gst_vtenc_update_timestamps (GstVTEnc * self, GstVideoCodecFrame * frame,
   }
 }
 
+static Boolean
+gst_vtenc_is_recoverable_error (OSStatus status)
+{
+  return status == kVTVideoEncoderMalfunctionErr
+      || status == kVTVideoEncoderNotAvailableNowErr;
+}
+
+static gboolean
+gst_vtenc_push_all_pending_frames (GstVTEnc * self)
+{
+  OSStatus status;
+  gboolean ret = TRUE;
+
+  GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
+  GST_DEBUG_OBJECT (self, "starting VTCompressionSessionCompleteFrames");
+  status = VTCompressionSessionCompleteFrames (self->session,
+      kCMTimePositiveInfinity);
+  GST_DEBUG_OBJECT (self, "VTCompressionSessionCompleteFrames ended");
+
+  if (status != noErr) {
+    GST_WARNING_OBJECT (self,
+        "VTCompressionSessionCompleteFrames returned %d", (int) status);
+    ret = FALSE;
+  }
+
+  GST_VIDEO_ENCODER_STREAM_LOCK (self);
+  return ret;
+}
+
+static void
+gst_vtenc_restart_session (GstVTEnc * self)
+{
+  VTCompressionSessionRef session;
+
+  /* We need to push out all frames still inside the encoder,
+   * otherwise destroy_session() will wait for all callbacks to fire
+   * and very likely deadlock due to the object lock being taken */
+  if (!gst_vtenc_push_all_pending_frames (self)) {
+    GST_DEBUG_OBJECT (self, "Will retry session restart on next frame encode");
+    return;
+  }
+
+  GST_DEBUG_OBJECT (self, "All frames out, restarting encoder session");
+
+  GST_OBJECT_LOCK (self);
+  gst_vtenc_destroy_session (self, &self->session);
+  GST_OBJECT_UNLOCK (self);
+
+  session = gst_vtenc_create_session (self);
+
+  GST_OBJECT_LOCK (self);
+  self->session = session;
+  GST_OBJECT_UNLOCK (self);
+
+  g_atomic_int_set (&self->require_reconfigure, FALSE);
+  g_atomic_int_set (&self->require_restart, FALSE);
+}
+
+static void
+gst_vtenc_reconfigure_session (GstVTEnc * self)
+{
+  if (!gst_vtenc_push_all_pending_frames (self)) {
+    GST_DEBUG_OBJECT (self,
+        "Will retry session reconfigure on next frame encode");
+    return;
+  }
+
+  GST_DEBUG_OBJECT (self, "All frames out, reconfiguring encoder session");
+
+  GST_OBJECT_LOCK (self);
+  gst_vtenc_session_configure_bitrate (self, self->session);
+  gst_vtenc_session_configure_allow_frame_reordering (self, self->session,
+      self->allow_frame_reordering);
+  gst_vtenc_session_configure_realtime (self, self->session, self->realtime);
+  gst_vtenc_session_configure_property_double (self, self->session,
+      kVTCompressionPropertyKey_Quality, self->quality);
+  gst_vtenc_session_configure_max_keyframe_interval (self, self->session,
+      self->max_keyframe_interval);
+  gst_vtenc_session_configure_max_keyframe_interval_duration (self,
+      self->session,
+      self->max_keyframe_interval_duration / ((gdouble) GST_SECOND));
+  gst_vtenc_session_configure_max_frame_delay (self, self->session,
+      self->max_frame_delay);
+  GST_OBJECT_UNLOCK (self);
+
+  g_atomic_int_set (&self->require_reconfigure, FALSE);
+}
+
 static GstFlowReturn
 gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
 {
@@ -1835,7 +2031,6 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
   GstFlowReturn ret = GST_FLOW_OK;
   CFDictionaryRef frame_props = NULL;
   GstTaskState task_state;
-  gboolean is_flushing;
 
   /* If this condition changes later while we're still in this function,
    * it'll just fail on next frame encode or in _finish() */
@@ -1843,28 +2038,30 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
   if (task_state == GST_TASK_STOPPED || task_state == GST_TASK_PAUSED) {
     /* Abort if our loop failed to push frames downstream... */
     if (self->downstream_ret != GST_FLOW_OK) {
-      if (self->downstream_ret == GST_FLOW_FLUSHING)
+      ret = self->downstream_ret;
+
+      if (ret == GST_FLOW_FLUSHING) {
         GST_DEBUG_OBJECT (self,
             "Output loop stopped because of flushing, ignoring frame");
-      else
+        goto release;
+      } else {
         GST_WARNING_OBJECT (self,
             "Output loop stopped with error (%s), leaving",
-            gst_flow_get_name (self->downstream_ret));
-
-      ret = self->downstream_ret;
-      goto drop;
+            gst_flow_get_name (ret));
+        goto drop;
+      }
     }
 
     /* ...or if it stopped because of the flushing flag while the queue
      * was empty, in which case we didn't get GST_FLOW_FLUSHING... */
     g_mutex_lock (&self->queue_mutex);
-    is_flushing = self->is_flushing;
-    g_mutex_unlock (&self->queue_mutex);
-    if (is_flushing) {
+    if (self->is_flushing) {
+      g_mutex_unlock (&self->queue_mutex);
       GST_DEBUG_OBJECT (self, "Flushing flag set, ignoring frame");
       ret = GST_FLOW_FLUSHING;
-      goto drop;
+      goto release;
     }
+    g_mutex_unlock (&self->queue_mutex);
 
     /* .. or if it refuses to resume - e.g. it was stopped instead of paused */
     if (!gst_vtenc_ensure_output_loop (self)) {
@@ -1873,6 +2070,13 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
       goto drop;
     }
   }
+
+  /* Flushes all remaining frames out of the encoder
+   * and recreates the encoding session. */
+  if (g_atomic_int_get (&self->require_restart))
+    gst_vtenc_restart_session (self);
+  else if (g_atomic_int_get (&self->require_reconfigure))
+    gst_vtenc_reconfigure_session (self);
 
   if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME (frame)) {
     GST_INFO_OBJECT (self, "received force-keyframe-event, will force intra");
@@ -1905,7 +2109,7 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
     } else {
       GST_WARNING_OBJECT (self, "have interlaced content, but don't know field "
           "order yet, skipping buffer");
-      gst_video_codec_frame_unref (frame);
+      gst_video_encoder_release_frame (GST_VIDEO_ENCODER (self), frame);
       return GST_FLOW_OK;
     }
 
@@ -2031,7 +2235,6 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
   /* HEVCWithAlpha encoder has a bug where it does not throttle the amount
    * of input frames queued internally. Other encoders do not have this
    * problem and correctly block until the internal queue has space.
-   * Trying to use kVTCompressionPropertyKey_MaxFrameDelayCount does not help.
    * When paired with a fast enough source like videotestsrc, this can result in
    * a ton of memory being taken up by frames inside the encoder, eventually killing
    * the process because of OOM.
@@ -2063,9 +2266,16 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
       GINT_TO_POINTER (frame->system_frame_number), NULL);
   GST_VIDEO_ENCODER_STREAM_LOCK (self);
 
-  if (vt_status != noErr) {
-    GST_WARNING_OBJECT (self, "VTCompressionSessionEncodeFrame returned %d",
-        (int) vt_status);
+  if (gst_vtenc_is_recoverable_error (vt_status)) {
+    GST_ELEMENT_WARNING (self, LIBRARY, ENCODE, (NULL),
+        ("Failed to encode frame %d: %d, restarting session on next frame encode",
+            frame->system_frame_number, (int) vt_status));
+
+    g_atomic_int_set (&self->require_restart, TRUE);
+  } else if (vt_status != noErr) {
+    GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
+        ("Failed to encode frame %d: %d", frame->system_frame_number,
+            (int) vt_status));
   }
 
   gst_video_codec_frame_unref (frame);
@@ -2073,17 +2283,16 @@ gst_vtenc_encode_frame (GstVTEnc * self, GstVideoCodecFrame * frame)
 
   return ret;
 
-drop:
-  {
-    gst_video_codec_frame_unref (frame);
-    return ret;
-  }
-
 cv_error:
-  {
-    gst_video_codec_frame_unref (frame);
-    return GST_FLOW_ERROR;
-  }
+  ret = GST_FLOW_ERROR;
+
+drop:
+  gst_video_encoder_drop_frame (GST_VIDEO_ENCODER_CAST (self), frame);
+  return ret;
+
+release:
+  gst_video_encoder_release_frame (GST_VIDEO_ENCODER_CAST (self), frame);
+  return ret;
 }
 
 static void
@@ -2094,14 +2303,23 @@ gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
 {
   GstVTEnc *self = outputCallbackRefCon;
   GstVideoCodecFrame *frame;
-  gboolean is_flushing;
 
   frame =
       gst_video_encoder_get_frame (GST_VIDEO_ENCODER_CAST (self),
       GPOINTER_TO_INT (sourceFrameRefCon));
 
+  if (g_atomic_int_get (&self->require_restart)) {
+    GST_DEBUG_OBJECT (self, "Ignoring frame because of scheduled restart");
+    goto drop;
+  }
+
   if (status != noErr) {
-    if (frame) {
+    if (gst_vtenc_is_recoverable_error (status)) {
+      GST_ELEMENT_WARNING (self, LIBRARY, ENCODE, (NULL),
+          ("Failed to encode frame (%d), restarting session on next frame encode",
+              (int) status));
+      g_atomic_int_set (&self->require_restart, TRUE);
+    } else if (frame) {
       GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
           ("Failed to encode frame %d: %d", frame->system_frame_number,
               (int) status));
@@ -2109,7 +2327,8 @@ gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
       GST_ELEMENT_ERROR (self, LIBRARY, ENCODE, (NULL),
           ("Failed to encode (frame unknown): %d", (int) status));
     }
-    goto beach;
+
+    goto drop;
   }
 
   if (self->specific_format_id == kCMVideoCodecType_HEVCWithAlpha) {
@@ -2121,21 +2340,23 @@ gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
 
   if (!frame) {
     GST_WARNING_OBJECT (self, "No corresponding frame found!");
-    goto beach;
+    return;
   }
 
   g_mutex_lock (&self->queue_mutex);
-  is_flushing = self->is_flushing;
-  g_mutex_unlock (&self->queue_mutex);
-  if (is_flushing) {
+  if (self->is_flushing) {
     GST_DEBUG_OBJECT (self, "Ignoring frame %d because we're flushing",
         frame->system_frame_number);
-    goto beach;
+
+    gst_video_encoder_release_frame (GST_VIDEO_ENCODER_CAST (self), frame);
+    g_mutex_unlock (&self->queue_mutex);
+    return;
   }
+  g_mutex_unlock (&self->queue_mutex);
 
   /* This may happen if we don't have enough bitrate */
   if (sampleBuffer == NULL)
-    goto beach;
+    goto drop;
 
   if (gst_vtenc_buffer_is_keyframe (self, sampleBuffer))
     GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (frame);
@@ -2153,28 +2374,18 @@ gst_vtenc_enqueue_buffer (void *outputCallbackRefCon,
       VTENC_OUTPUT_QUEUE_SIZE) {
     g_cond_wait (&self->queue_cond, &self->queue_mutex);
   }
-  g_mutex_unlock (&self->queue_mutex);
 
-beach:
-  if (!frame)
-    return;
-
-  g_mutex_lock (&self->queue_mutex);
-  if (self->is_flushing) {
-    /* We can discard the frame here, no need to have the output loop do that */
-    gst_video_codec_frame_unref (frame);
-    g_mutex_unlock (&self->queue_mutex);
-    return;
-  }
-
-  /* Buffer-less frames will be discarded in the output loop */
   gst_vec_deque_push_tail (self->output_queue, frame);
   g_cond_signal (&self->queue_cond);
   g_mutex_unlock (&self->queue_mutex);
+  return;
+
+drop:
+  gst_video_encoder_drop_frame (GST_VIDEO_ENCODER_CAST (self), frame);
 }
 
 static void
-gst_vtenc_loop (GstVTEnc * self)
+gst_vtenc_output_loop (GstVTEnc * self)
 {
   GstVideoCodecFrame *outframe;
   GstCoreMediaMeta *meta;
@@ -2203,7 +2414,7 @@ gst_vtenc_loop (GstVTEnc * self)
     g_mutex_lock (&self->queue_mutex);
     if (self->is_flushing) {
       GST_LOG_OBJECT (self, "flushing frame %d", outframe->system_frame_number);
-      gst_video_codec_frame_unref (outframe);
+      gst_video_encoder_release_frame (GST_VIDEO_ENCODER_CAST (self), outframe);
       GST_VIDEO_ENCODER_STREAM_UNLOCK (self);
       continue;
     }
@@ -2213,7 +2424,8 @@ gst_vtenc_loop (GstVTEnc * self)
         (meta = gst_buffer_get_core_media_meta (outframe->output_buffer))) {
       if (!gst_vtenc_negotiate_downstream (self, meta->sample_buf)) {
         ret = GST_FLOW_NOT_NEGOTIATED;
-        gst_video_codec_frame_unref (outframe);
+        gst_video_encoder_release_frame (GST_VIDEO_ENCODER_CAST (self),
+            outframe);
         g_mutex_lock (&self->queue_mutex);
         /* the rest of the frames will be pop'd and unref'd later */
         break;
@@ -2248,7 +2460,7 @@ gst_vtenc_loop (GstVTEnc * self)
 
     while ((outframe = gst_vec_deque_pop_head (self->output_queue))) {
       GST_LOG_OBJECT (self, "flushing frame %d", outframe->system_frame_number);
-      gst_video_codec_frame_unref (outframe);
+      gst_video_encoder_release_frame (GST_VIDEO_ENCODER_CAST (self), outframe);
     }
 
     g_cond_signal (&self->queue_cond);
@@ -2339,14 +2551,13 @@ gst_vtenc_register (GstPlugin * plugin,
     0,
     (GInstanceInitFunc) gst_vtenc_init,
   };
-  gchar *type_name;
+  char *type_name;
   GType type;
   gboolean result;
 
   type_name = g_strdup_printf ("vtenc_%s", codec_details->element_name);
 
-  type =
-      g_type_register_static (GST_TYPE_VIDEO_ENCODER, type_name, &type_info, 0);
+  type = g_type_register_static (GST_TYPE_VTENC, type_name, &type_info, 0);
 
   g_type_set_qdata (type, GST_VTENC_CODEC_DETAILS_QDATA,
       (gpointer) codec_details);
@@ -2360,18 +2571,30 @@ gst_vtenc_register (GstPlugin * plugin,
 }
 
 static const GstVTEncoderDetails gst_vtenc_codecs[] = {
-  {"H.264", "h264", "video/x-h264", kCMVideoCodecType_H264, FALSE},
-  {"H.265/HEVC", "h265", "video/x-h265", kCMVideoCodecType_HEVC, FALSE},
+  {"H.264", "h264", "video/x-h264",
+        "Ole André Vadla Ravnås <oleavr@soundrop.com>, "
+        "Dominik Röttsches <dominik.rottsches@intel.com>",
+      kCMVideoCodecType_H264, FALSE},
+  {"H.265/HEVC", "h265", "video/x-h265",
+        "Piotr Brzeziński <piotr@centricular.com>",
+      kCMVideoCodecType_HEVC, FALSE},
   {"H.265/HEVC with alpha", "h265a", "video/x-h265",
+        "Piotr Brzeziński <piotr@centricular.com>",
       kCMVideoCodecType_HEVCWithAlpha, FALSE},
 #ifndef HAVE_IOS
-  {"H.264 (HW only)", "h264_hw", "video/x-h264", kCMVideoCodecType_H264, TRUE},
-  {"H.265/HEVC (HW only)", "h265_hw", "video/x-h265", kCMVideoCodecType_HEVC,
-      TRUE},
+  {"H.264 (HW only)", "h264_hw", "video/x-h264",
+        "Ole André Vadla Ravnås <oleavr@soundrop.com>, "
+        "Dominik Röttsches <dominik.rottsches@intel.com>",
+      kCMVideoCodecType_H264, TRUE},
+  {"H.265/HEVC (HW only)", "h265_hw", "video/x-h265",
+        "Piotr Brzeziński <piotr@centricular.com>",
+      kCMVideoCodecType_HEVC, TRUE},
   {"H.265/HEVC with alpha (HW only)", "h265a_hw", "video/x-h265",
+        "Piotr Brzeziński <piotr@centricular.com>",
       kCMVideoCodecType_HEVCWithAlpha, TRUE},
 #endif
   {"Apple ProRes", "prores", "video/x-prores",
+        "Nirbheek Chauhan <nirbheek@centricular.com>",
       GST_kCMVideoCodecType_Some_AppleProRes, FALSE},
 };
 

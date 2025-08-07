@@ -71,7 +71,7 @@
  *
  * The message's structure contains one field:
  *
- * * #guint64 `timeout`: the timeout in microseconds that expired when waiting for data.
+ * * #guint64 `timeout`: the timeout in nanoseconds that expired when waiting for data.
  *
  * The message is typically used to detect that no UDP arrives in the receiver
  * because it is blocked by a firewall.
@@ -932,8 +932,7 @@ gst_udpsrc_free_cancellable (GstUDPSrc * src)
     g_cancellable_release_fd (src->cancellable);
     src->made_cancel_fd = FALSE;
   }
-  g_object_unref (src->cancellable);
-  src->cancellable = NULL;
+  g_clear_object (&src->cancellable);
 }
 
 static GstFlowReturn
@@ -1589,6 +1588,7 @@ gst_udpsrc_open (GstUDPSrc * src)
   GInetAddress *addr, *bind_addr;
   GSocketAddress *bind_saddr;
   GError *err = NULL;
+  gboolean allow_port_reuse = src->reuse;
 
   if (src->source_addrs) {
     g_list_free_full (src->source_addrs, (GDestroyNotify) g_object_unref);
@@ -1632,7 +1632,15 @@ gst_udpsrc_open (GstUDPSrc * src)
 
     bind_saddr = g_inet_socket_address_new (bind_addr, src->port);
     g_object_unref (bind_addr);
-    if (!g_socket_bind (src->used_socket, bind_saddr, src->reuse, &err)) {
+
+    if (allow_port_reuse && src->port == 0
+        && !g_inet_address_get_is_multicast (addr)) {
+      GST_WARNING_OBJECT (src,
+          "Disabling port reuse for dynamically allocated port to avoid potential conflicts");
+      allow_port_reuse = FALSE;
+    }
+
+    if (!g_socket_bind (src->used_socket, bind_saddr, allow_port_reuse, &err)) {
       GST_ERROR_OBJECT (src, "%s: error binding to %s:%d", err->message,
           src->address, src->port);
       goto bind_error;
@@ -1945,7 +1953,9 @@ gst_udpsrc_unlock (GstBaseSrc * bsrc)
   src = GST_UDPSRC (bsrc);
 
   GST_LOG_OBJECT (src, "Flushing");
+  GST_OBJECT_LOCK (src);
   g_cancellable_cancel (src->cancellable);
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
@@ -1959,8 +1969,10 @@ gst_udpsrc_unlock_stop (GstBaseSrc * bsrc)
 
   GST_LOG_OBJECT (src, "No longer flushing");
 
+  GST_OBJECT_LOCK (src);
   gst_udpsrc_free_cancellable (src);
   gst_udpsrc_create_cancellable (src);
+  GST_OBJECT_UNLOCK (src);
 
   return TRUE;
 }
