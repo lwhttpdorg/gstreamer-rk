@@ -1,4 +1,4 @@
-foreach plugin : ['accurip', 'adpcmdec', 'adpcmenc', 'aiff', 'asfmux',
+foreach plugin : ['accurip', 'adpcmdec', 'adpcmenc', 'aiff', 'airtimeaws', 'asfmux',
                   'audiobuffersplit', 'audiofxbad', 'audiomixmatrix',
                   'audiolatency', 'audiovisualizers', 'autoconvert', 'bayer',
                   'camerabin2', 'closedcaption', 'codecalpha', 'codectimestamper', 'coloreffects',
