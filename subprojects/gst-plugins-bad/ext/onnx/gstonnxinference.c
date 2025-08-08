@@ -84,6 +84,7 @@ typedef enum
   GST_ONNX_EXECUTION_PROVIDER_CPU,
   GST_ONNX_EXECUTION_PROVIDER_CUDA,
   GST_ONNX_EXECUTION_PROVIDER_VSI,
+  GST_ONNX_EXECUTION_PROVIDER_OPENVINO
 } GstOnnxExecutionProvider;
 
 struct _GstOnnxInference
@@ -230,6 +231,9 @@ gst_onnx_execution_provider_get_type (void)
             "VeriSilicon NPU execution provider (compiled out, will use CPU)",
           "vsi"},
 #endif
+      {GST_ONNX_EXECUTION_PROVIDER_OPENVINO,
+            "OpenVINO execution provider",
+          "openvino"},
       {0, NULL, NULL},
     };
 
@@ -753,6 +757,20 @@ gst_onnx_inference_start (GstBaseTransform * trans)
       GST_ERROR_OBJECT (self, "Compiled without VSI support");
       goto error;
 #endif
+      break;
+    case GST_ONNX_EXECUTION_PROVIDER_OPENVINO:
+      const OrtOpenVINOProviderOptions openvino_options = {
+        .device_type = "HETERO:GPU,CPU",
+      };
+
+      status =
+          api->SessionOptionsAppendExecutionProvider_OpenVINO (session_options,
+            &openvino_options);
+      if (status) {
+        GST_ERROR_OBJECT (self, "Failed to set OpenVINO execution provider:"
+            " %s", api->GetErrorMessage (status));
+        goto error;
+      }
       break;
     default:
       break;
