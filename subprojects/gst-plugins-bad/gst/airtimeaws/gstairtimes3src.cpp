@@ -158,39 +158,48 @@ GST_ELEMENT_REGISTER_DEFINE(gst_airtime_s3_src, "airtimes3src", GST_RANK_PRIMARY
 /// @brief Posts the metrics of the S3 URI provider to the bus. This includes the location, content length, download
 /// completion state and duration.
 /// @param self The GstAirtimeS3Src instance
-static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src* self)
+static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src* src)
 {
-    assert(self);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    assert(src);
+    GstAirtimeS3SrcImpl* impl = src->impl;
     if (not impl)
     {
-        // already destroyed before cache finished downloading. This can happen during discovery use of element.
+        // already destroyed - this can happen during discovery use of element.
         return;
     }
 
     if (not impl->s3_uri_provider)
     {
-        GST_WARNING_OBJECT(self, "S3 URI provider is not set, cannot post metrics to bus.");
+        GST_WARNING_OBJECT(src, "S3 URI provider is not set, cannot post metrics to bus.");
         return;
     }
 
-    GstStructure* metrics_structure = gst_structure_new_empty(AIRTIME_S3_SRC_METRICS_MESSAGE_NAME);
+    gst::airtime::ScopedGstStructure metrics_structure{gst_structure_new_empty(AIRTIME_S3_SRC_METRICS_MESSAGE_NAME)};
 
-    gst_structure_set(metrics_structure, "location", G_TYPE_STRING, impl->location.c_str(), NULL);
-    gst_structure_set(metrics_structure, "content-length", G_TYPE_UINT64, impl->s3_uri_provider->getContentLength(),
-                      NULL);
+    gst_structure_set(metrics_structure.get(), "location", G_TYPE_STRING, impl->location.c_str(), nullptr);
 
-    gst_structure_set(metrics_structure, "download-completion-state", G_TYPE_STRING,
-                      impl->s3_uri_provider->getDownloadCompletionStateString().data(), NULL);
+    try
+    {
+        gst_structure_set(metrics_structure.get(), "content-length", G_TYPE_UINT64,
+                          impl->s3_uri_provider->getContentLength(), nullptr);
+        gst_structure_set(metrics_structure.get(), "download-completion-state", G_TYPE_STRING,
+                          impl->s3_uri_provider->getDownloadCompletionStateString().data(), nullptr);
 
-    auto duration = impl->s3_uri_provider->getMetrics();
-    gst_structure_set(metrics_structure, "duration", G_TYPE_UINT64, duration, NULL);
+        gst_structure_set(metrics_structure.get(), "duration", G_TYPE_UINT64, impl->s3_uri_provider->getMetrics(),
+                          nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        GST_ERROR_OBJECT(src, "Failed to prepare metrics structure for bus: %s", e.what());
+        return;
+    }
 
-    auto metrics_message = gst_message_new_element(GST_OBJECT_CAST(self), metrics_structure);
+    gst::airtime::ScopedGstMessage metrics_message{
+        gst_message_new_element(GST_OBJECT_CAST(src), metrics_structure.release())};
     auto seq_num = gst_util_seqnum_next(); // get a unique sequence number for the message
-    gst_message_set_seqnum(metrics_message, seq_num);
+    gst_message_set_seqnum(metrics_message.get(), seq_num);
 
-    gst_element_post_message(GST_ELEMENT_CAST(self), metrics_message); // this takes ownership of the message
+    gst_element_post_message(GST_ELEMENT_CAST(src), metrics_message.release());
 }
 
 /// @brief Validate the properties of the GstAirtimeS3Src element. Sets GST element errors where needed.

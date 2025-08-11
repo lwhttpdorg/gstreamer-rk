@@ -76,30 +76,22 @@ using FunctionObj = std::integral_constant<decltype(Fn), Fn>;
 template <typename T, auto Fun>
 using ResourceReleasedByFunction = std::unique_ptr<T, FunctionObj<Fun>>;
 
-using ScopedGstURI = ResourceReleasedByFunction<GstUri, gst_uri_unref>;
-
-using ScopedGstQuery = ResourceReleasedByFunction<GstQuery, gst_query_unref>;
-
-using ScopedGstMessage = ResourceReleasedByFunction<GstMessage, gst_message_unref>;
-
-using ScopedGstAirtimeS3SrcContext = ResourceReleasedByFunction<GstAirtimeS3SrcContext, g_object_unref>;
-
 using ScopedGChar = ResourceReleasedByFunction<gchar, g_free>;
-
 using ScopedGError = ResourceReleasedByFunction<GError, details::AddressOfPtr<GError, g_clear_error>>;
-
+using ScopedGstAirtimeS3SrcContext = ResourceReleasedByFunction<GstAirtimeS3SrcContext, g_object_unref>;
+using ScopedGstMessage = ResourceReleasedByFunction<GstMessage, gst_message_unref>;
+using ScopedGstQuery = ResourceReleasedByFunction<GstQuery, gst_query_unref>;
+using ScopedGstStructure = ResourceReleasedByFunction<GstStructure, gst_structure_free>;
+using ScopedGstURI = ResourceReleasedByFunction<GstUri, gst_uri_unref>;
 using ScopedJsonBuilder = ResourceReleasedByFunction<JsonBuilder, g_object_unref>;
-
 using ScopedJsonParser = ResourceReleasedByFunction<JsonParser, g_object_unref>;
-
 using ScopedJsonGenerator = ResourceReleasedByFunction<JsonGenerator, g_object_unref>;
-
 using ScopedJsonNode = ResourceReleasedByFunction<JsonNode, json_node_unref>;
 
 class MappedBuffer
 {
 public:
-    explicit MappedBuffer(GstBuffer* buffer, GstMapFlags flags = GST_MAP_READ) :
+    explicit MappedBuffer(GstBuffer* buffer, GstMapFlags flags = GST_MAP_READ) noexcept :
         buffer_{buffer},
         mapped_{gst_buffer_map(buffer_, &map_info_, flags) != 0}
     {
@@ -144,17 +136,17 @@ private:
     bool mapped_ = false;
 };
 
-inline MappedBuffer getMappedReadBuffer(GstBuffer* buffer)
+inline MappedBuffer getMappedReadBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, GST_MAP_READ};
 }
 
-inline MappedBuffer getMappedWriteBuffer(GstBuffer* buffer)
+inline MappedBuffer getMappedWriteBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, GST_MAP_WRITE};
 }
 
-inline MappedBuffer getMappedReadWriteBuffer(GstBuffer* buffer)
+inline MappedBuffer getMappedReadWriteBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, static_cast<GstMapFlags>(GST_MAP_READ | GST_MAP_WRITE)};
 }
