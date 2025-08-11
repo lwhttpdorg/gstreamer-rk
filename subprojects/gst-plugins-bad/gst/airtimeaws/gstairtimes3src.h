@@ -85,7 +85,6 @@
 
 #include <gst/base/gstbasesrc.h>
 #include <gst/gst.h>
-#include <gst/video/video.h>
 
 G_BEGIN_DECLS
 
