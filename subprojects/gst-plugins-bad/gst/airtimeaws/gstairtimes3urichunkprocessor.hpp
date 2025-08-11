@@ -343,4 +343,9 @@ void saveLastAccessTimeToFile(const std::filesystem::path& last_access_time_file
 std::time_t loadLastAccessTimeFromFile(const std::filesystem::path& last_access_time_file);
 std::time_t loadLastAccessTimeFromFileOrCurrent(const std::filesystem::path& last_access_time_file);
 
+void saveFileChunkSizeToFile(const std::filesystem::path& file_chunk_size_file, std::uint64_t file_chunk_size);
+void saveFileChunkSizeToFileIfNotExists(const std::filesystem::path& file_chunk_size_file,
+                                        std::uint64_t file_chunk_size);
+std::uint64_t loadFileChunkSizeFromFile(const std::filesystem::path& file_chunk_size_file);
+
 } // namespace gst::airtime

@@ -68,6 +68,7 @@ namespace
 
 constexpr std::string_view file_chunk_extension = ".part";
 constexpr std::string_view metadata_file_name = "metadata.json";
+constexpr std::string_view file_chunk_size_file_name = "file_chunk_size.txt";
 constexpr std::string_view last_access_time_file_name = "last_access_time.txt";
 constexpr std::string_view dir_in_use_file_name = "dir_in_use.empty";
 
@@ -298,9 +299,11 @@ CachingS3URIChunkProcessor::CachingS3URIChunkProcessor(std::shared_ptr<S3URICach
 
     directory_path_ /= s3_bucket;
     directory_path_ /= s3_key;
+    GST_DEBUG("Using cache directory: %s", directory_path_.string().c_str());
     std::filesystem::create_directories(directory_path_);
     createDirectoryInUseFile();
     loadChunksFromDirectory();
+    saveFileChunkSizeToFileIfNotExists(directory_path_ / file_chunk_size_file_name, file_chunk_standard_size_);
 }
 
 CachingS3URIChunkProcessor::~CachingS3URIChunkProcessor()
@@ -390,6 +393,25 @@ std::pair<bool, std::vector<S3URIFileChunkGapSpec>> CachingS3URIChunkProcessor::
     if (deser_metadata != metadata_)
     {
         GST_DEBUG("Metadata values do not match, need to download all chunks.");
+        recreate_cache_content_ = true;
+        return {true, {}};
+    }
+
+    const auto file_chunk_size_file = directory_path_ / file_chunk_size_file_name;
+    std::uint64_t deser_file_chunk_standard_size = 0;
+    try
+    {
+        deser_file_chunk_standard_size = loadFileChunkSizeFromFile(file_chunk_size_file);
+    }
+    catch (const std::exception& e)
+    {
+        GST_DEBUG("Unable to load file chunk size file: %s.", e.what());
+        recreate_cache_content_ = true;
+        return {true, {}};
+    }
+    if (deser_file_chunk_standard_size != file_chunk_standard_size_)
+    {
+        GST_DEBUG("File chunk standard size does not match, need to download all chunks.");
         recreate_cache_content_ = true;
         return {true, {}};
     }
@@ -636,12 +658,8 @@ void CachingS3URIChunkProcessor::loadChunksFromDirectory()
         }
     }
 
-    if (not file_chunks_.empty())
-    {
-        std::sort(file_chunks_.begin(), file_chunks_.end(),
-                  [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
-        file_chunk_standard_size_ = file_chunks_.front().content_length;
-    }
+    std::sort(file_chunks_.begin(), file_chunks_.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
 }
 
 void CachingS3URIChunkProcessor::resetCacheDirectory(bool recreate_cache_content)
@@ -657,6 +675,9 @@ void CachingS3URIChunkProcessor::resetCacheDirectory(bool recreate_cache_content
         // serialize the metadata to a file
         const auto metadata_file = directory_path_ / metadata_file_name;
         serializeS3URIObjectMetadataToJSON(metadata_, metadata_file);
+
+        const auto file_chunk_size_file = directory_path_ / file_chunk_size_file_name;
+        saveFileChunkSizeToFile(file_chunk_size_file, file_chunk_standard_size_);
 
         file_chunks_content_length_ = 0;
         first_incoming_chunk_ = true;
@@ -878,49 +899,81 @@ S3URIObjectMetadata deserializeS3URIObjectMetadataFromJSON(const std::filesystem
     return deserializeS3URIObjectMetadataFromJSON(metadata_file_stream);
 }
 
+namespace
+{
+
+template <typename T>
+void saveInfoToFile(const std::filesystem::path& location, T info)
+{
+    std::ofstream stream{location, std::ios::out | std::ios::trunc};
+    if (not stream.is_open())
+    {
+        throw std::runtime_error{std::format("Failed to open file for writing: {}", location.string())};
+    }
+    stream << info;
+    if (not stream)
+    {
+        throw std::runtime_error{std::format("Failed to write to file: {}", location.string())};
+    }
+}
+
+template <typename T>
+T loadInfoFromFile(const std::filesystem::path& location)
+{
+    T info{};
+    std::ifstream stream{location};
+    if (stream.is_open())
+    {
+        stream >> info;
+        if (not stream)
+        {
+            throw std::runtime_error{std::format("Failed to read from file: {}", location.string())};
+        }
+        return info;
+    }
+    throw std::runtime_error{std::format("Failed to open file for reading: {}", location.string())};
+}
+
+} // namespace
+
 void saveLastAccessTimeToFile(const std::filesystem::path& last_access_time_file, std::time_t last_access_time)
 {
-    std::ofstream last_access_time_stream{last_access_time_file, std::ios::out | std::ios::trunc};
-    if (not last_access_time_stream.is_open())
-    {
-        throw std::runtime_error{
-            std::format("Failed to open last access time file for writing: {}", last_access_time_file.string())};
-    }
-    last_access_time_stream << last_access_time;
-    if (not last_access_time_stream)
-    {
-        throw std::runtime_error{
-            std::format("Failed to write last access time to file: {}", last_access_time_file.string())};
-    }
+    saveInfoToFile(last_access_time_file, last_access_time);
     GST_DEBUG("Last access time saved to file: %s", last_access_time_file.string().c_str());
 }
 
 std::time_t loadLastAccessTimeFromFile(const std::filesystem::path& last_access_time_file)
 {
-    std::time_t last_access_time = std::time(nullptr);
-    std::ifstream last_access_time_stream{last_access_time_file};
-    if (last_access_time_stream.is_open())
-    {
-        last_access_time_stream >> last_access_time;
-        if (not last_access_time_stream.fail())
-        {
-            return last_access_time;
-        }
-    }
-    throw std::runtime_error{
-        std::format("Failed to read last access time from file: {}", last_access_time_file.string())};
+    return loadInfoFromFile<std::time_t>(last_access_time_file);
 }
 
 std::time_t loadLastAccessTimeFromFileOrCurrent(const std::filesystem::path& last_access_time_file)
 {
-    try
+    if (std::filesystem::exists(last_access_time_file))
     {
         return loadLastAccessTimeFromFile(last_access_time_file);
     }
-    catch (const std::runtime_error&)
+    return std::time(nullptr);
+}
+
+void saveFileChunkSizeToFile(const std::filesystem::path& file_chunk_size_file, std::uint64_t file_chunk_size)
+{
+    saveInfoToFile(file_chunk_size_file, file_chunk_size);
+    GST_DEBUG("File chunk size saved to file: %s", file_chunk_size_file.string().c_str());
+}
+
+void saveFileChunkSizeToFileIfNotExists(const std::filesystem::path& file_chunk_size_file,
+                                        std::uint64_t file_chunk_size)
+{
+    if (not std::filesystem::exists(file_chunk_size_file))
     {
-        return std::time(nullptr);
+        saveFileChunkSizeToFile(file_chunk_size_file, file_chunk_size);
     }
+}
+
+std::uint64_t loadFileChunkSizeFromFile(const std::filesystem::path& file_chunk_size_file)
+{
+    return loadInfoFromFile<std::uint64_t>(file_chunk_size_file);
 }
 
 } // namespace gst::airtime
