@@ -39,7 +39,8 @@ void             gst_wasapi2_rbuf_set_device (GstWasapi2Rbuf * rbuf,
                                               GstWasapi2EndpointClass endpoint_class,
                                               guint pid,
                                               gboolean low_latency,
-                                              gboolean exclusive);
+                                              gboolean exclusive,
+                                              gboolean apo_bypass);
 
 GstCaps *        gst_wasapi2_rbuf_get_caps (GstWasapi2Rbuf * rbuf);
 

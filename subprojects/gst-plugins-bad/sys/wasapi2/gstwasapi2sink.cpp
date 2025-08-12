@@ -62,6 +62,7 @@ static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
 #define DEFAULT_VOLUME        1.0
 #define DEFAULT_CONTINUE_ON_ERROR FALSE
 #define DEFAULT_EXCLUSIVE FALSE
+#define DEFAULT_APO_BYPASS FALSE
 
 enum
 {
@@ -73,6 +74,7 @@ enum
   PROP_DISPATCHER,
   PROP_CONTINUE_ON_ERROR,
   PROP_EXCLUSIVE,
+  PROP_APO_BYPASS,
 };
 
 /* *INDENT-OFF* */
@@ -94,6 +96,7 @@ struct GstWasapi2SinkPrivate
   gboolean low_latency = DEFAULT_LOW_LATENCY;
   gboolean continue_on_error = DEFAULT_CONTINUE_ON_ERROR;
   gboolean exclusive = DEFAULT_EXCLUSIVE;
+  gboolean apo_bypass = DEFAULT_APO_BYPASS;
 };
 /* *INDENT-ON* */
 
@@ -203,6 +206,21 @@ gst_wasapi2_sink_class_init (GstWasapi2SinkClass * klass)
           DEFAULT_EXCLUSIVE,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
+  /**
+   * GstWasapi2Sink:apo-bypass:
+   *
+   * Request RAW mode (AUDCLNT_STREAMOPTIONS_RAW) to bypass Windows
+   * Audio Processing Object (APO) chain if the audio endpoint supports it.
+   * This can reduce latency and avoid system/third-party effects.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_APO_BYPASS,
+      g_param_spec_boolean ("apo-bypass", "APO Bypass",
+          "Bypass Windows Audio Processing Object (APO)",
+          DEFAULT_APO_BYPASS, (GParamFlags) (GST_PARAM_MUTABLE_READY |
+              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   gst_element_class_add_static_pad_template (element_class, &sink_template);
   gst_element_class_set_static_metadata (element_class, "Wasapi2Sink",
       "Sink/Audio/Hardware",
@@ -237,7 +255,7 @@ gst_wasapi2_sink_init (GstWasapi2Sink * self)
   priv->rbuf = gst_wasapi2_rbuf_new (self, gst_wasapi2_sink_on_invalidated);
   gst_wasapi2_rbuf_set_device (priv->rbuf, nullptr,
       GST_WASAPI2_ENDPOINT_CLASS_RENDER, 0, DEFAULT_LOW_LATENCY,
-      DEFAULT_EXCLUSIVE);
+      DEFAULT_EXCLUSIVE, DEFAULT_APO_BYPASS);
 
   self->priv = priv;
 }
@@ -266,7 +284,8 @@ gst_wasapi2_sink_set_device (GstWasapi2Sink * self, bool updated)
     return;
 
   gst_wasapi2_rbuf_set_device (priv->rbuf, priv->device_id,
-      GST_WASAPI2_ENDPOINT_CLASS_RENDER, 0, priv->low_latency, priv->exclusive);
+      GST_WASAPI2_ENDPOINT_CLASS_RENDER, 0, priv->low_latency, priv->exclusive,
+      priv->apo_bypass);
 }
 
 static void
@@ -330,6 +349,18 @@ gst_wasapi2_sink_set_property (GObject * object, guint prop_id,
       gst_wasapi2_sink_set_device (self, updated);
       break;
     }
+    case PROP_APO_BYPASS:
+    {
+      auto new_val = g_value_get_boolean (value);
+      bool updated = false;
+      if (new_val != priv->apo_bypass) {
+        priv->apo_bypass = new_val;
+        updated = true;
+      }
+
+      gst_wasapi2_sink_set_device (self, updated);
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -363,6 +394,9 @@ gst_wasapi2_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_EXCLUSIVE:
       g_value_set_boolean (value, priv->exclusive);
+      break;
+    case PROP_APO_BYPASS:
+      g_value_set_boolean (value, priv->apo_bypass);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
