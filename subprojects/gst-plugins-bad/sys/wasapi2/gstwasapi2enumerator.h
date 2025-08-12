@@ -33,8 +33,9 @@ G_END_DECLS
 
 struct GstWasapi2DeviceProps
 {
-  EndpointFormFactor form_factor;
+  EndpointFormFactor form_factor = UnknownFormFactor;
   std::string enumerator_name;
+  gboolean apo_bypass = FALSE;
 };
 
 struct GstWasapi2EnumeratorEntry

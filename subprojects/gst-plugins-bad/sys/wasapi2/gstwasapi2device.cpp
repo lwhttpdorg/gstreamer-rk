@@ -239,7 +239,9 @@ gst_wasapi2_device_provider_probe (GstDeviceProvider * provider)
         "device.form-factor-name", G_TYPE_STRING,
         gst_wasapi2_form_factor_to_string (entry->device_props.form_factor),
         "device.enumerator-name", G_TYPE_STRING,
-        entry->device_props.enumerator_name.c_str (), nullptr);
+        entry->device_props.enumerator_name.c_str (),
+        "device.raw-processing-supported", G_TYPE_BOOLEAN,
+        entry->device_props.apo_bypass, nullptr);
 
     if (entry->is_default) {
       if (!entry->actual_device_id.empty ()) {

@@ -27,6 +27,7 @@
 #include <condition_variable>
 #include <wrl.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <propkey.h>
 #include <string>
 #include <atomic>
 
@@ -577,6 +578,7 @@ gst_wasapi2_enumerator_build_entry (GstWasapi2Enumerator * self,
   if (device_props) {
     entry->device_props.form_factor = device_props->form_factor;
     entry->device_props.enumerator_name = device_props->enumerator_name;
+    entry->device_props.apo_bypass = device_props->apo_bypass;
   }
 
   GST_LOG_OBJECT (self, "Adding entry %s (%s), flow %d, caps %" GST_PTR_FORMAT,
@@ -609,6 +611,12 @@ gst_wasapi2_enumerator_probe_props (IPropertyStore * store,
     props->enumerator_name = name;
     g_free (name);
   }
+
+  PropVariantClear (&var);
+
+  hr = store->GetValue (PKEY_Devices_AudioDevice_RawProcessingSupported, &var);
+  if (SUCCEEDED (hr) && var.vt == VT_BOOL && var.boolVal == VARIANT_TRUE)
+    props->apo_bypass = TRUE;
 
   PropVariantClear (&var);
 }
