@@ -385,20 +385,6 @@ again:
       GST_BUFFER_OFFSET_END (*outbuf) = new_buffer->offset_end;
       GST_BUFFER_FLAGS (*outbuf) = new_buffer->flags;
 
-      for (int i = 0; i < new_buffer->n_meta; i++) {
-        guint32 consumed = 0;
-        gst_meta_deserialize (*outbuf, (guint8 *) payload + payload_off,
-            payload_size - payload_off, &consumed);
-        if (consumed == 0) {
-          GST_ERROR_OBJECT (self, "Malformed meta serialization");
-          ret = GST_FLOW_ERROR;
-          close_and_free_fds (fds_arr, fds_arr_len);
-          gst_clear_buffer (outbuf);
-          goto on_error;
-        }
-        payload_off += consumed;
-      }
-
       GST_OBJECT_LOCK (self);
       if (new_buffer->n_memory > 0) {
         BufferContext *ctx = g_new0 (BufferContext, 1);
@@ -423,6 +409,22 @@ again:
         release_buffer (self, new_buffer->id);
       }
       GST_OBJECT_UNLOCK (self);
+
+      /* We have to deserialize meta after we have deserialized buffer data,
+       * so that buffer size is known */
+      for (int i = 0; i < new_buffer->n_meta; i++) {
+        guint32 consumed = 0;
+        gst_meta_deserialize (*outbuf, (guint8 *) payload + payload_off,
+            payload_size - payload_off, &consumed);
+        if (consumed == 0) {
+          GST_ERROR_OBJECT (self, "Malformed meta serialization");
+          ret = GST_FLOW_ERROR;
+          close_and_free_fds (fds_arr, fds_arr_len);
+          gst_clear_buffer (outbuf);
+          goto on_error;
+        }
+        payload_off += consumed;
+      }
 
       g_free (fds_arr);
 
