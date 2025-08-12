@@ -129,4 +129,13 @@ void S3URIChunkSourceFake::cancel()
     pool_.join();
 }
 
+std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake(std::uint64_t content_length,
+                                                             std::size_t max_number_of_downloads,
+                                                             std::chrono::milliseconds min_nap_time,
+                                                             std::chrono::milliseconds max_nap_time)
+{
+    return std::make_unique<S3URIChunkSourceFake>(content_length, max_number_of_downloads, min_nap_time.count(),
+                                                  max_nap_time.count());
+}
+
 } // namespace gst::airtime

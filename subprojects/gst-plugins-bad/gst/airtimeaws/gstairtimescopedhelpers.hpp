@@ -73,9 +73,13 @@ void AddressOfPtr(T* rsc)
 template <auto Fn>
 using FunctionObj = std::integral_constant<decltype(Fn), Fn>;
 
+/// @brief A unique_ptr with resource deleter that uses a function pointer to release the resource.
+/// @tparam T The type of the resource.
+/// @tparam Fun The function pointer type used to release the resource.
 template <typename T, auto Fun>
 using ResourceReleasedByFunction = std::unique_ptr<T, FunctionObj<Fun>>;
 
+/// @brief Scoped resource management for GObject and GStreamer types.
 using ScopedGChar = ResourceReleasedByFunction<gchar, g_free>;
 using ScopedGError = ResourceReleasedByFunction<GError, details::AddressOfPtr<GError, g_clear_error>>;
 using ScopedGstAirtimeS3SrcContext = ResourceReleasedByFunction<GstAirtimeS3SrcContext, g_object_unref>;
@@ -88,6 +92,7 @@ using ScopedJsonParser = ResourceReleasedByFunction<JsonParser, g_object_unref>;
 using ScopedJsonGenerator = ResourceReleasedByFunction<JsonGenerator, g_object_unref>;
 using ScopedJsonNode = ResourceReleasedByFunction<JsonNode, json_node_unref>;
 
+/// @brief Simple RAII wrapper for GstBuffer mapped memory.
 class MappedBuffer
 {
 public:
@@ -136,16 +141,25 @@ private:
     bool mapped_ = false;
 };
 
+/// @brief Creates a mapped read buffer for the specified GstBuffer.
+/// @param buffer The GstBuffer to map.
+/// @return A MappedBuffer for reading from the specified GstBuffer.
 inline MappedBuffer getMappedReadBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, GST_MAP_READ};
 }
 
+/// @brief Creates a mapped write buffer for the specified GstBuffer.
+/// @param buffer The GstBuffer to map.
+/// @return A MappedBuffer for writing to the specified GstBuffer.
 inline MappedBuffer getMappedWriteBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, GST_MAP_WRITE};
 }
 
+/// @brief Creates a mapped read-write buffer for the specified GstBuffer.
+/// @param buffer The GstBuffer to map.
+/// @return A MappedBuffer for reading and writing to the specified GstBuffer.
 inline MappedBuffer getMappedReadWriteBuffer(GstBuffer* buffer) noexcept
 {
     return MappedBuffer{buffer, static_cast<GstMapFlags>(GST_MAP_READ | GST_MAP_WRITE)};

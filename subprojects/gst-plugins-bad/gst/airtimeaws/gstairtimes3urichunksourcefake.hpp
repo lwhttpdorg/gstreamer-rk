@@ -48,6 +48,7 @@
 #include "gstairtimes3urichunksource.hpp"
 
 #include <atomic>
+#include <chrono>
 
 #include <boost/asio/thread_pool.hpp>
 

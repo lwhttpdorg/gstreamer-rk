@@ -52,6 +52,7 @@
 namespace gst::airtime
 {
 
+/// @brief Simple RAII wrapper on AWS SDK initialization and shutdown.
 class AwsEnv
 {
 public:
@@ -72,6 +73,8 @@ private:
     Aws::SDKOptions options_;
 };
 
+/// @brief Factory class for accessing AWS environment. It guarantees that at a single point in time
+/// only one instance of AwsEnv is active, so that AWS environment is initialized just once.
 class AwsEnvFactory
 {
 private:

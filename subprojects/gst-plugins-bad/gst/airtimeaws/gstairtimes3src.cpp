@@ -924,29 +924,39 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
             "environment.",
             "", (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
+    /**
+     * airtimes3src:download-chunk-size-bytes:
+     *
+     * The size in bytes of the chunks of the S3 object to download is divided into. Must be multiple of the
+     * file-chunk-size property value.
+     *
+     * Since: 1.26
+     */
     g_object_class_install_property(
         object_class, PROP_CACHE_DOWNLOAD_CHUNK_SIZE,
-        g_param_spec_uint64("download-chunk-size-bytes", "S3 download chunk size in bytes",
-                            "The size in bytes of the chunks of the S3 object to download. Must be multiple of the "
-                            "file-chunk-size.",
-                            512, G_MAXUINT64, default_config.download_chunk_size,
-                            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+        g_param_spec_uint64(
+            "download-chunk-size-bytes", "S3 download chunk size in bytes",
+            "The size in bytes of the chunks of the S3 object to download is divided into. Must be multiple of the "
+            "file-chunk-size property value.",
+            512, G_MAXUINT64, default_config.download_chunk_size,
+            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
      * airtimes3src:file-chunk-size-bytes:
      *
-     * The size in bytes of the file chunk to use for caching/local storage. The
-     * download-chunk-size property value must be multiple of this value.
+     * The size in bytes of the cached file chunk. Each downloaded S3 chunk is split into these
+     * smaller chunks for storage. The download-chunk-size property value must be multiple of this value.
      *
      * Since: 1.26
      */
     g_object_class_install_property(
         object_class, PROP_CACHE_FILE_CHUNK_SIZE,
-        g_param_spec_uint64("file-chunk-size-bytes", "Local file chunk size in bytes",
-                            "The size in bytes of the file chunk to use for caching/local storage. The "
-                            "download-chunk-size property value must be multiple of this value.",
-                            512, G_MAXUINT64, default_config.file_chunk_size,
-                            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+        g_param_spec_uint64(
+            "file-chunk-size-bytes", "Local file chunk size in bytes",
+            "The size in bytes of the cached file chunk. Each downloaded S3 chunk is split into these "
+            "smaller chunks for storage. The download-chunk-size property value must be multiple of this value.",
+            512, G_MAXUINT64, default_config.file_chunk_size,
+            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
      * airtimes3src:max-concurrent-downloads:
@@ -965,42 +975,50 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
     /**
      * airtimes3src:cache-directory:
      *
-     * The base directory to use for local S3 file caching.
+     * The base directory to use for local S3 file caching. It points to a local directory where the S3 file is
+     * downloaded and stored in chunks. If not set, an OS-specific temporary directory is used as the base cache
+     * directory. Each S3 URI is stored in a dedicated bucket/key-specific subdirectory.
      * Since: 1.26
      */
     g_object_class_install_property(
         object_class, PROP_CACHE_DIRECTORY,
-        g_param_spec_string("cache-directory", "Cache directory",
-                            "The base directory to use for local S3 file caching.",
-                            default_config.cache_base_directory.c_str(),
-                            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+        g_param_spec_string(
+            "cache-directory", "Cache directory",
+            "The base directory to use for local S3 file caching. It points to a local directory where the S3 file is "
+            "downloaded and stored in chunks. If not set, an OS-specific temporary directory is used as the base cache "
+            "directory. Each S3 URI is stored in a dedicated bucket/key-specific subdirectory.",
+            default_config.cache_base_directory.c_str(),
+            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
      * airtimes3src:cache-max-size-bytes:
      *
-     * The maximum size in bytes for the local cache.
+     * The maximum total cache size in bytes. When this limit is reached, the LRU eviction policy removes cache
+     * directory of the least recently used S3 file.
      *
      * Since: 1.26
      */
     g_object_class_install_property(
         object_class, PROP_CACHE_MAX_SIZE,
         g_param_spec_uint64("cache-max-size-bytes", "Max cache size in bytes",
-                            "The maximum size in bytes for the local cache.", 10 * 1024 * 1024, G_MAXUINT64,
-                            default_config.max_cache_size_bytes,
+                            "The maximum total cache size in bytes. When this limit is reached, the LRU eviction "
+                            "policy removes cache directory of the least recently used S3 file.",
+                            10 * 1024 * 1024, G_MAXUINT64, default_config.max_cache_size_bytes,
                             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
      * airtimes3src:fetch-max-retry-count:
      *
-     * The maximum number of retry attempts to fetch chunks from S3.
+     * The maximum number of retries for S3 fetch operations that fail due to transient errors (e.g., network issues).
      *
      * Since: 1.26
      */
     g_object_class_install_property(
         object_class, PROP_FETCH_MAX_RETRY_COUNT,
         g_param_spec_uint("fetch-max-retry-count", "Max number of fetch retry count",
-                          "The maximum number of retry attempts to fetch chunks from S3.", 2, G_MAXUINT,
-                          default_config.fetch_max_retry_count,
+                          "The maximum number of retries for S3 fetch operations that fail due to transient errors "
+                          "(e.g., network issues).",
+                          2, G_MAXUINT, default_config.fetch_max_retry_count,
                           (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     gst_element_class_set_details_simple(

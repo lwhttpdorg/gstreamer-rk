@@ -56,6 +56,8 @@
 namespace gst::airtime
 {
 
+/// @brief Manages S3 URI providers. It guarantees that at most one instance of a provider for a specific URI/bucket/key
+/// is active at a time.
 class S3URIProviders
 {
 public:

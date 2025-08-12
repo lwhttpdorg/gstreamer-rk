@@ -53,6 +53,8 @@
 namespace gst::airtime
 {
 
+/// @brief Factory class for creating and managing S3 URI providers. It guarantees that at most one instance of a
+/// S3URIProviders is active at a time.
 class S3URIProvidersFactory
 {
 private:
@@ -61,7 +63,7 @@ private:
 public:
     ~S3URIProvidersFactory() = default;
 
-    /// @brief Create a new instance of the cache, or return the existing (semi-singleton) instance if it already
+    /// @brief Create a new instance of the cache, or return the existing instance if it already
     /// exists. This will create the cache directory and the purged cache directory.
     /// @param config The configuration for the cache.
     /// @return A shared pointer to the cache instance.
@@ -69,7 +71,7 @@ public:
 
     /// @brief Get the existing instance of the cache, or null if it does not exist. This will not create a new
     /// instance, but will return the existing one if it exists.
-    /// @return A shared pointer to the cache instance, or null if it does not exist.
+    /// @return A shared pointer to the cache instance, or nullptr if it does not exist.
     static std::shared_ptr<S3URIProviders> get();
 
 private:

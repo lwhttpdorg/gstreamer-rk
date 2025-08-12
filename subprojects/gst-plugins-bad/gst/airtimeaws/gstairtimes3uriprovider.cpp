@@ -46,7 +46,6 @@
 #include "gstairtimes3uriprovider.hpp"
 #include "gstairtimes3error.hpp"
 #include "gstairtimes3urichunksourceaws.hpp"
-#include "gstairtimes3urichunksourcefake.hpp"
 
 #include <cinttypes>
 #include <format>
@@ -59,26 +58,16 @@ namespace gst::airtime
 {
 
 S3URIProvider::S3URIProvider(std::string_view s3_bucket, std::string_view s3_key, S3URIProviderConfig config,
+                             std::unique_ptr<S3URIChunkSource> chunk_source,
                              std::unique_ptr<S3URIChunkProcessor> chunk_processor) :
     config_{config},
     s3_bucket_{s3_bucket},
     s3_key_{s3_key},
-    chunk_processor_{std::move(chunk_processor)},
-    chunk_source_{[this]() -> decltype(chunk_source_) {
-        if (config_.use_fake_aws_source)
-        {
-            GST_DEBUG("Using fake S3 source for testing purposes.");
-            return std::make_unique<S3URIChunkSourceFake>(100 * 1024 * 1024, config_.max_number_of_downloads);
-        }
-        else
-        {
-            GST_DEBUG("Using real S3 source with bucket: %s, key: %s", s3_bucket_.c_str(), s3_key_.c_str());
-            return std::make_unique<S3URIChunkSourceAws>(s3_bucket_, s3_key_, config_.max_number_of_downloads);
-        }
-    }()}
+    chunk_source_{std::move(chunk_source)},
+    chunk_processor_{std::move(chunk_processor)}
 {
-    assert(chunk_processor_);
     assert(chunk_source_);
+    assert(chunk_processor_);
     getS3URIObjectAsync();
 }
 
@@ -373,6 +362,42 @@ void S3URIProvider::setError(ErrorType type, std::string message)
     {
         downloaded_chunk_notifier_->stopWaitingForRange();
     }
+}
+
+std::unique_ptr<S3URICacheEvictionPolicy> createEvictionPolicy(const S3URIProviderConfig& config)
+{
+    if (config.max_cache_size_bytes == 0)
+    {
+        return std::make_unique<NoRulesCacheEvictionPolicy>();
+    }
+    return std::make_unique<LRUCacheEvictionPolicy>(config.max_cache_size_bytes);
+}
+
+std::unique_ptr<S3URIChunkSource> createChunkSource(std::string_view s3_bucket, std::string_view s3_key,
+                                                    const S3URIProviderConfig& config)
+{
+    if (config.use_fake_aws_source)
+    {
+        GST_DEBUG("Using fake S3 source for testing purposes.");
+        return createS3URIChunkSourceFake(100 * 1024 * 1024, config.max_number_of_downloads);
+    }
+    else
+    {
+        GST_DEBUG("Using real S3 source with bucket: %s, key: %s", s3_bucket.data(), s3_key.data());
+        return std::make_unique<S3URIChunkSourceAws>(std::string{s3_bucket}, std::string{s3_key},
+                                                     config.max_number_of_downloads);
+    }
+}
+
+std::shared_ptr<S3URIProvider> createS3URIProvider(std::shared_ptr<S3URICacheManager> cache_manager,
+                                                   std::string_view s3_bucket, std::string_view s3_key,
+                                                   const S3URIProviderConfig& config)
+{
+    auto chunk_source = createChunkSource(s3_bucket, s3_key, config);
+    auto chunk_processor = std::make_unique<gst::airtime::CachingS3URIChunkProcessor>(cache_manager, s3_bucket, s3_key,
+                                                                                      config.file_chunk_size);
+    return std::make_shared<S3URIProvider>(s3_bucket, s3_key, config, std::move(chunk_source),
+                                           std::move(chunk_processor));
 }
 
 std::string_view downloadCompletionStateToString(S3URIProvider::DownloadCompletionState state) noexcept

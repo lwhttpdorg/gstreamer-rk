@@ -49,6 +49,7 @@
 #include <cstdint>
 #include <functional>
 #include <istream>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -83,5 +84,10 @@ public:
     /// @brief Cancels all active async requests downloading chunks.
     virtual void cancel() = 0;
 };
+
+std::unique_ptr<S3URIChunkSource>
+createS3URIChunkSourceFake(std::uint64_t content_length, std::size_t max_number_of_downloads,
+                           std::chrono::milliseconds min_nap_time = std::chrono::milliseconds{100},
+                           std::chrono::milliseconds max_nap_time = std::chrono::milliseconds{3000});
 
 } // namespace gst::airtime

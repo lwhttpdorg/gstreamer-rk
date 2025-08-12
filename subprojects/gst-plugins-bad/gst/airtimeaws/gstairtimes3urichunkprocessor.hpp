@@ -229,6 +229,9 @@ public:
     S3URICacheManager(std::filesystem::path cache_base_directory,
                       std::unique_ptr<S3URICacheEvictionPolicy> eviction_policy);
 
+    /// @brief Checks if there is enough space in the cache for a new key.
+    /// @param metadata The S3 object metadata for the cache key.
+    /// @return True if there is enough space, false otherwise.
     bool isEnoughSpaceForKey(const S3URIObjectMetadata& metadata) const;
 
     /// @brief Adds a cache key to the eviction policy.
@@ -239,8 +242,12 @@ public:
     /// @param metadata The S3 object metadata for the cache key.
     void keyRemoved(const S3URIObjectMetadata& metadata);
 
+    /// @brief Returns the current size of the cache.
+    /// @return The current size of the cache in bytes.
     std::uint64_t currentCacheSize() const;
 
+    /// @brief Returns the base directory for the cache.
+    /// @return The base directory for the cache.
     const std::filesystem::path& cacheBaseDirectory() const noexcept
     {
         return cache_base_directory_;
@@ -256,6 +263,7 @@ private:
     mutable std::mutex entries_access_;
 };
 
+/// @brief Implementation of the S3URIChunkProcessor that caches S3 chunks fetched from S3 on a local filesystem.
 class CachingS3URIChunkProcessor : public S3URIChunkProcessor
 {
 public:

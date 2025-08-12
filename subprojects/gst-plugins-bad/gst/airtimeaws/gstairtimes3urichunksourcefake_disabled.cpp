@@ -43,39 +43,19 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#pragma once
+#include "gstairtimes3urichunksource.hpp"
 
-#include <system_error>
-
-#include <aws/s3/S3Errors.h>
-
-namespace std
-{
-
-template <>
-struct is_error_code_enum<Aws::S3::S3Errors> : true_type {
-};
-
-} // namespace std
+#include <stdexcept>
 
 namespace gst::airtime
 {
 
-/// @brief Custom error category for S3 errors.
-class S3ErrorCategory : public std::error_category
+std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake([[maybe_unused]] std::uint64_t content_length,
+                                                             [[maybe_unused]] std::size_t max_number_of_downloads,
+                                                             [[maybe_unused]] std::chrono::milliseconds min_nap_time,
+                                                             [[maybe_unused]] std::chrono::milliseconds max_nap_time)
 {
-public:
-    const char* name() const noexcept override
-    {
-        return "S3Error";
-    }
-
-    std::string message(int ev) const override;
-};
-
-/// @brief Creates an error code from an S3 error enumeration value.
-/// @param e The S3 error enumeration value.
-/// @return The corresponding error code.
-std::error_code make_error_code(Aws::S3::S3Errors e);
+    throw std::runtime_error("The S3URIChunkSource fake implementation is disabled at compile time");
+}
 
 } // namespace gst::airtime

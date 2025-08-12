@@ -62,6 +62,9 @@
 namespace gst::airtime
 {
 
+/// @brief S3 URI provider for managing S3 object access and chunk processing.
+/// A typical use case in GStreamer is to call the getContentLength() and then fill() method to fill a buffer with data
+/// from the S3 object.
 class S3URIProvider
 {
 public:
@@ -75,9 +78,10 @@ public:
     /// @param s3_bucket The S3 bucket name.
     /// @param s3_key The S3 object key.
     /// @param config The S3 URI provider configuration.
+    /// @param chunk_source The chunk source to use for downloading chunks.
     /// @param chunk_processor The chunk processor to use for processing downloaded chunks.
     S3URIProvider(std::string_view s3_bucket, std::string_view s3_key, S3URIProviderConfig config,
-                  std::unique_ptr<S3URIChunkProcessor> chunk_processor);
+                  std::unique_ptr<S3URIChunkSource> chunk_source, std::unique_ptr<S3URIChunkProcessor> chunk_processor);
     ~S3URIProvider();
 
     /// @brief Check if the provider has an error coming from underlying async operation.
@@ -107,25 +111,27 @@ public:
     /// @return The content length of the S3 object.
     std::uint64_t getContentLength() const;
 
-    /// @brief Wait for all chunks of the S3 object to be available.
-    /// If the provider is still fetching the data, it will wait until all chunks are downloaded.
-    /// If the provider is in error state, it will throw an exception.
+    /// @brief Wait synchronously for all chunks of the S3 object to be available. It blocks the calling thread as long
+    /// as the provider is still fetching the data.
     /// @param timeout The maximum time to wait for all chunks to be available. If zero, wait indefinitely.
     /// @return A boolean indicating success or failure.
+    /// @note If the provider is in an error state, this method will throw an exception.
     bool waitForAllChunksDownloaded(std::chrono::seconds timeout = std::chrono::seconds::zero());
 
-    /// @brief Wait for a specific byte range of the S3 object to be available.
-    /// If the provider is still fetching the data, it will wait until the specified range is downloaded.
-    /// If the provider is in error state, it will throw an exception.
+    /// @brief Wait synchronously for a specific byte range of the S3 object to be available. It blocks the calling
+    /// thread as long as the provider is still fetching the requested range of data.
     /// @param offset The starting byte offset of the range to wait for.
     /// @param size The size of the range to wait for.
     /// @param timeout The maximum time to wait for the range to be available. If zero, wait indefinitely.
     /// @return A boolean indicating success or failure.
+    /// @note If the provider is in an error state, this method will throw an exception.
     bool waitForRangeDownloaded(std::uint64_t offset, std::uint64_t size,
                                 std::chrono::seconds timeout = std::chrono::seconds{0});
 
     /// @brief Fill the provided buffer with data from the S3 object. If the URI provider is still fetching the
-    /// data, the chunk corresponding to the offset will be requested and prioritized for download.
+    /// data, the chunk corresponding to the offset will be requested and prioritized for download blocking the thread
+    /// calling this method. As soon as the data is available, it will be copied to the provided buffer and the thread
+    /// will be unblocked.
     /// @param data The buffer to fill.
     /// @param offset The offset to start filling from.
     /// @param size The size to fill.
@@ -189,8 +195,8 @@ private:
     std::string s3_bucket_;
     std::string s3_key_;
     std::chrono::time_point<std::chrono::steady_clock> fetch_start_time_ = std::chrono::steady_clock::now();
-    std::unique_ptr<S3URIChunkProcessor> chunk_processor_;
     std::unique_ptr<S3URIChunkSource> chunk_source_;
+    std::unique_ptr<S3URIChunkProcessor> chunk_processor_;
     std::unique_ptr<S3URIDownloadedChunkNotifier> downloaded_chunk_notifier_;
     std::unique_ptr<S3URIChunkDownloadQueue> download_chunk_queue_;
     S3URIObjectMetadata s3_object_metadata_;
@@ -202,6 +208,29 @@ private:
     std::optional<ErrorType> error_type_;
     std::string last_error_message_;
 };
+
+/// @brief Creates a cache eviction policy for the S3 URI provider.
+/// @param config The configuration for the S3 URI provider.
+/// @return A unique pointer to the created cache eviction policy.
+std::unique_ptr<S3URICacheEvictionPolicy> createEvictionPolicy(const S3URIProviderConfig& config);
+
+/// @brief Creates a chunk source for the S3 URI provider.
+/// @param s3_bucket The S3 bucket to use.
+/// @param s3_key The S3 key to use.
+/// @param config The configuration for the S3 URI provider.
+/// @return A unique pointer to the created chunk source.
+std::unique_ptr<S3URIChunkSource> createChunkSource(std::string_view s3_bucket, std::string_view s3_key,
+                                                    const S3URIProviderConfig& config);
+
+/// @brief Creates an S3 URI provider.
+/// @param cache_manager The cache manager to use.
+/// @param s3_bucket The S3 bucket to use.
+/// @param s3_key The S3 key to use.
+/// @param config The configuration for the S3 URI provider.
+/// @return A shared pointer to the created S3 URI provider.
+std::shared_ptr<S3URIProvider> createS3URIProvider(std::shared_ptr<S3URICacheManager> cache_manager,
+                                                   std::string_view s3_bucket, std::string_view s3_key,
+                                                   const S3URIProviderConfig& config);
 
 /// @brief Converts the download completion state to a string.
 /// @param state The download completion state to convert.

@@ -52,29 +52,6 @@
 namespace gst::airtime
 {
 
-namespace
-{
-
-std::unique_ptr<S3URICacheEvictionPolicy> createEvictionPolicy(const S3URIProviderConfig& config)
-{
-    if (config.max_cache_size_bytes == 0)
-    {
-        return std::make_unique<NoRulesCacheEvictionPolicy>();
-    }
-    return std::make_unique<LRUCacheEvictionPolicy>(config.max_cache_size_bytes);
-}
-
-std::shared_ptr<S3URIProvider> createProviderImpl(std::shared_ptr<S3URICacheManager> cache_manager,
-                                                  std::string_view s3_bucket, std::string_view s3_key,
-                                                  const S3URIProviderConfig& config)
-{
-    auto chunk_processor = std::make_unique<gst::airtime::CachingS3URIChunkProcessor>(cache_manager, s3_bucket, s3_key,
-                                                                                      config.file_chunk_size);
-    return std::make_shared<S3URIProvider>(s3_bucket, s3_key, config, std::move(chunk_processor));
-}
-
-} // namespace
-
 S3URIProviders::S3URIProviders(S3URIProviderConfig config) :
     config_{config},
     cache_manager_{std::make_shared<S3URICacheManager>(config.cache_base_directory, createEvictionPolicy(config_))}
@@ -140,7 +117,7 @@ std::shared_ptr<S3URIProvider> S3URIProviders::createProvider(std::string_view s
 {
     try
     {
-        return createProviderImpl(cache_manager_, s3_bucket, s3_key, config_);
+        return createS3URIProvider(cache_manager_, s3_bucket, s3_key, config_);
     }
     catch (const std::exception& e)
     {

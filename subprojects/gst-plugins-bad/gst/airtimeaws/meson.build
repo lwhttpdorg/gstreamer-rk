@@ -25,6 +25,8 @@ airtimeaws_sources = [
 
 if boost_dep.found()
   airtimeaws_sources += 'gstairtimes3urichunksourcefake.cpp'
+else
+  airtimeaws_sources += 'gstairtimes3urichunksourcefake_disabled.cpp'
 endif
 
 airtimeaws_headers = [
@@ -49,7 +51,7 @@ airtimeaws_headers = [
 ]
 
 if boost_dep.found()
-  airtimeaws_headers += 'gstairtimes3urichunksourcefake.cpp'
+  airtimeaws_headers += 'gstairtimes3urichunksourcefake.hpp'
 endif
 
 doc_sources = []
