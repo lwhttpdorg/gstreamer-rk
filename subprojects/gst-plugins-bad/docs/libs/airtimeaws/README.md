@@ -3,16 +3,17 @@
 The primary purpose of **`airtimeaws`** is to provide a simplified, cached, and streaming experience of working with media files stored on AWS S3, seamlessly integrated with GStreamer.
 At present, it contains a single element.
 
-```
+```bash
 gst-inspect-1.0 --gst-plugin-path=./build/gst_airtime_plugin/aws/Debug airtimeaws
 Plugin Details:
   Name                     airtimeaws
   Description              airtime aws plugin
-  Filename                 ./build/gst_airtime_plugin/aws/Debug/libgstairtimeaws.dylib
-  Version                  1.26.5
+  Filename                 /Users/me/gstreamer/builddir/subprojects/gst-plugins-bad/gst/airtimeaws/libgstairtimeaws.dylib
+  Version                  1.27.1.1
   License                  LGPL
-  Source module            gst-airtimeaws-plugin
-  Binary package           GStreamer airtime aws plugin source release
+  Source module            gst-plugins-bad
+  Documentation            https://gstreamer.freedesktop.org/documentation/airtimeaws/
+  Binary package           GStreamer Bad Plug-ins git
   Origin URL               http://www.airtimetools.com/
 
   airtimes3src: airtime S3 (file) src element
@@ -22,7 +23,7 @@ Plugin Details:
 
 ```
 
-## airtimes3src – AWS S3 Source Element for GStreamer ([doc](#the-airtimes3src-element))
+## airtimes3src – AWS S3 Source Element for GStreamer
 
 **`airtimes3src`** is a GStreamer source element that provides **URI-based**, **seekable**, **random** and **cached** access to AWS S3 objects.  
 It acts like a file source, streaming data directly from an `s3://` location into your pipeline.
@@ -42,6 +43,8 @@ It acts like a file source, streaming data directly from an `s3://` location int
 | **Cache Policies** | Supports eviction (e.g., LRU) to manage cache size |
 | **Metrics** | Posts `airtimes3src::metrics` to the bus with location, size, and progress |
 | **S3 Authentication** | Uses standard AWS credential resolution, including environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.) |
+
+For more details on the performance, please read [the performance section](#performance).
 
 ---
 
@@ -112,11 +115,12 @@ Factory Details:
 Plugin Details:
   Name                     airtimeaws
   Description              airtime aws plugin
-  Filename                 ./build/gst_airtime_plugin/aws/Debug/libgstairtimeaws.dylib
-  Version                  1.26.5
+  Filename                 /Users/me/gstreamer/builddir/subprojects/gst-plugins-bad/gst/airtimeaws/libgstairtimeaws.dylib
+  Version                  1.27.1.1
   License                  LGPL
-  Source module            gst-airtimeaws-plugin
-  Binary package           GStreamer airtime aws plugin source release
+  Source module            gst-plugins-bad
+  Documentation            https://gstreamer.freedesktop.org/documentation/airtimeaws/
+  Binary package           GStreamer Bad Plug-ins git
   Origin URL               http://www.airtimetools.com/
 
 GObject
@@ -336,6 +340,32 @@ If any mismatch is detected, the affected cache is purged and the file is re-dow
 - **`last_access_time.txt`** – Contains a timestamp indicating the last time the cached S3 file was accessed.  
   This timestamp is used by the LRU cache eviction policy to determine which files to remove.
 
+## Performance
+
+The **`airtimes3src`** element delivers excellent performance. Its main advantage is that it processes data in parallel with retrieval and fetches multiple chunks simultaneously (25 by default).
+
+In the example below, the file is first retrieved from S3 using the `aws s3 cp` CLI command, then processed from the local filesystem through a simple pipeline that decodes the entire media content.
+
+```
+aws s3 cp s3://my-bucket/path/to/media.webm media.webm
+gst-launch-1.0 filesrc location=./media.webm ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
+```
+
+The next example runs the same decoding pipeline but uses the **`airtimes3src`**  element instead of `filesrc`:
+```
+gst-launch-1.0 airtimes3src location=s3://my-bucket/path/to/media.webm media.webm ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
+```
+
+The tests have been performed multiple times and the table below shows an average durations. The performance depends a lot on the speed of the network. The tests have been performed on a mobile network (LTE), MacBook M3 Pro, 36GB of RAM.
+
+| Test | Duration [seconds] |
+| ------- | ----------- |
+| `aws s3 cp` + `filesrc` | 21 + 12 = 33 |
+| `airtimes3src` with cold cache | **21** |
+| `airtimes3src` with warm cache | **12** |
+
+With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`.
+
 ## More on the implementation details
 
-Although Rust is the preferred language, the plugin implementation is primarily written in C++ for the authors’ convenience. It is structured into multiple well-defined layers designed with **SOLID** principles in mind. Each component is testable, and a comprehensive suite of unit and integration tests has been developed using the [Catch2](https://github.com/catchorg/Catch2) testing framework. The implementation optionally depends on the [ASIO](https://github.com/chriskohlhoff/asio) library, distributed with [Boost](https://www.boost.org/), to simulate S3 fetching, enabling isolated testing of other layers. These tests are not currently included in the distribution due to limited time available to rewrite them using the GStreamer-preferred testing framework.
+Although **Rust** is the preferred language, the plugin implementation is primarily written in **C++** for the authors’ convenience. It is structured into multiple well-defined layers designed with **SOLID** principles in mind. Each component is testable, and a comprehensive suite of unit and integration tests has been developed using the [Catch2](https://github.com/catchorg/Catch2) testing framework. The implementation optionally depends on the [ASIO](https://github.com/chriskohlhoff/asio) library, distributed with [Boost](https://www.boost.org/), to simulate S3 fetching, enabling isolated testing of other layers. These tests are not currently included in the distribution due to limited time available to rewrite them using the GStreamer-preferred testing framework.
