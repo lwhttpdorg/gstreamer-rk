@@ -50,7 +50,9 @@
 namespace gst::airtime
 {
 
-std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake([[maybe_unused]] std::uint64_t content_length,
+std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake([[maybe_unused]] std::string s3_bucket,
+                                                             [[maybe_unused]] std::string s3_key,
+                                                             [[maybe_unused]] std::uint64_t content_length,
                                                              [[maybe_unused]] std::size_t max_number_of_downloads,
                                                              [[maybe_unused]] std::chrono::milliseconds min_nap_time,
                                                              [[maybe_unused]] std::chrono::milliseconds max_nap_time)

@@ -266,8 +266,8 @@ void S3URIChunkSourceAws::downloadChunkAsync(S3URIChunkSpec chunk_spec, Download
          callback = std::move(callback)](const Aws::S3::S3Client*, const Aws::S3::Model::GetObjectRequest&,
                                          const Aws::S3::Model::GetObjectOutcome& outcome,
                                          const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
-            active_async_requests_.deleteRequestContext(context);
             getObjectAsyncCallbackImpl(outcome, std::move(chunk_spec), callback);
+            active_async_requests_.deleteRequestContext(context);
         },
         context);
 }

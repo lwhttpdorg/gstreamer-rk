@@ -364,7 +364,39 @@ The tests have been performed multiple times and the table below shows an averag
 | `airtimes3src` with cold cache | **21** |
 | `airtimes3src` with warm cache | **12** |
 
-With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`.
+With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`. However, please note that the pipeline starts running immediately, processing the requested byte range as soon as those bytes are available — it does not wait for the entire file to be fetched. With that in mind, comparing aws s3 cp + filesrc to airtimes3src is not entirely fair. The above example pipelines perform very little work, so they run quickly. However, in more realistic pipelines where processing takes longer, it’s possible that even with a arm cold cache, the fetching time could be completely hidden by the processing time.
+
+## Comparison to the existing `awss3src` element
+
+Although at first glance `airtimes3src` may seem similar to the existing `awss3src` element implemented in Rust, it offers significantly more functionality. In particular:
+
+- **True seeking support — even during ongoing downloads**
+  - `airtimes3src` can seek accurately while S3 downloads are still in progress.
+  - `awss3src` does not support seeking ([source code](https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/blob/main/net/aws/src/s3src/imp.rs?ref_type=heads#L571)), where a `FIXME` remains.
+  - This limitation causes errors in GES and other components.
+
+- **Parallel byte-range downloads with prioritization**  
+  - Downloads up to N byte ranges at once using AWS’s `ThreadPoolExecutor` (by default N-25).
+  - Prioritizes byte ranges requested by `GstBaseSrc`, enabling pipelines to start processing early.
+  - `awss3src` lacks this logic and downloads only one range at a time ([code reference](https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/blob/main/net/aws/src/s3src/imp.rs?ref_type=heads#L221)).
+
+- **Advanced local caching**
+  - Reuses downloaded chunks to avoid redundant transfers.
+  - Cache persists between pipeline runs and discovery attempts — no need to re-download objects unnecessarily.
+  - `awss3src` has no caching mechanism and must re-download each time.
+
+- **On-demand downloading**
+  - Only fetches the exact byte ranges required, rather than downloading the full object when not needed.
+
+- **Metrics and download feedback**
+  - Provides real-time download metrics and status reporting.
+  - `awss3src` has no equivalent functionality.
+
+- **Robust URI handling**
+  - Correctly processes all valid URIs.
+  - `awss3src` can fail on certain URIs, producing errors such as:
+    - `"Could not parse URI"`
+    - `"Failed to get HEAD object: dispatch failure: io error: ... dns error: failed to lookup address information: nodename nor servname provided, or not known"`
 
 ## More on the implementation details
 

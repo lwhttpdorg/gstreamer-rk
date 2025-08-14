@@ -44,6 +44,7 @@
  */
 
 #include "gstairtimes3uriprovider.hpp"
+#include "gstairtimecleanup.hpp"
 #include "gstairtimes3error.hpp"
 #include "gstairtimes3urichunksourceaws.hpp"
 
@@ -253,6 +254,7 @@ void S3URIProvider::startDownloadingS3ObjectChunks(const std::vector<S3URIFileCh
             // no more chunks to download
             break;
         }
+        active_requests_count_++;
         initiateAsyncDownload(std::move(*chunk), 0);
     }
 }
@@ -261,6 +263,10 @@ void S3URIProvider::initiateAsyncDownload(S3URIChunkSpec chunk_spec, unsigned re
 {
     chunk_source_->downloadChunkAsync(chunk_spec, [this, retry_count](std::error_code error, S3URIChunkSpec chunk_spec,
                                                                       std::istream* stream) mutable {
+        Cleanup decrease_active_requests_count = [this] {
+            assert(active_requests_count_ > 0);
+            active_requests_count_--;
+        };
         try
         {
             if (error)
@@ -275,6 +281,7 @@ void S3URIProvider::initiateAsyncDownload(S3URIChunkSpec chunk_spec, unsigned re
                         GST_WARNING(
                             "Network connection error while downloading chunk %zu from S3: %s. Retrying (%u/%u)",
                             chunk_spec.index(), error.message().c_str(), retry_count, config_.fetch_max_retry_count);
+                        std::move(decrease_active_requests_count).cancel();
                         initiateAsyncDownload(std::move(chunk_spec), retry_count);
                         return;
                     }
@@ -290,13 +297,24 @@ void S3URIProvider::initiateAsyncDownload(S3URIChunkSpec chunk_spec, unsigned re
             }
             assert(stream);
             chunk_processor_->processChunk(chunk_spec, *stream);
-            downloaded_chunk_notifier_->notifyChunkDownloaded(chunk_spec.startByte(), chunk_spec.actualSize());
+
+            Cleanup chunk_ready_notifier = [this, &chunk_spec] {
+                downloaded_chunk_notifier_->notifyChunkDownloaded(chunk_spec.startByte(), chunk_spec.actualSize());
+            };
 
             if (hasError())
             {
-                // If we are in an error state, we should not process next chunks
-                if (chunk_source_->activeRequests() == 0)
+                // If we are in an error state, we do not process next chunks but set processing time once the last
+                // active request is done
+                std::move(decrease_active_requests_count)
+                    .invoke(); // forcing decrease here and checking if this is the last one
+
+                int last_active_request_counter_value = 0;
+                const bool last_request_finished =
+                    active_requests_count_.compare_exchange_strong(last_active_request_counter_value, -1);
+                if (last_request_finished)
                 {
+                    // active_requests_count_ went down from 0 -> -1 meaning this is the last active request.
                     const std::chrono::nanoseconds duration_ns = std::chrono::steady_clock::now() - fetch_start_time_;
                     fetch_duration_.store(duration_ns.count());
                     GST_DEBUG(
@@ -310,12 +328,26 @@ void S3URIProvider::initiateAsyncDownload(S3URIChunkSpec chunk_spec, unsigned re
             auto chunk = download_chunk_queue_->getNextChunk();
             if (chunk.has_value())
             {
+                active_requests_count_++;
                 initiateAsyncDownload(std::move(*chunk), 0);
             }
             else
             {
-                if (chunk_source_->activeRequests() == 0)
+                assert(active_requests_count_ > 0);
+
+                std::move(decrease_active_requests_count)
+                    .invoke(); // forcing decrease here and checking if this is the last one
+
+                int last_active_request_counter_value = 0;
+                // It might happen that two last callbacks entered simultaneously here, but we want to call the code
+                // for the last_request_finished condition set to tru just once
+                const bool last_request_finished =
+                    active_requests_count_.compare_exchange_strong(last_active_request_counter_value, -1);
+                if (last_request_finished)
                 {
+                    // active_requests_count_ went down from 0 -> -1 meaning this is the last active request and all
+                    // previous or currently running callbacks have called chunk_processor_->processChunk, so
+                    // chunk_processor_ has all the chunks.
                     const std::chrono::nanoseconds duration_ns = std::chrono::steady_clock::now() - fetch_start_time_;
                     fetch_duration_.store(duration_ns.count());
                     download_completion_state_ = DownloadCompletionState::fully_downloaded;
@@ -379,7 +411,9 @@ std::unique_ptr<S3URIChunkSource> createChunkSource(std::string_view s3_bucket, 
     if (config.use_fake_aws_source)
     {
         GST_DEBUG("Using fake S3 source for testing purposes.");
-        return createS3URIChunkSourceFake(100 * 1024 * 1024, config.max_number_of_downloads);
+        return createS3URIChunkSourceFake(std::string{s3_bucket}, std::string{s3_key}, 100 * 1024 * 1024,
+                                          config.max_number_of_downloads, std::chrono::milliseconds{10},
+                                          std::chrono::milliseconds{30});
     }
     else
     {

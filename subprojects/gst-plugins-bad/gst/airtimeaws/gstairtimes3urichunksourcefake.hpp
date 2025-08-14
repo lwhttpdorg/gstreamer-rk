@@ -59,8 +59,9 @@ namespace gst::airtime
 class S3URIChunkSourceFake : public S3URIChunkSource
 {
 public:
-    S3URIChunkSourceFake(std::uint64_t content_length, std::size_t max_number_of_downloads, int min_nap_time_ms = 100,
-                         int max_nap_time_ms = 3000);
+    S3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
+                         std::size_t max_number_of_downloads, std::chrono::milliseconds min_nap_time,
+                         std::chrono::milliseconds max_nap_time);
 
     ~S3URIChunkSourceFake() override;
 
@@ -73,11 +74,13 @@ public:
     void cancel() override;
 
 private:
+    std::string s3_bucket_;
+    std::string s3_key_;
     std::uint64_t content_length_{0}; // Content length of the fake S3 object
     boost::asio::thread_pool pool_;
     std::atomic<std::size_t> active_requests_{0}; // Number of active requests
-    int min_nap_time_ms_;                         // Minimum nap time in milliseconds
-    int max_nap_time_ms_;                         // Maximum nap time in milliseconds
+    std::chrono::milliseconds min_nap_time_;
+    std::chrono::milliseconds max_nap_time_;
 };
 
 } // namespace gst::airtime

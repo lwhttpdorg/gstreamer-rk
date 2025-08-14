@@ -549,7 +549,6 @@ bool CachingS3URIChunkProcessor::allChunksProcessed()
         GST_ERROR("File chunks content length %" G_GUINT64_FORMAT
                   " does not match metadata content length %" G_GUINT64_FORMAT,
                   file_chunks_content_length_, metadata_.content_length);
-        first_incoming_chunk_ = true;
         recreate_cache_content_ = true;
         return false;
     }

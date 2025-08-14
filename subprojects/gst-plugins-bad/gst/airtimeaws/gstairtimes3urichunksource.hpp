@@ -87,7 +87,8 @@ public:
 };
 
 std::unique_ptr<S3URIChunkSource>
-createS3URIChunkSourceFake(std::uint64_t content_length, std::size_t max_number_of_downloads,
+createS3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
+                           std::size_t max_number_of_downloads,
                            std::chrono::milliseconds min_nap_time = std::chrono::milliseconds{100},
                            std::chrono::milliseconds max_nap_time = std::chrono::milliseconds{3000});
 

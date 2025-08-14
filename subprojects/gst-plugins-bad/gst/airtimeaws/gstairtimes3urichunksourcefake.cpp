@@ -70,34 +70,44 @@ int getRandomInt(int min, int max)
     return distribution(gen);
 }
 
-std::chrono::milliseconds generateNapTime(int min, int max)
+std::chrono::milliseconds generateNapTime(std::chrono::milliseconds min_nap_time,
+                                          std::chrono::milliseconds max_nap_time)
 {
-    return std::chrono::milliseconds{getRandomInt(min, max)};
+    return std::chrono::milliseconds{getRandomInt(min_nap_time.count(), max_nap_time.count())};
 }
 
 } // namespace
 
-S3URIChunkSourceFake::S3URIChunkSourceFake(std::uint64_t content_length, std::size_t max_number_of_downloads,
-                                           int min_nap_time_ms, int max_nap_time_ms) :
+S3URIChunkSourceFake::S3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
+                                           std::size_t max_number_of_downloads, std::chrono::milliseconds min_nap_time,
+                                           std::chrono::milliseconds max_nap_time) :
+    s3_bucket_{std::move(s3_bucket)},
+    s3_key_{std::move(s3_key)},
     content_length_{content_length},
     pool_{max_number_of_downloads},
-    min_nap_time_ms_{min_nap_time_ms},
-    max_nap_time_ms_{max_nap_time_ms}
+    min_nap_time_{min_nap_time},
+    max_nap_time_{max_nap_time}
 {
-    assert(min_nap_time_ms_ >= 0 and max_nap_time_ms_ >= min_nap_time_ms_);
+    assert(min_nap_time_.count() >= 0 and max_nap_time_ >= min_nap_time_);
 }
 
 S3URIChunkSourceFake::~S3URIChunkSourceFake()
 {
-    pool_.stop();
-    pool_.join();
+    try
+    {
+        pool_.stop();
+        pool_.join();
+    }
+    catch (std::exception&)
+    {
+    }
 }
 
 std::pair<std::error_code, S3URIObjectMetadata> S3URIChunkSourceFake::getObjectMetadata()
 {
     return {{},
-            S3URIObjectMetadata{.bucket = "fake-bucket",
-                                .key = "fake-key",
+            S3URIObjectMetadata{.bucket = s3_bucket_,
+                                .key = s3_key_,
                                 .content_length = content_length_,
                                 .entity_tag = "71d0f45dfe369cc9adacaf5c4d37ce3d", // MD5 of the word "mmhmm"
                                 .version_id = "fake-version-id",
@@ -108,13 +118,21 @@ std::pair<std::error_code, S3URIObjectMetadata> S3URIChunkSourceFake::getObjectM
 void S3URIChunkSourceFake::downloadChunkAsync(S3URIChunkSpec chunk_spec, DownloadedChunkCallback callback)
 {
     ++active_requests_;
-    auto nap_time = generateNapTime(min_nap_time_ms_, max_nap_time_ms_);
+    auto nap_time = generateNapTime(min_nap_time_, max_nap_time_);
     boost::asio::post(pool_, [this, chunk_spec = std::move(chunk_spec), callback = std::move(callback), nap_time] {
         std::this_thread::sleep_for(nap_time);
-        --active_requests_;
         std::string fake_data_str(chunk_spec.actualSize(), 'a');
         std::istringstream stream(std::move(fake_data_str));
-        callback(std::error_code{}, chunk_spec, &stream);
+        try
+        {
+            callback(std::error_code{}, chunk_spec, &stream);
+            --active_requests_;
+        }
+        catch (std::exception&)
+        {
+            --active_requests_;
+            throw;
+        }
     });
 }
 
@@ -129,13 +147,14 @@ void S3URIChunkSourceFake::cancel()
     pool_.join();
 }
 
-std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake(std::uint64_t content_length,
+std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake(std::string s3_bucket, std::string s3_key,
+                                                             std::uint64_t content_length,
                                                              std::size_t max_number_of_downloads,
                                                              std::chrono::milliseconds min_nap_time,
                                                              std::chrono::milliseconds max_nap_time)
 {
-    return std::make_unique<S3URIChunkSourceFake>(content_length, max_number_of_downloads, min_nap_time.count(),
-                                                  max_nap_time.count());
+    return std::make_unique<S3URIChunkSourceFake>(std::move(s3_bucket), std::move(s3_key), content_length,
+                                                  max_number_of_downloads, min_nap_time, max_nap_time);
 }
 
 } // namespace gst::airtime

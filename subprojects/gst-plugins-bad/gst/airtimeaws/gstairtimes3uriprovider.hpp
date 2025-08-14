@@ -203,6 +203,7 @@ private:
 
     std::atomic<DownloadCompletionState> download_completion_state_{DownloadCompletionState::in_progress};
     std::atomic_uint64_t fetch_duration_{0};
+    std::atomic<int> active_requests_count_{0};
 
     mutable std::mutex error_access_;
     std::optional<ErrorType> error_type_;
