@@ -122,6 +122,8 @@ private:
 } // namespace details
 
 /// @brief It is a control-flow-construct-like type which is used for executing a provided callback on scope exit.
+/// Simplifies managing the resources by tying their lifetimes to the scope in which they are used.
+/// Simplifies also resource cleanup in the presence of exceptions.
 /// An example use case:
 ///
 ///     Cleanup rm_dir = [path] { std::filesystem::remove_all(path); }; // calls callback in dtor
@@ -130,8 +132,6 @@ private:
 ///     {
 ///         throw std::runtime_error("Unexpected error");
 ///     }
-///     // calling the callback may be dismissed:
-///     rm_dir.cancel();
 ///
 template <typename Callback = void()>
 class Cleanup final
@@ -155,12 +155,20 @@ public:
         }
     }
 
+    /// @brief Cancel calling the cleanup callback.
+    /// Example:
+    ///     Cleanup rm_dir = [path] { std::filesystem::remove_all(path); };
+    ///     std::move(rm_dir).cancel();
     void cancel() &&
     {
         assert(storage_.isCallbackEngaged());
         storage_.destroyCallback();
     }
 
+    /// @brief Force-calls the cleanup callback instead of calling it on scope exit.
+    /// Example:
+    ///     Cleanup rm_dir = [path] { std::filesystem::remove_all(path); };
+    ///     std::move(rm_dir).invoke();
     void invoke() &&
     {
         assert(storage_.isCallbackEngaged());

@@ -465,7 +465,7 @@ namespace
 bool areRangesOverlapping(std::uint64_t from1, std::uint64_t to1, std::uint64_t from2, std::uint64_t to2) noexcept
 {
     // Two ranges overlap if one range doesn't end before the other starts
-    return from1 <= to2 && from2 <= to1;
+    return from1 <= to2 and from2 <= to1;
 }
 
 } // namespace

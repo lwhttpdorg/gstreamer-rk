@@ -356,4 +356,9 @@ void saveFileChunkSizeToFileIfNotExists(const std::filesystem::path& file_chunk_
                                         std::uint64_t file_chunk_size);
 std::uint64_t loadFileChunkSizeFromFile(const std::filesystem::path& file_chunk_size_file);
 
+/// @brief Calculates the total number of gaps in the provided chunk gaps.
+/// @param gaps The chunk gaps to analyze.
+/// @return The total number of gaps.
+std::uint64_t calculateTotalGapsNumber(const std::vector<S3URIFileChunkGapSpec>& gaps);
+
 } // namespace gst::airtime

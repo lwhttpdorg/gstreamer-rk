@@ -975,4 +975,24 @@ std::uint64_t loadFileChunkSizeFromFile(const std::filesystem::path& file_chunk_
     return loadInfoFromFile<std::uint64_t>(file_chunk_size_file);
 }
 
+std::uint64_t calculateTotalGapsNumber(const std::vector<S3URIFileChunkGapSpec>& gaps)
+{
+    return std::accumulate(gaps.begin(), gaps.end(), std::size_t{0}, [](auto acc, const auto& gap) {
+        return std::visit(
+            [&acc](const auto& gap_spec) {
+                using T = std::decay_t<decltype(gap_spec)>;
+                if constexpr (std::is_same_v<T, S3URIFileChunkGapIndex>)
+                {
+                    acc += 1; // single index gap
+                }
+                else if constexpr (std::is_same_v<T, S3URIFileChunkGapIndicesRange>)
+                {
+                    acc += (gap_spec.to - gap_spec.from + 1); // range gap
+                }
+                return acc;
+            },
+            gap);
+    });
+}
+
 } // namespace gst::airtime
