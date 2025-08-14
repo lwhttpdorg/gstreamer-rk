@@ -263,10 +263,17 @@ void S3URIProvider::initiateAsyncDownload(S3URIChunkSpec chunk_spec, unsigned re
 {
     chunk_source_->downloadChunkAsync(chunk_spec, [this, retry_count](std::error_code error, S3URIChunkSpec chunk_spec,
                                                                       std::istream* stream) mutable {
+#if defined(__GNUC__) and not defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif // __GNUC__
         Cleanup decrease_active_requests_count = [this] {
             assert(active_requests_count_ > 0);
             active_requests_count_--;
         };
+#if defined(__GNUC__) and not defined(__clang__)
+#pragma GCC diagnostic pop
+#endif // __GNUC__
         try
         {
             if (error)
