@@ -328,6 +328,8 @@ enum
 
   SIGNAL_ON_BUNDLED_SSRC,
 
+  SIGNAL_REQUEST_CAPS,
+
   LAST_SIGNAL
 };
 
@@ -483,6 +485,7 @@ struct _GstRtpBinStream
   gulong demux_padremoved_sig;
   gulong demux_ptreq_sig;
   gulong demux_ptchange_sig;
+  gulong demux_request_caps_sig;
 
   /* if we have synced this stream */
   GstRtpBinStreamSynced have_sync;
@@ -2290,6 +2293,7 @@ free_stream (GstRtpBinStream * stream, GstRtpBin * bin)
     g_signal_handler_disconnect (stream->demux, stream->demux_ptreq_sig);
     g_signal_handler_disconnect (stream->demux, stream->demux_ptchange_sig);
     g_signal_handler_disconnect (stream->demux, stream->demux_padremoved_sig);
+    g_signal_handler_disconnect (stream->demux, stream->demux_request_caps_sig);
   }
 
   if (stream->buffer_handlesync_sig)
@@ -2925,6 +2929,25 @@ gst_rtp_bin_class_init (GstRtpBinClass * klass)
       G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstRtpBinClass,
           on_sender_ssrc_active), NULL, NULL, NULL,
       G_TYPE_NONE, 2, G_TYPE_UINT, G_TYPE_UINT);
+
+  /**
+   * GstRtpBin::request-caps:
+   * @rtpbin: the object which received the signal
+   * @pt: the payload type
+   * @buffer: the RTP #GstBuffer for which the caps should be built
+   *
+   * Emitted when a new payload type is detected and a new recv src pad is about to
+   * be created for it. This signal allows the application to provide accurate
+   * caps (including SSRC and a-mid attributes) using information that might not
+   * be available in rtpbin itself.
+   *
+   * Since: 1.28
+   */
+  gst_rtp_bin_signals[SIGNAL_REQUEST_CAPS] =
+      g_signal_new ("request-caps", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_ACTION | G_SIGNAL_RUN_LAST,
+      G_STRUCT_OFFSET (GstRtpBinClass, request_caps), NULL,
+      NULL, NULL, GST_TYPE_CAPS, 2, G_TYPE_UINT, GST_TYPE_BUFFER);
 
   g_object_class_install_property (gobject_class, PROP_SDES,
       g_param_spec_boxed ("sdes", "SDES",
@@ -4342,6 +4365,73 @@ ptdemux_pt_map_requested (GstElement * element, guint pt,
   return ret;
 }
 
+static GstCaps *
+get_caps_for_buffer (GstRtpBinSession * session, GstBuffer * buffer)
+{
+  GstCaps *caps = NULL;
+  GstRtpBin *bin;
+  GValue ret = { 0 };
+  GValue args[3] = { {0}, {0}, {0} };
+
+  bin = session->bin;
+
+  /* not in cache, send signal to request caps */
+  g_value_init (&args[0], GST_TYPE_ELEMENT);
+  g_value_set_object (&args[0], bin);
+  g_value_init (&args[1], G_TYPE_UINT);
+  g_value_set_uint (&args[1], session->id);
+  g_value_init (&args[2], GST_TYPE_BUFFER);
+  gst_value_set_buffer (&args[2], buffer);
+
+  g_value_init (&ret, GST_TYPE_CAPS);
+  g_value_set_boxed (&ret, NULL);
+
+  g_signal_emitv (args, gst_rtp_bin_signals[SIGNAL_REQUEST_CAPS], 0, &ret);
+
+  g_value_unset (&args[0]);
+  g_value_unset (&args[1]);
+  g_value_unset (&args[2]);
+
+  caps = (GstCaps *) g_value_dup_boxed (&ret);
+  g_value_unset (&ret);
+  if (!caps)
+    goto no_caps;
+
+  return caps;
+
+  /* ERRORS */
+no_caps:
+  {
+    GST_DEBUG ("no caps could be obtained");
+    return NULL;
+  }
+}
+
+static GstCaps *
+ptdemux_caps_requested (GstElement * element, GstBuffer * buffer,
+    GstRtpBinSession * session)
+{
+  GstRtpBin *rtpbin;
+  GstCaps *caps;
+
+  rtpbin = session->bin;
+
+  GST_DEBUG_OBJECT (rtpbin, "payload map requested for buffer in session %u",
+      session->id);
+
+  caps = get_caps_for_buffer (session, buffer);
+  if (!caps)
+    goto no_caps;
+
+  return caps;
+
+  /* ERRORS */
+no_caps:{
+    GST_DEBUG_OBJECT (rtpbin, "could not get caps");
+    return NULL;
+  }
+}
+
 static void
 payload_type_change (GstElement * element, guint pt, GstRtpBinSession * session)
 {
@@ -4460,6 +4550,11 @@ new_ssrc_pad_found (GstElement * element, guint ssrc, GstPad * pad,
      * depayloaders. */
     stream->demux_ptreq_sig = g_signal_connect (stream->demux,
         "request-pt-map", (GCallback) ptdemux_pt_map_requested, session);
+
+    stream->demux_request_caps_sig =
+        g_signal_connect (stream->demux, "request-caps",
+        (GCallback) ptdemux_caps_requested, session);
+
     /* connect to the  signal so it can be forwarded. */
     stream->demux_ptchange_sig = g_signal_connect (stream->demux,
         "payload-type-change", (GCallback) payload_type_change, session);

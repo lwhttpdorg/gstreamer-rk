@@ -7588,7 +7588,6 @@ on_rtpbin_pad_added (GstElement * rtpbin, GstPad * new_pad,
     guint32 session_id = 0, ssrc = 0, pt = 0;
     SsrcMapItem *mid_entry;
     GstWebRTCRTPTransceiver *rtp_trans = NULL;
-    WebRTCTransceiver *trans;
     TransportStream *stream;
     GstWebRTCBinPad *pad;
     guint media_idx;
@@ -7632,8 +7631,6 @@ on_rtpbin_pad_added (GstElement * rtpbin, GstPad * new_pad,
       rtp_trans = _find_transceiver_for_mline (webrtc, media_idx);
     if (!rtp_trans)
       g_warn_if_reached ();
-    trans = WEBRTC_TRANSCEIVER (rtp_trans);
-    g_assert (trans->stream == stream);
 
     pad = _find_pad_for_transceiver (webrtc, GST_PAD_SRC, rtp_trans);
     GST_TRACE_OBJECT (webrtc, "found pad %" GST_PTR_FORMAT
@@ -7699,6 +7696,215 @@ unknown_session:
     GST_DEBUG_OBJECT (webrtc, "unknown session %d", session_id);
     return NULL;
   }
+}
+
+/* only used for the receiving streams */
+static GstCaps *
+on_rtpbin_request_caps (GstElement * rtpbin, guint session_id,
+    GstBuffer * buffer, GstWebRTCBin * webrtc)
+{
+  TransportStream *stream;
+  GstCaps *caps = NULL;
+  unsigned medias_len = 0;
+  GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+  guint32 ssrc;
+  guint pt;
+
+  PC_LOCK (webrtc);
+  stream = _find_transport_for_session (webrtc, session_id);
+  if (!stream) {
+    GST_DEBUG_OBJECT (webrtc, "unknown session %d", session_id);
+    PC_UNLOCK (webrtc);
+    return NULL;
+  }
+
+  if (!gst_rtp_buffer_map (buffer, GST_MAP_READ, &rtp)) {
+    PC_UNLOCK (webrtc);
+    return NULL;
+  }
+
+  ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+  pt = gst_rtp_buffer_get_payload_type (&rtp);
+
+  medias_len =
+      gst_sdp_message_medias_len (webrtc->current_remote_description->sdp);
+  for (unsigned i = 0; i < medias_len; i++) {
+    const GstSDPMedia *media =
+        gst_sdp_message_get_media (webrtc->current_remote_description->sdp,
+        i);
+    GstCaps *media_caps = gst_caps_new_empty_simple ("application/x-rtp");
+    const GstStructure *s;
+    guint8 mid_ext_id = 0;
+    guint8 rid_ext_id = 0;
+    guint8 *pdata;
+    guint16 bits;
+    guint wordlen;
+    gboolean match_found = FALSE;
+
+    gst_sdp_media_attributes_to_caps (media, media_caps);
+    s = gst_caps_get_structure (media_caps, 0);
+    for (unsigned ii = 0; ii < gst_structure_n_fields (s); ii++) {
+      const char *name = gst_structure_nth_field_name (s, ii);
+      const char *value;
+
+      if (!g_str_has_prefix (name, "extmap-"))
+        continue;
+
+      value = gst_structure_get_string (s, name);
+      if (!g_strcmp0 (value, GST_RTP_HDREXT_BASE "sdes:mid")) {
+        gint64 id = g_ascii_strtoll (name + 7, NULL, 10);
+        if (id > 0 && id < 15)
+          mid_ext_id = id;
+      } else if (!g_strcmp0 (value, GST_RTP_HDREXT_BASE "sdes:rtp-stream-id")) {
+        gint64 id = g_ascii_strtoll (name + 7, NULL, 10);
+        if (id > 0 && id < 15)
+          rid_ext_id = id;
+      }
+      if (mid_ext_id && rid_ext_id)
+        break;
+    }
+
+    if (!mid_ext_id) {
+      gst_caps_unref (media_caps);
+      continue;
+    }
+
+    if (gst_rtp_buffer_get_extension_data (&rtp, &bits, (gpointer) & pdata,
+            &wordlen)) {
+      GstRTPHeaderExtensionFlags ext_flags = 0;
+      gsize bytelen = wordlen * 4;
+      guint hdr_unit_bytes;
+      gsize offset = 0;
+      gchar *mid = NULL;
+      gchar *rid = NULL;
+      SsrcMapItem *item = NULL;
+
+      if (bits == 0xBEDE) {
+        /* one byte extensions */
+        hdr_unit_bytes = 1;
+        ext_flags |= GST_RTP_HEADER_EXTENSION_ONE_BYTE;
+      } else if (bits >> 4 == 0x100) {
+        /* two byte extensions */
+        hdr_unit_bytes = 2;
+        ext_flags |= GST_RTP_HEADER_EXTENSION_TWO_BYTE;
+      } else {
+        GST_DEBUG ("unknown extension bit pattern 0x%02x%02x",
+            bits >> 8, bits & 0xff);
+        gst_caps_unref (media_caps);
+        continue;
+      }
+
+      while (TRUE) {
+        guint8 read_id, read_len;
+
+        if (offset + hdr_unit_bytes >= bytelen)
+          /* not enough remaining data */
+          break;
+
+        if (ext_flags & GST_RTP_HEADER_EXTENSION_ONE_BYTE) {
+          read_id = GST_READ_UINT8 (pdata + offset) >> 4;
+          read_len = (GST_READ_UINT8 (pdata + offset) & 0x0F) + 1;
+          offset += 1;
+
+          if (read_id == 0)
+            /* padding */
+            continue;
+
+          if (read_id == 15)
+            /* special id for possible future expansion */
+            break;
+        } else {
+          read_id = GST_READ_UINT8 (pdata + offset);
+          offset += 1;
+
+          if (read_id == 0)
+            /* padding */
+            continue;
+
+          read_len = GST_READ_UINT8 (pdata + offset);
+          offset += 1;
+        }
+        GST_TRACE ("found rtp header extension with id %u and "
+            "length %u", read_id, read_len);
+
+        /* Ignore extension headers where the size does not fit */
+        if (offset + read_len > bytelen) {
+          GST_WARNING ("Extension length extends past the "
+              "size of the extension data");
+          gst_caps_unref (media_caps);
+          break;
+        }
+
+        if (read_id == mid_ext_id) {
+          mid = g_strndup ((const char *) &pdata[offset], read_len);
+        } else if (read_id == rid_ext_id) {
+          rid = g_strndup ((const char *) &pdata[offset], read_len);
+        }
+
+        if (rid && mid)
+          break;
+
+        offset += read_len;
+      }
+
+      if (mid) {
+        GstWebRTCRTPTransceiver *rtp_trans = NULL;
+        item =
+            find_or_add_ssrc_map_item (webrtc,
+            GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, session_id, ssrc, i);
+        g_clear_pointer (&item->mid, g_free);
+        item->mid = g_strdup (mid);
+        item->media_idx = i;
+
+        gst_caps_set_simple (media_caps, "a-mid", G_TYPE_STRING, mid, NULL);
+
+        if (rid) {
+          gst_caps_set_simple (media_caps, "a-rid", G_TYPE_STRING, rid, NULL);
+
+          g_clear_pointer (&item->rid, g_free);
+          item->rid = g_strdup (rid);
+        }
+        GST_DEBUG_OBJECT (webrtc,
+            "set mid '%s' and rid '%s' on item with ssrc %u on mline %u",
+            item->mid, item->rid, ssrc, i);
+
+        rtp_trans = _find_transceiver_for_mid (webrtc, mid);
+        if (rtp_trans) {
+          rtp_trans->mline = i;
+        }
+        match_found = TRUE;
+      }
+      g_clear_pointer (&mid, g_free);
+      g_clear_pointer (&rid, g_free);
+    }
+
+    if (match_found) {
+      caps = media_caps;
+      break;
+    } else {
+      gst_caps_unref (media_caps);
+    }
+  }
+  gst_rtp_buffer_unmap (&rtp);
+
+  if (caps) {
+    GstCaps *pt_caps = transport_stream_get_caps_for_pt (stream, pt);
+    GstStructure *s2;
+    GstStructure *s = gst_caps_get_structure (caps, 0);
+    s2 = gst_caps_get_structure (pt_caps, 0);
+    for (unsigned j = 0; j < gst_structure_n_fields (s2); j++) {
+      const char *name = gst_structure_nth_field_name (s2, j);
+      if (!g_str_equal (name, "media") && !g_str_equal (name, "payload")
+          && !g_str_equal (name, "clock-rate")
+          && !g_str_equal (name, "encoding-name"))
+        continue;
+      gst_structure_set_value (s, name, gst_structure_get_value (s2, name));
+    }
+    gst_caps_unref (pt_caps);
+  }
+
+  PC_UNLOCK (webrtc);
+  return caps;
 }
 
 static GstElement *
@@ -8206,6 +8412,8 @@ _create_rtpbin (GstWebRTCBin * webrtc)
       G_CALLBACK (on_rtpbin_request_pt_map), webrtc);
   g_signal_connect (rtpbin, "request-aux-sender",
       G_CALLBACK (on_rtpbin_request_aux_sender), webrtc);
+  g_signal_connect (rtpbin, "request-caps",
+      G_CALLBACK (on_rtpbin_request_caps), webrtc);
   g_signal_connect (rtpbin, "request-aux-receiver",
       G_CALLBACK (on_rtpbin_request_aux_receiver), webrtc);
   g_signal_connect (rtpbin, "new-storage",

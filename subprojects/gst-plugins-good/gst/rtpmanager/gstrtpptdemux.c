@@ -111,6 +111,7 @@ enum
   SIGNAL_NEW_PAYLOAD_TYPE,
   SIGNAL_PAYLOAD_TYPE_CHANGE,
   SIGNAL_CLEAR_PT_MAP,
+  SIGNAL_REQUEST_CAPS,
   LAST_SIGNAL
 };
 
@@ -236,6 +237,26 @@ gst_rtp_pt_demux_class_init (GstRtpPtDemuxClass * klass)
       G_SIGNAL_ACTION | G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstRtpPtDemuxClass,
           clear_pt_map), NULL, NULL, NULL, G_TYPE_NONE, 0, G_TYPE_NONE);
 
+  /**
+   * GstRtpPtDemux::request-caps:
+   * @demux: the object which received the signal
+   * @buffer: the RTP #GstBuffer for which the caps should be built
+   *
+   * Emitted when a new payload type is detected and a new src pad is about to
+   * be created for it. This signal allows the application to provide accurate
+   * caps (including SSRC and a-mid attributes) using information that might not
+   * be available in ptdemux itself.
+   *
+   * In case there was no request-caps signal handler or the handler returned
+   * NULL caps, the request-pt-map signal is emitted.
+   *
+   * Since: 1.28
+   */
+  gst_rtp_pt_demux_signals[SIGNAL_REQUEST_CAPS] =
+      g_signal_new ("request-caps", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_ACTION | G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstRtpPtDemuxClass,
+          request_caps), NULL, NULL, NULL, GST_TYPE_CAPS, 1, GST_TYPE_BUFFER);
+
   gobject_klass->set_property = gst_rtp_pt_demux_set_property;
   gobject_klass->get_property = gst_rtp_pt_demux_get_property;
 
@@ -332,6 +353,56 @@ _filter_ssrc (const GstIdStr * fieldname, GValue * value, gpointer ssrc)
     return FALSE;
 
   return TRUE;
+}
+
+static GstCaps *
+gst_rtp_pt_demux_request_caps (GstRtpPtDemux * rtpdemux, GstBuffer * buffer)
+{
+  GstCaps *caps, *sink_caps;
+  GValue ret = { 0 };
+  GValue args[2] = { {0}, {0} };
+
+  /* figure out the caps */
+  g_value_init (&args[0], GST_TYPE_ELEMENT);
+  g_value_set_object (&args[0], rtpdemux);
+  g_value_init (&args[1], GST_TYPE_BUFFER);
+  gst_value_set_buffer (&args[1], buffer);
+
+  g_value_init (&ret, GST_TYPE_CAPS);
+  g_value_set_boxed (&ret, NULL);
+
+  g_signal_emitv (args, gst_rtp_pt_demux_signals[SIGNAL_REQUEST_CAPS], 0, &ret);
+
+  g_value_unset (&args[0]);
+  g_value_unset (&args[1]);
+  caps = g_value_dup_boxed (&ret);
+  g_value_unset (&ret);
+
+  if (caps == NULL) {
+    return NULL;
+  }
+
+  sink_caps = gst_pad_get_current_caps (rtpdemux->sink);
+  if (sink_caps) {
+    GstStructure *s;
+    gboolean have_ssrc = FALSE;
+    guint32 ssrc = 0;
+
+    have_ssrc = gst_structure_get_uint (gst_caps_get_structure (sink_caps, 0),
+        "ssrc", &ssrc);
+    gst_caps_unref (sink_caps);
+
+    caps = gst_caps_make_writable (caps);
+    s = gst_caps_get_structure (caps, 0);
+    gst_structure_filter_and_map_in_place_id_str (s, _filter_ssrc, &ssrc);
+
+    if (have_ssrc)
+      gst_caps_set_simple (caps, "ssrc", G_TYPE_UINT, ssrc, NULL);
+  }
+
+  GST_DEBUG_OBJECT (rtpdemux, "caps request result: %" GST_PTR_FORMAT, caps);
+
+  return caps;
 }
 
 static GstCaps *
@@ -500,7 +571,10 @@ gst_rtp_pt_demux_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     GstPadTemplate *templ;
     gchar *padname;
 
-    caps = gst_rtp_pt_demux_get_caps (rtpdemux, pt);
+    caps = gst_rtp_pt_demux_request_caps (rtpdemux, buf);
+    if (!caps)
+      caps = gst_rtp_pt_demux_get_caps (rtpdemux, pt);
+
     if (!caps)
       goto no_caps;
 

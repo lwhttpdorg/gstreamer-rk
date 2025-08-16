@@ -37,6 +37,7 @@
 
 #define OPUS_RTP_CAPS(pt) "application/x-rtp,payload=" G_STRINGIFY(pt) ",encoding-name=OPUS,media=audio,clock-rate=48000,ssrc=(uint)3384078950"
 #define VP8_RTP_CAPS(pt) "application/x-rtp,payload=" G_STRINGIFY(pt) ",encoding-name=VP8,media=video,clock-rate=90000,ssrc=(uint)3484078951"
+#define VP8_RTP_CAPS_WITHOUT_SSRC(pt) "application/x-rtp,payload=" G_STRINGIFY(pt) ",encoding-name=VP8,media=video,clock-rate=90000"
 #define H264_RTP_CAPS(pt) "application/x-rtp,payload=" G_STRINGIFY(pt) ",encoding-name=H264,media=video,clock-rate=90000,ssrc=(uint)3484078952"
 
 #define TEST_IS_OFFER_ELEMENT(t, e) ((((t)->offerror == 1 && (e) == (t)->webrtc1) || ((t)->offerror == 2 && (e) == (t)->webrtc2)) ? TRUE : FALSE)
@@ -5879,7 +5880,7 @@ GST_END_TEST;
 
 static GstCaps *
 create_simulcast_audio_caps (GstWebRTCRTPTransceiverDirection direction,
-    guint n_rid, guint ssrc[], const char *mid, guint mid_ext_id,
+    guint n_rid, const char *mid, guint mid_ext_id,
     const char *const *rids, guint stream_ext_id, guint repaired_ext_id)
 {
   GstStructure *s;
@@ -5948,7 +5949,7 @@ add_simulcast_audio_test_src_harness (GstHarness * h, guint n_rid,
 
   caps =
       create_simulcast_audio_caps
-      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY, n_rid, ssrc, mid,
+      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY, n_rid, mid,
       mid_ext_id, rids, stream_ext_id, repaired_ext_id);
 
   gst_harness_set_src_caps (h, gst_caps_ref (caps));
@@ -5963,7 +5964,7 @@ add_simulcast_audio_test_src_harness (GstHarness * h, guint n_rid,
     for (i = 0; i < n_rid; i++) {
       const char *rtpfunnel = "funnel.";
       if (i == 0)
-        rtpfunnel = "rtpfunnel name=funnel ! capsfilter name=capsfilter";
+        rtpfunnel = "rtpfunnel name=funnel ! capsfilter " "name=capsfilter";
 
       g_string_append_printf (launch, "audiotestsrc is-live=true ! "
           "rtpL16pay name=payloader%u ! " L16_CAPS ", ssrc=(uint)%u ! %s ", i,
@@ -6021,6 +6022,156 @@ add_simulcast_audio_test_src_harness (GstHarness * h, guint n_rid,
 
 #undef L16_CAPS
 
+typedef struct _VideoSimulcastParameter
+{
+  int width;
+  int height;
+} VideoSimulcastParameter;
+
+static GstCaps *
+create_simulcast_video_caps (GstWebRTCRTPTransceiverDirection direction,
+    guint n_rid, const char *mid, guint mid_ext_id,
+    const char *const *rids, guint stream_ext_id, guint repaired_ext_id,
+    VideoSimulcastParameter parameters[])
+{
+  GstStructure *s;
+  GstCaps *caps;
+  const char *dir_str;
+
+  if (direction == GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY)
+    dir_str = "recv";
+  else if (direction == GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY)
+    dir_str = "send";
+  else
+    g_assert_not_reached ();
+
+  caps = gst_caps_from_string (VP8_RTP_CAPS (97));
+  s = gst_caps_get_structure (caps, 0);
+  if (mid && mid_ext_id != G_MAXUINT) {
+    char *extmap_key = g_strdup_printf ("extmap-%u", mid_ext_id);
+    gst_structure_set (s, "a-mid", G_TYPE_STRING, mid, extmap_key,
+        G_TYPE_STRING, RTPHDREXT_MID, NULL);
+    g_free (extmap_key);
+  }
+  if (rids && n_rid > 0 && stream_ext_id != G_MAXUINT) {
+    GString *simulcast_value = g_string_new (dir_str);
+    char *extmap_key, *value;
+    int i;
+
+    g_string_append_c (simulcast_value, ' ');
+
+    for (i = 0; i < n_rid; i++) {
+      char *rid_key = g_strdup_printf ("rid-%s", rids[i]);
+      gst_structure_set (s, rid_key, G_TYPE_STRING, dir_str, NULL);
+      if (i > 0)
+        g_string_append_c (simulcast_value, ';');
+      g_string_append (simulcast_value, rids[i]);
+      g_free (rid_key);
+    }
+    value = g_string_free (simulcast_value, FALSE);
+    simulcast_value = NULL;
+    extmap_key = g_strdup_printf ("extmap-%u", stream_ext_id);
+    gst_structure_set (s, extmap_key, G_TYPE_STRING, RTPHDREXT_STREAM_ID,
+        "a-simulcast", G_TYPE_STRING, value, NULL);
+    g_clear_pointer (&extmap_key, g_free);
+    g_clear_pointer (&value, g_free);
+
+    if (repaired_ext_id != G_MAXUINT) {
+      extmap_key = g_strdup_printf ("extmap-%u", repaired_ext_id);
+      gst_structure_set (s, extmap_key, G_TYPE_STRING,
+          RTPHDREXT_REPAIRED_STREAM_ID, NULL);
+      g_clear_pointer (&extmap_key, g_free);
+    }
+  }
+
+  return caps;
+}
+
+static void
+add_simulcast_video_test_src_harness (GstHarness * h, guint n_rid, guint ssrc[],
+    const char *mid, guint mid_ext_id, const char *const *rids,
+    guint stream_ext_id, guint repaired_ext_id,
+    VideoSimulcastParameter parameters[])
+{
+  GstRTPHeaderExtension *ext;
+  GstElement *capsfilter;
+  char *launch_str;
+  GstCaps *caps;
+  int i;
+
+  caps =
+      create_simulcast_video_caps
+      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY, n_rid, mid,
+      mid_ext_id, rids, stream_ext_id, repaired_ext_id, parameters);
+
+  gst_harness_set_src_caps (h, gst_caps_ref (caps));
+
+  if (n_rid == 0) {
+    launch_str = g_strdup ("videotestsrc is-live=true ! " VP8_RTP_CAPS (97)
+        " vp8enc ! rtpvp8pay name=payloader0");
+  } else {
+    GString *launch = g_string_new (NULL);
+
+    for (i = 0; i < n_rid; i++) {
+      const char *rtpfunnel = "funnel.";
+      if (i == 0)
+        rtpfunnel = "rtpfunnel name=funnel ! capsfilter name=capsfilter";
+
+      g_string_append_printf (launch,
+          "videotestsrc is-live=true ! video/x-raw,width=%d,height=%d ! vp8enc !"
+          "rtpvp8pay name=payloader%u ! " VP8_RTP_CAPS_WITHOUT_SSRC (97)
+          ", ssrc=(uint)%u ! %s ", parameters[i].width, parameters[i].height, i,
+          ssrc[i], rtpfunnel);
+    }
+
+    launch_str = g_string_free (launch, FALSE);
+  }
+  gst_harness_add_src_parse (h, launch_str, TRUE);
+  g_clear_pointer (&launch_str, g_free);
+  capsfilter =
+      gst_bin_get_by_name (GST_BIN (h->src_harness->element), "capsfilter");
+  g_object_set (capsfilter, "caps", caps, NULL);
+  gst_clear_object (&capsfilter);
+  gst_clear_caps (&caps);
+
+  for (i = 0; i == 0 || i < n_rid; i++) {
+    const char *rid = n_rid > 0 ? rids[i] : NULL;
+    char *pay_name = g_strdup_printf ("payloader%u", i);
+    GstElement *payloader =
+        gst_bin_get_by_name (GST_BIN (h->src_harness->element), pay_name);
+    fail_unless (payloader);
+    g_clear_pointer (&pay_name, g_free);
+
+    if (mid_ext_id != G_MAXUINT) {
+      ext = gst_rtp_header_extension_create_from_uri (RTPHDREXT_MID);
+      fail_unless (ext);
+      gst_rtp_header_extension_set_id (ext, mid_ext_id);
+      g_object_set (ext, "mid", mid, NULL);
+      g_signal_emit_by_name (payloader, "add-extension", ext);
+      gst_clear_object (&ext);
+    }
+    if (n_rid > 0 && stream_ext_id != G_MAXUINT) {
+      ext = gst_rtp_header_extension_create_from_uri (RTPHDREXT_STREAM_ID);
+      fail_unless (ext);
+      gst_rtp_header_extension_set_id (ext, stream_ext_id);
+      g_object_set (ext, "rid", rid, NULL);
+      g_signal_emit_by_name (payloader, "add-extension", ext);
+      gst_clear_object (&ext);
+    }
+    if (n_rid > 0 && repaired_ext_id != G_MAXUINT) {
+      ext =
+          gst_rtp_header_extension_create_from_uri
+          (RTPHDREXT_REPAIRED_STREAM_ID);
+      fail_unless (ext);
+      gst_rtp_header_extension_set_id (ext, repaired_ext_id);
+      g_object_set (ext, "rid", rid, NULL);
+      g_signal_emit_by_name (payloader, "add-extension", ext);
+      gst_clear_object (&ext);
+    }
+    gst_clear_object (&payloader);
+  }
+}
+
 static gboolean
 gst_g_ptr_array_find_str (GPtrArray * ptr, const char *needle, guint * index)
 {
@@ -6038,10 +6189,16 @@ gst_g_ptr_array_find_str (GPtrArray * ptr, const char *needle, guint * index)
   return FALSE;
 }
 
-struct ExpectedRid
+struct ExpectedMediaRid
 {
   guint n_rid;
   const char *const *rid;
+};
+
+struct ExpectedRid
+{
+  guint n_media;
+  struct ExpectedMediaRid *media;
 };
 
 static void
@@ -6049,11 +6206,14 @@ on_sdp_media_rid (struct test_webrtc *t, GstElement * element,
     GstWebRTCSessionDescription * desc, gpointer user_data)
 {
   struct ExpectedRid *expected_rids = user_data;
-  int i;
+  guint i;
+  guint total_medias = gst_sdp_message_medias_len (desc->sdp);
 
-  for (i = 0; i < gst_sdp_message_medias_len (desc->sdp); i++) {
+  fail_unless_equals_int (expected_rids->n_media, total_medias);
+
+  for (i = 0; i < total_medias; i++) {
     const GstSDPMedia *media = gst_sdp_message_get_media (desc->sdp, i);
-    struct ExpectedRid *expected_rid = &expected_rids[i];
+    struct ExpectedMediaRid *expected_rid = &expected_rids->media[i];
     GPtrArray *seen_rid = g_ptr_array_new_with_free_func (g_free);
     int j;
 
@@ -6106,9 +6266,10 @@ do_test_simulcast (gboolean enable_fec_rtx)
   VAL_SDP_INIT (payloads, on_sdp_media_no_duplicate_payloads, NULL,
       &media_formats);
   const char *expected_rids0[] = { "a", "z" };
-  struct ExpectedRid expected_rids = { G_N_ELEMENTS (expected_rids0),
+  struct ExpectedMediaRid expected_media_rids = { G_N_ELEMENTS (expected_rids0),
     expected_rids0
   };
+  struct ExpectedRid expected_rids = { 1, &expected_media_rids };
   VAL_SDP_INIT (rids, on_sdp_media_rid, &expected_rids, &payloads);
   VAL_SDP_INIT (non_reject, _count_non_rejected_media,
       GUINT_TO_POINTER (1), &rids);
@@ -6165,16 +6326,15 @@ do_test_simulcast (gboolean enable_fec_rtx)
   g_object_unref (rtpbin2);
 
   h = gst_harness_new_with_element (t->webrtc1, "sink_0", NULL);
-  add_simulcast_audio_test_src_harness (h, expected_rids.n_rid, ssrcs, mid,
-      mid_ext_id, expected_rids.rid, stream_ext_id, repaired_ext_id);
+  add_simulcast_audio_test_src_harness (h, expected_media_rids.n_rid, ssrcs,
+      mid, mid_ext_id, expected_media_rids.rid, stream_ext_id, repaired_ext_id);
   t->harnesses = g_list_prepend (t->harnesses, h);
 
   /* setup recvonly transceiver as answer */
   caps =
       create_simulcast_audio_caps
-      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, expected_rids.n_rid,
-      ssrcs, mid, mid_ext_id, expected_rids.rid, stream_ext_id,
-      repaired_ext_id);
+      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, expected_media_rids.n_rid,
+      mid, mid_ext_id, expected_media_rids.rid, stream_ext_id, repaired_ext_id);
   g_signal_emit_by_name (t->webrtc2, "add-transceiver",
       GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, caps, &trans);
   gst_clear_caps (&caps);
@@ -6257,6 +6417,650 @@ GST_END_TEST;
 GST_START_TEST (test_simulcast_fec_rtx)
 {
   do_test_simulcast (TRUE);
+}
+
+GST_END_TEST;
+
+struct MidRidSSRC
+{
+  const gchar *mid;
+  const gchar *rid;
+  guint32 ssrc;
+};
+
+static void
+validate_mid_rid_ssrc (guint expected_count, struct MidRidSSRC *expected,
+    const gchar * mid, const gchar * rid, guint32 ssrc)
+{
+  for (guint i = 0; i < expected_count; i++) {
+    struct MidRidSSRC current = expected[i];
+    if (g_str_equal (current.mid, mid) && g_str_equal (current.rid, rid)
+        && current.ssrc == ssrc) {
+      return;
+    }
+  }
+
+  g_assert_not_reached ();
+}
+
+GST_START_TEST (test_simulcast_dual_audio)
+{
+  struct test_webrtc *t = test_webrtc_new ();
+  guint media_format_count[] = { 1, 1 };
+
+  VAL_SDP_INIT (media_formats, on_sdp_media_count_formats,
+      media_format_count, NULL);
+  VAL_SDP_INIT (payloads, on_sdp_media_no_duplicate_payloads, NULL,
+      &media_formats);
+
+  const char *expected_rids0[] = { "a", "z" };
+  struct ExpectedMediaRid expected_media_rids = { G_N_ELEMENTS (expected_rids0),
+    expected_rids0
+  };
+  const char *expected_rids_extra0[] = { "b", "c" };
+  struct ExpectedMediaRid expected_media_rids_extra = {
+    G_N_ELEMENTS (expected_rids_extra0), expected_rids_extra0
+  };
+  struct ExpectedRid expected_rids = {
+    1, &expected_media_rids
+  };
+
+  VAL_SDP_INIT (count, _count_num_sdp_media, GUINT_TO_POINTER (2), &payloads);
+
+  const gchar *expected_offer_setup[] = {
+    "actpass",
+    "actpass"
+  };
+  VAL_SDP_INIT (offer_setup, on_sdp_media_setup, expected_offer_setup, &count);
+  VAL_SDP_INIT (answer_non_reject, _count_non_rejected_media,
+      GUINT_TO_POINTER (2), &count);
+
+  const gchar *expected_answer_setup[] = {
+    "active",
+    "active"
+  };
+  VAL_SDP_INIT (answer_setup, on_sdp_media_setup,
+      expected_answer_setup, &answer_non_reject);
+  const gchar *expected_offer_direction[] = {
+    "sendrecv",
+    "sendrecv"
+  };
+  VAL_SDP_INIT (offer, on_sdp_media_direction,
+      expected_offer_direction, &offer_setup);
+  const gchar *expected_answer_direction[] = {
+    "recvonly",
+    "recvonly"
+  };
+  VAL_SDP_INIT (answer, on_sdp_media_direction,
+      expected_answer_direction, &answer_setup);
+  GstHarness *h;
+  GstHarness *h2;
+  GObject *trans;
+  guint i;
+  GstElement *rtpbin2;
+  GstBuffer *buf;
+  guint mid_ext_id = 1;
+  guint stream_ext_id = 2;
+  guint repaired_ext_id = 3;
+  guint mid_ext_id_extra = 4;
+  guint stream_ext_id_extra = 5;
+  guint repaired_ext_id_extra = 6;
+
+  const char *mid = "5";
+  const char *mid_extra = "6";
+  guint ssrcs[] = { 123456789, 987654321 };
+  guint ssrcs_extra[] = { 123456788, 887654321 };
+  guint expected_ssrcs = 4;
+  GArray *ssrcs_received;
+  GstCaps *caps;
+  struct pad_properties pad_prop[] = {
+    {mid, 0},
+    {mid_extra, 1},
+  };
+  struct new_pad_validate_properties validate_pad = { 2, pad_prop };
+  struct pad_added_harness_data pad_added_data =
+      { NULL, on_pad_added_validate_props, &validate_pad };
+  struct MidRidSSRC expected_layout[4] =
+      { {mid, "a", 123456789}, {mid, "z", 987654321}, {mid_extra, "b",
+      123456788},
+  {mid_extra, "c", 887654321}
+  };
+
+  t->on_negotiation_needed = NULL;
+  t->on_ice_candidate = NULL;
+  t->on_pad_added = _pad_added_harness;
+  t->pad_added_data = &pad_added_data;
+
+  gst_util_set_object_arg (G_OBJECT (t->webrtc1), "bundle-policy",
+      "max-bundle");
+  gst_util_set_object_arg (G_OBJECT (t->webrtc2), "bundle-policy",
+      "max-bundle");
+
+  rtpbin2 = gst_bin_get_by_name (GST_BIN (t->webrtc2), "rtpbin");
+  fail_unless (rtpbin2 != NULL);
+  g_signal_connect (rtpbin2, "new-jitterbuffer",
+      G_CALLBACK (new_jitterbuffer_set_fast_start), NULL);
+  g_object_unref (rtpbin2);
+
+  h = gst_harness_new_with_element (t->webrtc1, "sink_0", NULL);
+  add_simulcast_audio_test_src_harness (h, expected_media_rids.n_rid, ssrcs,
+      mid, mid_ext_id, expected_rids.media->rid, stream_ext_id,
+      repaired_ext_id);
+  t->harnesses = g_list_prepend (t->harnesses, h);
+
+  h2 = gst_harness_new_with_element (t->webrtc1, "sink_1", NULL);
+  add_simulcast_audio_test_src_harness (h2, expected_media_rids_extra.n_rid,
+      ssrcs_extra, mid_extra, mid_ext_id_extra, expected_media_rids_extra.rid,
+      stream_ext_id_extra, repaired_ext_id_extra);
+  t->harnesses = g_list_prepend (t->harnesses, h2);
+
+  /* setup recvonly transceiver as answer */
+  caps =
+      create_simulcast_audio_caps
+      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, expected_media_rids.n_rid,
+      mid, mid_ext_id, expected_media_rids.rid, stream_ext_id, repaired_ext_id);
+  g_signal_emit_by_name (t->webrtc2, "add-transceiver",
+      GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, caps, &trans);
+  gst_clear_caps (&caps);
+  fail_unless (trans != NULL);
+  g_clear_object (&trans);
+
+  caps =
+      create_simulcast_audio_caps
+      (GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY,
+      expected_media_rids_extra.n_rid, mid_extra,
+      mid_ext_id_extra, expected_media_rids_extra.rid, stream_ext_id_extra,
+      repaired_ext_id_extra);
+  g_signal_emit_by_name (t->webrtc2, "add-transceiver",
+      GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, caps, &trans);
+  gst_clear_caps (&caps);
+  fail_unless (trans != NULL);
+  g_clear_object (&trans);
+
+  test_validate_sdp (t, &offer, &answer);
+
+  fail_if (gst_element_set_state (t->webrtc1,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE);
+  fail_if (gst_element_set_state (t->webrtc2,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE);
+
+  for (i = 0; i < 10; i++) {
+    gst_harness_push_from_src (h);
+    gst_harness_push_from_src (h2);
+  }
+
+  ssrcs_received = g_array_new (FALSE, TRUE, sizeof (guint32));
+
+  /* Get one buffer out for each ssrc sent.
+   */
+  g_mutex_lock (&t->lock);
+  while (ssrcs_received->len < expected_ssrcs) {
+    GList *sink_harnesses = pad_added_data.sink_harnesses;
+    GList *l;
+    guint i;
+
+    gst_harness_push_from_src (h);
+    if (g_list_length (pad_added_data.sink_harnesses) < 4) {
+      g_cond_wait_until (&t->cond, &t->lock, g_get_monotonic_time () + 5000);
+      if (g_list_length (pad_added_data.sink_harnesses) < 4)
+        continue;
+    }
+
+    g_mutex_unlock (&t->lock);
+
+    for (l = sink_harnesses; l; l = l->next) {
+      GstHarness *sink_harness = (GstHarness *) l->data;
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      guint ssrc;
+
+      fail_unless (sink_harness->element == t->webrtc2);
+
+      buf = gst_harness_try_pull (sink_harness);
+      if (!buf)
+        continue;
+
+      fail_unless (gst_rtp_buffer_map (buf, GST_MAP_READ, &rtp));
+
+      ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+      for (i = 0; i < ssrcs_received->len; i++) {
+        if (g_array_index (ssrcs_received, guint, i) == ssrc)
+          break;
+      }
+      if (i == ssrcs_received->len) {
+        g_array_append_val (ssrcs_received, ssrc);
+      }
+
+      gst_rtp_buffer_unmap (&rtp);
+
+      gst_buffer_unref (buf);
+    }
+    g_mutex_lock (&t->lock);
+  }
+
+  /* the receiving webrtcbin should have exposed 4 src pads, check the mid, rid and ssrc on each. */
+  for (guint i = 0; i < 4; i++) {
+    GstPad *src_pad;
+    gchar *name = g_strdup_printf ("src_%u", i);
+    GstCaps *caps;
+    const GstStructure *s;
+    gchar *mid;
+    gchar *rid;
+    guint32 ssrc;
+    gint pt;
+    gchar *encoding_name;
+    gchar *media;
+
+    src_pad = gst_element_get_static_pad (t->webrtc2, name);
+    ck_assert_msg (src_pad != NULL, "pad %s not found", name);
+
+    caps = gst_pad_get_current_caps (src_pad);
+    fail_unless (caps != NULL);
+    s = gst_caps_get_structure (caps, 0);
+
+    gst_structure_get (s, "payload", G_TYPE_INT, &pt, "encoding-name",
+        G_TYPE_STRING, &encoding_name, "media", G_TYPE_STRING, &media, NULL);
+    fail_unless_equals_string (encoding_name, "L16");
+    fail_unless_equals_string (media, "audio");
+    fail_unless_equals_int (pt, 11);
+
+    gst_structure_get (s, "a-mid", G_TYPE_STRING, &mid, "a-rid", G_TYPE_STRING,
+        &rid, "ssrc", G_TYPE_UINT, &ssrc, NULL);
+    validate_mid_rid_ssrc (4, expected_layout, mid, rid, ssrc);
+
+    g_free (mid);
+    g_free (rid);
+    g_free (encoding_name);
+    g_free (media);
+    gst_caps_unref (caps);
+    gst_object_unref (src_pad);
+    g_free (name);
+  }
+
+  g_mutex_unlock (&t->lock);
+
+  test_webrtc_free (t);
+  g_list_free (pad_added_data.sink_harnesses);
+
+  g_array_unref (ssrcs_received);
+}
+
+GST_END_TEST;
+
+
+static GstWebRTCSessionDescription *
+swap_rid_and_mid_extensions_in_simulcast_offer (const
+    GstWebRTCSessionDescription * offer, guint n_rid, const char *const *rids)
+{
+  GstSDPMessage *sdp;
+  const GstSDPMedia *media = gst_sdp_message_get_media (offer->sdp, 0);
+  GString *bundle_value = g_string_new ("BUNDLE ");
+  gchar *bundle_group;
+  guint total_attributes = gst_sdp_media_attributes_len (media);
+  guint total_message_attributes;
+  guint i = 0;
+
+  /* Start from a copy of the offer */
+  gst_sdp_message_copy (offer->sdp, &sdp);
+
+  /* Remove session-level bundle group attribute */
+  total_message_attributes = gst_sdp_message_attributes_len (sdp);
+  while (i < total_message_attributes) {
+    const GstSDPAttribute *attr = gst_sdp_message_get_attribute (sdp, i);
+    if (g_str_has_prefix (attr->key, "group")) {
+      gst_sdp_message_remove_attribute (sdp, i);
+      total_message_attributes--;
+      continue;
+    }
+    i++;
+  }
+
+  /* Replace it with a new bundle group */
+  for (guint i = 0; i < n_rid; i++) {
+    g_string_append (bundle_value, rids[i]);
+    if (i < n_rid - 1)
+      g_string_append_c (bundle_value, ' ');
+  }
+
+  bundle_group = g_string_free (bundle_value, FALSE);
+  gst_sdp_message_add_attribute (sdp, "group", bundle_group);
+  g_free (bundle_group);
+
+  /* Add a new mline for each rid */
+  for (guint i = 0; i < n_rid; i++) {
+    GstSDPMedia *new_media;
+    gchar *msid_val;
+    guint j = 0;
+
+    gst_sdp_media_copy (media, &new_media);
+
+    while (j < total_attributes) {
+      const GstSDPAttribute *attr = gst_sdp_media_get_attribute (new_media, j);
+      if (g_str_equal (attr->key, "mid") ||
+          g_str_has_prefix (attr->key, "msid")) {
+        gst_sdp_media_remove_attribute (new_media, j);
+        total_attributes--;
+        continue;
+      }
+
+      /* Skip mid extension; we are replacing it with the rid extmap */
+      if (g_str_equal (attr->key, "extmap")) {
+        if (g_str_has_suffix (attr->value, GST_RTP_HDREXT_BASE "sdes:mid")) {
+          gst_sdp_media_remove_attribute (new_media, j);
+          total_attributes--;
+          continue;
+        } else if (g_str_has_suffix (attr->value,
+                GST_RTP_HDREXT_BASE "sdes:rtp-stream-id")) {
+          guint8 rid_ext_id = g_ascii_strtoll (attr->value, NULL, 10);
+          gchar *new_mid_value =
+              g_strdup_printf ("%u " GST_RTP_HDREXT_BASE "sdes:mid",
+              rid_ext_id);
+          GstSDPAttribute new_attr = {
+            0,
+          };
+          gst_sdp_attribute_set (&new_attr, attr->key, new_mid_value);
+          gst_sdp_media_replace_attribute (new_media, j, &new_attr);
+          g_free (new_mid_value);
+        }
+      }
+      j++;
+    }
+
+    gst_sdp_media_add_attribute (new_media, "mid", rids[i]);
+
+    msid_val = g_strdup_printf ("rid-%s rid-%s", rids[i], rids[i]);
+    gst_sdp_media_add_attribute (new_media, "msid", msid_val);
+    g_free (msid_val);
+
+    gst_sdp_message_add_media (sdp, new_media);
+    gst_sdp_media_free (new_media);
+  }
+
+  /* Remove the initial single media from previous offer */
+  gst_sdp_message_remove_media (sdp, 0);
+  return gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_OFFER, sdp);
+}
+
+static GstWebRTCSessionDescription *
+swap_rid_and_mid_extensions_in_simulcast_answer (const
+    GstWebRTCSessionDescription * answer,
+    const GstWebRTCSessionDescription * local_description, guint n_rid,
+    const char *const *rids)
+{
+  GstSDPMessage *sdp;
+  const GstSDPMedia *first_media =
+      gst_sdp_message_get_media (local_description->sdp, 0);
+  const gchar *local_mid = gst_sdp_media_get_attribute_val (first_media, "mid");
+  guint total_message_attributes;
+  guint i = 0;
+  GString *simulcast_value = g_string_new ("recv ");
+  gchar *simulcast_attr;
+  gchar *new_bundle_group = g_strdup_printf ("BUNDLE %s", local_mid);
+  const GstSDPMedia *media = gst_sdp_message_get_media (answer->sdp, 0);
+  guint total_attributes = gst_sdp_media_attributes_len (media);
+  GstSDPMedia *new_media;
+  gchar *rid_val;
+  guint j = 0;
+
+  /* Start from a copy of the answer */
+  gst_sdp_message_copy (answer->sdp, &sdp);
+
+  /* Remove session-level bundle group attribute */
+  total_message_attributes = gst_sdp_message_attributes_len (sdp);
+  while (i < total_message_attributes) {
+    const GstSDPAttribute *attr = gst_sdp_message_get_attribute (sdp, i);
+    if (g_str_has_prefix (attr->key, "group")) {
+      gst_sdp_message_remove_attribute (sdp, i);
+      total_message_attributes--;
+      continue;
+    }
+    i++;
+  }
+
+  /* Replace it with a new bundle group */
+  gst_sdp_message_add_attribute (sdp, "group", new_bundle_group);
+  g_free (new_bundle_group);
+
+  for (guint i = 0; i < n_rid; i++) {
+    g_string_append (simulcast_value, rids[i]);
+    if (i < n_rid - 1)
+      g_string_append_c (simulcast_value, ';');
+  }
+  simulcast_attr = g_string_free (simulcast_value, FALSE);
+
+  gst_sdp_media_copy (media, &new_media);
+
+  while (j < total_attributes) {
+    const GstSDPAttribute *attr = gst_sdp_media_get_attribute (new_media, j);
+    if (g_str_has_prefix (attr->key, "mid")
+        || g_str_has_prefix (attr->key, "simulcast")) {
+      gst_sdp_media_remove_attribute (new_media, j);
+      total_attributes--;
+      continue;
+    }
+    j++;
+  }
+
+  gst_sdp_media_add_attribute (new_media, "mid", local_mid);
+
+  for (guint i = 0; i < n_rid; i++) {
+    rid_val = g_strdup_printf ("%s recv", rids[i]);
+    gst_sdp_media_add_attribute (new_media, "rid", rid_val);
+    g_free (rid_val);
+  }
+
+  gst_sdp_media_add_attribute (new_media, "simulcast", simulcast_attr);
+  g_free (simulcast_attr);
+
+  gst_sdp_message_add_media (sdp, new_media);
+  gst_sdp_media_free (new_media);
+
+  /* Remove the initial medias from previous answer */
+  gst_sdp_message_remove_media (sdp, 0);
+  gst_sdp_message_remove_media (sdp, 0);
+  return gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER, sdp);
+}
+
+// This test is an adaptation of the simulcast playground, presented in this
+// blog post: https://webrtchacks.com/a-playground-for-simulcast-without-an-sfu/
+// https://github.com/web-platform-tests/wpt/blob/master/webrtc/simulcast/simulcast.js
+GST_START_TEST (test_simulcast_swap_rid_mid)
+{
+  struct test_webrtc *t = test_webrtc_new ();
+  const gchar *expected_rids0[] = { "a", "z" };
+  struct ExpectedMediaRid expected_media_rids = { G_N_ELEMENTS (expected_rids0),
+    expected_rids0
+  };
+  GstHarness *h;
+  guint i;
+  GstElement *rtpbin2;
+  GstBuffer *buf;
+  guint mid_ext_id = 1;
+  guint stream_ext_id = 2;
+  guint repaired_ext_id = 3;
+  const char *mid = "5";
+  guint ssrcs[] = { 123456789, 987654321 };
+  GArray *ssrcs_received;
+  struct pad_added_harness_data pad_added_data = { NULL, };
+  VideoSimulcastParameter video_parameters[] = {
+    {.width = 640,.height = 380}, {.width = 320,.height = 240}
+  };
+  GstPromise *promise;
+  GstPromiseResult res;
+  const GstStructure *s;
+  GstWebRTCSessionDescription *desc, *swapped_mid_and_rid_offer_desc,
+      *swapped_mid_and_rid_answer_desc, *local_desc;
+  GstWebRTCRTPTransceiver *trans1, *trans2;
+  GstPad *src_pad;
+
+  t->on_negotiation_needed = NULL;
+  t->on_ice_candidate = NULL;
+  t->on_pad_added = _pad_added_harness;
+  t->pad_added_data = &pad_added_data;
+
+  gst_util_set_object_arg (G_OBJECT (t->webrtc1), "bundle-policy",
+      "max-bundle");
+  gst_util_set_object_arg (G_OBJECT (t->webrtc2), "bundle-policy",
+      "max-bundle");
+
+  rtpbin2 = gst_bin_get_by_name (GST_BIN (t->webrtc2), "rtpbin");
+  fail_unless (rtpbin2 != NULL);
+  g_signal_connect (rtpbin2, "new-jitterbuffer",
+      G_CALLBACK (new_jitterbuffer_set_fast_start), NULL);
+  g_object_unref (rtpbin2);
+
+  h = gst_harness_new_with_element (t->webrtc1, "sink_0", NULL);
+  add_simulcast_video_test_src_harness (h, expected_media_rids.n_rid, ssrcs,
+      mid, mid_ext_id, expected_media_rids.rid, stream_ext_id, repaired_ext_id,
+      video_parameters);
+  t->harnesses = g_list_prepend (t->harnesses, h);
+
+  fail_if (gst_element_set_state (t->webrtc1, GST_STATE_READY) ==
+      GST_STATE_CHANGE_FAILURE);
+  fail_if (gst_element_set_state (t->webrtc2, GST_STATE_READY) ==
+      GST_STATE_CHANGE_FAILURE);
+
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc1, "create-offer", NULL, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  s = gst_promise_get_reply (promise);
+  fail_unless (s != NULL);
+  gst_structure_get (s, "offer", GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &desc,
+      NULL);
+  fail_unless (desc != NULL);
+  gst_promise_unref (promise);
+
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc1, "set-local-description", desc, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  gst_promise_unref (promise);
+
+  swapped_mid_and_rid_offer_desc =
+      swap_rid_and_mid_extensions_in_simulcast_offer (desc,
+      expected_media_rids.n_rid, expected_media_rids.rid);
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc2, "set-remote-description",
+      swapped_mid_and_rid_offer_desc, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  gst_promise_unref (promise);
+
+  gst_webrtc_session_description_free (swapped_mid_and_rid_offer_desc);
+  gst_webrtc_session_description_free (desc);
+
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc2, "create-answer", NULL, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  s = gst_promise_get_reply (promise);
+  fail_unless (s != NULL);
+  gst_structure_get (s, "answer", GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &desc,
+      NULL);
+  fail_unless (desc != NULL);
+  gst_promise_unref (promise);
+
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc2, "set-local-description", desc, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  gst_promise_unref (promise);
+
+  g_object_get (t->webrtc1, "pending-local-description", &local_desc, NULL);
+
+  swapped_mid_and_rid_answer_desc =
+      swap_rid_and_mid_extensions_in_simulcast_answer (desc, local_desc,
+      expected_media_rids.n_rid, expected_media_rids.rid);
+  promise = gst_promise_new ();
+  g_signal_emit_by_name (t->webrtc1, "set-remote-description",
+      swapped_mid_and_rid_answer_desc, promise);
+  res = gst_promise_wait (promise);
+  fail_unless_equals_int (res, GST_PROMISE_RESULT_REPLIED);
+  gst_promise_unref (promise);
+
+  gst_webrtc_session_description_free (local_desc);
+  gst_webrtc_session_description_free (swapped_mid_and_rid_answer_desc);
+  gst_webrtc_session_description_free (desc);
+
+  fail_if (gst_element_set_state (t->webrtc1,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE);
+  fail_if (gst_element_set_state (t->webrtc2,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE);
+
+  for (i = 0; i < 10; i++) {
+    gst_harness_push_from_src (h);
+  }
+
+  ssrcs_received = g_array_new (FALSE, TRUE, sizeof (guint32));
+
+  /* Get one buffer out for each ssrc sent.
+   */
+  g_mutex_lock (&t->lock);
+  while (ssrcs_received->len < G_N_ELEMENTS (ssrcs)) {
+    GList *sink_harnesses = pad_added_data.sink_harnesses;
+    GList *l;
+    guint i;
+
+    gst_harness_push_from_src (h);
+    if (g_list_length (pad_added_data.sink_harnesses) < 2) {
+      g_cond_wait_until (&t->cond, &t->lock, g_get_monotonic_time () + 5000);
+      if (g_list_length (pad_added_data.sink_harnesses) < 2)
+        continue;
+    }
+
+    g_mutex_unlock (&t->lock);
+
+    for (l = sink_harnesses; l; l = l->next) {
+      GstHarness *sink_harness = (GstHarness *) l->data;
+      GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
+      guint ssrc;
+
+      fail_unless (sink_harness->element == t->webrtc2);
+
+      buf = gst_harness_try_pull (sink_harness);
+      if (!buf)
+        continue;
+
+      fail_unless (gst_rtp_buffer_map (buf, GST_MAP_READ, &rtp));
+
+      ssrc = gst_rtp_buffer_get_ssrc (&rtp);
+      for (i = 0; i < ssrcs_received->len; i++) {
+        if (g_array_index (ssrcs_received, guint, i) == ssrc)
+          break;
+      }
+      if (i == ssrcs_received->len) {
+        g_array_append_val (ssrcs_received, ssrc);
+      }
+
+      gst_rtp_buffer_unmap (&rtp);
+
+      gst_buffer_unref (buf);
+    }
+    g_mutex_lock (&t->lock);
+  }
+
+  /* the receiving webrtcbin should have exposed 2 src pads, each associated with a different transceiver. */
+  src_pad = gst_element_get_static_pad (t->webrtc2, "src_0");
+  fail_unless (src_pad != NULL);
+  g_object_get (src_pad, "transceiver", &trans1, NULL);
+  gst_object_unref (src_pad);
+
+  src_pad = gst_element_get_static_pad (t->webrtc2, "src_1");
+  fail_unless (src_pad != NULL);
+  g_object_get (src_pad, "transceiver", &trans2, NULL);
+  fail_if (trans1 == trans2,
+      "src pads should be associated with different transceivers");
+
+  gst_object_unref (src_pad);
+  gst_object_unref (trans1);
+  gst_object_unref (trans2);
+
+  g_mutex_unlock (&t->lock);
+
+  test_webrtc_free (t);
+  g_list_free (pad_added_data.sink_harnesses);
+
+  g_array_unref (ssrcs_received);
 }
 
 GST_END_TEST;
@@ -7033,6 +7837,7 @@ webrtcbin_suite (void)
     tcase_add_test (tc, test_data_channel_ice_stats);
     if (vp8enc) {
       tcase_add_test (tc, test_stats_with_two_streams);
+      tcase_add_test (tc, test_simulcast_swap_rid_mid);
     } else {
       GST_WARNING ("A required element was not found: vp8enc. Skipping tests");
     }
@@ -7078,6 +7883,7 @@ webrtcbin_suite (void)
     tcase_add_test (tc, test_max_bundle_fec);
     tcase_add_test (tc, test_simulcast);
     tcase_add_test (tc, test_simulcast_fec_rtx);
+    tcase_add_test (tc, test_simulcast_dual_audio);
     tcase_add_test (tc, test_bundle_multiple_media_rtx_payload_mapping);
     tcase_add_test (tc, test_invalid_add_media_in_answer);
     tcase_add_test (tc, test_add_turn_server);
