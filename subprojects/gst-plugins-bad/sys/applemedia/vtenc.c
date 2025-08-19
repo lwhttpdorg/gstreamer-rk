@@ -1518,7 +1518,7 @@ gst_vtenc_create_session (GstVTEnc * self)
   }
 
   /* This was set in gst_vtenc_negotiate_specific_format_details() */
-  g_assert_cmpint (self->specific_format_id, !=, 0);
+  g_assert (self->specific_format_id != 0);
 
   if (self->profile_level) {
     if (!gst_vtenc_compute_dts_offset (self, self->video_info.fps_d,

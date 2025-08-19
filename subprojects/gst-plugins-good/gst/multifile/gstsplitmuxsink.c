@@ -1249,7 +1249,7 @@ eos_context_async (MqStreamCtx * ctx, GstSplitMuxSink * splitmux)
   GST_DEBUG_OBJECT (splitmux, "scheduled EOS to pad %" GST_PTR_FORMAT " ctx %p",
       sinkpad, ctx);
 
-  g_assert_nonnull (helper->pad);
+  g_assert (helper->pad);
   gst_element_call_async (GST_ELEMENT (splitmux),
       (GstElementCallAsyncFunc) send_eos_async, helper, NULL);
 }

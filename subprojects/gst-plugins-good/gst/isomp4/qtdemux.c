@@ -10444,7 +10444,7 @@ qtdemux_merge_sample_table (GstQTDemux * qtdemux, QtDemuxStream * stream)
     stream->n_samples += last_chunk - first_chunk;
   }
 
-  g_assert_cmpint (stream->n_samples, ==, num_chunks);
+  g_assert (stream->n_samples == num_chunks);
 
   GST_DEBUG_OBJECT (qtdemux, "Have %u samples and %u sample times",
       stream->n_samples, stream->n_sample_times);

@@ -902,7 +902,7 @@ _project_loaded_cb (GESProject * project, GESTimeline * timeline,
     ges_project_save (project, timeline, uri, NULL, TRUE, &error);
     g_free (uri);
 
-    g_assert_no_error (error);
+    g_assert (error == NULL);
     if (error) {
       self->priv->seenerrors = TRUE;
       g_error_free (error);

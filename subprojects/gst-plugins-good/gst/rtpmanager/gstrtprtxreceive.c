@@ -733,7 +733,7 @@ _gst_rtp_buffer_new_from_rtx (GstRtpRtxReceive * rtx, GstRTPBuffer * rtp,
   }
 
   /* copy payload and remove OSN */
-  g_assert_cmpint (rtp->size[2], >, 1);
+  g_assert (rtp->size[2] > 1);
   payload_len = rtp->size[2] - 2;
   mem = gst_allocator_alloc (NULL, payload_len, NULL);
 

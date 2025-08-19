@@ -496,7 +496,7 @@ gst_rtp_vp9_create_header_buffer (GstRtpVP9Pay * self,
     p[off++] = 0x01;            /* P_DIFF=1 */
   }
 
-  g_assert_cmpint (off, ==, hdrlen);
+  g_assert (off == hdrlen);
 
   gst_rtp_buffer_set_marker (&rtpbuffer, mark);
   if (mark)

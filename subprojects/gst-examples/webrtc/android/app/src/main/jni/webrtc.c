@@ -158,7 +158,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   g_assert (sink);
   if (g_strcmp0 (convert_name, "audioconvert") == 0) {
     GstElement *resample = gst_element_factory_make ("audioresample", NULL);
-    g_assert_nonnull (resample);
+    g_assert (resample);
     gst_bin_add_many (GST_BIN (pipe), q, conv, resample, sink, NULL);
     gst_element_sync_state_with_parent (q);
     gst_element_sync_state_with_parent (conv);
@@ -597,8 +597,8 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
       /* In this example, we always create the offer and receive one answer.
        * See tests/examples/webrtcbidirectional.c in gst-plugins-bad for how to
        * handle offers from peers and reply with answers using webrtcbin. */
-      g_assert_cmpstr (json_object_get_string_member (object, "type"), ==,
-          "answer");
+      g_assert (!strcmp (json_object_get_string_member (object, "type"),
+              "answer"));
 
       text = json_object_get_string_member (object, "sdp");
 

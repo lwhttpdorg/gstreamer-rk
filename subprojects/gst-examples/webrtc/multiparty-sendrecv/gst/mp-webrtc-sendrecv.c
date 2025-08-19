@@ -166,11 +166,11 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   GstPadLinkReturn ret;
 
   q = gst_element_factory_make ("queue", NULL);
-  g_assert_nonnull (q);
+  g_assert (q);
   conv = gst_element_factory_make (convert_name, NULL);
-  g_assert_nonnull (conv);
+  g_assert (conv);
   sink = gst_element_factory_make (sink_name, NULL);
-  g_assert_nonnull (sink);
+  g_assert (sink);
   gst_bin_add_many (GST_BIN (pipe), q, conv, sink, NULL);
   gst_element_sync_state_with_parent (q);
   gst_element_sync_state_with_parent (conv);
@@ -180,7 +180,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   qpad = gst_element_get_static_pad (q, "sink");
 
   ret = gst_pad_link (pad, qpad);
-  g_assert_cmpint (ret, ==, GST_PAD_LINK_OK);
+  g_assert (ret == GST_PAD_LINK_OK);
 }
 
 static void
@@ -268,7 +268,7 @@ send_room_peer_sdp (GstWebRTCSessionDescription * desc, const gchar * peer_id)
   JsonObject *msg, *sdp;
   gchar *text, *sdptype, *sdptext;
 
-  g_assert_cmpint (app_state, >=, ROOM_CALL_OFFERING);
+  g_assert (app_state >= ROOM_CALL_OFFERING);
 
   if (desc->type == GST_WEBRTC_SDP_TYPE_OFFER)
     sdptype = "offer";
@@ -301,10 +301,12 @@ on_offer_created (GstPromise * promise, const gchar * peer_id)
   GstElement *webrtc;
   GstWebRTCSessionDescription *offer;
   const GstStructure *reply;
+  GstPromiseResult res;
 
-  g_assert_cmpint (app_state, ==, ROOM_CALL_OFFERING);
+  g_assert (app_state == ROOM_CALL_OFFERING);
 
-  g_assert_cmpint (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
+  res = gst_promise_wait (promise);
+  g_assert (res == GST_PROMISE_RESULT_REPLIED);
   reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "offer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, NULL);
@@ -312,7 +314,7 @@ on_offer_created (GstPromise * promise, const gchar * peer_id)
 
   promise = gst_promise_new ();
   webrtc = gst_bin_get_by_name (GST_BIN (pipeline), peer_id);
-  g_assert_nonnull (webrtc);
+  g_assert (webrtc);
   g_signal_emit_by_name (webrtc, "set-local-description", offer, promise);
   gst_promise_interrupt (promise);
   gst_promise_unref (promise);
@@ -354,9 +356,9 @@ remove_peer_from_pipeline (const gchar * peer_id)
   g_free (qname);
 
   sinkpad = gst_element_get_static_pad (q, "sink");
-  g_assert_nonnull (sinkpad);
+  g_assert (sinkpad);
   srcpad = gst_pad_get_peer (sinkpad);
-  g_assert_nonnull (srcpad);
+  g_assert (srcpad);
   gst_object_unref (sinkpad);
 
   gst_bin_remove (GST_BIN (pipeline), q);
@@ -364,7 +366,7 @@ remove_peer_from_pipeline (const gchar * peer_id)
   gst_object_unref (q);
 
   tee = gst_bin_get_by_name (GST_BIN (pipeline), "audiotee");
-  g_assert_nonnull (tee);
+  g_assert (tee);
   gst_element_release_request_pad (tee, srcpad);
   gst_object_unref (srcpad);
   gst_object_unref (tee);
@@ -386,23 +388,23 @@ add_peer_to_pipeline (const gchar * peer_id, gboolean offer)
   gst_bin_add_many (GST_BIN (pipeline), q, webrtc, NULL);
 
   srcpad = gst_element_get_static_pad (q, "src");
-  g_assert_nonnull (srcpad);
+  g_assert (srcpad);
   sinkpad = gst_element_request_pad_simple (webrtc, "sink_%u");
-  g_assert_nonnull (sinkpad);
+  g_assert (sinkpad);
   ret = gst_pad_link (srcpad, sinkpad);
-  g_assert_cmpint (ret, ==, GST_PAD_LINK_OK);
+  g_assert (ret == GST_PAD_LINK_OK);
   gst_object_unref (srcpad);
   gst_object_unref (sinkpad);
 
   tee = gst_bin_get_by_name (GST_BIN (pipeline), "audiotee");
-  g_assert_nonnull (tee);
+  g_assert (tee);
   srcpad = gst_element_request_pad_simple (tee, "src_%u");
-  g_assert_nonnull (srcpad);
+  g_assert (srcpad);
   gst_object_unref (tee);
   sinkpad = gst_element_get_static_pad (q, "sink");
-  g_assert_nonnull (sinkpad);
+  g_assert (sinkpad);
   ret = gst_pad_link (srcpad, sinkpad);
-  g_assert_cmpint (ret, ==, GST_PAD_LINK_OK);
+  g_assert (ret == GST_PAD_LINK_OK);
   gst_object_unref (srcpad);
   gst_object_unref (sinkpad);
 
@@ -426,9 +428,9 @@ add_peer_to_pipeline (const gchar * peer_id, gboolean offer)
 
   /* Set to pipeline branch to PLAYING */
   ret = gst_element_sync_state_with_parent (q);
-  g_assert_true (ret);
+  g_assert (ret);
   ret = gst_element_sync_state_with_parent (webrtc);
-  g_assert_true (ret);
+  g_assert (ret);
 }
 
 static void
@@ -577,7 +579,7 @@ do_join_room (const gchar * text)
   }
 
   peer_ids = g_strsplit (text, " ", -1);
-  g_assert_cmpstr (peer_ids[0], ==, "ROOM_OK");
+  g_assert (g_str_equal (peer_ids[0], "ROOM_OK"));
   len = g_strv_length (peer_ids);
   /* There are peers in the room already. We need to start negotiation
    * (exchange SDP and ICE candidates) and transmission of media. */
@@ -633,10 +635,13 @@ on_answer_created (GstPromise * promise, const gchar * peer_id)
   GstElement *webrtc;
   GstWebRTCSessionDescription *answer;
   const GstStructure *reply;
+  GstPromiseResult res;
 
-  g_assert_cmpint (app_state, ==, ROOM_CALL_ANSWERING);
+  g_assert (app_state == ROOM_CALL_ANSWERING);
 
-  g_assert_cmpint (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
+  res = gst_promise_wait (promise);
+  g_assert (res == GST_PROMISE_RESULT_REPLIED);
+
   reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "answer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, NULL);
@@ -644,7 +649,7 @@ on_answer_created (GstPromise * promise, const gchar * peer_id)
 
   promise = gst_promise_new ();
   webrtc = gst_bin_get_by_name (GST_BIN (pipeline), peer_id);
-  g_assert_nonnull (webrtc);
+  g_assert (webrtc);
   g_signal_emit_by_name (webrtc, "set-local-description", answer, promise);
   gst_promise_interrupt (promise);
   gst_promise_unref (promise);
@@ -666,23 +671,23 @@ handle_sdp_offer (const gchar * peer_id, const gchar * text)
   GstSDPMessage *sdp;
   GstWebRTCSessionDescription *offer;
 
-  g_assert_cmpint (app_state, ==, ROOM_CALL_ANSWERING);
+  g_assert (app_state == ROOM_CALL_ANSWERING);
 
   gst_print ("Received offer:\n%s\n", text);
 
   ret = gst_sdp_message_new (&sdp);
-  g_assert_cmpint (ret, ==, GST_SDP_OK);
+  g_assert (ret == GST_SDP_OK);
 
   ret = gst_sdp_message_parse_buffer ((guint8 *) text, strlen (text), sdp);
-  g_assert_cmpint (ret, ==, GST_SDP_OK);
+  g_assert (ret == GST_SDP_OK);
 
   offer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_OFFER, sdp);
-  g_assert_nonnull (offer);
+  g_assert (offer);
 
   /* Set remote description on our pipeline */
   promise = gst_promise_new ();
   webrtc = gst_bin_get_by_name (GST_BIN (pipeline), peer_id);
-  g_assert_nonnull (webrtc);
+  g_assert (webrtc);
   g_signal_emit_by_name (webrtc, "set-remote-description", offer, promise);
   /* We don't want to be notified when the action is done */
   gst_promise_interrupt (promise);
@@ -706,23 +711,23 @@ handle_sdp_answer (const gchar * peer_id, const gchar * text)
   GstSDPMessage *sdp;
   GstWebRTCSessionDescription *answer;
 
-  g_assert_cmpint (app_state, >=, ROOM_CALL_OFFERING);
+  g_assert (app_state >= ROOM_CALL_OFFERING);
 
   gst_print ("Received answer:\n%s\n", text);
 
   ret = gst_sdp_message_new (&sdp);
-  g_assert_cmpint (ret, ==, GST_SDP_OK);
+  g_assert (ret == GST_SDP_OK);
 
   ret = gst_sdp_message_parse_buffer ((guint8 *) text, strlen (text), sdp);
-  g_assert_cmpint (ret, ==, GST_SDP_OK);
+  g_assert (ret == GST_SDP_OK);
 
   answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER, sdp);
-  g_assert_nonnull (answer);
+  g_assert (answer);
 
   /* Set remote description on our pipeline */
   promise = gst_promise_new ();
   webrtc = gst_bin_get_by_name (GST_BIN (pipeline), peer_id);
-  g_assert_nonnull (webrtc);
+  g_assert (webrtc);
   g_signal_emit_by_name (webrtc, "set-remote-description", answer, promise);
   gst_object_unref (webrtc);
   /* We don't want to be notified when the action is done */
@@ -757,7 +762,7 @@ handle_peer_message (const gchar * peer_id, const gchar * msg)
   if (json_object_has_member (object, "sdp")) {
     const gchar *text, *sdp_type;
 
-    g_assert_cmpint (app_state, >=, ROOM_JOINED);
+    g_assert (app_state >= ROOM_JOINED);
 
     child = json_object_get_object_member (object, "sdp");
 
@@ -775,7 +780,7 @@ handle_peer_message (const gchar * peer_id, const gchar * msg)
       incoming_call_from_peer (peer_id);
       handle_sdp_offer (peer_id, text);
     } else if (g_strcmp0 (sdp_type, "answer") == 0) {
-      g_assert_cmpint (app_state, >=, ROOM_CALL_OFFERING);
+      g_assert (app_state >= ROOM_CALL_OFFERING);
       handle_sdp_answer (peer_id, text);
       app_state = ROOM_CALL_STARTED;
     } else {
@@ -793,7 +798,7 @@ handle_peer_message (const gchar * peer_id, const gchar * msg)
 
     /* Add ice candidate sent by remote peer */
     webrtc = gst_bin_get_by_name (GST_BIN (pipeline), peer_id);
-    g_assert_nonnull (webrtc);
+    g_assert (webrtc);
     g_signal_emit_by_name (webrtc, "add-ice-candidate", sdpmlineindex,
         candidate);
     gst_object_unref (webrtc);
@@ -843,19 +848,19 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
       if (g_str_has_prefix (text, "ROOM_PEER_MSG")) {
         splitm = g_strsplit (text, " ", 3);
         peer_id = find_peer_from_list (splitm[1]);
-        g_assert_nonnull (peer_id);
+        g_assert (peer_id);
         /* Could be an offer or an answer, or ICE, or an arbitrary message */
         handle_peer_message (peer_id, splitm[2]);
       } else if (g_str_has_prefix (text, "ROOM_PEER_JOINED")) {
         splitm = g_strsplit (text, " ", 2);
         peers = g_list_prepend (peers, g_strdup (splitm[1]));
         peer_id = find_peer_from_list (splitm[1]);
-        g_assert_nonnull (peer_id);
+        g_assert (peer_id);
         gst_print ("Peer %s has joined the room\n", peer_id);
       } else if (g_str_has_prefix (text, "ROOM_PEER_LEFT")) {
         splitm = g_strsplit (text, " ", 2);
         peer_id = find_peer_from_list (splitm[1]);
-        g_assert_nonnull (peer_id);
+        g_assert (peer_id);
         peers = g_list_remove (peers, peer_id);
         gst_print ("Peer %s has left the room\n", peer_id);
         remove_peer_from_pipeline (peer_id);
@@ -901,7 +906,7 @@ on_server_connected (SoupSession * session, GAsyncResult * res,
     return;
   }
 
-  g_assert_nonnull (ws_conn);
+  g_assert (ws_conn);
 
   app_state = SERVER_CONNECTED;
   gst_print ("Connected to signalling server\n");

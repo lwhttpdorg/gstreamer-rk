@@ -194,17 +194,17 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
 
   q = gst_element_factory_make ("queue", NULL);
-  g_assert_nonnull (q);
+  g_assert (q);
   conv = gst_element_factory_make (convert_name, NULL);
-  g_assert_nonnull (conv);
+  g_assert (conv);
   sink = gst_element_factory_make (sink_name, NULL);
-  g_assert_nonnull (sink);
+  g_assert (sink);
 
   if (g_strcmp0 (convert_name, "audioconvert") == 0) {
     /* Might also need to resample, so add it just in case.
      * Will be a no-op if it's not required. */
     resample = gst_element_factory_make ("audioresample", NULL);
-    g_assert_nonnull (resample);
+    g_assert (resample);
     gst_bin_add_many (GST_BIN (pipe), q, conv, resample, sink, NULL);
     gst_element_sync_state_with_parent (q);
     gst_element_sync_state_with_parent (conv);
@@ -222,7 +222,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   qpad = gst_element_get_static_pad (q, "sink");
 
   ret = gst_pad_link (pad, qpad);
-  g_assert_cmphex (ret, ==, GST_PAD_LINK_OK);
+  g_assert (ret == GST_PAD_LINK_OK);
 }
 
 static void
@@ -577,7 +577,7 @@ soup_websocket_message_cb (G_GNUC_UNUSED SoupWebsocketConnection * connection,
     gst_println ("Received SDP:\n%s", sdp_string);
 
     ret = gst_sdp_message_new (&sdp);
-    g_assert_cmphex (ret, ==, GST_SDP_OK);
+    g_assert (ret == GST_SDP_OK);
 
     ret =
         gst_sdp_message_parse_buffer ((guint8 *) sdp_string,
@@ -589,7 +589,7 @@ soup_websocket_message_cb (G_GNUC_UNUSED SoupWebsocketConnection * connection,
 
     answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
         sdp);
-    g_assert_nonnull (answer);
+    g_assert (answer);
 
     promise = gst_promise_new ();
     g_signal_emit_by_name (receiver_entry->webrtcbin, "set-remote-description",

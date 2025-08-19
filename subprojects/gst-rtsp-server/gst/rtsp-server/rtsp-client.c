@@ -1159,7 +1159,7 @@ set_data_seq (GstRTSPClient * client, guint8 channel, guint seq)
   DataSeq *data_seq;
 
   data_seq = get_data_seq_element (client, channel);
-  g_assert_nonnull (data_seq);
+  g_assert (data_seq);
   data_seq->seq = seq;
 }
 
@@ -1169,7 +1169,7 @@ get_data_seq (GstRTSPClient * client, guint8 channel)
   DataSeq *data_seq;
 
   data_seq = get_data_seq_element (client, channel);
-  g_assert_nonnull (data_seq);
+  g_assert (data_seq);
   return data_seq->seq;
 }
 

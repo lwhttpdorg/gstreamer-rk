@@ -307,7 +307,7 @@ static guint
 gst_rtp_ulpfec_enc_stream_ctx_get_fec_packets_num (GstRtpUlpFecEncStreamCtx *
     ctx)
 {
-  g_assert_cmpfloat (ctx->budget_important, >=, 0.);
+  g_assert (ctx->budget_important >= 0.);
 
   if (ctx->budget_important >= 1.)
     return ctx->budget_important;
@@ -335,7 +335,7 @@ gst_rtp_ulpfec_enc_stream_ctx_prepend_to_fec_buffer (GstRtpUlpFecEncStreamCtx *
   gst_buffer_replace ((GstBuffer **) & new_head->data, rtp->buffer);
   g_queue_push_head_link (&ctx->packets_buf, new_head);
 
-  g_assert_cmpint (ctx->packets_buf.length, <=, buf_max_size);
+  g_assert (ctx->packets_buf.length <= buf_max_size);
 }
 
 static GstFlowReturn
@@ -399,7 +399,7 @@ gst_rtp_ulpfec_enc_stream_ctx_push_fec_packets (GstRtpUlpFecEncStreamCtx * ctx,
 
     gst_rtp_ulpfec_enc_stream_ctx_stop (ctx);
 
-    g_assert_cmpint (fec_packets_pushed, <=, fec_packets_num);
+    g_assert (fec_packets_pushed <= fec_packets_num);
 
     ctx->num_packets_protected += ctx->packets_buf.length;
     ctx->num_packets_fec += fec_packets_pushed;

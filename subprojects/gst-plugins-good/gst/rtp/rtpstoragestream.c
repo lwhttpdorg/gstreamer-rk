@@ -60,7 +60,7 @@ rtp_storage_stream_resize (RtpStorageStream * stream, GstClockTime size_time)
 
   g_assert (GST_CLOCK_TIME_IS_VALID (stream->max_arrival_time));
   g_assert (GST_CLOCK_TIME_IS_VALID (size_time));
-  g_assert_cmpint (size_time, >, 0);
+  g_assert (size_time > 0);
 
   /* Iterating from oldest sequence numbers to newest */
   for (i = 0, it = stream->queue.tail; it; it = it->prev, ++i) {

@@ -131,17 +131,17 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
 
   q = gst_element_factory_make ("queue", NULL);
-  g_assert_nonnull (q);
+  g_assert (q);
   conv = gst_element_factory_make (convert_name, NULL);
-  g_assert_nonnull (conv);
+  g_assert (conv);
   sink = gst_element_factory_make (sink_name, NULL);
-  g_assert_nonnull (sink);
+  g_assert (sink);
 
   if (g_strcmp0 (convert_name, "audioconvert") == 0) {
     /* Might also need to resample, so add it just in case.
      * Will be a no-op if it's not required. */
     resample = gst_element_factory_make ("audioresample", NULL);
-    g_assert_nonnull (resample);
+    g_assert (resample);
     gst_bin_add_many (GST_BIN (pipe), q, conv, resample, sink, NULL);
     gst_element_sync_state_with_parent (q);
     gst_element_sync_state_with_parent (conv);
@@ -159,7 +159,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   qpad = gst_element_get_static_pad (q, "sink");
 
   ret = gst_pad_link (pad, qpad);
-  g_assert_cmphex (ret, ==, GST_PAD_LINK_OK);
+  g_assert (ret == GST_PAD_LINK_OK);
 }
 
 static void
@@ -275,9 +275,9 @@ on_offer_created (GstPromise * promise, gpointer user_data)
   GstWebRTCSessionDescription *offer = NULL;
   const GstStructure *reply;
 
-  g_assert_cmphex (app_state, ==, PEER_CALL_NEGOTIATING);
+  g_assert (app_state == PEER_CALL_NEGOTIATING);
 
-  g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
+  g_assert (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
   reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "offer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, NULL);
@@ -530,7 +530,7 @@ start_pipeline (gboolean create_offer, guint opus_pt, guint vp8_pt)
     webrtc1 = gst_element_factory_make_full ("webrtcbin", "name", "sendrecv",
         "stun-server", STUN_SERVER, NULL);
   }
-  g_assert_nonnull (webrtc1);
+  g_assert (webrtc1);
   gst_util_set_object_arg (G_OBJECT (webrtc1), "bundle-policy", "max-bundle");
 
   /* Takes ownership of each: */
@@ -554,18 +554,18 @@ start_pipeline (gboolean create_offer, guint opus_pt, guint vp8_pt)
     GstRTPHeaderExtension *video_twcc, *audio_twcc;
 
     videopay = gst_bin_get_by_name (GST_BIN (pipe1), "videopay");
-    g_assert_nonnull (videopay);
+    g_assert (videopay);
     video_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
-    g_assert_nonnull (video_twcc);
+    g_assert (video_twcc);
     gst_rtp_header_extension_set_id (video_twcc, 1);
     g_signal_emit_by_name (videopay, "add-extension", video_twcc);
     g_clear_object (&video_twcc);
     g_clear_object (&videopay);
 
     audiopay = gst_bin_get_by_name (GST_BIN (pipe1), "audiopay");
-    g_assert_nonnull (audiopay);
+    g_assert (audiopay);
     audio_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
-    g_assert_nonnull (audio_twcc);
+    g_assert (audio_twcc);
     gst_rtp_header_extension_set_id (audio_twcc, 1);
     g_signal_emit_by_name (audiopay, "add-extension", audio_twcc);
     g_clear_object (&audio_twcc);
@@ -689,9 +689,10 @@ on_answer_created (GstPromise * promise, gpointer user_data)
   GstWebRTCSessionDescription *answer = NULL;
   const GstStructure *reply;
 
-  g_assert_cmphex (app_state, ==, PEER_CALL_NEGOTIATING);
+  g_assert (app_state == PEER_CALL_NEGOTIATING);
 
-  g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
+  GstPromiseResult res = gst_promise_wait (promise);
+  g_assert (res == GST_PROMISE_RESULT_REPLIED);
   reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "answer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, NULL);
@@ -753,8 +754,8 @@ on_offer_received (GstSDPMessage * sdp)
       }
     }
 
-    g_assert_cmpint (opus_pt, !=, 0);
-    g_assert_cmpint (vp8_pt, !=, 0);
+    g_assert (opus_pt != 0);
+    g_assert (vp8_pt != 0);
 
     gst_println ("Starting pipeline with opus pt: %u vp8 pt: %u", opus_pt,
         vp8_pt);
@@ -766,7 +767,7 @@ on_offer_received (GstSDPMessage * sdp)
   }
 
   offer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_OFFER, sdp);
-  g_assert_nonnull (offer);
+  g_assert (offer);
 
   /* Set remote description on our pipeline */
   {
@@ -905,15 +906,15 @@ on_server_message (SoupWebsocketConnection * conn, SoupWebsocketDataType type,
        * example how to handle offers from peers and reply with answers using webrtcbin. */
       text = json_object_get_string_member (child, "sdp");
       ret = gst_sdp_message_new (&sdp);
-      g_assert_cmphex (ret, ==, GST_SDP_OK);
+      g_assert (ret == GST_SDP_OK);
       ret = gst_sdp_message_parse_buffer ((guint8 *) text, strlen (text), sdp);
-      g_assert_cmphex (ret, ==, GST_SDP_OK);
+      g_assert (ret == GST_SDP_OK);
 
       if (g_str_equal (sdptype, "answer")) {
         gst_print ("Received answer:\n%s\n", text);
         answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
             sdp);
-        g_assert_nonnull (answer);
+        g_assert (answer);
 
         /* Set remote description on our pipeline */
         {
@@ -963,7 +964,7 @@ on_server_connected (SoupSession * session, GAsyncResult * res,
     return;
   }
 
-  g_assert_nonnull (ws_conn);
+  g_assert (ws_conn);
 
   app_state = SERVER_CONNECTED;
   gst_print ("Connected to signalling server\n");
