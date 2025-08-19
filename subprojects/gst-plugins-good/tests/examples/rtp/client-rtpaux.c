@@ -255,7 +255,8 @@ handle_new_stream (GstElement * element, GstPad * newPad, gpointer data)
     gst_object_unref (parent);
 
     outputSinkPad = gst_element_get_static_pad (session->output, "sink");
-    g_assert_cmpint (gst_pad_link (newPad, outputSinkPad), ==, GST_PAD_LINK_OK);
+    fail_unless_equals_int (gst_pad_link (newPad, outputSinkPad),
+        GST_PAD_LINK_OK);
     gst_object_unref (outputSinkPad);
 
     g_print ("Linked!\n");

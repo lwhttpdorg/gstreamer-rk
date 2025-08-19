@@ -140,41 +140,41 @@ GST_START_TEST (test_event_forwarding)
   gst_harness_push_event (h, gst_event_new_eos ());
 
   /* We expect stream-start/caps/segment/eos */
-  g_assert_cmpint (gst_harness_events_in_queue (ctx.rtp_src), ==, 4);
+  fail_unless_equals_int (gst_harness_events_in_queue (ctx.rtp_src), 4);
 
   event = gst_harness_pull_event (ctx.rtp_src);
-  g_assert_cmpint (event->type, ==, GST_EVENT_STREAM_START);
+  fail_unless_equals_int (event->type, GST_EVENT_STREAM_START);
   gst_event_unref (event);
 
   event = gst_harness_pull_event (ctx.rtp_src);
-  g_assert_cmpint (event->type, ==, GST_EVENT_CAPS);
+  fail_unless_equals_int (event->type, GST_EVENT_CAPS);
   gst_event_parse_caps (event, &caps);
   s = gst_caps_get_structure (caps, 0);
   g_assert (gst_structure_has_field (s, "ssrc"));
   g_assert (gst_structure_get_uint (s, "ssrc", &ssrc));
-  g_assert_cmpuint (ssrc, ==, TEST_BUF_SSRC);
+  fail_unless_equals_int (ssrc, TEST_BUF_SSRC);
   gst_event_unref (event);
 
   event = gst_harness_pull_event (ctx.rtp_src);
-  g_assert_cmpint (event->type, ==, GST_EVENT_SEGMENT);
+  fail_unless_equals_int (event->type, GST_EVENT_SEGMENT);
   gst_event_unref (event);
 
   event = gst_harness_pull_event (ctx.rtp_src);
-  g_assert_cmpint (event->type, ==, GST_EVENT_EOS);
+  fail_unless_equals_int (event->type, GST_EVENT_EOS);
   gst_event_unref (event);
 
   /* We pushed on the RTP pad, no events should have reached the RTCP pad */
-  g_assert_cmpint (gst_harness_events_in_queue (ctx.rtcp_src), ==, 0);
+  fail_unless_equals_int (gst_harness_events_in_queue (ctx.rtcp_src), 0);
 
   /* push EOS on the rtcp sink pad, to make sure it EOS properly, the harness
    * will create the missing stream-start */
   gst_harness_push_event (ctx.rtcp_sink, gst_event_new_eos ());
 
-  g_assert_cmpint (gst_harness_events_in_queue (ctx.rtp_src), ==, 0);
-  g_assert_cmpint (gst_harness_events_in_queue (ctx.rtcp_src), ==, 1);
+  fail_unless_equals_int (gst_harness_events_in_queue (ctx.rtp_src), 0);
+  fail_unless_equals_int (gst_harness_events_in_queue (ctx.rtcp_src), 1);
 
   event = gst_harness_pull_event (ctx.rtcp_src);
-  g_assert_cmpint (event->type, ==, GST_EVENT_EOS);
+  fail_unless_equals_int (event->type, GST_EVENT_EOS);
   gst_event_unref (event);
 
   gst_harness_teardown (ctx.rtp_src);

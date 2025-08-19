@@ -1246,7 +1246,7 @@ GST_START_TEST (rtp_klv_fragmented_packet_loss)
   free (frame_data);
 
   /* We should be able to decode all RTP buffers except for the second one */
-  g_assert_cmpuint (src_probe_data.buffer_count, ==, FRAME_COUNT - 1);
+  fail_unless_equals_int (src_probe_data.buffer_count, FRAME_COUNT - 1);
 }
 
 GST_END_TEST;

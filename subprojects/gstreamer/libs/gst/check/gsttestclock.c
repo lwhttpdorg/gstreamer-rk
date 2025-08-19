@@ -120,7 +120,7 @@
  *   GST_INFO ("Set time, create and push the first buffer\n");
  *   gst_test_clock_set_time (test_clock, 0);
  *   buf = create_test_buffer (gst_clock_get_time (clock), ...);
- *   gst_assert_cmpint (gst_pad_push (srcpad, buf), ==, GST_FLOW_OK);
+ *   gst_assert_cmpint (gst_pad_push (srcpad, buf), GST_FLOW_OK);
  *
  *   GST_INFO ("Block until element is waiting for a clock notification\n");
  *   gst_test_clock_wait_for_next_pending_id (test_clock, &pending_id);
@@ -129,14 +129,14 @@
  *   GST_INFO ("Release the next blocking wait and make sure it is the one from element\n");
  *   processed_id = gst_test_clock_process_next_clock_id (test_clock);
  *   g_assert (processed_id == pending_id);
- *   g_assert_cmpint (GST_CLOCK_ENTRY_STATUS (processed_id), ==, GST_CLOCK_OK);
+ *   fail_unless_equals_int (GST_CLOCK_ENTRY_STATUS (processed_id), GST_CLOCK_OK);
  *   gst_clock_id_unref (pending_id);
  *   gst_clock_id_unref (processed_id);
  *
  *   GST_INFO ("Validate that element produced an output buffer and check its timestamp\n");
- *   g_assert_cmpint (get_number_of_output_buffer (...), ==, 1);
+ *   fail_unless_equals_int (get_number_of_output_buffer (...), 1);
  *   buf = get_buffer_pushed_by_element (element, ...);
- *   g_assert_cmpint (GST_BUFFER_TIMESTAMP (buf), ==, latency);
+ *   fail_unless_equals_int (GST_BUFFER_TIMESTAMP (buf), latency);
  *   gst_buffer_unref (buf);
  *   GST_INFO ("Check that element does not wait for any clock notification\n");
  *   g_assert (!gst_test_clock_peek_next_pending_id (test_clock, NULL));
@@ -144,7 +144,7 @@
  *   GST_INFO ("Set time, create and push the second buffer\n");
  *   gst_test_clock_advance_time (test_clock, 10 * GST_SECOND);
  *   buf = create_test_buffer (gst_clock_get_time (clock), ...);
- *   gst_assert_cmpint (gst_pad_push (srcpad, buf), ==, GST_FLOW_OK);
+ *   gst_assert_cmpint (gst_pad_push (srcpad, buf), GST_FLOW_OK);
  *
  *   GST_INFO ("Block until element is waiting for a new clock notification\n");
  *   (gst_test_clock_wait_for_next_pending_id (test_clock, &pending_id);
@@ -153,14 +153,14 @@
  *   GST_INFO ("Release the next blocking wait and make sure it is the one from element\n");
  *   processed_id = gst_test_clock_process_next_clock_id (test_clock);
  *   g_assert (processed_id == pending_id);
- *   g_assert_cmpint (GST_CLOCK_ENTRY_STATUS (processed_id), ==, GST_CLOCK_OK);
+ *   fail_unless_equals_int (GST_CLOCK_ENTRY_STATUS (processed_id), GST_CLOCK_OK);
  *   gst_clock_id_unref (pending_id);
  *   gst_clock_id_unref (processed_id);
  *
  *   GST_INFO ("Validate that element produced an output buffer and check its timestamp\n");
- *   g_assert_cmpint (get_number_of_output_buffer (...), ==, 1);
+ *   fail_unless_equals_int (get_number_of_output_buffer (...), 1);
  *   buf = get_buffer_pushed_by_element (element, ...);
- *   g_assert_cmpint (GST_BUFFER_TIMESTAMP (buf), ==,
+ *   fail_unless_equals_int (GST_BUFFER_TIMESTAMP (buf),
  *       10 * GST_SECOND + latency + 7 * GST_MSECOND);
  *   gst_buffer_unref (buf);
  *   GST_INFO ("Check that element does not wait for any clock notification\n");
@@ -169,7 +169,7 @@
  * ]|
  *
  * Since #GstTestClock is only supposed to be used in unit tests it calls
- * g_assert(), g_assert_cmpint() or g_assert_cmpuint() to validate all function
+ * g_assert(), fail_unless_equals_int() or fail_unless_equals_int() to validate all function
  * arguments. This will highlight any issues with the unit test code itself.
  */
 
@@ -690,7 +690,7 @@ gst_test_clock_new_with_start_time (GstClockTime start_time)
 {
   GstClock *clock;
 
-  g_assert_cmpuint (start_time, !=, GST_CLOCK_TIME_NONE);
+  g_assert (start_time != GST_CLOCK_TIME_NONE);
   clock = g_object_new (GST_TYPE_TEST_CLOCK, "start-time", start_time, NULL);
 
   /* Clear floating flag */
@@ -705,7 +705,7 @@ gst_test_clock_set_time_unlocked (GstTestClock * test_clock,
 {
   GstTestClockPrivate *priv = GST_TEST_CLOCK_GET_PRIVATE (test_clock);
 
-  g_assert_cmpuint (new_time, >=, priv->internal_time);
+  g_assert (new_time >= priv->internal_time);
 
   priv->internal_time = new_time;
   GST_CAT_DEBUG_OBJECT (GST_CAT_TEST_CLOCK, test_clock,
@@ -731,7 +731,7 @@ gst_test_clock_set_time (GstTestClock * test_clock, GstClockTime new_time)
 {
   g_return_if_fail (GST_IS_TEST_CLOCK (test_clock));
 
-  g_assert_cmpuint (new_time, !=, GST_CLOCK_TIME_NONE);
+  g_assert (new_time != GST_CLOCK_TIME_NONE);
 
   GST_OBJECT_LOCK (test_clock);
 
@@ -762,8 +762,8 @@ gst_test_clock_advance_time (GstTestClock * test_clock, GstClockTimeDiff delta)
 
   priv = GST_TEST_CLOCK_GET_PRIVATE (test_clock);
 
-  g_assert_cmpint (delta, >=, 0);
-  g_assert_cmpuint (delta, <, G_MAXUINT64 - delta);
+  g_assert (delta >= 0);
+  g_assert (delta < G_MAXUINT64 - delta);
 
   GST_OBJECT_LOCK (test_clock);
 

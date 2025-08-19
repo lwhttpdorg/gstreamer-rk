@@ -34,9 +34,9 @@ GST_START_TEST (test_uri_to_properties)
       "latency", &latency, "ttl-mc", &ttl_mc, "ttl", &ttl, NULL);
 
   /* Make sure these values are in sync with the one from the URI. */
-  g_assert_cmpuint (latency, ==, 300);
-  g_assert_cmpint (ttl, ==, 8);
-  g_assert_cmpint (ttl_mc, ==, 9);
+  g_assert (latency == 300);
+  g_assert (ttl == 8);
+  g_assert (ttl_mc == 9);
 
   gst_object_unref (rtpsrc);
 }

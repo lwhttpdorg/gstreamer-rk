@@ -365,7 +365,7 @@ GST_START_TEST (test_splitmuxsrc_format_location)
 
   pipeline = gst_parse_launch ("splitmuxsrc name=splitsrc ! decodebin "
       "! fakesink", &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_if (pipeline == NULL);
 
   src = gst_bin_get_by_name (GST_BIN (pipeline), "splitsrc");

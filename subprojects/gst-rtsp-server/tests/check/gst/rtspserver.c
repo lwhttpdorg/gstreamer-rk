@@ -1345,7 +1345,7 @@ GST_START_TEST (test_bind_already_in_use)
   port =
       g_socket_listener_add_any_inet_port (G_SOCKET_LISTENER (service), NULL,
       &error);
-  g_assert_no_error (error);
+  fail_if (error);
 
   port_str = g_strdup_printf ("%d\n", port);
 

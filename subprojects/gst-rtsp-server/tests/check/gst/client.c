@@ -199,7 +199,7 @@ create_connection (GstRTSPConnection ** conn)
 
   sock = g_socket_new (G_SOCKET_FAMILY_IPV4, G_SOCKET_TYPE_STREAM,
       G_SOCKET_PROTOCOL_TCP, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (gst_rtsp_connection_create_from_socket (sock, "127.0.0.1", 444,
           NULL, conn) == GST_RTSP_OK);
   g_object_unref (sock);

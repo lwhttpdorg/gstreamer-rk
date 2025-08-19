@@ -44,7 +44,7 @@ G_STMT_START { \
   GstClockEntry *entry = GST_CLOCK_ENTRY (pending_id); \
   g_assert (entry == (id)); \
   g_assert (GST_CLOCK_ENTRY_TYPE (entry) == (type)); \
-  g_assert_cmpuint (GST_CLOCK_ENTRY_TIME (entry), ==, (time)); \
+  fail_unless_equals_uint64 (GST_CLOCK_ENTRY_TIME (entry), (time)); \
 } G_STMT_END
 
 #define assert_processed_id(processed_id, id, type, time) \
@@ -52,7 +52,7 @@ G_STMT_START { \
   GstClockEntry *entry = GST_CLOCK_ENTRY (processed_id); \
   g_assert (entry == (id)); \
   g_assert (GST_CLOCK_ENTRY_TYPE (entry) == (type)); \
-  g_assert_cmpuint (GST_CLOCK_ENTRY_STATUS (entry), ==, (time)); \
+  fail_unless_equals_int (GST_CLOCK_ENTRY_STATUS (entry), (time)); \
 } G_STMT_END
 
 static gpointer test_wait_pending_single_shot_id_sync_worker (gpointer data);
@@ -136,7 +136,7 @@ gst_test_util_wait_for_clock_id_begin (GstTestClock * test_clock, GstClockID id,
   }
 
   g_assert (gst_test_clock_has_id (wait_ctx->test_clock, wait_ctx->id));
-  g_assert_cmpint (gst_test_clock_peek_id_count (wait_ctx->test_clock), >, 0);
+  fail_unless (gst_test_clock_peek_id_count (wait_ctx->test_clock) > 0);
 
   return wait_ctx;
 }
@@ -212,7 +212,7 @@ GST_END_TEST;
 GST_START_TEST (test_resolution_query)
 {
   GstClock *clock = gst_test_clock_new ();
-  g_assert_cmpuint (gst_clock_get_resolution (clock), ==, 1);
+  fail_unless_equals_uint64 (gst_clock_get_resolution (clock), 1);
   gst_object_unref (clock);
 }
 
@@ -224,15 +224,15 @@ GST_START_TEST (test_start_time)
   guint64 start_time;
 
   clock = gst_test_clock_new ();
-  g_assert_cmpuint (gst_clock_get_time (clock), ==, 0);
+  fail_unless_equals_uint64 (gst_clock_get_time (clock), 0);
   g_object_get (clock, "start-time", &start_time, NULL);
-  g_assert_cmpuint (start_time, ==, 0);
+  fail_unless_equals_uint64 (start_time, 0);
   gst_object_unref (clock);
 
   clock = gst_test_clock_new_with_start_time (GST_SECOND);
-  g_assert_cmpuint (gst_clock_get_time (clock), ==, GST_SECOND);
+  fail_unless_equals_uint64 (gst_clock_get_time (clock), GST_SECOND);
   g_object_get (clock, "start-time", &start_time, NULL);
-  g_assert_cmpuint (start_time, ==, GST_SECOND);
+  fail_unless_equals_uint64 (start_time, GST_SECOND);
   gst_object_unref (clock);
 }
 
@@ -242,9 +242,9 @@ GST_START_TEST (test_set_time)
 {
   GstClock *clock = gst_test_clock_new_with_start_time (GST_SECOND);
   gst_test_clock_set_time (GST_TEST_CLOCK (clock), GST_SECOND);
-  g_assert_cmpuint (gst_clock_get_time (clock), ==, GST_SECOND);
+  fail_unless_equals_uint64 (gst_clock_get_time (clock), GST_SECOND);
   gst_test_clock_set_time (GST_TEST_CLOCK (clock), GST_SECOND + 1);
-  g_assert_cmpuint (gst_clock_get_time (clock), ==, GST_SECOND + 1);
+  fail_unless_equals_uint64 (gst_clock_get_time (clock), GST_SECOND + 1);
   gst_object_unref (clock);
 }
 
@@ -254,9 +254,9 @@ GST_START_TEST (test_advance_time)
 {
   GstClock *clock = gst_test_clock_new_with_start_time (GST_SECOND);
   gst_test_clock_advance_time (GST_TEST_CLOCK (clock), 0);
-  g_assert_cmpuint (gst_clock_get_time (clock), ==, GST_SECOND);
+  fail_unless_equals_uint64 (gst_clock_get_time (clock), GST_SECOND);
   gst_test_clock_advance_time (GST_TEST_CLOCK (clock), 42 * GST_MSECOND);
-  g_assert_cmpuint (gst_clock_get_time (clock), ==,
+  fail_unless_equals_uint64 (gst_clock_get_time (clock),
       GST_SECOND + (42 * GST_MSECOND));
   gst_object_unref (clock);
 }
@@ -291,7 +291,7 @@ GST_START_TEST (test_wait_synchronous_no_timeout)
       GST_CLOCK_EARLY);
   gst_clock_id_unref (processed_id);
   g_thread_join (worker_thread);
-  g_assert_cmpuint (context.jitter, ==, 1);
+  fail_unless_equals_int64 (context.jitter, 1);
   gst_clock_id_unref (context.clock_id);
   gst_clock_id_unref (clock_id);
 
@@ -309,7 +309,7 @@ GST_START_TEST (test_wait_synchronous_no_timeout)
       GST_CLOCK_OK);
   gst_clock_id_unref (processed_id);
   g_thread_join (worker_thread);
-  g_assert_cmpuint (context.jitter, ==, 0);
+  fail_unless_equals_int64 (context.jitter, 0);
   gst_clock_id_unref (context.clock_id);
   gst_clock_id_unref (clock_id);
 
@@ -331,7 +331,7 @@ GST_START_TEST (test_wait_synchronous_no_timeout)
       GST_CLOCK_OK);
   gst_clock_id_unref (processed_id);
   g_thread_join (worker_thread);
-  g_assert_cmpuint (context.jitter, ==, -1);
+  fail_unless_equals_int64 (context.jitter, -1);
   gst_clock_id_unref (context.clock_id);
   gst_clock_id_unref (clock_id);
 
@@ -456,7 +456,7 @@ GST_START_TEST (test_single_shot_sync_past)
       gst_test_util_wait_for_clock_id_begin (test_clock, clock_id, &jitter);
   fail_unless_equals_int (gst_test_util_wait_for_clock_id_end (wait_ctx),
       GST_CLOCK_EARLY);
-  g_assert_cmpint (jitter, ==, 1);
+  fail_unless_equals_int64 (jitter, 1);
   gst_clock_id_unref (clock_id);
 
   gst_object_unref (clock);
@@ -480,7 +480,7 @@ GST_START_TEST (test_single_shot_sync_present)
       gst_test_util_wait_for_clock_id_begin (test_clock, clock_id, &jitter);
   fail_unless_equals_int (gst_test_util_wait_for_clock_id_end (wait_ctx),
       GST_CLOCK_OK);
-  g_assert_cmpint (jitter, ==, 0);
+  fail_unless_equals_int64 (jitter, 0);
   gst_clock_id_unref (clock_id);
 
   gst_object_unref (clock);
@@ -505,7 +505,7 @@ GST_START_TEST (test_single_shot_sync_future)
   gst_test_clock_advance_time (test_clock, GST_SECOND);
   fail_unless_equals_int (gst_test_util_wait_for_clock_id_end (wait_ctx),
       GST_CLOCK_OK);
-  g_assert_cmpint (jitter, ==, -GST_SECOND);
+  fail_unless_equals_int64 (jitter, -GST_SECOND);
   gst_clock_id_unref (clock_id);
 
   gst_object_unref (clock);
@@ -596,16 +596,16 @@ GST_START_TEST (test_single_shot_sync_ordering_parallel)
   wait_ctx_b = gst_test_util_wait_for_clock_id_begin (test_clock, clock_id_b,
       NULL);
 
-  g_assert_cmpuint (gst_test_clock_get_next_entry_time (test_clock), ==,
+  fail_unless_equals_uint64 (gst_test_clock_get_next_entry_time (test_clock),
       2 * GST_SECOND);
   gst_test_clock_advance_time (test_clock, GST_SECOND);
-  fail_unless_equals_int (gst_test_util_wait_for_clock_id_end (wait_ctx_b),
+  fail_unless_equals_uint64 (gst_test_util_wait_for_clock_id_end (wait_ctx_b),
       GST_CLOCK_OK);
 
-  g_assert_cmpuint (gst_test_clock_get_next_entry_time (test_clock), ==,
+  fail_unless_equals_uint64 (gst_test_clock_get_next_entry_time (test_clock),
       3 * GST_SECOND);
   gst_test_clock_advance_time (test_clock, GST_SECOND);
-  fail_unless_equals_int (gst_test_util_wait_for_clock_id_end (wait_ctx_a),
+  fail_unless_equals_uint64 (gst_test_util_wait_for_clock_id_end (wait_ctx_a),
       GST_CLOCK_OK);
 
   gst_clock_id_unref (clock_id_b);
@@ -662,7 +662,7 @@ GST_START_TEST (test_single_shot_sync_simultaneous_no_timeout)
       5 * GST_SECOND);
   gst_clock_id_unref (pending_id);
 
-  g_assert_cmpuint (gst_test_clock_get_next_entry_time (test_clock), ==,
+  fail_unless_equals_uint64 (gst_test_clock_get_next_entry_time (test_clock),
       5 * GST_SECOND);
   gst_test_clock_advance_time (test_clock, 5 * GST_SECOND);
   processed_id = gst_test_clock_process_next_clock_id (test_clock);
@@ -676,7 +676,7 @@ GST_START_TEST (test_single_shot_sync_simultaneous_no_timeout)
       6 * GST_SECOND);
   gst_clock_id_unref (pending_id);
 
-  g_assert_cmpuint (gst_test_clock_get_next_entry_time (test_clock), ==,
+  fail_unless_equals_uint64 (gst_test_clock_get_next_entry_time (test_clock),
       6 * GST_SECOND);
   gst_test_clock_advance_time (test_clock, 6 * GST_SECOND);
   processed_id = gst_test_clock_process_next_clock_id (test_clock);
@@ -689,8 +689,8 @@ GST_START_TEST (test_single_shot_sync_simultaneous_no_timeout)
   g_thread_join (worker_thread_a);
   g_thread_join (worker_thread_b);
 
-  g_assert_cmpuint (context_a.jitter, ==, -4 * GST_SECOND);
-  g_assert_cmpuint (context_b.jitter, ==, -5 * GST_SECOND);
+  fail_unless_equals_int64 (context_a.jitter, -4 * GST_SECOND);
+  fail_unless_equals_int64 (context_b.jitter, -5 * GST_SECOND);
 
   gst_clock_id_unref (context_a.clock_id);
   gst_clock_id_unref (context_b.clock_id);
@@ -1000,7 +1000,7 @@ GST_START_TEST (test_periodic_uniqueness)
 
     for (j = 0; j < 10; j++) {
       g_usleep (G_USEC_PER_SEC / 10 / 10);
-      g_assert_cmpuint (gst_test_clock_peek_id_count (test_clock), ==, 1);
+      fail_unless_equals_int (gst_test_clock_peek_id_count (test_clock), 1);
     }
 
     gst_test_clock_advance_time (test_clock, interval);

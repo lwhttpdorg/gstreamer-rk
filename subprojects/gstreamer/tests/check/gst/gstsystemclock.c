@@ -73,26 +73,26 @@ GST_START_TEST (test_set_default)
    * refcount before returning */
   static_clock = gst_system_clock_obtain ();
   fail_unless (static_clock != NULL, "Could not create default system clock");
-  g_assert_cmpint (GST_OBJECT_REFCOUNT (static_clock), ==, 2);
+  fail_unless_equals_int (GST_OBJECT_REFCOUNT (static_clock), 2);
 
   /* set a new default clock to a different instance which should replace the
    * static clock with this one, and unref the static clock */
   clock = g_object_new (GST_TYPE_SYSTEM_CLOCK, "name", "TestClock", NULL);
   gst_object_ref_sink (clock);
   gst_system_clock_set_default (clock);
-  g_assert_cmpint (GST_OBJECT_REFCOUNT (static_clock), ==, 1);
+  fail_unless_equals_int (GST_OBJECT_REFCOUNT (static_clock), 1);
   gst_object_unref (static_clock);
   static_clock = gst_system_clock_obtain ();
   fail_unless (static_clock == clock);
-  g_assert_cmpint (GST_OBJECT_REFCOUNT (clock), ==, 3);
+  fail_unless_equals_int (GST_OBJECT_REFCOUNT (clock), 3);
   gst_object_unref (static_clock);
 
   /* Reset the default clock to the static one */
   gst_system_clock_set_default (NULL);
   static_clock = gst_system_clock_obtain ();
   fail_unless (static_clock != clock);
-  g_assert_cmpint (GST_OBJECT_REFCOUNT (clock), ==, 1);
-  g_assert_cmpint (GST_OBJECT_REFCOUNT (static_clock), ==, 2);
+  fail_unless_equals_int (GST_OBJECT_REFCOUNT (clock), 1);
+  fail_unless_equals_int (GST_OBJECT_REFCOUNT (static_clock), 2);
   gst_object_unref (clock);
   gst_object_unref (static_clock);
 }

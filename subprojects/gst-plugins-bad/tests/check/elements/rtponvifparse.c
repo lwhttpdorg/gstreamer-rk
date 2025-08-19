@@ -172,7 +172,7 @@ test_parse (gboolean clean_point, gboolean discont)
   fail_unless (gst_pad_push (mysrcpad, buf) == GST_FLOW_OK,
       "failed pushing buffer");
 
-  g_assert_cmpuint (g_list_length (buffers), ==, 1);
+  g_assert (g_list_length (buffers) == 1);
   buf = buffers->data;
 
   if (clean_point)

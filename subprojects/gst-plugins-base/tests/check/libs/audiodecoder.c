@@ -169,7 +169,7 @@ gst_audio_decoder_tester_handle_frame (GstAudioDecoder * dec,
       data = g_malloc0 (size);
 
       if (map.size) {
-        g_assert_cmpint (map.size, >=, sizeof (guint64));
+        fail_unless (map.size >= sizeof (guint64));
         memcpy (data, map.data, sizeof (guint64));
       }
 

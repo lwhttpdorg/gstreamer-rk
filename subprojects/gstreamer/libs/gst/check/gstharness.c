@@ -452,7 +452,7 @@ gst_harness_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
 
         /* FIXME: Can this be removed? */
         size = gst_query_get_n_allocation_params (query);
-        g_assert_cmpuint (0, ==, size);
+        g_assert (0 == size);
         gst_query_add_allocation_param (query,
             priv->propose_allocator, &priv->propose_allocation_params);
 
@@ -583,7 +583,7 @@ gst_harness_link_element_srcpad (GstHarness * h,
     srcpad = gst_element_request_pad_simple (h->element, element_srcpad_name);
   g_assert (srcpad);
   link = gst_pad_link (srcpad, h->sinkpad);
-  g_assert_cmpint (link, ==, GST_PAD_LINK_OK);
+  g_assert (link == GST_PAD_LINK_OK);
   g_free (priv->element_srcpad_name);
   priv->element_srcpad_name = gst_pad_get_name (srcpad);
 
@@ -602,7 +602,7 @@ gst_harness_link_element_sinkpad (GstHarness * h,
     sinkpad = gst_element_request_pad_simple (h->element, element_sinkpad_name);
   g_assert (sinkpad);
   link = gst_pad_link (h->srcpad, sinkpad);
-  g_assert_cmpint (link, ==, GST_PAD_LINK_OK);
+  g_assert (link == GST_PAD_LINK_OK);
   g_free (priv->element_sinkpad_name);
   priv->element_sinkpad_name = gst_pad_get_name (sinkpad);
 
@@ -1234,7 +1234,7 @@ gst_harness_add_element_src_pad (GstHarness * h, GstPad * srcpad)
   if (h->sinkpad == NULL)
     gst_harness_setup_sink_pad (h, &hsinktemplate, NULL);
   link = gst_pad_link (srcpad, h->sinkpad);
-  g_assert_cmpint (link, ==, GST_PAD_LINK_OK);
+  g_assert (link == GST_PAD_LINK_OK);
   g_free (priv->element_srcpad_name);
   priv->element_srcpad_name = gst_pad_get_name (srcpad);
 }
@@ -1258,7 +1258,7 @@ gst_harness_add_element_sink_pad (GstHarness * h, GstPad * sinkpad)
   if (h->srcpad == NULL)
     gst_harness_setup_src_pad (h, &hsrctemplate, NULL);
   link = gst_pad_link (h->srcpad, sinkpad);
-  g_assert_cmpint (link, ==, GST_PAD_LINK_OK);
+  g_assert (link == GST_PAD_LINK_OK);
   g_free (priv->element_sinkpad_name);
   priv->element_sinkpad_name = gst_pad_get_name (sinkpad);
 }
@@ -1565,10 +1565,10 @@ gst_harness_play (GstHarness * h)
   GstState state, pending;
   gboolean state_change;
   state_change = gst_element_set_state (h->element, GST_STATE_PLAYING);
-  g_assert_cmpint (GST_STATE_CHANGE_SUCCESS, ==, state_change);
+  g_assert (GST_STATE_CHANGE_SUCCESS == state_change);
   state_change = gst_element_get_state (h->element, &state, &pending, 0);
-  g_assert_cmpint (GST_STATE_CHANGE_SUCCESS, ==, state_change);
-  g_assert_cmpint (GST_STATE_PLAYING, ==, state);
+  g_assert (GST_STATE_CHANGE_SUCCESS == state_change);
+  g_assert (GST_STATE_PLAYING == state);
 }
 
 /**
@@ -1662,7 +1662,7 @@ gst_harness_create_buffer (GstHarness * h, gsize size)
 
   if (priv->pool) {
     flow = gst_buffer_pool_acquire_buffer (priv->pool, &ret, NULL);
-    g_assert_cmpint (flow, ==, GST_FLOW_OK);
+    g_assert (flow == GST_FLOW_OK);
     if (gst_buffer_get_size (ret) != size) {
       GST_DEBUG ("use fallback, pool is configured with a different size (%"
           G_GSIZE_FORMAT " != %" G_GSIZE_FORMAT ")",

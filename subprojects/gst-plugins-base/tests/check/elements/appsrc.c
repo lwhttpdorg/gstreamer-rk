@@ -454,7 +454,7 @@ GST_START_TEST (test_appsrc_blocked_on_caps)
   loop = g_main_loop_new (NULL, FALSE);
 
   pipeline = gst_parse_launch ("appsrc is-live=1 name=app ! fakesink", &error);
-  g_assert_no_error (error);
+  fail_if (error);
 
   app = gst_bin_get_by_name (GST_BIN (pipeline), "app");
   pad = gst_element_get_static_pad (app, "src");
@@ -1510,16 +1510,17 @@ send_event_before_buffer_event_func (GstPad * pad, GstObject * parent,
   GST_LOG ("event %" GST_PTR_FORMAT, event);
 
   if (expected_obj == EXPECTED_STREAM_START) {
-    g_assert_cmpuint (GST_EVENT_TYPE (event), ==, GST_EVENT_STREAM_START);
+    fail_unless_equals_int (GST_EVENT_TYPE (event), GST_EVENT_STREAM_START);
     expected_obj = EXPECTED_CAPS;
   } else if (expected_obj == EXPECTED_CAPS) {
-    g_assert_cmpuint (GST_EVENT_TYPE (event), ==, GST_EVENT_CAPS);
+    fail_unless_equals_int (GST_EVENT_TYPE (event), GST_EVENT_CAPS);
     expected_obj = EXPECTED_SEGMENT;
   } else if (expected_obj == EXPECTED_SEGMENT) {
-    g_assert_cmpuint (GST_EVENT_TYPE (event), ==, GST_EVENT_SEGMENT);
+    fail_unless_equals_int (GST_EVENT_TYPE (event), GST_EVENT_SEGMENT);
     expected_obj = EXPECTED_CUSTOM;
   } else if (expected_obj == EXPECTED_CUSTOM) {
-    g_assert_cmpuint (GST_EVENT_TYPE (event), ==, GST_EVENT_CUSTOM_DOWNSTREAM);
+    fail_unless_equals_int (GST_EVENT_TYPE (event),
+        GST_EVENT_CUSTOM_DOWNSTREAM);
     expected_obj = EXPECTED_BUFFER;
   } else {
     g_assert_not_reached ();
@@ -1535,7 +1536,7 @@ send_event_before_buffer_chain_func (GstPad * pad, GstObject * parent,
 {
   GST_LOG ("buffer # %3u", (guint) GST_BUFFER_OFFSET (buf));
 
-  g_assert_cmpuint (expected_obj, ==, EXPECTED_BUFFER);
+  fail_unless_equals_int (expected_obj, EXPECTED_BUFFER);
 
   g_mutex_lock (&check_mutex);
   done = TRUE;

@@ -154,7 +154,7 @@ GST_START_TEST (test_add_source_buffer_with_content_type_null)
 
   GstMediaSource *media_source = gst_media_source_new ();
 
-  g_assert_null (gst_media_source_add_source_buffer (media_source, NULL, NULL));
+  fail_if (gst_media_source_add_source_buffer (media_source, NULL, NULL));
 
   gst_object_unref (media_source);
 }
@@ -168,8 +168,9 @@ GST_START_TEST (test_add_source_buffer_with_content_type_empty)
   GstSourceBuffer *source_buffer =
       gst_media_source_add_source_buffer (media_source, "", &error);
 
-  g_assert_null (source_buffer);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR, GST_MEDIA_SOURCE_ERROR_TYPE);
+  fail_if (source_buffer);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_TYPE));
 
   gst_object_unref (media_source);
   g_clear_error (&error);
@@ -184,9 +185,9 @@ GST_START_TEST (test_add_source_buffer_with_content_type_fake)
   GstSourceBuffer *source_buffer =
       gst_media_source_add_source_buffer (media_source, "fake/type", &error);
 
-  g_assert_null (source_buffer);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_NOT_SUPPORTED);
+  fail_if (source_buffer);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_NOT_SUPPORTED));
 
   gst_object_unref (media_source);
   g_clear_error (&error);
@@ -201,9 +202,9 @@ GST_START_TEST (test_add_source_buffer_to_unopened_media_source)
   GstSourceBuffer *source_buffer =
       gst_media_source_add_source_buffer (media_source, "video/webm", &error);
 
-  g_assert_null (source_buffer);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_INVALID_STATE);
+  fail_if (source_buffer);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_INVALID_STATE));
 
   gst_object_unref (media_source);
   g_clear_error (&error);
@@ -223,7 +224,7 @@ GST_START_TEST (test_add_source_buffer_to_opened_media_source)
   guint n_buffers_after = gst_source_buffer_list_get_length (buffers);
 
   fail_unless (GST_IS_SOURCE_BUFFER (source_buffer));
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (n_buffers_before < n_buffers_after);
 
   g_object_unref (media_source);
@@ -243,8 +244,8 @@ GST_START_TEST (test_remove_source_buffer_from_unrelated_media_source)
       gst_media_source_add_source_buffer (b, "video/webm", &error);
 
   gst_media_source_remove_source_buffer (a, buffer_in_b, &error);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_NOT_FOUND);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_NOT_FOUND));
 
   gst_object_unref (a);
   gst_object_unref (b);
@@ -267,7 +268,7 @@ GST_START_TEST (test_remove_source_buffer_from_parent_media_source)
   gst_media_source_remove_source_buffer (media_source, buffer, &error);
   guint n_buffers_after = gst_source_buffer_list_get_length (buffers);
 
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (n_buffers_before > n_buffers_after);
 
   gst_object_unref (media_source);
@@ -285,8 +286,8 @@ GST_START_TEST (test_set_live_seekable_range_on_unopened_media_source)
 
   gst_media_source_set_live_seekable_range (media_source, 0, 1, &error);
 
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_INVALID_STATE);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_INVALID_STATE));
 
   gst_object_unref (media_source);
   g_clear_error (&error);
@@ -307,7 +308,8 @@ GST_START_TEST (test_set_backwards_live_seekable_range_on_opened_media_source)
   };
   gst_media_source_get_live_seekable_range (media_source, &range);
 
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR, GST_MEDIA_SOURCE_ERROR_TYPE);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_TYPE));
   fail_unless (range.start == 0);
   fail_unless (range.end == 0);
 
@@ -331,7 +333,7 @@ GST_START_TEST (test_set_live_seekable_range_on_opened_media_source)
   };
   gst_media_source_get_live_seekable_range (media_source, &range);
 
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (range.start == start);
   fail_unless (range.end == end);
 
@@ -348,8 +350,8 @@ GST_START_TEST (test_clear_live_seekable_range_on_unopened_media_source)
 
   gst_media_source_clear_live_seekable_range (media_source, &error);
 
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_INVALID_STATE);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_INVALID_STATE));
 
   gst_object_unref (media_source);
   g_clear_error (&error);
@@ -370,7 +372,7 @@ GST_START_TEST (test_clear_live_seekable_range_on_opened_media_source)
   };
   gst_media_source_get_live_seekable_range (media_source, &range);
 
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (range.start == 0);
   fail_unless (range.end == 0);
 
@@ -384,7 +386,7 @@ GST_START_TEST (test_append_pipeline_create_and_free)
 {
   GError *error = NULL;
   GstAppendPipeline *pipeline = gst_append_pipeline_new (NULL, NULL, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (GST_IS_APPEND_PIPELINE (pipeline));
   gst_check_object_destroyed_on_unref (pipeline);
   g_clear_error (&error);
@@ -461,7 +463,7 @@ test_append_pipeline (const gchar * filename)
   gsize length;
 
   g_file_get_contents (filename, &data, &length, &error);
-  g_assert_no_error (error);
+  fail_if (error);
 
   fail_unless (gst_append_pipeline_append (pipeline,
           gst_buffer_new_wrapped (data, length)) == GST_FLOW_OK);
@@ -559,7 +561,7 @@ GST_START_TEST (test_append_pipeline_reset_recovery)
     GError *error = NULL;
     gchar *filename = test_webm_path ();
     g_file_get_contents (filename, &data, &length, &error);
-    g_assert_no_error (error);
+    fail_if (error);
     g_clear_error (&error);
     g_free (filename);
   }
@@ -593,8 +595,8 @@ GST_START_TEST (test_track_create_with_invalid_type)
   add_log_filter (G_LOG_LEVEL_CRITICAL,
       "^.*track_new_full: assertion .*type .* failed");
 
-  g_assert_null (gst_media_source_track_new (-1, ""));
-  g_assert_null (gst_media_source_track_new (GST_MEDIA_SOURCE_TRACK_TYPE_OTHER +
+  fail_if (gst_media_source_track_new (-1, ""));
+  fail_if (gst_media_source_track_new (GST_MEDIA_SOURCE_TRACK_TYPE_OTHER +
           1, ""));
 }
 
@@ -752,7 +754,8 @@ GST_START_TEST (test_source_buffer_change_content_type_null)
 
   GError *error = NULL;
   gst_source_buffer_change_content_type (source_buffer, NULL, &error);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR, GST_MEDIA_SOURCE_ERROR_TYPE);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_TYPE));
 
   g_clear_error (&error);
   gst_object_unref (source_buffer);
@@ -771,7 +774,8 @@ GST_START_TEST (test_source_buffer_change_content_type_empty)
 
   GError *error = NULL;
   gst_source_buffer_change_content_type (source_buffer, "", &error);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR, GST_MEDIA_SOURCE_ERROR_TYPE);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_TYPE));
 
   g_clear_error (&error);
   gst_object_unref (source_buffer);
@@ -790,8 +794,8 @@ GST_START_TEST (test_source_buffer_change_content_type)
 
   GError *error = NULL;
   gst_source_buffer_change_content_type (source_buffer, "video/webm", &error);
-  g_assert_error (error, GST_MEDIA_SOURCE_ERROR,
-      GST_MEDIA_SOURCE_ERROR_NOT_SUPPORTED);
+  fail_unless (g_error_matches (error, GST_MEDIA_SOURCE_ERROR,
+          GST_MEDIA_SOURCE_ERROR_NOT_SUPPORTED));
 
   gst_object_unref (source_buffer);
   gst_object_unref (media_source);

@@ -90,7 +90,7 @@ load_file (const gchar * fn, guint8 ** p_data, guint expected_len)
   if (!g_file_get_contents (fn, (gchar **) p_data, &read_len, NULL))
     return FALSE;
 
-  g_assert_cmpuint (read_len, ==, expected_len);
+  fail_unless_equals_int (read_len, expected_len);
   return TRUE;
 }
 

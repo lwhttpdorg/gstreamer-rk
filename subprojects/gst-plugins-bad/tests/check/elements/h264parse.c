@@ -547,18 +547,18 @@ GST_START_TEST (test_sink_caps_reordering)
   sink_caps = gst_pad_peer_query_caps (src, src_caps);
 
   /* Sink pad has both format on its sink caps but prefer to use byte-stream */
-  g_assert_cmpuint (gst_caps_get_size (sink_caps), ==, 2);
+  g_assert (gst_caps_get_size (sink_caps) == 2);
 
   s = gst_caps_get_structure (sink_caps, 0);
-  g_assert_cmpstr (gst_structure_get_name (s), ==, "video/x-h264");
-  g_assert_cmpstr (gst_structure_get_string (s, "alignment"), ==, "au");
-  g_assert_cmpstr (gst_structure_get_string (s, "stream-format"), ==,
-      "byte-stream");
+  g_assert (g_str_equal (gst_structure_get_name (s), "video/x-h264"));
+  g_assert (g_str_equal (gst_structure_get_string (s, "alignment"), "au"));
+  g_assert (g_str_equal (gst_structure_get_string (s, "stream-format"),
+          "byte-stream"));
 
   s = gst_caps_get_structure (sink_caps, 1);
-  g_assert_cmpstr (gst_structure_get_name (s), ==, "video/x-h264");
-  g_assert_cmpstr (gst_structure_get_string (s, "alignment"), ==, "au");
-  g_assert_cmpstr (gst_structure_get_string (s, "stream-format"), ==, "avc");
+  g_assert (g_str_equal (gst_structure_get_name (s), "video/x-h264"));
+  g_assert (g_str_equal (gst_structure_get_string (s, "alignment"), "au"));
+  g_assert (g_str_equal (gst_structure_get_string (s, "stream-format"), "avc"));
 
   gst_caps_unref (src_caps);
   gst_caps_unref (sink_caps);

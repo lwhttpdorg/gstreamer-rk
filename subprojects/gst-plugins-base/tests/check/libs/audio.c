@@ -104,8 +104,8 @@ GST_START_TEST (test_buffer_clip_time_start_and_stop)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 400);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 800);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 400);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 400);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -182,8 +182,8 @@ GST_START_TEST (test_buffer_clip_time_start)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 400);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 1200);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 800);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 800);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -268,8 +268,8 @@ GST_START_TEST (test_buffer_clip_time_stop)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 200);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 1000);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data);
-  fail_unless (map.size == 800);
+  fail_unless_equals_pointer (map.data, data);
+  fail_unless_equals_uint64 (map.size, 800);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -377,8 +377,8 @@ GST_START_TEST (test_buffer_clip_time_start_and_stop_no_meta)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret),
       GST_BUFFER_OFFSET_NONE);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 400);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 400);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -441,8 +441,8 @@ GST_START_TEST (test_buffer_clip_time_handles_rounding)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 200);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 1000);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data);
-  fail_unless (map.size == 800);
+  fail_unless_equals_pointer (map.data, data);
+  fail_unless_equals_uint64 (map.size, 800);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -475,8 +475,8 @@ GST_START_TEST (test_buffer_clip_samples_start_and_stop)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 400);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 800);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 400);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 400);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -560,8 +560,8 @@ GST_START_TEST (test_buffer_clip_samples_start)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 400);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 1200);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 800);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 800);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -594,8 +594,8 @@ GST_START_TEST (test_buffer_clip_samples_stop)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 200);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 1000);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data);
-  fail_unless (map.size == 800);
+  fail_unless_equals_pointer (map.data, data);
+  fail_unless_equals_uint64 (map.size, 800);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -649,8 +649,8 @@ GST_START_TEST (test_buffer_clip_samples_start_and_stop_no_meta)
   fail_unless_equals_int64 (GST_BUFFER_OFFSET (ret), 400);
   fail_unless_equals_int64 (GST_BUFFER_OFFSET_END (ret), 800);
   gst_buffer_map (ret, &map, GST_MAP_READ);
-  fail_unless (map.data == data + 200);
-  fail_unless (map.size == 400);
+  fail_unless_equals_pointer (map.data, data + 200);
+  fail_unless_equals_uint64 (map.size, 400);
   gst_buffer_unmap (ret, &map);
 
   gst_buffer_unref (ret);
@@ -1613,17 +1613,17 @@ GST_START_TEST (test_audio_meta_serialize)
   g_byte_array_unref (data);
 
   /* Check meta's content */
-  g_assert_cmpint (meta->info.finfo->format, ==, GST_AUDIO_FORMAT_S32);
-  g_assert_cmpint (meta->info.layout, ==, GST_AUDIO_LAYOUT_NON_INTERLEAVED);
-  g_assert_cmpint (meta->info.rate, ==, 44100);
-  g_assert_cmpint (meta->info.channels, ==, 2);
-  g_assert_cmpint (meta->info.position[0], ==,
+  fail_unless_equals_int (meta->info.finfo->format, GST_AUDIO_FORMAT_S32);
+  fail_unless_equals_int (meta->info.layout, GST_AUDIO_LAYOUT_NON_INTERLEAVED);
+  fail_unless_equals_int (meta->info.rate, 44100);
+  fail_unless_equals_int (meta->info.channels, 2);
+  fail_unless_equals_int (meta->info.position[0],
       GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT);
-  g_assert_cmpint (meta->info.position[1], ==,
+  fail_unless_equals_int (meta->info.position[1],
       GST_AUDIO_CHANNEL_POSITION_FRONT_RIGHT);
-  g_assert_cmpuint (meta->samples, ==, samples);
-  g_assert_cmpuint (meta->offsets[0], ==, 0);
-  g_assert_cmpuint (meta->offsets[1], ==, buf_size / 2);
+  fail_unless_equals_int (meta->samples, samples);
+  fail_unless_equals_int (meta->offsets[0], 0);
+  fail_unless_equals_int (meta->offsets[1], buf_size / 2);
 
   gst_buffer_unref (buf);
 }
@@ -1665,13 +1665,13 @@ GST_START_TEST (test_audio_meta_serialize_65_chans)
   g_byte_array_unref (data);
 
   /* Check meta's content */
-  g_assert_cmpint (meta->info.finfo->format, ==, GST_AUDIO_FORMAT_S32);
-  g_assert_cmpint (meta->info.layout, ==, GST_AUDIO_LAYOUT_NON_INTERLEAVED);
-  g_assert_cmpint (meta->info.rate, ==, 44100);
-  g_assert_cmpint (meta->info.channels, ==, 65);
-  g_assert_cmpuint (meta->samples, ==, samples);
+  fail_unless_equals_int (meta->info.finfo->format, GST_AUDIO_FORMAT_S32);
+  fail_unless_equals_int (meta->info.layout, GST_AUDIO_LAYOUT_NON_INTERLEAVED);
+  fail_unless_equals_int (meta->info.rate, 44100);
+  fail_unless_equals_int (meta->info.channels, 65);
+  fail_unless_equals_int (meta->samples, samples);
   for (int i = 0; i < 65; i++)
-    g_assert_cmpuint (meta->offsets[i], ==, i * samples * 4);
+    fail_unless_equals_int (meta->offsets[i], i * samples * 4);
 
   gst_buffer_unref (buf);
 }
