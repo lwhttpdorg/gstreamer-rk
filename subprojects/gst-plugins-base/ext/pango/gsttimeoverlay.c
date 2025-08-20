@@ -129,6 +129,8 @@ gst_time_overlay_time_line_type (void)
         "buffer-count", "buffer-count"},
     {GST_TIME_OVERLAY_TIME_LINE_BUFFER_OFFSET,
         "buffer-offset", "buffer-offset"},
+    {GST_TIME_OVERLAY_TIME_LINE_NOW,
+        "now", "now"},
     {0, NULL, NULL},
   };
 
@@ -251,6 +253,12 @@ gst_time_overlay_get_text (GstBaseTextOverlay * overlay,
       time_str = g_date_time_format (datetime, self->datetime_format);
 
       g_date_time_unref (datetime);
+    } else if (time_line == GST_TIME_OVERLAY_TIME_LINE_NOW) {
+      GDateTime *now = g_date_time_new_now_local ();
+
+      time_str = g_date_time_format (now, self->datetime_format);
+
+      g_date_time_unref (now);
     } else {
       time_str = gst_time_overlay_render_time (GST_TIME_OVERLAY (overlay), ts);
     }
