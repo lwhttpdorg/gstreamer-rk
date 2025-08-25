@@ -75,8 +75,6 @@ GST_DEBUG_CATEGORY_STATIC (aacparse_debug);
                                    headers prepended during raw to ADTS
                                    conversion */
 
-#define AAC_FRAME_DURATION(parse) (GST_SECOND/parse->frames_per_sec)
-
 static const gint loas_sample_rate_table[16] = {
   96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050,
   16000, 12000, 11025, 8000, 7350, 0, 0, 0
@@ -159,6 +157,8 @@ gst_aac_parse_init (GstAacParse * aacparse)
 
   aacparse->last_parsed_sample_rate = 0;
   aacparse->last_parsed_channels = 0;
+  aacparse->total_samples = 0;
+  aacparse->frame_offset = 0;
 }
 
 
@@ -1388,6 +1388,20 @@ gst_aac_parse_prepend_adts_headers (GstAacParse * aacparse,
       ADTS_HEADERS_LENGTH, adts_headers, g_free);
   gst_buffer_prepend_memory (frame->out_buffer, mem);
 
+  GST_BUFFER_PTS (frame->out_buffer) =
+      gst_util_uint64_scale (aacparse->total_samples, GST_SECOND,
+      aacparse->sample_rate);
+  GST_BUFFER_DTS (frame->out_buffer) = GST_BUFFER_PTS (frame->out_buffer);
+  GST_BUFFER_DURATION (frame->out_buffer) =
+      gst_util_uint64_scale (aacparse->frame_samples, GST_SECOND,
+      aacparse->sample_rate);
+  aacparse->total_samples += aacparse->frame_samples;
+
+  GST_BUFFER_OFFSET (frame->out_buffer) = aacparse->frame_offset;
+  GST_BUFFER_OFFSET_END (frame->out_buffer) =
+      aacparse->frame_offset + frame_size;
+  aacparse->frame_offset += frame_size;
+
   return TRUE;
 }
 
@@ -1652,6 +1666,8 @@ gst_aac_parse_start (GstBaseParse * parse)
   aacparse->output_header_type = DSPAAC_HEADER_NOT_PARSED;
   aacparse->channels = 0;
   aacparse->sample_rate = 0;
+  aacparse->total_samples = 0;
+  aacparse->frame_offset = 0;
   return TRUE;
 }
 

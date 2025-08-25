@@ -1,0 +1,8 @@
+set-globals, media_dir="$(test_dir)/../../../medias/"
+meta,
+    args = {
+         "file://$(media_dir)/defaults/mp4/aac.mp4 ! qtdemux ! aacparse name=parser ! audio/mpeg,stream-format=adts ! fakesink",
+    },
+    configs = {
+       "$(validateflow), pad=parser:src, record-buffers=true",
+    }

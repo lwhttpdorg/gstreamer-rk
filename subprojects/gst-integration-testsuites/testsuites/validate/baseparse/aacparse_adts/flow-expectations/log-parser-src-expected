@@ -1,0 +1,37 @@
+event stream-start: GstEventStreamStart, flags=(GstStreamFlags)GST_STREAM_FLAG_NONE, group-id=(uint)1;
+event caps: audio/mpeg, base-profile=(string)lc, channels=(int)2, framed=(boolean)true, level=(string)2, mpegversion=(int)4, profile=(string)lc, rate=(int)44100, stream-format=(string)adts;
+event segment: format=TIME, start=0:00:00.000000000, offset=0:00:00.000000000, stop=0:00:00.626666666, time=0:00:00.000000000, base=0:00:00.000000000, position=0:00:00.000000000
+event tag: GstTagList-stream, taglist=(taglist)"taglist\,\ audio-codec\=\(string\)\"MPEG-4\\\ AAC\\\ audio\"\,\ bitrate\=\(uint\)112649\,\ container-specific-track-id\=\(string\)1\,\ description\=\(string\)\"audiotest\\\ wave\"\;";
+event tag: GstTagList-global, taglist=(taglist)"taglist\,\ datetime\=\(datetime\)2025-08-26T09:04:09Z\,\ container-format\=\(string\)\"ISO\\\ MP4/M4A\"\;";
+event tag: GstTagList-stream, taglist=(taglist)"taglist\,\ audio-codec\=\(string\)\"MPEG-4\\\ AAC\"\,\ bitrate\=\(uint\)112649\,\ container-specific-track-id\=\(string\)1\,\ description\=\(string\)\"audiotest\\\ wave\"\;";
+buffer: dts=0:00:00.000000000, pts=0:00:00.000000000, dur=0:00:00.023219954, flags=discont tag-memory
+buffer: dts=0:00:00.023219954, pts=0:00:00.023219954, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.046439909, pts=0:00:00.046439909, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.069659863, pts=0:00:00.069659863, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.092879818, pts=0:00:00.092879818, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.116099773, pts=0:00:00.116099773, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.139319727, pts=0:00:00.139319727, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.162539682, pts=0:00:00.162539682, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.185759637, pts=0:00:00.185759637, dur=0:00:00.023219954, flags=tag-memory
+event tag: GstTagList-stream, taglist=(taglist)"taglist\,\ audio-codec\=\(string\)\"MPEG-4\\\ AAC\"\,\ bitrate\=\(uint\)112649\,\ container-specific-track-id\=\(string\)1\,\ description\=\(string\)\"audiotest\\\ wave\"\,\ minimum-bitrate\=\(uint\)114384\,\ maximum-bitrate\=\(uint\)114384\;";
+buffer: dts=0:00:00.208979591, pts=0:00:00.208979591, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.232199546, pts=0:00:00.232199546, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.255419501, pts=0:00:00.255419501, dur=0:00:00.023219954, flags=tag-memory
+event tag: GstTagList-stream, taglist=(taglist)"taglist\,\ audio-codec\=\(string\)\"MPEG-4\\\ AAC\"\,\ bitrate\=\(uint\)112649\,\ container-specific-track-id\=\(string\)1\,\ description\=\(string\)\"audiotest\\\ wave\"\,\ minimum-bitrate\=\(uint\)114384\,\ maximum-bitrate\=\(uint\)114728\;";
+buffer: dts=0:00:00.278639455, pts=0:00:00.278639455, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.301859410, pts=0:00:00.301859410, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.325079365, pts=0:00:00.325079365, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.348299319, pts=0:00:00.348299319, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.371519274, pts=0:00:00.371519274, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.394739229, pts=0:00:00.394739229, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.417959183, pts=0:00:00.417959183, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.441179138, pts=0:00:00.441179138, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.464399092, pts=0:00:00.464399092, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.487619047, pts=0:00:00.487619047, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.510839002, pts=0:00:00.510839002, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.534058956, pts=0:00:00.534058956, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.557278911, pts=0:00:00.557278911, dur=0:00:00.023219954, flags=tag-memory
+buffer: dts=0:00:00.580498866, pts=0:00:00.580498866, dur=0:00:00.023219954, flags=tag-memory
+event tag: GstTagList-stream, taglist=(taglist)"taglist\,\ audio-codec\=\(string\)\"MPEG-4\\\ AAC\"\,\ bitrate\=\(uint\)112649\,\ container-specific-track-id\=\(string\)1\,\ description\=\(string\)\"audiotest\\\ wave\"\,\ minimum-bitrate\=\(uint\)114384\,\ maximum-bitrate\=\(uint\)131610\;";
+buffer: dts=0:00:00.603718820, pts=0:00:00.603718820, dur=0:00:00.023219954, flags=tag-memory
+event eos: (no structure)
