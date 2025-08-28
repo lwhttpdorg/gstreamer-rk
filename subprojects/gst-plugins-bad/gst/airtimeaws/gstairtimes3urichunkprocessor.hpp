@@ -267,14 +267,17 @@ private:
 class CachingS3URIChunkProcessor : public S3URIChunkProcessor
 {
 public:
+    /// @param cache_manager The cache manager to use for caching S3 chunks.
+    /// @param s3_bucket S3 bucket name.
+    /// @param s3_key S3 object key.
+    /// @param file_chunk_standard_size Standard size of file chunks.
+    /// @param trust_cached_data Whether to trust the cached metadata (if exists) or not. This may avoid unnecessary
+    /// metadata fetching.
     CachingS3URIChunkProcessor(std::shared_ptr<S3URICacheManager> cache_manager, std::string_view s3_bucket,
-                               std::string_view s3_key, std::uint64_t file_chunk_standard_size);
+                               std::string_view s3_key, std::uint64_t file_chunk_standard_size, bool trust_cached_data);
     ~CachingS3URIChunkProcessor();
 
-    bool needsObjectMetadata() const override
-    {
-        return true;
-    }
+    bool needsObjectMetadata() const override;
 
     void setObjectMetadata(S3URIObjectMetadata metadata) override;
 
@@ -297,6 +300,7 @@ private:
     void createDirectoryInUseFile();
     void removeDirectoryInUseFile();
     void loadChunksFromDirectory();
+    void readCachedMetadataIfExists();
     void resetCacheDirectory(bool recreate_cache_content);
     S3URIFileChunkGaps calculateChunkGapsImpl() const;
 
@@ -315,8 +319,10 @@ private:
     std::shared_ptr<S3URICacheManager> cache_manager_;
     std::filesystem::path directory_path_;
     std::uint64_t file_chunk_standard_size_; // standard size of file chunks, used to estimate amount of file chunks
+    bool trust_cached_data_;
 
-    S3URIObjectMetadata metadata_;
+    std::optional<S3URIObjectMetadata> cached_metadata_;
+    std::optional<S3URIObjectMetadata> metadata_;
     mutable std::mutex state_access_;
     mutable std::vector<CacheFileChunk> file_chunks_;
     std::uint64_t file_chunks_content_length_{0};

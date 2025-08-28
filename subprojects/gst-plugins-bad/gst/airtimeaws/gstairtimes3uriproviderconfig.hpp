@@ -83,6 +83,12 @@ struct S3URIProviderConfig {
     /// @brief The maximum number of retry attempts to download a chunk.
     /// If the download fails, it will be retried up to this number of times.
     unsigned fetch_max_retry_count = 2;
+
+    /// @brief Whether to trust the cached data.
+    /// If this is set to true, the cached metadata will be used without checking
+    /// for updates (if exists) avoiding unnecessary S3 requests. If set to false, the metadata will be re-fetched from
+    /// S3.
+    bool trust_cached_data = false;
 };
 
 } // namespace gst::airtime

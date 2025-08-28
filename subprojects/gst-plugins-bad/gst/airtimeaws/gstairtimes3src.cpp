@@ -110,7 +110,8 @@ enum {
     PROP_MAX_NUMBER_OF_DOWNLOADS,
     PROP_CACHE_DIRECTORY,
     PROP_CACHE_MAX_SIZE,
-    PROP_FETCH_MAX_RETRY_COUNT
+    PROP_FETCH_MAX_RETRY_COUNT,
+    PROP_TRUST_CACHED_DATA
 };
 
 #define S3_URI "s3"
@@ -808,6 +809,9 @@ static void gst_airtime_s3_src_get_property(GObject* object, guint prop_id, GVal
         case PROP_FETCH_MAX_RETRY_COUNT:
             g_value_set_uint(value, impl->uri_provider_config.fetch_max_retry_count);
             break;
+        case PROP_TRUST_CACHED_DATA:
+            g_value_set_boolean(value, impl->uri_provider_config.trust_cached_data);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -855,6 +859,11 @@ static void gst_airtime_s3_src_set_property(GObject* object, guint prop_id, cons
         case PROP_FETCH_MAX_RETRY_COUNT:
             impl->uri_provider_config.fetch_max_retry_count = g_value_get_uint(value);
             GST_DEBUG_OBJECT(self, "Fetch max retry count set to %u", impl->uri_provider_config.fetch_max_retry_count);
+            break;
+        case PROP_TRUST_CACHED_DATA:
+            impl->uri_provider_config.trust_cached_data = g_value_get_boolean(value);
+            GST_DEBUG_OBJECT(self, "Trust cached data set to %s",
+                             impl->uri_provider_config.trust_cached_data ? "true" : "false");
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -1002,8 +1011,9 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
         object_class, PROP_CACHE_MAX_SIZE,
         g_param_spec_uint64("cache-max-size-bytes", "Max cache size in bytes",
                             "The maximum total cache size in bytes. When this limit is reached, the LRU eviction "
-                            "policy removes cache directory of the least recently used S3 file.",
-                            10 * 1024 * 1024, G_MAXUINT64, default_config.max_cache_size_bytes,
+                            "policy removes cache directory of the least recently used S3 file. Setting this value to "
+                            "0 disables eviction making the cache unbounded.",
+                            0, G_MAXUINT64, default_config.max_cache_size_bytes,
                             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
@@ -1018,8 +1028,27 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
         g_param_spec_uint("fetch-max-retry-count", "Max number of fetch retry count",
                           "The maximum number of retries for S3 fetch operations that fail due to transient errors "
                           "(e.g., network issues).",
-                          2, G_MAXUINT, default_config.fetch_max_retry_count,
+                          0, G_MAXUINT, default_config.fetch_max_retry_count,
                           (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:trust-cached-data:
+     *
+     * Whether to trust the integrity of cached data without revalidating it with S3 metadata object.
+     * It may avoid unnecessary S3 requests if the metadata is already cached and allows for
+     * working with the cached object without having an active internet connection.
+     *
+     * Since: 1.26
+     */
+    g_object_class_install_property(
+        object_class, PROP_TRUST_CACHED_DATA,
+        g_param_spec_boolean(
+            "trust-cached-data", "Trust cached data",
+            "Whether to trust the integrity of cached data without revalidating it with S3 metadata "
+            "object. It may avoid unnecessary S3 requests if the metadata is already cached and allows for "
+            "working with the cached object without having an active internet connection.",
+            default_config.trust_cached_data,
+            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     gst_element_class_set_details_simple(
         element_class, "airtime S3 (file) src element", "Source", "Serves as an S3 (file) source element",

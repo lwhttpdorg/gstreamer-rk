@@ -286,10 +286,11 @@ std::uint64_t S3URICacheManager::currentCacheSize() const
 
 CachingS3URIChunkProcessor::CachingS3URIChunkProcessor(std::shared_ptr<S3URICacheManager> cache_manager,
                                                        std::string_view s3_bucket, std::string_view s3_key,
-                                                       std::uint64_t file_chunk_standard_size) :
+                                                       std::uint64_t file_chunk_standard_size, bool trust_cached_data) :
     cache_manager_{std::move(cache_manager)},
     directory_path_{cache_manager_->cacheBaseDirectory()},
-    file_chunk_standard_size_{file_chunk_standard_size}
+    file_chunk_standard_size_{file_chunk_standard_size},
+    trust_cached_data_{trust_cached_data}
 {
     if (s3_key.starts_with("/"))
     {
@@ -303,6 +304,7 @@ CachingS3URIChunkProcessor::CachingS3URIChunkProcessor(std::shared_ptr<S3URICach
     std::filesystem::create_directories(directory_path_);
     createDirectoryInUseFile();
     loadChunksFromDirectory();
+    readCachedMetadataIfExists();
     saveFileChunkSizeToFileIfNotExists(directory_path_ / file_chunk_size_file_name, file_chunk_standard_size_);
 }
 
@@ -310,6 +312,7 @@ CachingS3URIChunkProcessor::~CachingS3URIChunkProcessor()
 {
     try
     {
+        std::lock_guard lock{state_access_};
         removeDirectoryInUseFile();
 
         // Remove all files in the directory. That may happen if the cache was not in a consistent state.
@@ -322,6 +325,12 @@ CachingS3URIChunkProcessor::~CachingS3URIChunkProcessor()
     {
         GST_ERROR("Unexpected exception: %s", e.what());
     }
+}
+
+bool CachingS3URIChunkProcessor::needsObjectMetadata() const
+{
+    return trust_cached_data_ ? not cached_metadata_.has_value() and not metadata_.has_value()
+                              : not metadata_.has_value();
 }
 
 void CachingS3URIChunkProcessor::setObjectMetadata(S3URIObjectMetadata metadata)
@@ -343,7 +352,7 @@ void CachingS3URIChunkProcessor::setObjectMetadata(S3URIObjectMetadata metadata)
 
     // It may happen that loadChunksFromDirectory loaded non-contiguous chunks and we need to fill the gaps here.
     const std::uint64_t expected_file_chunks_count =
-        calculateExpectedCacheFilesCount(metadata_.content_length, file_chunk_standard_size_);
+        calculateExpectedCacheFilesCount(metadata_->content_length, file_chunk_standard_size_);
     if (file_chunks_.empty())
     {
         // nothing is loaded from the cache directory yet, so we can just resize the vector
@@ -371,26 +380,29 @@ void CachingS3URIChunkProcessor::setObjectMetadata(S3URIObjectMetadata metadata)
 S3URIObjectMetadata CachingS3URIChunkProcessor::getObjectMetadata() const
 {
     std::lock_guard lock{state_access_};
-    return metadata_;
+    if (not metadata_)
+    {
+        throw std::runtime_error("Metadata has not been set");
+    }
+    return *metadata_;
 }
 
 std::pair<bool, std::vector<S3URIFileChunkGapSpec>> CachingS3URIChunkProcessor::needsChunks() const
 {
     std::lock_guard lock{state_access_};
-    const auto metadata_file = directory_path_ / metadata_file_name;
-    S3URIObjectMetadata deser_metadata;
-    try
+    if (not cached_metadata_.has_value())
     {
-        deser_metadata = deserializeS3URIObjectMetadataFromJSON(metadata_file);
-    }
-    catch (const std::exception& e)
-    {
-        GST_DEBUG("Unable to deserialize metadata json file: %s.", e.what());
         recreate_cache_content_ = true;
         return {true, {}};
     }
 
-    if (deser_metadata != metadata_)
+    if (not metadata_.has_value())
+    {
+        recreate_cache_content_ = true;
+        return {true, {}};
+    }
+
+    if (cached_metadata_ != metadata_)
     {
         GST_DEBUG("Metadata values do not match, need to download all chunks.");
         recreate_cache_content_ = true;
@@ -418,14 +430,14 @@ std::pair<bool, std::vector<S3URIFileChunkGapSpec>> CachingS3URIChunkProcessor::
 
     // it may happen that loadChunksFromDirectory loaded more files than expected
     const auto expected_files_count =
-        calculateExpectedCacheFilesCount(metadata_.content_length, file_chunk_standard_size_);
+        calculateExpectedCacheFilesCount(metadata_->content_length, file_chunk_standard_size_);
     if (file_chunks_.size() > expected_files_count)
     {
         recreate_cache_content_ = true;
         return {true, {}};
     }
 
-    if (file_chunks_content_length_ > metadata_.content_length)
+    if (file_chunks_content_length_ > metadata_->content_length)
     {
         GST_DEBUG("Content length of file chunks is too big, need to download chunks.");
         recreate_cache_content_ = true;
@@ -433,7 +445,7 @@ std::pair<bool, std::vector<S3URIFileChunkGapSpec>> CachingS3URIChunkProcessor::
     }
 
     auto calc_gaps = calculateChunkGapsImpl();
-    if (file_chunks_content_length_ == metadata_.content_length and not calc_gaps.gaps.empty())
+    if (file_chunks_content_length_ == metadata_->content_length and not calc_gaps.gaps.empty())
     {
         GST_DEBUG(
             "Filling the gaps would cause the content length to exceed the expected length, need to download chunks.");
@@ -453,7 +465,7 @@ std::pair<bool, std::vector<S3URIFileChunkGapSpec>> CachingS3URIChunkProcessor::
         // from the cache.
         // However, we still need to notify the cache manager that the key was requested
         // to update the last access time of the cache entry.
-        cache_manager_->keyRequested(metadata_);
+        cache_manager_->keyRequested(*metadata_);
     }
     return {not calc_gaps.gaps.empty(), std::move(calc_gaps.gaps)};
 }
@@ -463,6 +475,11 @@ void CachingS3URIChunkProcessor::processChunk(const S3URIChunkSpec& chunk_spec, 
     // NOTE: This implementation has a limitation that it assumes the downloaded chunk size is always a multiple of
     // file_chunk_standard_size_.
     std::lock_guard lock{state_access_};
+
+    if (not metadata_)
+    {
+        throw std::runtime_error("Metadata has not been set");
+    }
 
     if (chunk_spec.standardSize() % file_chunk_standard_size_ != 0)
     {
@@ -478,7 +495,7 @@ void CachingS3URIChunkProcessor::processChunk(const S3URIChunkSpec& chunk_spec, 
             resetCacheDirectory(true);
             recreate_cache_content_ = false;
         }
-        cache_manager_->keyRequested(metadata_);
+        cache_manager_->keyRequested(*metadata_);
         GST_INFO("New cache size: %" G_GUINT64_FORMAT, cache_manager_->currentCacheSize());
         first_incoming_chunk_ = false;
     }
@@ -544,11 +561,15 @@ void CachingS3URIChunkProcessor::processChunk(const S3URIChunkSpec& chunk_spec, 
 bool CachingS3URIChunkProcessor::allChunksProcessed()
 {
     std::lock_guard lock{state_access_};
-    if (file_chunks_content_length_ != metadata_.content_length)
+    if (not metadata_)
+    {
+        throw std::runtime_error("Metadata has not been set");
+    }
+    if (file_chunks_content_length_ != metadata_->content_length)
     {
         GST_ERROR("File chunks content length %" G_GUINT64_FORMAT
                   " does not match metadata content length %" G_GUINT64_FORMAT,
-                  file_chunks_content_length_, metadata_.content_length);
+                  file_chunks_content_length_, metadata_->content_length);
         recreate_cache_content_ = true;
         return false;
     }
@@ -661,11 +682,34 @@ void CachingS3URIChunkProcessor::loadChunksFromDirectory()
               [](const auto& lhs, const auto& rhs) { return lhs.index < rhs.index; });
 }
 
+void CachingS3URIChunkProcessor::readCachedMetadataIfExists()
+{
+    std::lock_guard lock{state_access_};
+    const auto metadata_file = directory_path_ / metadata_file_name;
+    try
+    {
+        cached_metadata_ = deserializeS3URIObjectMetadataFromJSON(metadata_file);
+        if (trust_cached_data_)
+        {
+            metadata_ = cached_metadata_;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        GST_DEBUG("Unable to deserialize metadata json file: %s.", e.what());
+    }
+}
+
 void CachingS3URIChunkProcessor::resetCacheDirectory(bool recreate_cache_content)
 {
     // remove the existing cache directory, so that we can start fresh
     std::filesystem::remove_all(directory_path_);
-    cache_manager_->keyRemoved(metadata_);
+
+    if (not metadata_)
+    {
+        return;
+    }
+    cache_manager_->keyRemoved(*metadata_);
 
     if (recreate_cache_content)
     {
@@ -673,7 +717,8 @@ void CachingS3URIChunkProcessor::resetCacheDirectory(bool recreate_cache_content
 
         // serialize the metadata to a file
         const auto metadata_file = directory_path_ / metadata_file_name;
-        serializeS3URIObjectMetadataToJSON(metadata_, metadata_file);
+        serializeS3URIObjectMetadataToJSON(*metadata_, metadata_file);
+        cached_metadata_ = metadata_;
 
         const auto file_chunk_size_file = directory_path_ / file_chunk_size_file_name;
         saveFileChunkSizeToFile(file_chunk_size_file, file_chunk_standard_size_);
@@ -682,7 +727,7 @@ void CachingS3URIChunkProcessor::resetCacheDirectory(bool recreate_cache_content
         first_incoming_chunk_ = true;
 
         const std::size_t expected_file_chunks_count =
-            calculateExpectedCacheFilesCount(metadata_.content_length, file_chunk_standard_size_);
+            calculateExpectedCacheFilesCount(metadata_->content_length, file_chunk_standard_size_);
         file_chunks_.clear();
         file_chunks_.resize(expected_file_chunks_count);
     }

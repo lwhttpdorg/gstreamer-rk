@@ -435,8 +435,8 @@ std::shared_ptr<S3URIProvider> createS3URIProvider(std::shared_ptr<S3URICacheMan
                                                    const S3URIProviderConfig& config)
 {
     auto chunk_source = createChunkSource(s3_bucket, s3_key, config);
-    auto chunk_processor = std::make_unique<gst::airtime::CachingS3URIChunkProcessor>(cache_manager, s3_bucket, s3_key,
-                                                                                      config.file_chunk_size);
+    auto chunk_processor = std::make_unique<gst::airtime::CachingS3URIChunkProcessor>(
+        cache_manager, s3_bucket, s3_key, config.file_chunk_size, config.trust_cached_data);
     return std::make_shared<S3URIProvider>(s3_bucket, s3_key, config, std::move(chunk_source),
                                            std::move(chunk_processor));
 }

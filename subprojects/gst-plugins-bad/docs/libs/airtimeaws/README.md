@@ -167,10 +167,10 @@ Element Properties:
                         flags: readable, writable, changeable only in NULL or READY state
                         String. Default: "/var/folders/mk/r99zwhtj1lb6ylpbl3gnk80h0000gn/T/airtime_s3_cache"
   
-  cache-max-size-bytes: The maximum total cache size in bytes. When this limit is reached, the LRU eviction policy removes cache directory of the least recently used S3 file.
+  cache-max-size-bytes: The maximum total cache size in bytes. When this limit is reached, the LRU eviction policy removes cache directory of the least recently used S3 file. Setting this value to 0 disables eviction making the cache unbounded.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer64. Range: 10485760 - 18446744073709551615 Default: 10737418240 
-  
+                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 0
+
   do-timestamp        : Apply current stream time to buffers
                         flags: readable, writable
                         Boolean. Default: false
@@ -181,7 +181,7 @@ Element Properties:
   
   fetch-max-retry-count: The maximum number of retries for S3 fetch operations that fail due to transient errors (e.g., network issues).
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer. Range: 2 - 4294967295 Default: 2 
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 2
   
   file-chunk-size-bytes: The size in bytes of the cached file chunk. Each downloaded S3 chunk is split into these smaller chunks for storage. The download-chunk-size property value must be multiple of this value.
                         flags: readable, writable, changeable only in NULL or READY state
@@ -207,6 +207,10 @@ Element Properties:
                         flags: readable, writable
                         Object of type "GstObject"
   
+  trust-cached-data   : Whether to trust the integrity of cached data without revalidating it with S3 metadata object. It may avoid unnecessary S3 requests if the metadata is already cached and allows for working with the cached object without having an active internet connection.
+                        flags: readable, writable, changeable only in NULL or READY state
+                        Boolean. Default: true
+
   typefind            : Run typefind before negotiating (deprecated, non-functional)
                         flags: readable, writable, deprecated
                         Boolean. Default: false
@@ -234,6 +238,8 @@ The most important **`airtimes3src`-specific** properties are:
   - Each downloaded S3 chunk is split into these smaller chunks for storage.
 
 - **`max-concurrent-downloads`** – The maximum number of S3 chunks fetched in parallel.
+
+- **`trust-cached-data`** - Specifies whether to trust the integrity of cached data without revalidating it with S3 metadata object. It may avoid unnecessary S3 requests if the metadata is already cached. Setting this property to true allows for working with the cached S3 object without an active internet connection.
 
 
 ## Seeking and cache-reusing example
