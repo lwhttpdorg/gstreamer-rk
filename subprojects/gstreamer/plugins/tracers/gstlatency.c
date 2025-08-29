@@ -305,20 +305,28 @@ calculate_latency (GstElement * parent, GstPad * pad, guint64 ts)
     if (peer_pad && peer_parent &&
         GST_OBJECT_FLAG_IS_SET (peer_parent, GST_ELEMENT_FLAG_SINK)) {
       ev = g_object_get_qdata ((GObject *) pad, latency_probe_id);
-      GST_DEBUG ("%s_%s: Should log full latency now (event %p)",
-          GST_DEBUG_PAD_NAME (pad), ev);
-      if (ev) {
+      if (ev != NULL) {
+        GST_DEBUG ("%s_%s: Should log full latency now (event %p)",
+            GST_DEBUG_PAD_NAME (pad), ev);
         log_latency (gst_event_get_structure (ev), peer_parent, peer_pad, ts);
         g_object_set_qdata ((GObject *) pad, latency_probe_id, NULL);
+      } else {
+        GST_WARNING
+            ("%s_%s: Error logging full latency now because no event with src_ts",
+            GST_DEBUG_PAD_NAME (pad));
       }
     }
 
     ev = g_object_get_qdata ((GObject *) pad, sub_latency_probe_id);
-    GST_DEBUG ("%s_%s: Should log sub latency now (event %p)",
-        GST_DEBUG_PAD_NAME (pad), ev);
-    if (ev) {
+    if (ev != NULL) {
+      GST_DEBUG ("%s_%s: Should log sub latency now (event %p)",
+          GST_DEBUG_PAD_NAME (pad), ev);
       log_element_latency (gst_event_get_structure (ev), parent, pad, ts);
       g_object_set_qdata ((GObject *) pad, sub_latency_probe_id, NULL);
+    } else {
+      GST_WARNING
+          ("%s_%s: Error logging sub latency now because no event with src_ts",
+          GST_DEBUG_PAD_NAME (pad));
     }
     if (peer_pad)
       gst_object_unref (peer_pad);
@@ -444,6 +452,7 @@ do_push_event_pre (GstTracer * self, guint64 ts, GstPad * pad, GstEvent * ev)
 
     if (gst_structure_has_name (data, "sub_latency_probe.id")) {
       const GValue *value;
+      const GstEvent *oldev;
       gchar *element_id = g_strdup_printf ("%p", peer_parent);
       gchar *pad_name = peer_pad ? gst_pad_get_name (peer_pad) : NULL;
       const gchar *value_element_id, *value_pad_name;
@@ -456,8 +465,15 @@ do_push_event_pre (GstTracer * self, guint64 ts, GstPad * pad, GstEvent * ev)
 
       if (!g_str_equal (value_element_id, element_id) ||
           g_strcmp0 (value_pad_name, pad_name) != 0) {
-        GST_DEBUG ("%s_%s: Storing sub-latency event",
-            GST_DEBUG_PAD_NAME (pad));
+
+        oldev = g_object_get_qdata ((GObject *) pad, sub_latency_probe_id);
+        if (oldev != NULL) {
+          GST_WARNING ("%s_%s: Overriding sub-latency event (event %p by %p)",
+              GST_DEBUG_PAD_NAME (pad), oldev, ev);
+        } else {
+          GST_DEBUG ("%s_%s: Storing sub-latency event (event %p)",
+              GST_DEBUG_PAD_NAME (pad), ev);
+        }
         g_object_set_qdata_full ((GObject *) pad, sub_latency_probe_id,
             gst_event_ref (ev), (GDestroyNotify) gst_event_unref);
       }
