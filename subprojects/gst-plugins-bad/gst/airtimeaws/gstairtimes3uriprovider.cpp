@@ -419,14 +419,16 @@ std::unique_ptr<S3URIChunkSource> createChunkSource(std::string_view s3_bucket, 
     {
         GST_DEBUG("Using fake S3 source for testing purposes.");
         return createS3URIChunkSourceFake(std::string{s3_bucket}, std::string{s3_key}, 100 * 1024 * 1024,
-                                          config.max_number_of_downloads, std::chrono::milliseconds{10},
+                                          config.max_number_of_downloads, config.http_request_timeout_ms,
+                                          config.request_timeout_ms, std::chrono::milliseconds{10},
                                           std::chrono::milliseconds{30});
     }
     else
     {
         GST_DEBUG("Using real S3 source with bucket: %s, key: %s", s3_bucket.data(), s3_key.data());
         return std::make_unique<S3URIChunkSourceAws>(std::string{s3_bucket}, std::string{s3_key},
-                                                     config.max_number_of_downloads);
+                                                     config.max_number_of_downloads, config.http_request_timeout_ms,
+                                                     config.request_timeout_ms);
     }
 }
 

@@ -111,7 +111,9 @@ enum {
     PROP_CACHE_DIRECTORY,
     PROP_CACHE_MAX_SIZE,
     PROP_FETCH_MAX_RETRY_COUNT,
-    PROP_TRUST_CACHED_DATA
+    PROP_TRUST_CACHED_DATA,
+    PROP_HTTP_REQUEST_TIMEOUT,
+    PROP_REQUEST_TIMEOUT
 };
 
 #define S3_URI "s3"
@@ -812,6 +814,12 @@ static void gst_airtime_s3_src_get_property(GObject* object, guint prop_id, GVal
         case PROP_TRUST_CACHED_DATA:
             g_value_set_boolean(value, impl->uri_provider_config.trust_cached_data);
             break;
+        case PROP_HTTP_REQUEST_TIMEOUT:
+            g_value_set_long(value, impl->uri_provider_config.http_request_timeout_ms);
+            break;
+        case PROP_REQUEST_TIMEOUT:
+            g_value_set_long(value, impl->uri_provider_config.request_timeout_ms);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -865,6 +873,15 @@ static void gst_airtime_s3_src_set_property(GObject* object, guint prop_id, cons
             GST_DEBUG_OBJECT(self, "Trust cached data set to %s",
                              impl->uri_provider_config.trust_cached_data ? "true" : "false");
             break;
+        case PROP_HTTP_REQUEST_TIMEOUT:
+            impl->uri_provider_config.http_request_timeout_ms = g_value_get_long(value);
+            GST_DEBUG_OBJECT(self, "HTTP request timeout set to %ld ms.",
+                             impl->uri_provider_config.http_request_timeout_ms);
+            break;
+        case PROP_REQUEST_TIMEOUT:
+            impl->uri_provider_config.request_timeout_ms = g_value_get_long(value);
+            GST_DEBUG_OBJECT(self, "Request timeout set to %ld ms.", impl->uri_provider_config.request_timeout_ms);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -912,7 +929,6 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
     object_class->finalize = gst_airtime_s3_src_finalize;
     object_class->set_property = gst_airtime_s3_src_set_property;
     object_class->get_property = gst_airtime_s3_src_get_property;
-
     const gst::airtime::S3URIProviderConfig default_config;
 
     /**
@@ -1049,6 +1065,36 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
             "working with the cached object without having an active internet connection.",
             default_config.trust_cached_data,
             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:http-request-timeout:
+     *
+     * Corresponds to the AWS client configuration `httpRequestTimeoutMs` property. See AWS documentation for more
+     * details.
+     *
+     * Since: 1.26
+     */
+    g_object_class_install_property(
+        object_class, PROP_HTTP_REQUEST_TIMEOUT,
+        g_param_spec_long("http-request-timeout", "HTTP request timeout",
+                          "Corresponds to the AWS client configuration httpRequestTimeoutMs property.", 0, G_MAXLONG,
+                          default_config.http_request_timeout_ms,
+                          (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:request-timeout:
+     *
+     * Corresponds to the AWS client configuration `requestTimeoutMs` property. See AWS documentation for more
+     * details.
+     *
+     * Since: 1.26
+     */
+    g_object_class_install_property(
+        object_class, PROP_REQUEST_TIMEOUT,
+        g_param_spec_long("request-timeout", "Request timeout",
+                          "Corresponds to the AWS client configuration requestTimeoutMs property.", 0, G_MAXLONG,
+                          default_config.request_timeout_ms,
+                          (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     gst_element_class_set_details_simple(
         element_class, "airtime S3 (file) src element", "Source", "Serves as an S3 (file) source element",

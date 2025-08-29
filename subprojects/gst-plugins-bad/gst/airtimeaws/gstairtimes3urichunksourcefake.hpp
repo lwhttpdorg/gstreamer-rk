@@ -60,8 +60,8 @@ class S3URIChunkSourceFake : public S3URIChunkSource
 {
 public:
     S3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
-                         std::size_t max_number_of_downloads, std::chrono::milliseconds min_nap_time,
-                         std::chrono::milliseconds max_nap_time);
+                         std::size_t max_number_of_downloads, long http_request_timeout_ms, long request_timeout_ms,
+                         std::chrono::milliseconds min_nap_time, std::chrono::milliseconds max_nap_time);
 
     ~S3URIChunkSourceFake() override;
 
@@ -78,6 +78,8 @@ private:
     std::string s3_key_;
     std::uint64_t content_length_{0}; // Content length of the fake S3 object
     boost::asio::thread_pool pool_;
+    long http_request_timeout_ms_{0};             // HTTP request timeout in milliseconds
+    long request_timeout_ms_{0};                  // Request timeout in milliseconds
     std::atomic<std::size_t> active_requests_{0}; // Number of active requests
     std::chrono::milliseconds min_nap_time_;
     std::chrono::milliseconds max_nap_time_;

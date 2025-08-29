@@ -79,12 +79,15 @@ std::chrono::milliseconds generateNapTime(std::chrono::milliseconds min_nap_time
 } // namespace
 
 S3URIChunkSourceFake::S3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
-                                           std::size_t max_number_of_downloads, std::chrono::milliseconds min_nap_time,
+                                           std::size_t max_number_of_downloads, long http_request_timeout_ms,
+                                           long request_timeout_ms, std::chrono::milliseconds min_nap_time,
                                            std::chrono::milliseconds max_nap_time) :
     s3_bucket_{std::move(s3_bucket)},
     s3_key_{std::move(s3_key)},
     content_length_{content_length},
     pool_{max_number_of_downloads},
+    http_request_timeout_ms_{http_request_timeout_ms},
+    request_timeout_ms_{request_timeout_ms},
     min_nap_time_{min_nap_time},
     max_nap_time_{max_nap_time}
 {
@@ -121,6 +124,12 @@ void S3URIChunkSourceFake::downloadChunkAsync(S3URIChunkSpec chunk_spec, Downloa
     auto nap_time = generateNapTime(min_nap_time_, max_nap_time_);
     boost::asio::post(pool_, [this, chunk_spec = std::move(chunk_spec), callback = std::move(callback), nap_time] {
         std::this_thread::sleep_for(nap_time);
+        if (http_request_timeout_ms_ > 0 and nap_time.count() > http_request_timeout_ms_)
+        {
+            --active_requests_;
+            callback(make_error_code(std::errc::timed_out), chunk_spec, nullptr);
+            return;
+        }
         std::string fake_data_str(chunk_spec.actualSize(), 'a');
         std::istringstream stream(std::move(fake_data_str));
         try
@@ -147,14 +156,14 @@ void S3URIChunkSourceFake::cancel()
     pool_.join();
 }
 
-std::unique_ptr<S3URIChunkSource> createS3URIChunkSourceFake(std::string s3_bucket, std::string s3_key,
-                                                             std::uint64_t content_length,
-                                                             std::size_t max_number_of_downloads,
-                                                             std::chrono::milliseconds min_nap_time,
-                                                             std::chrono::milliseconds max_nap_time)
+std::unique_ptr<S3URIChunkSource>
+createS3URIChunkSourceFake(std::string s3_bucket, std::string s3_key, std::uint64_t content_length,
+                           std::size_t max_number_of_downloads, long http_request_timeout_ms, long request_timeout_ms,
+                           std::chrono::milliseconds min_nap_time, std::chrono::milliseconds max_nap_time)
 {
     return std::make_unique<S3URIChunkSourceFake>(std::move(s3_bucket), std::move(s3_key), content_length,
-                                                  max_number_of_downloads, min_nap_time, max_nap_time);
+                                                  max_number_of_downloads, http_request_timeout_ms, request_timeout_ms,
+                                                  min_nap_time, max_nap_time);
 }
 
 } // namespace gst::airtime

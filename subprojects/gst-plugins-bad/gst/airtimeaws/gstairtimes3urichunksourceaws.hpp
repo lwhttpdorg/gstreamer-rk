@@ -85,7 +85,8 @@ private:
 class S3URIChunkSourceAws : public S3URIChunkSource
 {
 public:
-    S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key, std::size_t max_number_of_downloads);
+    S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key, std::size_t max_number_of_downloads,
+                        long http_request_timeout_ms, long request_timeout_ms);
     ~S3URIChunkSourceAws() override;
 
     /// @brief Uses a head object request to get the metadata of the S3 object.
@@ -131,6 +132,8 @@ private:
     std::string s3_key_;
     std::shared_ptr<AwsEnv> aws_env_;
     std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> thread_pool_executor_;
+    long http_request_timeout_ms_{0};
+    long request_timeout_ms_{0};
     std::shared_ptr<Aws::S3::S3Client> s3_client_;
     AwsActiveAsyncS3Requests active_async_requests_{};
 };

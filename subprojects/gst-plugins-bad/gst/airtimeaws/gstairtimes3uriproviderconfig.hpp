@@ -89,6 +89,15 @@ struct S3URIProviderConfig {
     /// for updates (if exists) avoiding unnecessary S3 requests. If set to false, the metadata will be re-fetched from
     /// S3.
     bool trust_cached_data = false;
+
+    /// @brief The timeout for HTTP requests in milliseconds. Corresponds to the AWS client configuration
+    /// `httpRequestTimeoutMs` property.
+    /// @note A value of `0` means no timeout.
+    long http_request_timeout_ms = 0;
+
+    /// @brief The timeout for socket requests in milliseconds. Corresponds to the AWS client configuration
+    /// `requestTimeoutMs` property.
+    long request_timeout_ms = 0;
 };
 
 } // namespace gst::airtime

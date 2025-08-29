@@ -61,11 +61,19 @@ namespace
 {
 
 Aws::S3::S3ClientConfiguration
-createS3ClientConfiguration(std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> thread_pool_executor)
+createS3ClientConfiguration(std::shared_ptr<Aws::Utils::Threading::PooledThreadExecutor> thread_pool_executor,
+                            long http_request_timeout_ms, long request_timeout_ms)
 {
     Aws::S3::S3ClientConfiguration config{};
     config.executor = std::move(thread_pool_executor);
     config.useVirtualAddressing = false;
+
+    // https://docs.aws.amazon.com/sdk-for-cpp/latest/api/aws-cpp-sdk-core/html/struct_aws_1_1_client_1_1_client_configuration.html#a68c35ac8d14619e4bfc77d848fd89473
+    config.requestTimeoutMs = request_timeout_ms;
+
+    // https://docs.aws.amazon.com/sdk-for-cpp/latest/api/aws-cpp-sdk-core/html/struct_aws_1_1_client_1_1_client_configuration.html#a7f812c185f0363d21fe706ca1117c56b
+    config.httpRequestTimeoutMs = http_request_timeout_ms;
+
     return config;
 }
 
@@ -108,15 +116,18 @@ std::size_t AwsActiveAsyncS3Requests::size() const
 
 // --------------------------------------------------------------------------------------------------------------------
 
-S3URIChunkSourceAws::S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key,
-                                         std::size_t max_number_of_downloads) :
+S3URIChunkSourceAws::S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key, std::size_t max_number_of_downloads,
+                                         long http_request_timeout_ms, long request_timeout_ms) :
     s3_bucket_{std::move(s3_bucket)},
     s3_key_{std::move(s3_key)},
     aws_env_{AwsEnvFactory::create()},
     thread_pool_executor_{Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
         "AIRTIMES3SRC_THREAD_POOL_EXECUTOR", max_number_of_downloads)},
-    s3_client_{Aws::MakeShared<Aws::S3::S3Client>("AIRTIMES3SRC_S3_CLIENT",
-                                                  createS3ClientConfiguration(thread_pool_executor_))}
+    http_request_timeout_ms_{http_request_timeout_ms},
+    request_timeout_ms_{request_timeout_ms},
+    s3_client_{Aws::MakeShared<Aws::S3::S3Client>(
+        "AIRTIMES3SRC_S3_CLIENT",
+        createS3ClientConfiguration(thread_pool_executor_, http_request_timeout_ms_, request_timeout_ms_))}
 {
     checkCredentials();
     ensureCorrectBucketRegion();
@@ -324,7 +335,8 @@ void S3URIChunkSourceAws::ensureCorrectBucketRegion()
         auto& result = location_outcome.GetResult();
         auto region_str = Aws::S3::Model::BucketLocationConstraintMapper::GetNameForBucketLocationConstraint(
             result.GetLocationConstraint());
-        Aws::S3::S3ClientConfiguration s3_client_config = createS3ClientConfiguration(thread_pool_executor_);
+        Aws::S3::S3ClientConfiguration s3_client_config =
+            createS3ClientConfiguration(thread_pool_executor_, http_request_timeout_ms_, request_timeout_ms_);
         if (not region_str.empty() and region_str != s3_client_config.region)
         {
             // Reconfigure client with the correct region
