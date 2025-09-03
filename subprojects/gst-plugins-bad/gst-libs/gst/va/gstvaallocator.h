@@ -23,7 +23,6 @@
 #include <gst/allocators/allocators.h>
 #include <gst/va/gstva.h>
 #include <gst/video/video.h>
-#include <stdint.h>
 #include <va/va.h>
 
 G_BEGIN_DECLS
@@ -57,7 +56,7 @@ GST_VA_API
 gboolean              gst_va_dmabuf_memories_setup        (GstVaDisplay * display,
                                                            GstVideoInfoDmaDrm * drm_info,
                                                            GstMemory * mem[GST_VIDEO_MAX_PLANES],
-                                                           uintptr_t fds[GST_VIDEO_MAX_PLANES],
+                                                           guintptr fds[GST_VIDEO_MAX_PLANES],
                                                            gsize offset[GST_VIDEO_MAX_PLANES],
                                                            guint usage_hint);
 

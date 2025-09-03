@@ -1058,7 +1058,7 @@ gst_va_dmabuf_allocator_get_format (GstAllocator * allocator,
 }
 
 static gboolean
-_is_fd_repeated (uintptr_t fds[GST_VIDEO_MAX_PLANES], guint cur, guint * prev)
+_is_fd_repeated (guintptr fds[GST_VIDEO_MAX_PLANES], guint cur, guint * prev)
 {
   guint i;
 
@@ -1083,7 +1083,7 @@ _is_fd_repeated (uintptr_t fds[GST_VIDEO_MAX_PLANES], guint cur, guint * prev)
  * @drm_info: a #GstVideoInfoDmaDrm
  * @mem: (array fixed-size=4) (element-type GstMemory): Memories. One
  *     per plane.
- * @fds: (array fixed-size=4) (element-type uintptr_t): array of
+ * @fds: (array fixed-size=4) (element-type guintptr): array of
  *     DMABuf file descriptors.
  * @offset: (array fixed-size=4) (element-type gsize): array of memory
  *     offsets.
@@ -1101,7 +1101,7 @@ _is_fd_repeated (uintptr_t fds[GST_VIDEO_MAX_PLANES], guint cur, guint * prev)
 gboolean
 gst_va_dmabuf_memories_setup (GstVaDisplay * display,
     GstVideoInfoDmaDrm * drm_info, GstMemory * mem[GST_VIDEO_MAX_PLANES],
-    uintptr_t fds[GST_VIDEO_MAX_PLANES], gsize offset[GST_VIDEO_MAX_PLANES],
+    guintptr fds[GST_VIDEO_MAX_PLANES], gsize offset[GST_VIDEO_MAX_PLANES],
     guint usage_hint)
 {
   GstVideoFormat format;
