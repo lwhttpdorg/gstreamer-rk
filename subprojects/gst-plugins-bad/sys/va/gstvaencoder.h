@@ -40,6 +40,7 @@ struct _GstVaEncodePicture
   GstBuffer *reconstruct_buffer;
 
   VABufferID coded_buffer;
+  gpointer codedbuf_pool;
 };
 
 gboolean              gst_va_encoder_is_open              (GstVaEncoder * self);
