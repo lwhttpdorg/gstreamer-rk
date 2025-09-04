@@ -45,73 +45,19 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <memory>
+#include <type_traits>
 
 namespace gst::airtime
 {
 
-/// @brief Describes an URI chunk with its index, start byte, size, and priority.
-class S3URIChunkSpec
-{
-public:
-    /// @param index Index of the chunk, the URI is divided into.
-    /// @param start_byte Starting byte of the URI's chunk.
-    /// @param actual_size Size of the chunk in bytes. This is the actual size of the data that will be downloaded. It
-    /// may be smaller than the standard size if the last chunk is smaller than the standard size.
-    /// @param standard_size Size of the chunk in bytes. This is the size the total data is divided into.
-    /// @param priority Priority of the chunk, higher means higher priority. Default is 0 which means unprioritized
-    /// chunk.
-    /// @note The priority can be used to prioritize chunks for download.
-    S3URIChunkSpec(std::size_t index, std::uint64_t start_byte, std::uint64_t actual_size, std::uint64_t standard_size,
-                   int priority = 0) :
-        index_{index},
-        start_byte_{start_byte},
-        actual_size_{actual_size},
-        standard_size_{standard_size},
-        priority_{priority}
-    {
-    }
+template <auto Fn>
+using FunctionObj = std::integral_constant<decltype(Fn), Fn>;
 
-    std::size_t index() const noexcept
-    {
-        return index_;
-    }
-    std::uint64_t startByte() const noexcept
-    {
-        return start_byte_;
-    }
-    std::uint64_t endByte() const noexcept
-    {
-        return start_byte_ + actual_size_ - 1;
-    }
-    std::uint64_t actualSize() const noexcept
-    {
-        return actual_size_;
-    }
-    std::uint64_t standardSize() const noexcept
-    {
-        return standard_size_;
-    }
-    int priority() const noexcept
-    {
-        return priority_;
-    }
-    void priority(int priority) noexcept
-    {
-        priority_ = priority;
-    }
-    void increasePriority(int delta = 1) noexcept
-    {
-        priority_ += delta;
-    }
-
-private:
-    std::size_t index_{0}; // Index of the download chunk
-    std::uint64_t start_byte_{0};
-    std::uint64_t actual_size_{0};
-    std::uint64_t standard_size_{0};
-    int priority_{0};
-};
+/// @brief A unique_ptr with resource deleter that uses a function pointer to release the resource.
+/// @tparam T The type of the resource.
+/// @tparam Fun The function pointer type used to release the resource.
+template <typename T, auto Fun>
+using ResourceReleasedByFunction = std::unique_ptr<T, FunctionObj<Fun>>;
 
 } // namespace gst::airtime

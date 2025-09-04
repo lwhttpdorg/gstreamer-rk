@@ -124,7 +124,10 @@ enum {
 struct GstAirtimeS3SrcImpl {
 
     std::string location;
-    gst::airtime::S3URIProviderConfig uri_provider_config;
+    // Configuration for the S3 URI provider. It is configuration of already existing providers or the default
+    // configuration if no providers exist yet.
+    gst::airtime::S3URIProviderConfig uri_provider_config =
+        gst::airtime::S3URIProvidersFactory::create(gst::airtime::S3URIProviderConfig{})->getConfig();
 
     std::string s3_bucket;
     std::string s3_key;

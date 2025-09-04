@@ -46,6 +46,7 @@
 #include "gstairtimes3urichunkdownloadqueue.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <utility>
 
 namespace gst::airtime
@@ -103,13 +104,27 @@ void S3URIChunkDownloadQueue::setHighestPriorityForRange(std::uint64_t byte_offs
 
     for (auto& chunk : queue_)
     {
-        // Check if the chunk overlaps with the given byte range
-        if (((chunk.startByte() >= byte_offset) and (chunk.startByte() < byte_offset + size)) or
-            ((chunk.endByte() >= byte_offset) and (chunk.endByte() < byte_offset + size)) or
-            ((chunk.startByte() < byte_offset and chunk.endByte() >= byte_offset + size)))
+        if (areRangesOverlapping(chunk.startByte(), chunk.endByte(), byte_offset, byte_offset + size - 1))
         {
             // Set the priority of the chunk to the highest
             chunk.priority(it->priority() + 1);
+        }
+    }
+}
+
+void S3URIChunkDownloadQueue::prioritizeRange(std::uint64_t byte_offset, std::uint64_t size)
+{
+    std::lock_guard lock{queue_access_};
+
+    for (auto& chunk : queue_)
+    {
+        // 1) For non-prioritized chunks that overlaps we increase their priority to 1.
+        // 2) For already prioritized chunks we bump their priority by 1 to make them still more important not to starve
+        // the consumers waiting for them.
+        if (areRangesOverlapping(chunk.startByte(), chunk.endByte(), byte_offset, byte_offset + size - 1) or
+            chunk.priority() > 0)
+        {
+            chunk.increasePriority();
         }
     }
 }
@@ -145,6 +160,14 @@ std::vector<S3URIChunkSpec>::const_iterator S3URIChunkDownloadQueue::findHighest
     return std::max_element(queue_.begin(), queue_.end(), [](const S3URIChunkSpec& a, const S3URIChunkSpec& b) {
         return a.priority() < b.priority();
     });
+}
+
+bool areRangesOverlapping(std::uint64_t from1, std::uint64_t to1, std::uint64_t from2, std::uint64_t to2) noexcept
+{
+    assert(from1 <= to1);
+    assert(from2 <= to2);
+    // Two ranges overlap if one range doesn't end before the other starts
+    return from1 <= to2 and from2 <= to1;
 }
 
 } // namespace gst::airtime

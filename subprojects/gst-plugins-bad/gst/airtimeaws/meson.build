@@ -33,6 +33,7 @@ airtimeaws_headers = [
   'gstairtimeawsenv.hpp',
   'gstairtimes3bufferfillstatus.hpp',
   'gstairtimes3error.hpp',
+  'gstairtimes3init.cpp',
   'gstairtimes3src.h',
   'gstairtimes3srccontext.h',
   'gstairtimes3srccontext.hpp',

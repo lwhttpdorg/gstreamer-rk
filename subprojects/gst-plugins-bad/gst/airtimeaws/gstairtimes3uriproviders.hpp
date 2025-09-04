@@ -70,6 +70,13 @@ public:
     /// @return provider for the specified URI.
     std::shared_ptr<S3URIProvider> getURIProvider(std::string uri, std::string_view s3_bucket, std::string_view s3_key);
 
+    /// @brief Gets the configuration used to create the providers.
+    /// @return The configuration used to create the providers.
+    S3URIProviderConfig getConfig() const
+    {
+        return config_;
+    }
+
 private:
     std::shared_ptr<S3URIProvider> createProviderWithRetry(std::string_view s3_bucket, std::string_view s3_key);
     std::shared_ptr<S3URIProvider> createProvider(std::string_view s3_bucket, std::string_view s3_key);

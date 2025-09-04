@@ -93,6 +93,13 @@ public:
     /// @note This method is thread-safe and can be called from multiple threads.
     void setHighestPriorityForRange(std::uint64_t byte_offset, std::uint64_t size);
 
+    /// @brief Makes all chunks that overlap with the specified byte range to be consumed next once consuming of all
+    /// already prioritized chunks is complete.
+    /// @param byte_offset The starting byte offset of the range to prioritize.
+    /// @param size The size of the range to prioritize.
+    /// @note This method is thread-safe and can be called from multiple threads.
+    void prioritizeRange(std::uint64_t byte_offset, std::uint64_t size);
+
     /// @brief Returns the number of chunks in the queue.
     /// @return The number of chunks in the queue.
     /// @note This method is thread-safe and can be called from multiple threads.
@@ -113,10 +120,20 @@ public:
     std::optional<S3URIChunkSpec> getNextChunk();
 
 private:
+    /// @brief Finds the chunk with the highest priority in the queue.
+    /// @return An iterator to the chunk with the highest priority, or queue_.end() if the queue is empty.
     std::vector<S3URIChunkSpec>::const_iterator findHighestPriorityChunk() const;
 
     mutable std::mutex queue_access_;
     std::vector<S3URIChunkSpec> queue_;
 };
+
+/// @brief Check if two ranges overlap.
+/// @param from1 Start of the first range
+/// @param to1 End of the first range
+/// @param from2 Start of the second range
+/// @param to2 End of the second range
+/// @return true if the ranges overlap, false otherwise
+bool areRangesOverlapping(std::uint64_t from1, std::uint64_t to1, std::uint64_t from2, std::uint64_t to2) noexcept;
 
 } // namespace gst::airtime

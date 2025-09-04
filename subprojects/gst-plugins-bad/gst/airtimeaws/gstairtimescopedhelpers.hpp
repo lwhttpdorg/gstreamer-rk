@@ -47,10 +47,9 @@
 
 #include <cassert>
 #include <cstdint>
-#include <memory>
-#include <type_traits>
 
 #include "gstairtimes3srccontext.h"
+#include "gstairtimescopedresource.hpp"
 
 #include <glib-object.h>
 #include <gst/gst.h>
@@ -69,15 +68,6 @@ void AddressOfPtr(T* rsc)
 }
 
 } // namespace details
-
-template <auto Fn>
-using FunctionObj = std::integral_constant<decltype(Fn), Fn>;
-
-/// @brief A unique_ptr with resource deleter that uses a function pointer to release the resource.
-/// @tparam T The type of the resource.
-/// @tparam Fun The function pointer type used to release the resource.
-template <typename T, auto Fun>
-using ResourceReleasedByFunction = std::unique_ptr<T, FunctionObj<Fun>>;
 
 /// @brief Scoped resource management for GObject and GStreamer types.
 using ScopedGChar = ResourceReleasedByFunction<gchar, g_free>;

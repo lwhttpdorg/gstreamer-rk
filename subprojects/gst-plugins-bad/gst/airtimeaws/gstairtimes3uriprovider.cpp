@@ -143,7 +143,7 @@ std::pair<S3BufferFillStatus, std::uint64_t> S3URIProvider::fill(std::uint8_t* d
     // the queue is not created.
     if (download_chunk_queue_)
     {
-        download_chunk_queue_->setHighestPriorityForRange(offset, size);
+        download_chunk_queue_->prioritizeRange(offset, size);
         if (not waitForRangeDownloaded(offset, size, timeout))
         {
             throw std::runtime_error(
@@ -461,23 +461,6 @@ std::string_view downloadCompletionStateToString(S3URIProvider::DownloadCompleti
             return "unknown";
     }
 }
-
-namespace
-{
-
-/// @brief Check if two ranges overlap.
-/// @param from1 Start of the first range
-/// @param to1 End of the first range
-/// @param from2 Start of the second range
-/// @param to2 End of the second range
-/// @return true if the ranges overlap, false otherwise
-bool areRangesOverlapping(std::uint64_t from1, std::uint64_t to1, std::uint64_t from2, std::uint64_t to2) noexcept
-{
-    // Two ranges overlap if one range doesn't end before the other starts
-    return from1 <= to2 and from2 <= to1;
-}
-
-} // namespace
 
 bool passFileChunkGap(std::uint64_t download_chunk_standard_size, std::uint64_t file_chunk_standard_size,
                       std::size_t download_chunk_index, const std::vector<S3URIFileChunkGapSpec>& file_chunk_gaps)
