@@ -1182,6 +1182,7 @@ copy_field (GstInterlace * interlace, GstBuffer * src, int field_index)
     cheight = GST_VIDEO_FRAME_COMP_HEIGHT (&sframe, i);
     cwidth = MIN (ABS (ss), ABS (ds));
 
+    s += field_index * ss;
     for (j = field_index; j < cheight; j += 2) {
       memcpy (d, s, cwidth);
       d += ds;
