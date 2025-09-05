@@ -117,7 +117,8 @@ std::size_t AwsActiveAsyncS3Requests::size() const
 // --------------------------------------------------------------------------------------------------------------------
 
 S3URIChunkSourceAws::S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key, std::size_t max_number_of_downloads,
-                                         long http_request_timeout_ms, long request_timeout_ms) :
+                                         long http_request_timeout_ms, long request_timeout_ms,
+                                         bool validate_credentials, bool ensure_correct_region) :
     s3_bucket_{std::move(s3_bucket)},
     s3_key_{std::move(s3_key)},
     aws_env_{AwsEnvFactory::create()},
@@ -129,8 +130,14 @@ S3URIChunkSourceAws::S3URIChunkSourceAws(std::string s3_bucket, std::string s3_k
         "AIRTIMES3SRC_S3_CLIENT",
         createS3ClientConfiguration(thread_pool_executor_, http_request_timeout_ms_, request_timeout_ms_))}
 {
-    checkCredentials();
-    ensureCorrectBucketRegion();
+    if (validate_credentials)
+    {
+        checkCredentials();
+    }
+    if (ensure_correct_region)
+    {
+        ensureCorrectBucketRegion();
+    }
 }
 
 S3URIChunkSourceAws::~S3URIChunkSourceAws()

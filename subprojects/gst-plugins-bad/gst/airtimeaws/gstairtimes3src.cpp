@@ -113,7 +113,9 @@ enum {
     PROP_FETCH_MAX_RETRY_COUNT,
     PROP_TRUST_CACHED_DATA,
     PROP_HTTP_REQUEST_TIMEOUT,
-    PROP_REQUEST_TIMEOUT
+    PROP_REQUEST_TIMEOUT,
+    PROP_VALIDATE_CREDENTIALS,
+    PROP_ENSURE_CORRECT_REGION
 };
 
 #define S3_URI "s3"
@@ -238,8 +240,8 @@ static gboolean gst_airtime_s3_src_validate_properties(GstBaseSrc* src)
 
         GST_WARNING_OBJECT(src, "Resetting download chunk size and file chunk size to default values.");
 
-        impl->uri_provider_config.download_chunk_size = default_download_chunk_size_bytes;
-        impl->uri_provider_config.file_chunk_size = default_file_cache_chunk_size_bytes;
+        impl->uri_provider_config.download_chunk_size = gst::airtime::default_download_chunk_size_bytes;
+        impl->uri_provider_config.file_chunk_size = gst::airtime::default_file_cache_chunk_size_bytes;
     }
     return true;
 }
@@ -823,6 +825,12 @@ static void gst_airtime_s3_src_get_property(GObject* object, guint prop_id, GVal
         case PROP_REQUEST_TIMEOUT:
             g_value_set_long(value, impl->uri_provider_config.request_timeout_ms);
             break;
+        case PROP_VALIDATE_CREDENTIALS:
+            g_value_set_boolean(value, impl->uri_provider_config.validate_credentials);
+            break;
+        case PROP_ENSURE_CORRECT_REGION:
+            g_value_set_boolean(value, impl->uri_provider_config.ensure_correct_region);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -856,6 +864,11 @@ static void gst_airtime_s3_src_set_property(GObject* object, guint prop_id, cons
             break;
         case PROP_MAX_NUMBER_OF_DOWNLOADS:
             impl->uri_provider_config.max_number_of_downloads = g_value_get_uint64(value);
+            if (impl->uri_provider_config.max_number_of_downloads == 0)
+            {
+                impl->uri_provider_config.max_number_of_downloads =
+                    gst::airtime::default_number_of_concurrent_downloads;
+            }
             GST_DEBUG_OBJECT(self, "Max number of downloads set to %" PRIu64,
                              impl->uri_provider_config.max_number_of_downloads);
             break;
@@ -884,6 +897,16 @@ static void gst_airtime_s3_src_set_property(GObject* object, guint prop_id, cons
         case PROP_REQUEST_TIMEOUT:
             impl->uri_provider_config.request_timeout_ms = g_value_get_long(value);
             GST_DEBUG_OBJECT(self, "Request timeout set to %ld ms.", impl->uri_provider_config.request_timeout_ms);
+            break;
+        case PROP_VALIDATE_CREDENTIALS:
+            impl->uri_provider_config.validate_credentials = g_value_get_boolean(value);
+            GST_DEBUG_OBJECT(self, "Validate credentials set to %s",
+                             impl->uri_provider_config.validate_credentials ? "true" : "false");
+            break;
+        case PROP_ENSURE_CORRECT_REGION:
+            impl->uri_provider_config.ensure_correct_region = g_value_get_boolean(value);
+            GST_DEBUG_OBJECT(self, "Ensure correct region set to %s",
+                             impl->uri_provider_config.ensure_correct_region ? "true" : "false");
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -996,8 +1019,9 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
     g_object_class_install_property(
         object_class, PROP_MAX_NUMBER_OF_DOWNLOADS,
         g_param_spec_uint64("max-concurrent-downloads", "Max number of concurrent S3 chunk downloads",
-                            "The maximum number of concurrent S3 chunk downloads to cache the S3 object locally.", 1,
-                            G_MAXUINT64, default_config.max_number_of_downloads,
+                            "The maximum number of concurrent S3 chunk downloads to cache the S3 object locally. If "
+                            "set to 0, the default value will be used as defined in the AWS SDK.",
+                            0, G_MAXUINT64, default_config.max_number_of_downloads,
                             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     /**
@@ -1098,6 +1122,39 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
                           "Corresponds to the AWS client configuration requestTimeoutMs property.", 0, G_MAXLONG,
                           default_config.request_timeout_ms,
                           (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:validate-credentials:
+     *
+     * Whether to validate AWS credentials before using them. If enabled, the element will attempt to
+     * validate the provided AWS credentials by making a simple request to AWS STS service. If the
+     * credentials are invalid, the element will fail to start.
+     * Since: 1.26
+     */
+    g_object_class_install_property(
+        object_class, PROP_VALIDATE_CREDENTIALS,
+        g_param_spec_boolean("validate-credentials", "Validate AWS credentials",
+                             "Whether to validate AWS credentials before using them. If enabled, the element will "
+                             "attempt to validate the provided AWS credentials by making a simple request to AWS STS "
+                             "service. If the credentials are invalid, the element will fail to start.",
+                             default_config.validate_credentials,
+                             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:ensure-correct-region:
+     *
+     * Whether to ensure that the S3 bucket is accessed in the correct region. If enabled, the element will
+     * attempt to determine the correct region for the specified S3 bucket and configure the S3 client accordingly.
+     * Since: 1.26
+     */
+    g_object_class_install_property(
+        object_class, PROP_ENSURE_CORRECT_REGION,
+        g_param_spec_boolean("ensure-correct-region", "Ensure correct S3 bucket region",
+                             "Whether to ensure that the S3 bucket is accessed in the correct region. If enabled, the "
+                             "element will attempt to determine the correct region for the specified S3 bucket and "
+                             "configure the S3 client accordingly.",
+                             default_config.ensure_correct_region,
+                             (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     gst_element_class_set_details_simple(
         element_class, "airtime S3 (file) src element", "Source", "Serves as an S3 (file) source element",

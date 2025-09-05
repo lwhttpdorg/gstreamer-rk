@@ -49,11 +49,12 @@
 #include <filesystem>
 #include <string_view>
 
-inline constexpr std::uint64_t default_file_cache_chunk_size_bytes = (1024 * 1024);                           // 1 MB
-inline constexpr std::uint64_t default_download_chunk_size_bytes = (default_file_cache_chunk_size_bytes * 2); // 2 MB
-
 namespace gst::airtime
 {
+
+inline constexpr std::uint64_t default_file_cache_chunk_size_bytes = (1024 * 1024);                           // 1 MB
+inline constexpr std::uint64_t default_download_chunk_size_bytes = (default_file_cache_chunk_size_bytes * 2); // 2 MB
+inline constexpr std::uint64_t default_number_of_concurrent_downloads = 25; // AWS C++ SDK default is 25
 
 struct S3URIProviderConfig {
     /// @brief The size of the chunks to download from S3.
@@ -63,7 +64,7 @@ struct S3URIProviderConfig {
     std::uint64_t file_chunk_size{default_file_cache_chunk_size_bytes};
 
     /// @brief The maximum number of concurrent S3 chunk downloads to cache the S3 object locally.
-    std::uint64_t max_number_of_downloads{25};
+    std::uint64_t max_number_of_downloads{default_number_of_concurrent_downloads};
 
     /// @brief For testing purposes, use a fake S3 source instead of the real one.
     bool use_fake_aws_source{false};
@@ -98,6 +99,12 @@ struct S3URIProviderConfig {
     /// @brief The timeout for socket requests in milliseconds. Corresponds to the AWS client configuration
     /// `requestTimeoutMs` property.
     long request_timeout_ms = 0;
+
+    /// @brief Validate the AWS credentials by making a STS call.
+    bool validate_credentials = false;
+
+    /// @brief Ensure that the S3 client is configured for the correct region of the S3 bucket.
+    bool ensure_correct_region = false;
 };
 
 } // namespace gst::airtime

@@ -47,6 +47,7 @@
 #include "gstairtimes3uriprovidersfactory.hpp"
 
 #include <cassert>
+#include <cinttypes>
 #include <cstring>
 #include <memory>
 
@@ -55,12 +56,39 @@
 namespace
 {
 
+bool validateConfig(const GstAirtimeS3ContextConfig& config)
+{
+    if (config.download_chunk_size == 0)
+    {
+        GST_ERROR("Download chunk size must be greater than 0");
+        return false;
+    }
+    if (config.file_chunk_size == 0)
+    {
+        GST_ERROR("File chunk size must be greater than 0");
+        return false;
+    }
+    if (config.download_chunk_size % config.file_chunk_size != 0)
+    {
+        GST_ERROR("Download chunk size must be a multiple of file chunk size");
+        return false;
+    }
+    // max_concurrent_downloads can be 0, which means we rely on the default value
+    // max_cache_size_bytes can be 0, which means no limit
+    // fetch_max_retry_count can be 0, which means no retries
+    // http_request_timeout_ms can be 0, which means no timeout
+    // request_timeout_ms can be 0, which means no timeout
+    return true;
+}
+
 gst::airtime::S3URIProviderConfig getConfig(const GstAirtimeS3ContextConfig& c_config)
 {
     gst::airtime::S3URIProviderConfig config;
     config.download_chunk_size = c_config.download_chunk_size;
     config.file_chunk_size = c_config.file_chunk_size;
-    config.max_number_of_downloads = c_config.max_concurrent_downloads;
+    config.max_number_of_downloads = (c_config.max_concurrent_downloads == 0)
+                                         ? gst::airtime::default_number_of_concurrent_downloads
+                                         : c_config.max_concurrent_downloads;
     if (c_config.cache_directory)
     {
         config.cache_base_directory = std::filesystem::path{c_config.cache_directory};
@@ -70,6 +98,8 @@ gst::airtime::S3URIProviderConfig getConfig(const GstAirtimeS3ContextConfig& c_c
     config.trust_cached_data = c_config.trust_cached_data;
     config.http_request_timeout_ms = c_config.http_request_timeout;
     config.request_timeout_ms = c_config.request_timeout;
+    config.validate_credentials = c_config.validate_credentials;
+    config.ensure_correct_region = c_config.ensure_correct_region;
     return config;
 }
 
@@ -99,6 +129,8 @@ GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config()
     config.trust_cached_data = default_config.trust_cached_data;
     config.http_request_timeout = default_config.http_request_timeout_ms;
     config.request_timeout = default_config.request_timeout_ms;
+    config.validate_credentials = default_config.validate_credentials;
+    config.ensure_correct_region = default_config.ensure_correct_region;
     return config;
 }
 
@@ -109,6 +141,10 @@ int gst_airtime_s3_context_create(const GstAirtimeS3ContextConfig* config, gst_a
 
     try
     {
+        if (not validateConfig(*config))
+        {
+            return 1;
+        }
         *context = new gst_airtime_s3_context(*config);
         return 0;
     }

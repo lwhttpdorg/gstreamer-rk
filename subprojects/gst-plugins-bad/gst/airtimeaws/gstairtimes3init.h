@@ -155,6 +155,21 @@ typedef struct GstAirtimeS3ContextConfig {
      */
     long request_timeout;
 
+    /**
+     * Whether to validate the S3 credentials before making requests. If enabled, the context will attempt to validate
+     * the provided AWS credentials by making a simple request to AWS STS service. If the credentials are invalid, the
+     * context creation will fail.
+     */
+    bool validate_credentials;
+
+    /**
+     * Whether to ensure that the S3 client is configured for the correct region of the S3 bucket. If enabled, the
+     * context will attempt to determine the correct region for the S3 bucket and configure the S3 client accordingly.
+     * This may involve making an additional request to AWS, which could introduce some latency during the first
+     * access.
+     */
+    bool ensure_correct_region;
+
 } GstAirtimeS3ContextConfig;
 
 GST_AIRTIME_DLL_PUBLIC GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config();

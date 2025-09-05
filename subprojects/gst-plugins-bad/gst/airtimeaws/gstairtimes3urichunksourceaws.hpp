@@ -85,8 +85,17 @@ private:
 class S3URIChunkSourceAws : public S3URIChunkSource
 {
 public:
+    /// @param s3_bucket The S3 bucket name.
+    /// @param s3_key The S3 object key.
+    /// @param max_number_of_downloads The maximum number of concurrent downloads.
+    /// @param http_request_timeout_ms The HTTP request timeout in milliseconds. Set to 0 for default.
+    /// @param request_timeout_ms The overall request timeout in milliseconds. Set to 0 for default.
+    /// @param validate_credentials Whether to validate the AWS credentials by making a STS call.
+    /// @param ensure_correct_region Whether to ensure that the S3 client is configured for the correct region of the S3
+    /// bucket.
     S3URIChunkSourceAws(std::string s3_bucket, std::string s3_key, std::size_t max_number_of_downloads,
-                        long http_request_timeout_ms, long request_timeout_ms);
+                        long http_request_timeout_ms, long request_timeout_ms, bool validate_credentials,
+                        bool ensure_correct_region);
     ~S3URIChunkSourceAws() override;
 
     /// @brief Uses a head object request to get the metadata of the S3 object.

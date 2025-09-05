@@ -88,14 +88,16 @@ void S3URIDownloadedChunkNotifier::stopWaitingForRange()
 {
     std::lock_guard lock{access_};
     interrupt_flag_ = true;
-    range_available_cond_.notify_one();
+    // multiple threads might be waiting for the same S3 object range or for different but overlapping ranges
+    range_available_cond_.notify_all();
 }
 
 void S3URIDownloadedChunkNotifier::notifyChunkDownloaded(std::uint64_t start_byte, std::uint64_t size)
 {
     std::lock_guard lock{access_};
     downloaded_chunks_.emplace_back(start_byte, start_byte + size - 1); // Store the range as (start_byte, end_byte)
-    range_available_cond_.notify_one();
+    // multiple threads might be waiting for the same S3 object range or for different but overlapping ranges
+    range_available_cond_.notify_all();
 }
 
 bool S3URIDownloadedChunkNotifier::isRangeAvailable(std::uint64_t byte_offset, std::uint64_t size) const
