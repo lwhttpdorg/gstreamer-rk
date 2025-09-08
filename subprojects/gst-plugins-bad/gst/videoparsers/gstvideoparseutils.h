@@ -173,6 +173,7 @@ typedef struct
 
   /* pending LCEVC data */
   GstBuffer *lcevc_enhancement_data;
+  GstCaps *lcevc_caps;
 
   /* pending hdr plus data */
   guint8 hdr10_plus_data[GST_VIDEO_HDR10_PLUS_MAX_BYTES];

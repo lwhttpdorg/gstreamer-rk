@@ -33,7 +33,6 @@ if lcevc_eil_dep.found()
     include_directories : [configinc],
     dependencies : [
       gstvideo_dep,
-      gstcodecparsers_dep,
       lcevc_eil_dep,
     ],
     install : true,

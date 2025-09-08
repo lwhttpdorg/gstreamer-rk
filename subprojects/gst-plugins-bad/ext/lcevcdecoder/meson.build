@@ -36,7 +36,6 @@ if lcevc_dec_dep.found()
     dependencies : [
       gstpbutils_dep,
       gstvideo_dep,
-      gstcodecparsers_dep,
       lcevc_dec_dep,
     ],
     install : true,

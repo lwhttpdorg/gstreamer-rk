@@ -57,6 +57,8 @@ struct _GstLcevcDec {
 
   guint32 out_alloc_width;
   guint32 out_alloc_height;
+
+  GstCaps *lcevc_caps;
 };
 
 struct _GstLcevcDecClass {
