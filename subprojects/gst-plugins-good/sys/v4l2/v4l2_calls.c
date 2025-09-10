@@ -961,6 +961,9 @@ gst_v4l2_set_attribute (GstV4l2Object * v4l2object,
   if (v4l2object->ioctl (v4l2object->video_fd, VIDIOC_S_CTRL, &control) < 0)
     goto ctrl_failed;
 
+  if (attribute_num == V4L2_CID_MPEG_VIDEO_BITRATE)
+    v4l2object->set_bitrate = TRUE;
+
   return TRUE;
 
   /* ERRORS */
