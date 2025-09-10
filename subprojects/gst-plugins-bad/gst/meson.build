@@ -12,7 +12,7 @@ foreach plugin : ['accurip', 'adpcmdec', 'adpcmenc', 'aiff', 'asfmux',
                   'rawparse', 'removesilence', 'rist', 'rtmp2', 'rtp', 'sdp',
                   'segmentclip', 'siren', 'smooth', 'speed', 'subenc', 'switchbin',
                   'tensordecoders', 'timecode', 'transcode', 'unixfd', 'videofilters',
-                  'videoframe_audiolevel', 'videoparsers', 'videosignal',
+                  'videoframe_audiolevel', 'videoframescheduler', 'videoparsers', 'videosignal',
                   'vmnc']
   subdir(plugin)
 endforeach
