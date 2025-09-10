@@ -174,9 +174,29 @@ typedef struct GstAirtimeS3ContextConfig {
 
 GST_AIRTIME_DLL_PUBLIC GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config();
 
+/**
+ * Create a new GstAirtimeS3Context instance.
+ *
+ * @param config The configuration for the context.
+ * @param context Pointer to the location where the created context instance will be stored.
+ * @return 0 on success, non-zero error code on failure.
+ */
 GST_AIRTIME_DLL_PUBLIC int gst_airtime_s3_context_create(const GstAirtimeS3ContextConfig* config,
                                                          gst_airtime_s3_context** context);
 
+/**
+ * Check if the underlying S3 URI providers were newly created or an existing instance was returned.
+ * @param context The context instance to check.
+ * @return true if the providers were newly created, false if an existing instance was returned.
+ */
+GST_AIRTIME_DLL_PUBLIC bool gst_airtime_s3_context_newly_created_providers(const gst_airtime_s3_context* context);
+
+/**
+ * Destroy the given GstAirtimeS3Context instance.
+ *
+ * @param context The context instance to destroy.
+ * @return 0 on success, non-zero error code on failure.
+ */
 GST_AIRTIME_DLL_PUBLIC int gst_airtime_s3_context_destroy(gst_airtime_s3_context* context);
 
 #ifdef __cplusplus
@@ -190,6 +210,9 @@ namespace gst::airtime
 
 using ScopedS3Context = ResourceReleasedByFunction<gst_airtime_s3_context, gst_airtime_s3_context_destroy>;
 
+/// @brief Create a scoped S3 context.
+/// @param config The configuration for the context.
+/// @return A scoped S3 context instance.
 GST_AIRTIME_DLL_PUBLIC ScopedS3Context createScopedS3Context(const GstAirtimeS3ContextConfig& config);
 
 } // namespace gst::airtime

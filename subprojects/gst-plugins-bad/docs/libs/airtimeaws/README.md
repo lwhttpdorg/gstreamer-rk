@@ -371,7 +371,7 @@ Apart from the `metadata.json` file and the file chunks stored as a collection o
 
 The **`airtimes3src`** element delivers excellent performance. Its main advantage is that it processes data in parallel with retrieval and fetches multiple chunks simultaneously (25 by default).
 
-In the example below, the file is first retrieved from S3 using the `aws s3 cp` CLI command, then processed from the local filesystem through a simple pipeline that decodes the entire media content.
+In the example below, the 189M file is first retrieved from S3 using the `aws s3 cp` CLI command, then processed from the local filesystem through a simple pipeline that decodes the entire media content.
 
 ```
 aws s3 cp s3://my-bucket/path/to/media.webm media.webm
@@ -381,7 +381,7 @@ gst-launch-1.0 filesrc location=./media.webm ! decodebin name=d d. ! videoconver
 The next example runs the same decoding pipeline but uses the **`airtimes3src`** element instead of `filesrc`:
 
 ```
-gst-launch-1.0 airtimes3src location=s3://my-bucket/path/to/media.webm media.webm ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
+gst-launch-1.0 airtimes3src location=s3://my-bucket/path/to/media.webm ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
 ```
 
 The tests have been performed multiple times and the table below shows an average durations. The performance depends a lot on the speed of the network. The tests have been performed on a mobile network (LTE), MacBook M3 Pro, 36GB of RAM.
@@ -389,7 +389,7 @@ The tests have been performed multiple times and the table below shows an averag
 | Test                           | Duration [seconds] |
 | ------------------------------ | ------------------ |
 | `aws s3 cp` + `filesrc`        | 21 + 12 = 33       |
-| `airtimes3src` with cold cache | **21**             |
+| `airtimes3src` with cold cache | **15**             |
 | `airtimes3src` with warm cache | **12**             |
 
 With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`. However, please note that the pipeline starts running immediately, processing the requested byte range as soon as those bytes are available — it does not wait for the entire file to be fetched. With that in mind, comparing aws s3 cp + filesrc to airtimes3src is not entirely fair. The above example pipelines perform very little work, so they run quickly. However, in more realistic pipelines where processing takes longer, it’s possible that even with a arm cold cache, the fetching time could be completely hidden by the processing time.

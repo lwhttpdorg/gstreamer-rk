@@ -79,7 +79,7 @@ struct GstAirtimeS3SrcContextPrivateGuts {
 
 private:
     S3URIProviderConfig config_;
-    std::shared_ptr<S3URIProviders> s3_uri_providers_;
+    std::pair<std::shared_ptr<S3URIProviders>, bool> s3_uri_providers_;
 };
 
 } // namespace

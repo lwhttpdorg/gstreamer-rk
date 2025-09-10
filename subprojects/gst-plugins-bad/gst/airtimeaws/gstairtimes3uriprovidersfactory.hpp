@@ -49,6 +49,7 @@
 
 #include <memory>
 #include <mutex>
+#include <utility>
 
 namespace gst::airtime
 {
@@ -66,8 +67,9 @@ public:
     /// @brief Create a new instance of the cache, or return the existing instance if it already
     /// exists. This will create the cache directory and the purged cache directory.
     /// @param config The configuration for the cache.
-    /// @return A shared pointer to the cache instance.
-    static std::shared_ptr<S3URIProviders> create(S3URIProviderConfig config);
+    /// @return A pair containing a shared pointer to the cache instance, and a boolean indicating whether a new
+    /// instance was created (true) or an existing instance was returned (false).
+    static std::pair<std::shared_ptr<S3URIProviders>, bool> create(S3URIProviderConfig config);
 
     /// @brief Get the existing instance of the cache, or null if it does not exist. This will not create a new
     /// instance, but will return the existing one if it exists.

@@ -48,19 +48,19 @@
 namespace gst::airtime
 {
 
-std::shared_ptr<S3URIProviders> S3URIProvidersFactory::create(S3URIProviderConfig config)
+std::pair<std::shared_ptr<S3URIProviders>, bool> S3URIProvidersFactory::create(S3URIProviderConfig config)
 {
     std::lock_guard lock{instance_access_};
 
     if (auto existing = cached_instance_.lock())
     {
-        return existing;
+        return {existing, false};
     }
 
     auto new_instance = std::make_shared<S3URIProviders>(config);
     cached_instance_ = new_instance;
 
-    return new_instance;
+    return {new_instance, true};
 }
 
 std::shared_ptr<S3URIProviders> S3URIProvidersFactory::get()

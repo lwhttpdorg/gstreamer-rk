@@ -107,12 +107,17 @@ gst::airtime::S3URIProviderConfig getConfig(const GstAirtimeS3ContextConfig& c_c
 
 struct gst_airtime_s3_context {
     explicit gst_airtime_s3_context(const GstAirtimeS3ContextConfig& config) :
-        cache{gst::airtime::S3URIProvidersFactory::create(getConfig(config))}
+        providers_{gst::airtime::S3URIProvidersFactory::create(getConfig(config))}
     {
     }
 
+    bool newlyCreated() const noexcept
+    {
+        return providers_.second;
+    }
+
 private:
-    std::shared_ptr<gst::airtime::S3URIProviders> cache;
+    std::pair<std::shared_ptr<gst::airtime::S3URIProviders>, bool> providers_;
 };
 
 GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config()
@@ -153,6 +158,12 @@ int gst_airtime_s3_context_create(const GstAirtimeS3ContextConfig* config, gst_a
         GST_ERROR("Failed to create airtime S3 context: %s", e.what());
     }
     return 1;
+}
+
+bool gst_airtime_s3_context_newly_created_providers(const gst_airtime_s3_context* context)
+{
+    assert(context);
+    return context->newlyCreated();
 }
 
 int gst_airtime_s3_context_destroy(gst_airtime_s3_context* context)
