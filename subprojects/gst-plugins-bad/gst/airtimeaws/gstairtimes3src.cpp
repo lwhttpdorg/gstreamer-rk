@@ -162,7 +162,6 @@ static void gst_airtime_s3_src_uri_handler_init(gpointer g_iface, gpointer iface
 #define gst_airtime_s3_src_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(GstAirtimeS3Src, gst_airtime_s3_src, GST_TYPE_BASE_SRC,
                         G_IMPLEMENT_INTERFACE(GST_TYPE_URI_HANDLER, gst_airtime_s3_src_uri_handler_init));
-GST_ELEMENT_REGISTER_DEFINE(gst_airtime_s3_src, "airtimes3src", GST_RANK_PRIMARY, GST_TYPE_AIRTIMES3SRC);
 
 /// @brief Posts the metrics of the S3 URI provider to the bus. This includes the location, content length, download
 /// completion state and duration.

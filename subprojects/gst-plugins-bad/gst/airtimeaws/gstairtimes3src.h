@@ -91,4 +91,7 @@ G_BEGIN_DECLS
 #define GST_TYPE_AIRTIMES3SRC (gst_airtime_s3_src_get_type())
 G_DECLARE_FINAL_TYPE(GstAirtimeS3Src, gst_airtime_s3_src, GST, AIRTIMES3SRC, GstBaseSrc)
 
+/* Element registration function declaration */
+GST_ELEMENT_REGISTER_DECLARE(airtime_s3_src)
+
 G_END_DECLS
