@@ -136,6 +136,7 @@ option('ladspa-rdf', type : 'feature', value : 'auto', description : 'LADSPA plu
 option('lc3', type : 'feature', value : 'auto', description : 'LC3 (Bluetooth) LE audio codec plugin')
 option('ldac', type : 'feature', value : 'auto', description : 'LDAC bluetooth audio codec plugin')
 option('libde265', type : 'feature', value : 'auto', description : 'HEVC/H.265 video decoder plugin')
+option('libndi', type : 'feature', value : 'auto', description : 'VideoLAN NDI source plugin')
 option('openaptx', type : 'feature', value : 'auto', description : 'Open Source implementation of Audio Processing Technology codec (aptX) plugin')
 option('lv2', type : 'feature', value : 'auto', description : 'LV2 audio plugin bridge')
 option('mediafoundation', type : 'feature', value : 'auto', description : 'Microsoft Media Foundation plugin')
