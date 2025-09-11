@@ -1,8 +1,7 @@
 [wrap-git]
 directory = libndi
-url = https://code.videolan.org/AhmedHamed3699/libndi.git
+url = https://code.videolan.org/jbk/libndi.git
 revision = 930234549f96bcf7442795180f8d1fb43ed23af1
 depth = 1
 
 diff_files = libndi/0000-export-dep.patch
-
