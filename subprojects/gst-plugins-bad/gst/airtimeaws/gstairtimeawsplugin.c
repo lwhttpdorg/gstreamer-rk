@@ -24,16 +24,17 @@
 #include "gstairtimes3src.h"
 
 // announce the types that will be added to the plugin
-GST_ELEMENT_REGISTER_DEFINE(airtime_s3_src, "airtimes3src", GST_RANK_PRIMARY, GST_TYPE_AIRTIMES3SRC)
-
+GST_ELEMENT_REGISTER_DEFINE (airtime_s3_src, "airtimes3src", GST_RANK_PRIMARY,
+    GST_TYPE_AIRTIMES3SRC)
 /// @brief Plugin entry point
 /// @param plugin An instance of the plugin
 /// @return A boolean indicating success
-static gboolean airtime_init(GstPlugin* plugin)
+     static gboolean airtime_init (GstPlugin * plugin)
 {
-    return GST_ELEMENT_REGISTER(airtime_s3_src, plugin);
+  return GST_ELEMENT_REGISTER (airtime_s3_src, plugin);
 }
 
 // GStreamer looks for this structure to register airtime
-GST_PLUGIN_DEFINE(GST_VERSION_MAJOR, GST_VERSION_MINOR, airtimeaws, "airtime aws plugin", airtime_init, VERSION,
-                  GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR, airtimeaws,
+    "airtime aws plugin", airtime_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME,
+    GST_PACKAGE_ORIGIN)
