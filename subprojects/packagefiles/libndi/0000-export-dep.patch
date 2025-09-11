@@ -1,0 +1,33 @@
+diff --git a/meson.build b/meson.build
+index ebfffbd..955233f 100644
+--- a/meson.build
++++ b/meson.build
+@@ -136,6 +136,13 @@ pkg.generate(
+   extra_cflags: ndi_core_export_cflags,
+ )
+ 
++libndi_dep = declare_dependency(
++  compile_args: ndi_core_export_cflags,
++  dependencies: ndi_core_deps,
++  link_with: libndi,
++)
++
++meson.override_dependency(meson.project_name(), libndi_dep)
+ 
+ #
+ # Example Executable
+@@ -143,6 +150,8 @@ pkg.generate(
+ 
+ # mDNS discovery specifics
+ 
++ndi_example_deps += libndi_dep
++
+ microdns_dep = dependency('microdns', required: get_option('microdns'))
+ if microdns_dep.found()
+   threads_dep = dependency('threads', required: false)
+@@ -156,5 +165,4 @@ executable('ndi',
+            c_args: ndi_example_cargs,
+            include_directories: include_directories('include'),
+            install: true,
+-           link_with: [libndi],
+            dependencies: ndi_example_deps)
