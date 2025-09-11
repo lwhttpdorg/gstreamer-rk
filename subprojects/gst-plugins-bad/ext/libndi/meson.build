@@ -1,8 +1,10 @@
 ndi_sources = [
   'gstndi.c',
+  'gstndisrc.c',
 ]
 
 ndi_headers = [
+  'gstndisrc.h',
 ]
 
 doc_sources = []
