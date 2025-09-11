@@ -26,26 +26,27 @@
 #include "gstndisrc.h"
 
 #include <gst/video/video.h>
+#include <ndi/ndi.h>
 
 struct _GstNdiSrc
 {
   GstPushSrc parent;
 };
 
-G_DEFINE_TYPE (GstNdiSrc, gst_ndi_src, GST_TYPE_PUSH_SRC)
-    GST_ELEMENT_REGISTER_DEFINE (ndi_src, "ndisrc", GST_RANK_NONE, GST_NDI_TYPE_SRC)
-    GST_DEBUG_CATEGORY_STATIC (gst_ndi_src_debug);
+G_DEFINE_TYPE (GstNdiSrc, gst_ndi_src, GST_TYPE_PUSH_SRC);
+GST_ELEMENT_REGISTER_DEFINE (ndi_src, "ndisrc", GST_RANK_NONE,
+    GST_NDI_TYPE_SRC);
+GST_DEBUG_CATEGORY_STATIC (gst_ndi_src_debug);
 #define GST_CAT_DEFAULT gst_ndi_src_debug
 
-     static GstStaticPadTemplate src_factory =
-         GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
+static GstStaticPadTemplate src_factory =
+    GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (GST_VIDEO_FORMATS_ALL) ";"
         GST_VIDEO_CAPS_MAKE_WITH_FEATURES ("ANY", GST_VIDEO_FORMATS_ALL))
     );
 
-
-
-     static void gst_ndi_src_class_init (GstNdiSrcClass * klass)
+static void
+gst_ndi_src_class_init (GstNdiSrcClass * klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
