@@ -2,9 +2,15 @@ if get_option('airtimeaws').disabled()
   subdir_done()
 endif
 
-aws_core_dep = dependency('aws-cpp-sdk-core', method : 'cmake', required : true, include_type: 'system')
-aws_s3_dep = dependency('aws-cpp-sdk-s3', method : 'cmake', required : true, include_type: 'system')
-aws_sts_dep = dependency('aws-cpp-sdk-sts', method : 'cmake', required : true, include_type: 'system')
+aws_core_dep = dependency('aws-cpp-sdk-core', method : 'cmake', required : false, include_type: 'system')
+aws_s3_dep = dependency('aws-cpp-sdk-s3', method : 'cmake', required : false, include_type: 'system')
+aws_sts_dep = dependency('aws-cpp-sdk-sts', method : 'cmake', required : false, include_type: 'system')
+
+if not aws_core_dep.found() or not aws_s3_dep.found() or not aws_sts_dep.found()
+   message('Skipping airtimeaws plugin: AWS SDK dependencies not found')
+   subdir_done()
+endif
+
 json_dep = dependency('json-glib-1.0', version : '>=1.6.6', fallback : ['json-glib', 'json_glib_dep'], required: true, include_type: 'system')
 boost_dep = dependency('boost', method : 'cmake', required : false, include_type: 'system')
 
