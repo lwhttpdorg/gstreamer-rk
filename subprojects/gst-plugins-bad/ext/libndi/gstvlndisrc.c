@@ -23,21 +23,21 @@
 #  include "config.h"
 #endif
 
-#include "gstndisrc.h"
+#include "gstvlndisrc.h"
 
 #include <gst/video/video.h>
 #include <ndi/ndi.h>
 
-struct _GstNdiSrc
+struct _GstVlNdiSrc
 {
   GstPushSrc parent;
 };
 
-G_DEFINE_TYPE (GstNdiSrc, gst_ndi_src, GST_TYPE_PUSH_SRC);
-GST_ELEMENT_REGISTER_DEFINE (ndi_src, "ndisrc", GST_RANK_NONE,
-    GST_NDI_TYPE_SRC);
-GST_DEBUG_CATEGORY_STATIC (gst_ndi_src_debug);
-#define GST_CAT_DEFAULT gst_ndi_src_debug
+G_DEFINE_TYPE (GstVlNdiSrc, gst_vl_ndi_src, GST_TYPE_PUSH_SRC);
+GST_ELEMENT_REGISTER_DEFINE (vl_ndi_src, "vlndisrc", GST_RANK_NONE,
+    GST_VL_TYPE_NDI_SRC);
+GST_DEBUG_CATEGORY_STATIC (gst_vl_ndi_src_debug);
+#define GST_CAT_DEFAULT gst_vl_ndi_src_debug
 
 static GstStaticPadTemplate src_factory =
     GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
@@ -46,23 +46,23 @@ static GstStaticPadTemplate src_factory =
     );
 
 static void
-gst_ndi_src_class_init (GstNdiSrcClass * klass)
+gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
 
   gst_element_class_set_static_metadata (element_class, "VideoLAN NDI Source",
-      "Source/Video", "Reads frames from a NDI device",
+      "Source/Video", "Reads frames from an NDI device",
       "Michael Gruner <michael.gruner@ridgerun.com>");
 
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_factory));
 
-  GST_DEBUG_CATEGORY_INIT (gst_ndi_src_debug, "ndisrc", 0,
+  GST_DEBUG_CATEGORY_INIT (gst_vl_ndi_src_debug, "vlndisrc", 0,
       "VideoLAN NDI Source");
 }
 
 static void
-gst_ndi_src_init (GstNdiSrc * self)
+gst_vl_ndi_src_init (GstVlNdiSrc * self)
 {
   GST_DEBUG_OBJECT (self, "initializing NDI src");
 }

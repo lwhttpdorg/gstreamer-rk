@@ -19,18 +19,20 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_NDI_SRC_H__
-#define __GST_NDI_SRC_H__
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
+#include "gstvlndisrc.h"
 
 #include <gst/gst.h>
-#include <gst/base/gstpushsrc.h>
 
-G_BEGIN_DECLS
+static gboolean
+plugin_init (GstPlugin * plugin)
+{
+  return GST_ELEMENT_REGISTER (vl_ndi_src, plugin);
+}
 
-#define GST_NDI_TYPE_SRC gst_ndi_src_get_type ()
-G_DECLARE_FINAL_TYPE (GstNdiSrc, gst_ndi_src, GST_NDI, SRC, GstPushSrc)
-GST_ELEMENT_REGISTER_DECLARE (ndi_src)
-
-G_END_DECLS
-
-#endif //__GST_NDI_SRC_H__
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR, vlndi,
+    "Elements for VideoLAN NDI", plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME,
+    GST_PACKAGE_ORIGIN)

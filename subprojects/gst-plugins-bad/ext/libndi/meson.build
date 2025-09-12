@@ -1,32 +1,32 @@
-ndi_sources = [
-  'gstndi.c',
-  'gstndisrc.c',
+vlndi_sources = [
+  'gstvlndi.c',
+  'gstvlndisrc.c',
 ]
 
-ndi_headers = [
-  'gstndisrc.h',
+vlndi_headers = [
+  'gstvlndisrc.h',
 ]
 
 doc_sources = []
-foreach s: ndi_sources + ndi_headers
+foreach s: vlndi_sources + vlndi_headers
   doc_sources += meson.current_source_dir() / s
 endforeach
 
 plugin_sources += {
-  'ndi': pathsep.join(doc_sources)
+  'vlndi': pathsep.join(doc_sources)
 }
 
-ndi_option = get_option('libndi')
-ndi_dep = dependency('libndi', version : '>= 0.1.0', required : ndi_option, allow_fallback: true)
+vlndi_option = get_option('libndi')
+vlndi_dep = dependency('libndi', version : '>= 0.1.0', required : vlndi_option, allow_fallback: true)
 
-if ndi_dep.found()
-  gstndi = library('gstndi',
-    ndi_sources,
+if vlndi_dep.found()
+  gstvlndi = library('gstvlndi',
+    vlndi_sources,
     c_args : gst_plugins_bad_args,
     include_directories : [configinc],
-    dependencies : [gstvideo_dep, ndi_dep],
+    dependencies : [gstvideo_dep, vlndi_dep],
     install : true,
     install_dir : plugins_install_dir,
   )
-  plugins += [gstndi]
+  plugins += [gstvlndi]
 endif
