@@ -34,6 +34,7 @@ struct _GstVlNdiSrc
 
   gchar *host;
   guint port;
+  gint capture_timeout;
 
   ndi_recv_ctx_t ctx;
 };
@@ -55,12 +56,16 @@ enum
   PROP_0,
   PROP_HOST,
   PROP_PORT,
+  PROP_CAPTURE_TIMEOUT,
 };
 
 #define PROP_HOST_DEFAULT "127.0.0.1"
 #define PROP_PORT_DEFAULT 5960
 #define PROP_PORT_MIN 0
 #define PROP_PORT_MAX G_MAXUINT16
+#define PROP_CAPTURE_TIMEOUT_DEFAULT 500
+#define PROP_CAPTURE_TIMEOUT_MIN -1
+#define PROP_CAPTURE_TIMEOUT_MAX G_MAXINT
 
 static void gst_vl_ndi_src_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -98,6 +103,12 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
           "Port of the NDI device. Must be set in the NULL state.",
           PROP_PORT_MIN, PROP_PORT_MAX, PROP_PORT_DEFAULT,
           G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE));
+  g_object_class_install_property (object_class, PROP_CAPTURE_TIMEOUT,
+      g_param_spec_int ("capture-timeout", "Capture Timeout",
+          "Capture timeout in milliseconds to wait for a packet. Use -1 to wait forever.",
+          PROP_CAPTURE_TIMEOUT_MIN, PROP_CAPTURE_TIMEOUT_MAX,
+          PROP_CAPTURE_TIMEOUT_DEFAULT,
+          G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE));
 
   gst_element_class_set_static_metadata (element_class, "VideoLAN NDI Source",
       "Source/Video", "Reads frames from an NDI device",
@@ -122,6 +133,7 @@ gst_vl_ndi_src_init (GstVlNdiSrc * self)
 
   self->host = g_strdup (PROP_HOST_DEFAULT);
   self->port = PROP_PORT_DEFAULT;
+  self->capture_timeout = PROP_CAPTURE_TIMEOUT_DEFAULT;
   self->ctx = NULL;
 }
 
@@ -131,7 +143,35 @@ gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
   g_return_val_if_fail (GST_VL_IS_NDI_SRC (self), -1);
   g_return_val_if_fail (ndi_packet, -1);
 
-  GST_LOG_OBJECT (self, "packet received: %p", ndi_packet);
+  switch (ndi_packet->type) {
+    case NDI_DATA_VIDEO:{
+      ndi_packet_video_t *video = (ndi_packet_video_t *) ndi_packet->packet;
+      GST_LOG_OBJECT (self,
+          "video data received (%dx%d) %lu %" GST_FOURCC_FORMAT, video->width,
+          video->height, video->size, GST_FOURCC_ARGS (video->fourcc));
+      break;
+    }
+
+    case NDI_DATA_AUDIO:{
+      ndi_packet_audio_t *audio = (ndi_packet_audio_t *) ndi_packet->packet;
+      GST_LOG_OBJECT (self, "audio data received (%d samples)",
+          audio->num_samples);
+      break;
+    }
+
+    case NDI_DATA_METADATA:{
+      ndi_packet_metadata_t *meta =
+          (ndi_packet_metadata_t *) ndi_packet->packet;
+      GST_LOG_OBJECT (self, "metadata received: %.*s", (gint) meta->size,
+          meta->data);
+      break;
+    }
+    default:
+      GST_ERROR_OBJECT (self, "unknown NDI packet type received: %d",
+          ndi_packet->type);
+      return -1;
+      break;
+  }
 
   return 0;
 }
@@ -139,7 +179,31 @@ gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
 static GstFlowReturn
 gst_vl_ndi_src_fill (GstPushSrc * src, GstBuffer * buf)
 {
-  return GST_FLOW_OK;
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (src);
+  GstFlowReturn ret = GST_FLOW_ERROR;
+  gint status = 0;
+  gint timeout = 0;
+
+  GST_OBJECT_LOCK (self);
+  timeout = self->capture_timeout;
+  GST_OBJECT_UNLOCK (self);
+
+  if (!ndi_recv_is_connected (self->ctx)) {
+    GST_ERROR_OBJECT (self, "unexpected NDI disconnection");
+    goto out;
+  }
+
+  status = ndi_recv_wait_capture (self->ctx, timeout);
+  if (status < 0) {
+    GST_ERROR_OBJECT (self, "failed to capture from the NDI device: %d",
+        status);
+    goto out;
+  }
+
+  ret = GST_FLOW_OK;
+
+out:
+  return ret;
 }
 
 static gboolean
@@ -163,8 +227,8 @@ gst_vl_ndi_src_start (GstBaseSrc * basesrc)
       ndi_recv_create (&opts, (ndi_data_cb) gst_vl_ndi_src_callback, self,
       non_blocking);
   if (!self->ctx) {
-    GST_ELEMENT_ERROR (self, LIBRARY, INIT, ("failed to initialize libNDI"),
-        ("errno is: %u", errno));
+    GST_ELEMENT_ERROR (self, LIBRARY, INIT,
+        ("failed to create the NDI context"), ("errno is: %u", errno));
     ret = FALSE;
     goto out;
   }
@@ -201,7 +265,7 @@ gst_vl_ndi_src_stop (GstBaseSrc * basesrc)
   GstVlNdiSrc *self = GST_VL_NDI_SRC (basesrc);
   gboolean ret = TRUE;
 
-  GST_INFO_OBJECT (self, "starting");
+  GST_INFO_OBJECT (self, "stopping");
 
   if (ndi_recv_close (self->ctx) < 0) {
     GST_ERROR_OBJECT (self, "failed to close the NDI context");
@@ -228,6 +292,9 @@ gst_vl_ndi_src_set_property (GObject * object, guint prop_id,
       g_free (self->host);
       self->host = g_value_dup_string (value);
       break;
+    case PROP_CAPTURE_TIMEOUT:
+      self->capture_timeout = g_value_get_int (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -250,6 +317,9 @@ gst_vl_ndi_src_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_HOST:
       g_value_set_string (value, self->host);
+      break;
+    case PROP_CAPTURE_TIMEOUT:
+      g_value_set_int (value, self->capture_timeout);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
