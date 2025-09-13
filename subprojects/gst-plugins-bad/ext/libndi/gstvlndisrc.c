@@ -25,7 +25,6 @@
 
 #include "gstvlndisrc.h"
 
-#include <gst/video/video.h>
 #include <ndi/ndi.h>
 
 struct _GstVlNdiSrc
@@ -46,9 +45,8 @@ GST_DEBUG_CATEGORY_STATIC (gst_vl_ndi_src_debug);
 #define GST_CAT_DEFAULT gst_vl_ndi_src_debug
 
 static GstStaticPadTemplate src_factory =
-    GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (GST_VIDEO_FORMATS_ALL) ";"
-        GST_VIDEO_CAPS_MAKE_WITH_FEATURES ("ANY", GST_VIDEO_FORMATS_ALL))
+GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
+    GST_STATIC_CAPS ("video/x-speedhq")
     );
 
 enum
