@@ -34,6 +34,8 @@ struct _GstVlNdiSrc
 
   gchar *host;
   guint port;
+
+  ndi_recv_ctx_t ctx;
 };
 
 G_DEFINE_TYPE (GstVlNdiSrc, gst_vl_ndi_src, GST_TYPE_PUSH_SRC);
@@ -66,11 +68,22 @@ static void gst_vl_ndi_src_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void gst_vl_ndi_src_finalize (GObject * object);
 
+static gboolean gst_vl_ndi_src_start (GstBaseSrc * basesrc);
+static gboolean gst_vl_ndi_src_stop (GstBaseSrc * basesrc);
+
+static GstFlowReturn gst_vl_ndi_src_fill (GstPushSrc * src, GstBuffer * buf);
+
+static gint gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet,
+    GstVlNdiSrc * self);
+
+
 static void
 gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
+  GstBaseSrcClass *src_class = GST_BASE_SRC_CLASS (klass);
+  GstPushSrcClass *push_class = GST_PUSH_SRC_CLASS (klass);
 
   object_class->set_property = gst_vl_ndi_src_set_property;
   object_class->get_property = gst_vl_ndi_src_get_property;
@@ -93,6 +106,11 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&src_factory));
 
+  src_class->start = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_start);
+  src_class->stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_stop);
+
+  push_class->fill = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_fill);
+
   GST_DEBUG_CATEGORY_INIT (gst_vl_ndi_src_debug, "vlndisrc", 0,
       "VideoLAN NDI Source");
 }
@@ -104,6 +122,94 @@ gst_vl_ndi_src_init (GstVlNdiSrc * self)
 
   self->host = g_strdup (PROP_HOST_DEFAULT);
   self->port = PROP_PORT_DEFAULT;
+  self->ctx = NULL;
+}
+
+static gint
+gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
+{
+  g_return_val_if_fail (GST_VL_IS_NDI_SRC (self), -1);
+  g_return_val_if_fail (ndi_packet, -1);
+
+  GST_LOG_OBJECT (self, "packet received: %p", ndi_packet);
+
+  return 0;
+}
+
+static GstFlowReturn
+gst_vl_ndi_src_fill (GstPushSrc * src, GstBuffer * buf)
+{
+  return GST_FLOW_OK;
+}
+
+static gboolean
+gst_vl_ndi_src_start (GstBaseSrc * basesrc)
+{
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (basesrc);
+  ndi_opts opts = { 0 };
+  const gboolean non_blocking = FALSE;
+  gint status = 0;
+  gboolean ret = FALSE;
+
+  GST_INFO_OBJECT (self, "starting");
+
+  GST_OBJECT_LOCK (self);
+  opts.host = self->host;
+  opts.port = self->port;
+  opts.initial_tally_state = NDI_TALLY_LIVE;
+  GST_OBJECT_UNLOCK (self);
+
+  self->ctx =
+      ndi_recv_create (&opts, (ndi_data_cb) gst_vl_ndi_src_callback, self,
+      non_blocking);
+  if (!self->ctx) {
+    GST_ELEMENT_ERROR (self, LIBRARY, INIT, ("failed to initialize libNDI"),
+        ("errno is: %u", errno));
+    ret = FALSE;
+    goto out;
+  }
+
+  status = ndi_recv_connect (self->ctx);
+  if (status < 0) {
+    GST_ELEMENT_ERROR (self, LIBRARY, INIT,
+        ("failed to connect to the NDI device"), ("errno is: %u", errno));
+    goto free_ctx;
+  }
+
+  status = ndi_recv_send_metadata (self->ctx);
+  if (status < 0) {
+    GST_ELEMENT_ERROR (self, LIBRARY, INIT,
+        ("failed to send the metadata to the NDI device"), ("errno is: %u",
+            errno));
+    goto free_ctx;
+  }
+
+  ret = TRUE;
+  goto out;
+
+free_ctx:
+  ndi_recv_close (self->ctx);
+  self->ctx = NULL;
+
+out:
+  return ret;
+}
+
+static gboolean
+gst_vl_ndi_src_stop (GstBaseSrc * basesrc)
+{
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (basesrc);
+  gboolean ret = TRUE;
+
+  GST_INFO_OBJECT (self, "starting");
+
+  if (ndi_recv_close (self->ctx) < 0) {
+    GST_ERROR_OBJECT (self, "failed to close the NDI context");
+    ret = FALSE;
+  }
+  self->ctx = NULL;
+
+  return ret;
 }
 
 static void
