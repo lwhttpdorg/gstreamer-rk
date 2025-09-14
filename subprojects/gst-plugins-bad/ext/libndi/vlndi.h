@@ -19,18 +19,26 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_VL_NDI_SRC_H__
-#define __GST_VL_NDI_SRC_H__
+#ifndef __VL_NDI_H__
+#define __VL_NDI_H__
 
-#include <gst/gst.h>
-#include <gst/base/gstpushsrc.h>
+#include <glib.h>
+#include <ndi/packet.h>
 
 G_BEGIN_DECLS
 
-#define GST_VL_TYPE_NDI_SRC gst_vl_ndi_src_get_type ()
-G_DECLARE_FINAL_TYPE (GstVlNdiSrc, gst_vl_ndi_src, GST_VL, NDI_SRC, GstPushSrc)
-GST_ELEMENT_REGISTER_DECLARE (vl_ndi_src)
+ndi_packet_t* vl_ndi_packet_copy_deep (const ndi_packet_t *pkt);
+void vl_ndi_packet_free(ndi_packet_t *pkt);
+
+ndi_packet_video_t *vl_ndi_packet_video_copy_deep (const ndi_packet_video_t *pkt);
+void vl_ndi_packet_video_free(ndi_packet_video_t *pkt);
+
+ndi_packet_audio_t *vl_ndi_packet_audio_copy_deep (const ndi_packet_audio_t *pkt);
+void vl_ndi_packet_audio_free(ndi_packet_audio_t *pkt);
+
+ndi_packet_metadata_t *vl_ndi_packet_metadata_copy_deep (const ndi_packet_metadata_t *pkt);
+void vl_ndi_packet_metadata_free(ndi_packet_metadata_t *pkt);
 
 G_END_DECLS
 
-#endif //__GST_VL_NDI_SRC_H__
+#endif //__GST_NDI_SRC_H__

@@ -24,6 +24,7 @@
 #endif
 
 #include "gstvlndisrc.h"
+#include "vlndi.h"
 
 #include <ndi/ndi.h>
 
@@ -36,6 +37,9 @@ struct _GstVlNdiSrc
   gint capture_timeout;
 
   ndi_recv_ctx_t ctx;
+  ndi_packet_t *pkt;
+  GMutex pkt_mutex;
+  GCond pkt_cond;
 };
 
 G_DEFINE_TYPE (GstVlNdiSrc, gst_vl_ndi_src, GST_TYPE_PUSH_SRC);
@@ -74,11 +78,10 @@ static void gst_vl_ndi_src_finalize (GObject * object);
 static gboolean gst_vl_ndi_src_start (GstBaseSrc * basesrc);
 static gboolean gst_vl_ndi_src_stop (GstBaseSrc * basesrc);
 
-static GstFlowReturn gst_vl_ndi_src_fill (GstPushSrc * src, GstBuffer * buf);
+static GstFlowReturn gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf);
 
 static gint gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet,
     GstVlNdiSrc * self);
-
 
 static void
 gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
@@ -118,7 +121,7 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
   src_class->start = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_start);
   src_class->stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_stop);
 
-  push_class->fill = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_fill);
+  push_class->create = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_create);
 
   GST_DEBUG_CATEGORY_INIT (gst_vl_ndi_src_debug, "vlndisrc", 0,
       "VideoLAN NDI Source");
@@ -127,17 +130,28 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
 static void
 gst_vl_ndi_src_init (GstVlNdiSrc * self)
 {
+  GstBaseSrc *bsrc = GST_BASE_SRC (self);
+
   GST_DEBUG_OBJECT (self, "initializing NDI src");
 
   self->host = g_strdup (PROP_HOST_DEFAULT);
   self->port = PROP_PORT_DEFAULT;
   self->capture_timeout = PROP_CAPTURE_TIMEOUT_DEFAULT;
+
   self->ctx = NULL;
+  self->pkt = NULL;
+  g_mutex_init (&self->pkt_mutex);
+  g_cond_init (&self->pkt_cond);
+
+  gst_base_src_set_live (bsrc, TRUE);
+  gst_base_src_set_format (bsrc, GST_FORMAT_TIME);
 }
 
 static gint
 gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
 {
+  gint ret = 0;
+
   g_return_val_if_fail (GST_VL_IS_NDI_SRC (self), -1);
   g_return_val_if_fail (ndi_packet, -1);
 
@@ -149,14 +163,12 @@ gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
           video->height, video->size, GST_FOURCC_ARGS (video->fourcc));
       break;
     }
-
     case NDI_DATA_AUDIO:{
       ndi_packet_audio_t *audio = (ndi_packet_audio_t *) ndi_packet->packet;
       GST_LOG_OBJECT (self, "audio data received (%d samples)",
           audio->num_samples);
       break;
     }
-
     case NDI_DATA_METADATA:{
       ndi_packet_metadata_t *meta =
           (ndi_packet_metadata_t *) ndi_packet->packet;
@@ -167,35 +179,65 @@ gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
     default:
       GST_ERROR_OBJECT (self, "unknown NDI packet type received: %d",
           ndi_packet->type);
-      return -1;
+      ret = -1;
       break;
   }
 
-  return 0;
+  g_mutex_lock (&self->pkt_mutex);
+  vl_ndi_packet_free (self->pkt);
+  self->pkt = vl_ndi_packet_copy_deep (ndi_packet);
+  g_cond_signal (&self->pkt_cond);
+  g_mutex_unlock (&self->pkt_mutex);
+
+  return ret;
 }
 
 static GstFlowReturn
-gst_vl_ndi_src_fill (GstPushSrc * src, GstBuffer * buf)
+gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf)
 {
   GstVlNdiSrc *self = GST_VL_NDI_SRC (src);
   GstFlowReturn ret = GST_FLOW_ERROR;
   gint status = 0;
   gint timeout = 0;
+  ndi_packet_t *pkt = NULL;
+  ndi_packet_video_t *video = NULL;
 
   GST_OBJECT_LOCK (self);
   timeout = self->capture_timeout;
   GST_OBJECT_UNLOCK (self);
 
-  if (!ndi_recv_is_connected (self->ctx)) {
-    GST_ERROR_OBJECT (self, "unexpected NDI disconnection");
-    goto out;
-  }
+  *buf = NULL;
 
-  status = ndi_recv_wait_capture (self->ctx, timeout);
-  if (status < 0) {
-    GST_ERROR_OBJECT (self, "failed to capture from the NDI device: %d",
-        status);
-    goto out;
+  while (!*buf) {
+    if (!ndi_recv_is_connected (self->ctx)) {
+      GST_ERROR_OBJECT (self, "unexpected NDI disconnection");
+      goto out;
+    }
+
+    status = ndi_recv_wait_capture (self->ctx, timeout);
+    if (status < 0) {
+      GST_ERROR_OBJECT (self, "failed to capture from the NDI device: %d",
+          status);
+      goto out;
+    }
+
+    g_mutex_lock (&self->pkt_mutex);
+    while (!self->pkt) {
+      g_cond_wait (&self->pkt_cond, &self->pkt_mutex);
+    }
+    pkt = self->pkt;
+    self->pkt = NULL;
+    g_mutex_unlock (&self->pkt_mutex);
+
+    if (pkt->type != NDI_DATA_VIDEO) {
+      vl_ndi_packet_free (pkt);
+      continue;
+    }
+
+    video = (ndi_packet_video_t *) pkt->packet;
+    *buf =
+        gst_buffer_new_wrapped_full (0, video->data, video->size, 0,
+        video->size, pkt, (GDestroyNotify) vl_ndi_packet_free);
   }
 
   ret = GST_FLOW_OK;
@@ -333,6 +375,9 @@ gst_vl_ndi_src_finalize (GObject * object)
   GstVlNdiSrc *self = GST_VL_NDI_SRC (object);
 
   g_free (self->host);
+
+  g_mutex_clear (&self->pkt_mutex);
+  g_cond_clear (&self->pkt_cond);
 
   G_OBJECT_CLASS (gst_vl_ndi_src_parent_class)->finalize (object);
 }

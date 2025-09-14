@@ -1,10 +1,12 @@
 vlndi_sources = [
   'gstvlndi.c',
   'gstvlndisrc.c',
+  'vlndi.c',
 ]
 
 vlndi_headers = [
   'gstvlndisrc.h',
+  'vlndi.h',
 ]
 
 doc_sources = []
