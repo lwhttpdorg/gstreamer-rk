@@ -49,8 +49,8 @@ GST_DEBUG_CATEGORY_STATIC (gst_vl_ndi_src_debug);
 #define GST_CAT_DEFAULT gst_vl_ndi_src_debug
 
 static GstStaticPadTemplate src_factory =
-GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-speedhq")
+    GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
+    GST_STATIC_CAPS ("video/x-speedhq ; video/x-h264 ; video/x-h265")
     );
 
 enum
@@ -184,6 +184,7 @@ gst_vl_ndi_src_callback (ndi_packet_t * ndi_packet, GstVlNdiSrc * self)
   }
 
   g_mutex_lock (&self->pkt_mutex);
+  // Need to copy here, libndi will free the packet after we return from the cb
   vl_ndi_packet_free (self->pkt);
   self->pkt = vl_ndi_packet_copy_deep (ndi_packet);
   g_cond_signal (&self->pkt_cond);
