@@ -22,10 +22,25 @@
 #ifndef __VL_NDI_H__
 #define __VL_NDI_H__
 
-#include <glib.h>
+#include <gst/gst.h>
+#include <gst/video/video.h>
 #include <ndi/packet.h>
 
 G_BEGIN_DECLS
+
+typedef struct _VlNdiCapsVideo VlNdiCapsVideo;
+struct _VlNdiCapsVideo {
+  gint width;
+  gint height;
+  gint framerate_num;
+  gint framerate_den;
+  gint32 fourcc;
+};
+
+void vl_ndi_caps_video_clear (VlNdiCapsVideo *caps);
+gboolean vl_ndi_caps_video_are_empty (VlNdiCapsVideo *caps);
+void vl_ndi_caps_video_fill (VlNdiCapsVideo *caps, ndi_packet_video_t *pkt);
+GstCaps *vl_ndi_caps_video_to_gst (VlNdiCapsVideo *caps);
 
 ndi_packet_t* vl_ndi_packet_copy_deep (const ndi_packet_t *pkt);
 void vl_ndi_packet_free(ndi_packet_t *pkt);

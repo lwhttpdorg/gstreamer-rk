@@ -37,6 +37,8 @@ struct _GstVlNdiSrc
   gint capture_timeout;
   gboolean stop;
 
+  VlNdiCapsVideo ndi_caps;
+
   ndi_recv_ctx_t ctx;
   ndi_packet_t *pkt;
   GMutex pkt_mutex;
@@ -80,6 +82,7 @@ static gboolean gst_vl_ndi_src_start (GstBaseSrc * basesrc);
 static gboolean gst_vl_ndi_src_stop (GstBaseSrc * basesrc);
 static gboolean gst_vl_ndi_src_unlock (GstBaseSrc * src);
 static gboolean gst_vl_ndi_src_unlock_stop (GstBaseSrc * src);
+static GstCaps *gst_vl_ndi_src_get_caps (GstBaseSrc * src, GstCaps * filter);
 
 static GstFlowReturn gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf);
 
@@ -125,6 +128,7 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
   src_class->stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_stop);
   src_class->unlock = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_unlock);
   src_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_unlock_stop);
+  src_class->get_caps = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_get_caps);
 
   push_class->create = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_create);
 
@@ -143,6 +147,8 @@ gst_vl_ndi_src_init (GstVlNdiSrc * self)
   self->port = PROP_PORT_DEFAULT;
   self->capture_timeout = PROP_CAPTURE_TIMEOUT_DEFAULT;
   self->stop = FALSE;
+
+  vl_ndi_caps_video_clear (&self->ndi_caps);
 
   self->ctx = NULL;
   self->pkt = NULL;
@@ -244,6 +250,12 @@ gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf)
     }
 
     video = (ndi_packet_video_t *) pkt->packet;
+
+    if (vl_ndi_caps_video_are_empty (&self->ndi_caps)) {
+      vl_ndi_caps_video_fill (&self->ndi_caps, video);
+      gst_base_src_negotiate (GST_BASE_SRC (src));
+    }
+
     *buf =
         gst_buffer_new_wrapped_full (0, video->data, video->size, 0,
         video->size, pkt, (GDestroyNotify) vl_ndi_packet_free);
@@ -351,7 +363,40 @@ gst_vl_ndi_src_stop (GstBaseSrc * basesrc)
   }
   self->ctx = NULL;
 
+  vl_ndi_caps_video_clear (&self->ndi_caps);
+
   return ret;
+}
+
+static GstCaps *
+gst_vl_ndi_src_get_caps (GstBaseSrc * src, GstCaps * filter)
+{
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (src);
+  GstCaps *out = NULL;
+
+  if (vl_ndi_caps_video_are_empty (&self->ndi_caps)) {
+    GST_DEBUG_OBJECT (self,
+        "caps requested but we haven't received a buffer, waiting");
+    goto out;
+  }
+
+  out = vl_ndi_caps_video_to_gst (&self->ndi_caps);
+
+  GST_DEBUG_OBJECT (self, "ndi caps are %" GST_PTR_FORMAT, out);
+
+  if (filter) {
+    GstCaps *tmp = out;
+
+    GST_DEBUG_OBJECT (self, "filter caps are %" GST_PTR_FORMAT, filter);
+
+    out = gst_caps_intersect (filter, out);
+    gst_caps_unref (tmp);
+  }
+
+  GST_DEBUG_OBJECT (self, "final returned caps are %" GST_PTR_FORMAT, out);
+
+out:
+  return out;
 }
 
 static void
