@@ -35,6 +35,7 @@ struct _GstVlNdiSrc
   gchar *host;
   guint port;
   gint capture_timeout;
+  gboolean stop;
 
   ndi_recv_ctx_t ctx;
   ndi_packet_t *pkt;
@@ -77,6 +78,8 @@ static void gst_vl_ndi_src_finalize (GObject * object);
 
 static gboolean gst_vl_ndi_src_start (GstBaseSrc * basesrc);
 static gboolean gst_vl_ndi_src_stop (GstBaseSrc * basesrc);
+static gboolean gst_vl_ndi_src_unlock (GstBaseSrc * src);
+static gboolean gst_vl_ndi_src_unlock_stop (GstBaseSrc * src);
 
 static GstFlowReturn gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf);
 
@@ -120,6 +123,8 @@ gst_vl_ndi_src_class_init (GstVlNdiSrcClass * klass)
 
   src_class->start = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_start);
   src_class->stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_stop);
+  src_class->unlock = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_unlock);
+  src_class->unlock_stop = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_unlock_stop);
 
   push_class->create = GST_DEBUG_FUNCPTR (gst_vl_ndi_src_create);
 
@@ -137,6 +142,7 @@ gst_vl_ndi_src_init (GstVlNdiSrc * self)
   self->host = g_strdup (PROP_HOST_DEFAULT);
   self->port = PROP_PORT_DEFAULT;
   self->capture_timeout = PROP_CAPTURE_TIMEOUT_DEFAULT;
+  self->stop = FALSE;
 
   self->ctx = NULL;
   self->pkt = NULL;
@@ -202,6 +208,7 @@ gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf)
   gint timeout = 0;
   ndi_packet_t *pkt = NULL;
   ndi_packet_video_t *video = NULL;
+  gboolean stop = FALSE;
 
   GST_OBJECT_LOCK (self);
   timeout = self->capture_timeout;
@@ -209,7 +216,7 @@ gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf)
 
   *buf = NULL;
 
-  while (!*buf) {
+  while (!*buf && !stop) {
     if (!ndi_recv_is_connected (self->ctx)) {
       GST_ERROR_OBJECT (self, "unexpected NDI disconnection");
       goto out;
@@ -223,14 +230,15 @@ gst_vl_ndi_src_create (GstPushSrc * src, GstBuffer ** buf)
     }
 
     g_mutex_lock (&self->pkt_mutex);
-    while (!self->pkt) {
+    while (!self->pkt && !self->stop) {
       g_cond_wait (&self->pkt_cond, &self->pkt_mutex);
     }
     pkt = self->pkt;
     self->pkt = NULL;
+    stop = self->stop;
     g_mutex_unlock (&self->pkt_mutex);
 
-    if (pkt->type != NDI_DATA_VIDEO) {
+    if (pkt->type != NDI_DATA_VIDEO || stop) {
       vl_ndi_packet_free (pkt);
       continue;
     }
@@ -298,6 +306,35 @@ free_ctx:
 
 out:
   return ret;
+}
+
+static gboolean
+gst_vl_ndi_src_unlock (GstBaseSrc * src)
+{
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (src);
+
+  GST_DEBUG_OBJECT (self, "requested to unlock");
+
+  g_mutex_lock (&self->pkt_mutex);
+  self->stop = TRUE;
+  g_cond_signal (&self->pkt_cond);
+  g_mutex_unlock (&self->pkt_mutex);
+
+  return TRUE;
+}
+
+static gboolean
+gst_vl_ndi_src_unlock_stop (GstBaseSrc * src)
+{
+  GstVlNdiSrc *self = GST_VL_NDI_SRC (src);
+
+  GST_DEBUG_OBJECT (self, "request to unlock finished");
+
+  g_mutex_lock (&self->pkt_mutex);
+  self->stop = FALSE;
+  g_mutex_unlock (&self->pkt_mutex);
+
+  return TRUE;
 }
 
 static gboolean
