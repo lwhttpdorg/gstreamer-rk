@@ -102,6 +102,8 @@ struct _GstVideoMeta {
   gboolean (*unmap)  (GstVideoMeta *meta, guint plane, GstMapInfo *info);
 
   GstVideoAlignment  alignment;
+
+  gboolean (*remap_readonly)  (GstVideoMeta *meta, guint plane, GstMapInfo *info);
 };
 
 GST_VIDEO_API
@@ -132,6 +134,9 @@ gboolean       gst_video_meta_map        (GstVideoMeta *meta, guint plane, GstMa
 
 GST_VIDEO_API
 gboolean       gst_video_meta_unmap      (GstVideoMeta *meta, guint plane, GstMapInfo *info);
+
+GST_VIDEO_API
+gboolean       gst_video_meta_remap_readonly (GstVideoMeta *meta, guint plane, GstMapInfo *info);
 
 GST_VIDEO_API
 gboolean       gst_video_meta_set_alignment (GstVideoMeta * meta, GstVideoAlignment alignment);
@@ -360,7 +365,7 @@ GstVideoRegionOfInterestMeta *gst_buffer_add_video_region_of_interest_meta    (G
                                                                                guint         h);
 
 GST_VIDEO_API
-GstVideoRegionOfInterestMeta *gst_buffer_add_video_region_of_interest_meta_id (GstBuffer   * buffer, 
+GstVideoRegionOfInterestMeta *gst_buffer_add_video_region_of_interest_meta_id (GstBuffer   * buffer,
 									       GQuark        roi_type,
                                                                                guint         x,
                                                                                guint         y,

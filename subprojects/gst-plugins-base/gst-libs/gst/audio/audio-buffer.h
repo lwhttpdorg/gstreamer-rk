@@ -72,6 +72,9 @@ gboolean gst_audio_buffer_map (GstAudioBuffer *buffer, const GstAudioInfo *info,
 GST_AUDIO_API
 void gst_audio_buffer_unmap (GstAudioBuffer *buffer);
 
+GST_AUDIO_API
+gboolean gst_audio_buffer_remap_readonly (GstAudioBuffer *buffer);
+
 
 #define GST_AUDIO_BUFFER_FORMAT(b)          (GST_AUDIO_INFO_FORMAT(&(b)->info))
 #define GST_AUDIO_BUFFER_CHANNELS(b)        (GST_AUDIO_INFO_CHANNELS(&(b)->info))

@@ -1955,6 +1955,33 @@ _find_mapping (GstBuffer * buffer, gsize * offset)
 }
 
 /**
+ * gst_buffer_remap_readonly:
+ * @buffer: a #GstBuffer.
+ * @info: a #GstMapInfo
+ *
+ * Re-map a memory that was previously mapped read-write with gst_buffer_map() to
+ * be read-only mapped. The data pointers and sizes stay the same.
+ *
+ * On failure the original mapping is preserved.
+ *
+ * Returns: %TRUE if remapping was successful.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_buffer_remap_readonly (GstBuffer * buffer, GstMapInfo * info)
+{
+  g_return_val_if_fail (GST_IS_BUFFER (buffer), FALSE);
+  g_return_val_if_fail (info != NULL, FALSE);
+
+  if (G_LIKELY (info->memory)) {
+    return gst_memory_remap_readonly (info->memory, info);
+  }
+
+  return TRUE;
+}
+
+/**
  * gst_buffer_fill:
  * @buffer: a #GstBuffer.
  * @offset: the offset to fill

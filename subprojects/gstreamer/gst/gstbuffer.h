@@ -416,6 +416,9 @@ GST_API
 void        gst_buffer_unmap               (GstBuffer *buffer, GstMapInfo *info);
 
 GST_API
+gboolean    gst_buffer_remap_readonly      (GstBuffer *buffer, GstMapInfo *info);
+
+GST_API
 void        gst_buffer_extract_dup         (GstBuffer *buffer, gsize offset,
                                             gsize size, gpointer *dest,
                                             gsize *dest_size);
