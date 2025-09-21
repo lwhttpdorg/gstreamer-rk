@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_H264_DEPAY \
-  (gst_rtp_h264_depay_get_type())
-#define GST_RTP_H264_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H264_DEPAY,GstRtpH264Depay))
-#define GST_RTP_H264_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H264_DEPAY,GstRtpH264DepayClass))
-#define GST_IS_RTP_H264_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H264_DEPAY))
-#define GST_IS_RTP_H264_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H264_DEPAY))
-
-typedef struct _GstRtpH264Depay GstRtpH264Depay;
-typedef struct _GstRtpH264DepayClass GstRtpH264DepayClass;
+#define GST_TYPE_RTP_H264_DEPAY (gst_rtp_h264_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH264Depay, gst_rtp_h264_depay, GST, RTP_H264_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpH264Depay
 {
@@ -77,13 +67,6 @@ struct _GstRtpH264Depay
   gboolean waiting_for_keyframe;
   gboolean requesting_keyframe;
 };
-
-struct _GstRtpH264DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_h264_depay_get_type (void);
 
 gboolean gst_rtp_h264_add_sps_pps (GstElement * rtph264, GPtrArray * sps,
     GPtrArray * pps, GstBuffer * nal);

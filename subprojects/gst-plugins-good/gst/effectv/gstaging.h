@@ -34,16 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AGINGTV \
-  (gst_agingtv_get_type())
-#define GST_AGINGTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AGINGTV,GstAgingTV))
-#define GST_AGINGTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AGINGTV,GstAgingTVClass))
-#define GST_IS_AGINGTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AGINGTV))
-#define GST_IS_AGINGTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AGINGTV))
+#define GST_TYPE_AGINGTV (gst_agingtv_get_type())
+G_DECLARE_FINAL_TYPE (GstAgingTV, gst_agingtv, GST, AGINGTV, GstVideoFilter)
 
 typedef struct _scratch
 {
@@ -53,9 +45,6 @@ typedef struct _scratch
   gint init;
 } scratch;
 #define SCRATCH_MAX 20
-
-typedef struct _GstAgingTV GstAgingTV;
-typedef struct _GstAgingTVClass GstAgingTVClass;
 
 struct _GstAgingTV
 {
@@ -75,13 +64,6 @@ struct _GstAgingTV
   gint pits_interval;
 
 };
-
-struct _GstAgingTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_agingtv_get_type (void);
 
 G_END_DECLS
 

@@ -24,33 +24,13 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_LDAC_PAY \
-  (gst_rtp_ldac_pay_get_type())
-#define GST_RTP_LDAC_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_LDAC_PAY,\
-                              GstRtpLdacPay))
-#define GST_RTP_LDAC_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_LDAC_PAY,\
-                           GstRtpLdacPayClass))
-#define GST_IS_RTP_LDAC_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_LDAC_PAY))
-#define GST_IS_RTP_LDAC_PAY_CLASS(obj) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_LDAC_PAY))
-
-typedef struct _GstRtpLdacPay GstRtpLdacPay;
-typedef struct _GstRtpLdacPayClass GstRtpLdacPayClass;
+#define GST_TYPE_RTP_LDAC_PAY (gst_rtp_ldac_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpLdacPay, gst_rtp_ldac_pay, GST, RTP_LDAC_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpLdacPay {
   GstRTPBasePayload base;
   guint8 frame_count;
 };
-
-struct _GstRtpLdacPayClass {
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_ldac_pay_get_type(void);
-
-gboolean gst_rtp_ldac_pay_plugin_init (GstPlugin * plugin);
 
 G_END_DECLS

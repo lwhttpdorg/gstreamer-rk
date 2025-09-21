@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_GST_PAY \
-  (gst_rtp_gst_pay_get_type())
-#define GST_RTP_GST_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_GST_PAY,GstRtpGSTPay))
-#define GST_RTP_GST_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_GST_PAY,GstRtpGSTPayClass))
-#define GST_IS_RTP_GST_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_GST_PAY))
-#define GST_IS_RTP_GST_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_GST_PAY))
-
-typedef struct _GstRtpGSTPay GstRtpGSTPay;
-typedef struct _GstRtpGSTPayClass GstRtpGSTPayClass;
+#define GST_TYPE_RTP_GST_PAY (gst_rtp_gst_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpGSTPay, gst_rtp_gst_pay, GST, RTP_GST_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpGSTPay
 {
@@ -58,13 +48,6 @@ struct _GstRtpGSTPay
   GstClockTime last_config;
   gboolean force_config;
 };
-
-struct _GstRtpGSTPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_gst_pay_get_type (void);
 
 G_END_DECLS
 

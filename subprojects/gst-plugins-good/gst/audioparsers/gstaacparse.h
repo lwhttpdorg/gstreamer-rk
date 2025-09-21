@@ -27,17 +27,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AAC_PARSE \
-  (gst_aac_parse_get_type())
-#define GST_AAC_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_AAC_PARSE, GstAacParse))
-#define GST_AAC_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_AAC_PARSE, GstAacParseClass))
-#define GST_IS_AAC_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_AAC_PARSE))
-#define GST_IS_AAC_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_AAC_PARSE))
-
+#define GST_TYPE_AAC_PARSE (gst_aac_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstAacParse, gst_aac_parse, GST, AAC_PARSE, GstBaseParse)
 
 /**
  * GstAacHeaderType:
@@ -58,10 +49,6 @@ typedef enum {
   DSPAAC_HEADER_LOAS,
   DSPAAC_HEADER_NONE
 } GstAacHeaderType;
-
-
-typedef struct _GstAacParse GstAacParse;
-typedef struct _GstAacParseClass GstAacParseClass;
 
 /**
  * GstAacParse:
@@ -87,18 +74,6 @@ struct _GstAacParse {
   gint last_parsed_sample_rate;
   gint last_parsed_channels;
 };
-
-/**
- * GstAacParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstAacParseClass data structure.
- */
-struct _GstAacParseClass {
-  GstBaseParseClass parent_class;
-};
-
-GType gst_aac_parse_get_type (void);
 
 G_END_DECLS
 

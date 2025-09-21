@@ -25,23 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_ULPFEC_ENC \
-  (gst_rtp_ulpfec_enc_get_type())
-#define GST_RTP_ULPFEC_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_ULPFEC_ENC,GstRtpUlpFecEnc))
-#define GST_RTP_ULPFEC_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_ULPFEC_ENC,GstRtpUlpFecEncClass))
-#define GST_IS_RTP_ULPFEC_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_ULPFEC_ENC))
-#define GST_IS_RTP_ULPFEC_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_ULPFEC_ENC))
-
-typedef struct _GstRtpUlpFecEnc GstRtpUlpFecEnc;
-typedef struct _GstRtpUlpFecEncClass GstRtpUlpFecEncClass;
-
-struct _GstRtpUlpFecEncClass {
-  GstElementClass parent_class;
-};
+#define GST_TYPE_RTP_ULPFEC_ENC (gst_rtp_ulpfec_enc_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpUlpFecEnc, gst_rtp_ulpfec_enc,
+    GST, RTP_ULPFEC_ENC, GstElement)
 
 struct _GstRtpUlpFecEnc {
   GstElement parent;
@@ -92,8 +78,6 @@ typedef struct {
   guint fec_packets;
   guint fec_packet_idx;
 } GstRtpUlpFecEncStreamCtx;
-
-GType gst_rtp_ulpfec_enc_get_type (void);
 
 G_END_DECLS
 

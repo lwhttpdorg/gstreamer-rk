@@ -92,5 +92,7 @@ GType gst_rtp_mux_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (rtpmux);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GstRTPMux, gst_object_unref)
+
 G_END_DECLS
 #endif /* __GST_RTP_MUX_H__ */

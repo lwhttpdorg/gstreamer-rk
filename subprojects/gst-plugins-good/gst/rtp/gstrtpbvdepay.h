@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPBVDepay GstRTPBVDepay;
-typedef struct _GstRTPBVDepayClass GstRTPBVDepayClass;
-
-#define GST_TYPE_RTP_BV_DEPAY \
-  (gst_rtp_bv_depay_get_type())
-#define GST_RTP_BV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_BV_DEPAY,GstRTPBVDepay))
-#define GST_RTP_BV_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_BV_DEPAY,GstRTPBVDepayClass))
-#define GST_IS_RTP_BV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_BV_DEPAY))
-#define GST_IS_RTP_BV_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_BV_DEPAY))
+#define GST_TYPE_RTP_BV_DEPAY (gst_rtp_bv_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPBVDepay, gst_rtp_bv_depay, GST, RTP_BV_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRTPBVDepay
 {
@@ -45,13 +35,6 @@ struct _GstRTPBVDepay
 
   gint mode;
 };
-
-struct _GstRTPBVDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_bv_depay_get_type (void);
 
 G_END_DECLS
 

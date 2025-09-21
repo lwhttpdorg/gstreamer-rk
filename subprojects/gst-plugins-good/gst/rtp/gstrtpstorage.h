@@ -26,23 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_STORAGE \
-  (gst_rtp_storage_get_type())
-#define GST_RTP_STORAGE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_STORAGE,GstRtpStorage))
-#define GST_RTP_STORAGE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_STORAGE,GstRtpStorageClass))
-#define RTP_IS_STORAGE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_STORAGE))
-#define RTP_IS_STORAGE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_STORAGE))
-
-typedef struct _GstRtpStorage GstRtpStorage;
-typedef struct _GstRtpStorageClass GstRtpStorageClass;
-
-struct _GstRtpStorageClass {
-  GstElementClass parent_class;
-};
+#define GST_TYPE_RTP_STORAGE (gst_rtp_storage_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpStorage, gst_rtp_storage, GST, RTP_STORAGE,
+    GstElement)
 
 struct _GstRtpStorage {
   GstElement parent;
@@ -51,8 +37,6 @@ struct _GstRtpStorage {
 
   RtpStorage *storage;
 };
-
-GType gst_rtp_storage_get_type (void);
 
 G_END_DECLS
 

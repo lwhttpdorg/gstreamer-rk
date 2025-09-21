@@ -196,7 +196,6 @@ static void gst_matroska_demux_set_property (GObject * object,
 static void gst_matroska_demux_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec);
 
-GType gst_matroska_demux_get_type (void);
 #define parent_class gst_matroska_demux_parent_class
 G_DEFINE_TYPE (GstMatroskaDemux, gst_matroska_demux, GST_TYPE_ELEMENT);
 #define _do_init \

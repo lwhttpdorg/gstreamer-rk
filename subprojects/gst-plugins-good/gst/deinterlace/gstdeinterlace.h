@@ -31,19 +31,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_DEINTERLACE \
-  (gst_deinterlace_get_type())
-#define GST_DEINTERLACE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DEINTERLACE,GstDeinterlace))
-#define GST_DEINTERLACE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DEINTERLACE,GstDeinterlace))
-#define GST_IS_DEINTERLACE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DEINTERLACE))
-#define GST_IS_DEINTERLACE_CLASS(obj) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DEINTERLACE))
-
-typedef struct _GstDeinterlace GstDeinterlace;
-typedef struct _GstDeinterlaceClass GstDeinterlaceClass;
+#define GST_TYPE_DEINTERLACE (gst_deinterlace_get_type())
+G_DECLARE_FINAL_TYPE (GstDeinterlace, gst_deinterlace, GST, DEINTERLACE,
+    GstElement)
 
 typedef enum
 {
@@ -198,13 +188,6 @@ struct _GstDeinterlace
   gboolean have_eos;
   gboolean telecine_tc_warned;
 };
-
-struct _GstDeinterlaceClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_deinterlace_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (deinterlace);
 

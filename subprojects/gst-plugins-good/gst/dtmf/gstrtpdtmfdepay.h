@@ -30,18 +30,10 @@
 #include "gstdtmfcommon.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_DTMF_DEPAY \
-  (gst_rtp_dtmf_depay_get_type())
-#define GST_RTP_DTMF_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_DTMF_DEPAY,GstRtpDTMFDepay))
-#define GST_RTP_DTMF_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_DTMF_DEPAY,GstRtpDTMFDepayClass))
-#define GST_IS_RTP_DTMF_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_DTMF_DEPAY))
-#define GST_IS_RTP_DTMF_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_DTMF_DEPAY))
-typedef struct _GstRtpDTMFDepay GstRtpDTMFDepay;
-typedef struct _GstRtpDTMFDepayClass GstRtpDTMFDepayClass;
+
+#define GST_TYPE_RTP_DTMF_DEPAY (gst_rtp_dtmf_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpDTMFDepay, gst_rtp_dtmf_depay, GST, RTP_DTMF_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpDTMFDepay
 {
@@ -54,13 +46,6 @@ struct _GstRtpDTMFDepay
   guint unit_time;
   guint max_duration;
 };
-
-struct _GstRtpDTMFDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_dtmf_depay_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (rtpdtmfdepay);
 

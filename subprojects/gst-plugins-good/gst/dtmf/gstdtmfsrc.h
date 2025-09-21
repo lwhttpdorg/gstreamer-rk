@@ -32,15 +32,10 @@
 #include <gst/base/gstbasesrc.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_DTMF_SRC               (gst_dtmf_src_get_type())
-#define GST_DTMF_SRC(obj)               (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DTMF_SRC,GstDTMFSrc))
-#define GST_DTMF_SRC_CLASS(klass)       (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DTMF_SRC,GstDTMFSrcClass))
-#define GST_DTMF_SRC_GET_CLASS(obj)     (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_DTMF_SRC, GstDTMFSrcClass))
-#define GST_IS_DTMF_SRC(obj)            (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DTMF_SRC))
-#define GST_IS_DTMF_SRC_CLASS(klass)    (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DTMF_SRC))
+
+#define GST_TYPE_DTMF_SRC (gst_dtmf_src_get_type())
+G_DECLARE_FINAL_TYPE (GstDTMFSrc, gst_dtmf_src, GST, DTMF_SRC, GstBaseSrc)
 #define GST_DTMF_SRC_CAST(obj)          ((GstDTMFSrc *)(obj))
-typedef struct _GstDTMFSrc GstDTMFSrc;
-typedef struct _GstDTMFSrcClass GstDTMFSrcClass;
 
 enum _GstDTMFEventType
 {
@@ -86,14 +81,6 @@ struct _GstDTMFSrc
 
   gint sample_rate;
 };
-
-
-struct _GstDTMFSrcClass
-{
-  GstBaseSrcClass parent_class;
-};
-
-GType gst_dtmf_src_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (dtmfsrc);
 

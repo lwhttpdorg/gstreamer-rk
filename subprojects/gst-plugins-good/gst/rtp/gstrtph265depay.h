@@ -27,18 +27,10 @@
 #include "gstrtph265types.h"
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_H265_DEPAY \
-  (gst_rtp_h265_depay_get_type())
-#define GST_RTP_H265_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H265_DEPAY,GstRtpH265Depay))
-#define GST_RTP_H265_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H265_DEPAY,GstRtpH265DepayClass))
-#define GST_IS_RTP_H265_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H265_DEPAY))
-#define GST_IS_RTP_H265_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H265_DEPAY))
-typedef struct _GstRtpH265Depay GstRtpH265Depay;
-typedef struct _GstRtpH265DepayClass GstRtpH265DepayClass;
+
+#define GST_TYPE_RTP_H265_DEPAY (gst_rtp_h265_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH265Depay, gst_rtp_h265_depay, GST, RTP_H265_DEPAY,
+    GstRTPBaseDepayload)
 
 #define GST_H265_VPS_NUT 32
 #define GST_H265_SPS_NUT 33
@@ -93,11 +85,6 @@ struct _GstRtpH265Depay
   gboolean requesting_keyframe;
 };
 
-struct _GstRtpH265DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
 typedef struct
 {
   GstElement *element;
@@ -110,8 +97,6 @@ typedef struct
   GstElement *element;
   GQuark keep_tag;
 } DropMetaData;
-
-GType gst_rtp_h265_depay_get_type (void);
 
 gboolean gst_rtp_h265_add_vps_sps_pps (GstElement * rtph265, GPtrArray * vps,
     GPtrArray * sps, GPtrArray * pps, GstBuffer * nal);

@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPMPVPay GstRTPMPVPay;
-typedef struct _GstRTPMPVPayClass GstRTPMPVPayClass;
-
-#define GST_TYPE_RTP_MPV_PAY \
-  (gst_rtp_mpv_pay_get_type())
-#define GST_RTP_MPV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MPV_PAY,GstRTPMPVPay))
-#define GST_RTP_MPV_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MPV_PAY,GstRTPMPVPayClass))
-#define GST_IS_RTP_MPV_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MPV_PAY))
-#define GST_IS_RTP_MPV_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MPV_PAY))
+#define GST_TYPE_RTP_MPV_PAY (gst_rtp_mpv_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPMPVPay, gst_rtp_mpv_pay, GST, RTP_MPV_PAY,
+    GstRTPBasePayload)
 
 struct _GstRTPMPVPay
 {
@@ -49,13 +39,6 @@ struct _GstRTPMPVPay
   GstClockTime first_ts;
   GstClockTime duration;
 };
-
-struct _GstRTPMPVPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_mpv_pay_get_type (void);
 
 G_END_DECLS
 

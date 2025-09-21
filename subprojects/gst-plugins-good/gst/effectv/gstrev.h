@@ -50,19 +50,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_REVTV \
-  (gst_revtv_get_type())
-#define GST_REVTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_REVTV,GstRevTV))
-#define GST_REVTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_REVTV,GstRevTVClass))
-#define GST_IS_REVTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_REVTV))
-#define GST_IS_REVTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_REVTV))
-
-typedef struct _GstRevTV GstRevTV;
-typedef struct _GstRevTVClass GstRevTVClass;
+#define GST_TYPE_REVTV (gst_revtv_get_type())
+G_DECLARE_FINAL_TYPE (GstRevTV, gst_revtv, GST, REVTV, GstVideoFilter)
 
 struct _GstRevTV
 {
@@ -74,13 +63,6 @@ struct _GstRevTV
   gint linespace;
   gint vscale;
 };
-
-struct _GstRevTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_revtv_get_type (void);
 
 G_END_DECLS
 

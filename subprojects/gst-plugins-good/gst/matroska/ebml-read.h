@@ -27,19 +27,6 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_EBML_READ \
-  (gst_ebml_read_get_type ())
-#define GST_EBML_READ(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_EBML_READ, GstEbmlRead))
-#define GST_EBML_READ_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_EBML_READ, GstEbmlReadClass))
-#define GST_IS_EBML_READ(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_EBML_READ))
-#define GST_IS_EBML_READ_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_EBML_READ))
-#define GST_EBML_READ_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_EBML_READ, GstEbmlReadClass))
-
 GST_DEBUG_CATEGORY_EXTERN (ebmlread_debug);
 
 /* custom flow return code */

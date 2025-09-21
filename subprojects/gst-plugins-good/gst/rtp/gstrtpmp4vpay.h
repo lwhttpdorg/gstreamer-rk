@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MP4V_PAY \
-  (gst_rtp_mp4v_pay_get_type())
-#define GST_RTP_MP4V_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP4V_PAY,GstRtpMP4VPay))
-#define GST_RTP_MP4V_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP4V_PAY,GstRtpMP4VPayClass))
-#define GST_IS_RTP_MP4V_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP4V_PAY))
-#define GST_IS_RTP_MP4V_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP4V_PAY))
-
-typedef struct _GstRtpMP4VPay GstRtpMP4VPay;
-typedef struct _GstRtpMP4VPayClass GstRtpMP4VPayClass;
+#define GST_TYPE_RTP_MP4V_PAY (gst_rtp_mp4v_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMP4VPay, gst_rtp_mp4v_pay, GST, RTP_MP4V_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpMP4VPay
 {
@@ -59,13 +49,6 @@ struct _GstRtpMP4VPay
   gint         config_interval;
   GstClockTime  last_config;
 };
-
-struct _GstRtpMP4VPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_mp4v_pay_get_type (void);
 
 G_END_DECLS
 

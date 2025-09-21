@@ -27,18 +27,10 @@
 #include <gst/base/gstadapter.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_H261_PAY                   \
-  (gst_rtp_h261_pay_get_type())
-#define GST_RTP_H261_PAY(obj)                                           \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H261_PAY,GstRtpH261Pay))
-#define GST_RTP_H261_PAY_CLASS(klass)                                   \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H261_PAY,GstRtpH261PayClass))
-#define GST_IS_RTP_H261_PAY(obj)                            \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H261_PAY))
-#define GST_IS_RTP_H261_PAY_CLASS(klass)                    \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H261_PAY))
-typedef struct _GstRtpH261PayClass GstRtpH261PayClass;
-typedef struct _GstRtpH261Pay GstRtpH261Pay;
+
+#define GST_TYPE_RTP_H261_PAY (gst_rtp_h261_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH261Pay, gst_rtp_h261_pay, GST, RTP_H261_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpH261Pay
 {
@@ -47,11 +39,6 @@ struct _GstRtpH261Pay
   GstAdapter *adapter;
   gint offset;
   GstClockTime timestamp;
-};
-
-struct _GstRtpH261PayClass
-{
-  GstRTPBasePayloadClass parent_class;
 };
 
 typedef struct _GstRtpH261PayHeader
@@ -91,8 +78,6 @@ typedef struct _GstRtpH261PayHeader
 #endif
 } GstRtpH261PayHeader;
 #define GST_RTP_H261_PAYLOAD_HEADER_LEN 4
-
-GType gst_rtp_h261_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_H261_PAY_H__ */

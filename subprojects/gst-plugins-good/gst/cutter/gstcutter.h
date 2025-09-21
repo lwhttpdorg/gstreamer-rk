@@ -26,24 +26,10 @@
 /* #include <gst/meta/audioraw.h> */
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
+G_BEGIN_DECLS
 
-
-#define GST_TYPE_CUTTER \
-  (gst_cutter_get_type())
-#define GST_CUTTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_CUTTER,GstCutter))
-#define GST_CUTTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_CUTTER,GstCutterClass))
-#define GST_IS_CUTTER(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_CUTTER))
-#define GST_IS_CUTTER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_CUTTER))
-
-typedef struct _GstCutter GstCutter;
-typedef struct _GstCutterClass GstCutterClass;
+#define GST_TYPE_CUTTER (gst_cutter_get_type())
+G_DECLARE_FINAL_TYPE (GstCutter, gst_cutter, GST, CUTTER, GstElement)
 
 struct _GstCutter
 {
@@ -68,20 +54,8 @@ struct _GstCutter
   GstSegment segment;
 };
 
-struct _GstCutterClass
-{
-  GstElementClass parent_class;
-  void (*cut_start) (GstCutter* filter);
-  void (*cut_stop) (GstCutter* filter);
-};
-
-GType gst_cutter_get_type (void);
-
 GST_ELEMENT_REGISTER_DECLARE (cutter);
 
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
+G_END_DECLS
 
-
-#endif /* __GST_STEREO_H__ */
+#endif /* __GST_CUTTER_H__ */

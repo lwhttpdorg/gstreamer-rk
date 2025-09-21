@@ -34,19 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_OPTV \
-  (gst_optv_get_type())
-#define GST_OPTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OPTV,GstOpTV))
-#define GST_OPTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OPTV,GstOpTVClass))
-#define GST_IS_OPTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OPTV))
-#define GST_IS_OPTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OPTV))
-
-typedef struct _GstOpTV GstOpTV;
-typedef struct _GstOpTVClass GstOpTVClass;
+#define GST_TYPE_OPTV (gst_optv_get_type())
+G_DECLARE_FINAL_TYPE (GstOpTV, gst_optv, GST, OPTV, GstVideoFilter)
 
 struct _GstOpTV
 {
@@ -61,13 +50,6 @@ struct _GstOpTV
   guint8 *diff;
   guint8 phase;
 };
-
-struct _GstOpTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_optv_get_type (void);
 
 G_END_DECLS
 

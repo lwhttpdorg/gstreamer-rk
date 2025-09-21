@@ -25,31 +25,14 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPGSMDepay GstRTPGSMDepay;
-typedef struct _GstRTPGSMDepayClass GstRTPGSMDepayClass;
-
-#define GST_TYPE_RTP_GSM_DEPAY \
-  (gst_rtp_gsm_depay_get_type())
-#define GST_RTP_GSM_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_GSM_DEPAY,GstRTPGSMDepay))
-#define GST_RTP_GSM_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_GSM_DEPAY,GstRTPGSMDepayClass))
-#define GST_IS_RTP_GSM_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_GSM_DEPAY))
-#define GST_IS_RTP_GSM_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_GSM_DEPAY))
+#define GST_TYPE_RTP_GSM_DEPAY (gst_rtp_gsm_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPGSMDepay, gst_rtp_gsm_depay, GST, RTP_GSM_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRTPGSMDepay
 {
   GstRTPBaseDepayload _depayload;
 };
-
-struct _GstRTPGSMDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_gsm_depay_get_type (void);
 
 G_END_DECLS
 

@@ -20,31 +20,14 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRtpPcmaDepay GstRtpPcmaDepay;
-typedef struct _GstRtpPcmaDepayClass GstRtpPcmaDepayClass;
-
-#define GST_TYPE_RTP_PCMA_DEPAY \
-  (gst_rtp_pcma_depay_get_type())
-#define GST_RTP_PCMA_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_PCMA_DEPAY,GstRtpPcmaDepay))
-#define GST_RTP_PCMA_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_PCMA_DEPAY,GstRtpPcmaDepayClass))
-#define GST_IS_RTP_PCMA_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_PCMA_DEPAY))
-#define GST_IS_RTP_PCMA_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_PCMA_DEPAY))
+#define GST_TYPE_RTP_PCMA_DEPAY (gst_rtp_pcma_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpPcmaDepay, gst_rtp_pcma_depay, GST, RTP_PCMA_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpPcmaDepay
 {
   GstRTPBaseDepayload depayload;
 };
-
-struct _GstRtpPcmaDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_pcma_depay_get_type (void);
 
 G_END_DECLS
 

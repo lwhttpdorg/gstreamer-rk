@@ -24,20 +24,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_IMAGE_FREEZE \
-  (gst_image_freeze_get_type())
-#define GST_IMAGE_FREEZE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_IMAGE_FREEZE,GstImageFreeze))
-#define GST_IMAGE_FREEZE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_IMAGE_FREEZE,GstImageFreezeClass))
-#define GST_IMAGE_FREEZE_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj),GST_TYPE_IMAGE_FREEZE,GstImageFreezeClass))
-#define GST_IS_IMAGE_FREEZE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_IMAGE_FREEZE))
-#define GST_IS_IMAGE_FREEZE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_IMAGE_FREEZE))
-
-typedef struct _GstImageFreeze GstImageFreeze;
-typedef struct _GstImageFreezeClass GstImageFreezeClass;
+#define GST_TYPE_IMAGE_FREEZE (gst_image_freeze_get_type())
+G_DECLARE_FINAL_TYPE (GstImageFreeze, gst_image_freeze, GST, IMAGE_FREEZE,
+    GstElement)
 
 struct _GstImageFreeze
 {
@@ -74,13 +63,6 @@ struct _GstImageFreeze
   /* Indicates EOS received via send_event() */
   gboolean direct_eos;
 };
-
-struct _GstImageFreezeClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_image_freeze_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (imagefreeze);
 

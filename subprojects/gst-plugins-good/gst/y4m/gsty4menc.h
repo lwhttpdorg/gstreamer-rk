@@ -27,21 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_Y4M_ENCODE \
-  (gst_y4m_encode_get_type())
-#define GST_Y4M_ENCODE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_Y4M_ENCODE, GstY4mEncode))
-#define GST_Y4M_ENCODE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_Y4M_ENCODE, GstY4mEncodeClass))
-#define GST_Y4M_ENCODE_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_Y4M_ENCODE, GstY4mEncodeClass))
-#define GST_IS_Y4M_ENCODE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_Y4M_ENCODE))
-#define GST_IS_Y4M_ENCODE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_Y4M_ENCODE))
-
-typedef struct _GstY4mEncode GstY4mEncode;
-typedef struct _GstY4mEncodeClass GstY4mEncodeClass;
+#define GST_TYPE_Y4M_ENCODE (gst_y4m_encode_get_type())
+G_DECLARE_FINAL_TYPE (GstY4mEncode, gst_y4m_encode, GST, Y4M_ENCODE,
+    GstVideoEncoder)
 
 struct _GstY4mEncode {
   GstVideoEncoder parent;
@@ -57,12 +45,6 @@ struct _GstY4mEncode {
   gboolean header;
   gboolean padded;
 };
-
-struct _GstY4mEncodeClass {
-  GstVideoEncoderClass parent_class;
-};
-
-GType gst_y4m_encode_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (y4menc);
 

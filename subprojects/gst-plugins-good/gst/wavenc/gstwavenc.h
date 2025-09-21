@@ -27,19 +27,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_WAVENC \
-  (gst_wavenc_get_type())
-#define GST_WAVENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_WAVENC,GstWavEnc))
-#define GST_WAVENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_WAVENC,GstWavEncClass))
-#define GST_IS_WAVENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_WAVENC))
-#define GST_IS_WAVENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_WAVENC))
-
-typedef struct _GstWavEnc GstWavEnc;
-typedef struct _GstWavEncClass GstWavEncClass;
+#define GST_TYPE_WAVENC (gst_wavenc_get_type())
+G_DECLARE_FINAL_TYPE (GstWavEnc, gst_wavenc, GST, WAVENC, GstElement)
 
 struct _GstWavEnc {
   GstElement element;
@@ -71,12 +60,6 @@ struct _GstWavEnc {
   gboolean   sent_header;
   gboolean   finished_properly;
 };
-
-struct _GstWavEncClass {
-  GstElementClass parent_class;
-};
-
-GType gst_wavenc_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (wavenc);
 

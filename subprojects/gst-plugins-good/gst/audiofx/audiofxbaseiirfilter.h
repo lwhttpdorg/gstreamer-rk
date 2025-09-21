@@ -73,6 +73,8 @@ GType gst_audio_fx_base_iir_filter_get_type (void);
 void gst_audio_fx_base_iir_filter_set_coefficients (GstAudioFXBaseIIRFilter *filter, gdouble *a, guint na, gdouble *b, guint nb);
 gdouble gst_audio_fx_base_iir_filter_calculate_gain (gdouble *a, guint na, gdouble *b, guint nb, gdouble zr, gdouble zi);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GstAudioFXBaseIIRFilter, gst_object_unref)
+
 G_END_DECLS
 
 #endif /* __GST_AUDIO_FX_BASE_IIR_FILTER_H__ */

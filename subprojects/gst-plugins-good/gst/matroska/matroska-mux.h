@@ -163,6 +163,8 @@ typedef struct _GstMatroskaMuxClass {
 GType   gst_matroska_mux_get_type (void);
 GType   gst_matroska_mux_pad_get_type (void);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GstMatroskaMux, gst_object_unref)
+
 G_END_DECLS
 
 #endif /* __GST_MATROSKA_MUX_H__ */

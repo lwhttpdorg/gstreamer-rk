@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_VORBIS_PAY \
-  (gst_rtp_vorbis_pay_get_type())
-#define GST_RTP_VORBIS_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_VORBIS_PAY,GstRtpVorbisPay))
-#define GST_RTP_VORBIS_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_VORBIS_PAY,GstRtpVorbisPayClass))
-#define GST_IS_RTP_VORBIS_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_VORBIS_PAY))
-#define GST_IS_RTP_VORBIS_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_VORBIS_PAY))
-
-typedef struct _GstRtpVorbisPay GstRtpVorbisPay;
-typedef struct _GstRtpVorbisPayClass GstRtpVorbisPayClass;
+#define GST_TYPE_RTP_VORBIS_PAY (gst_rtp_vorbis_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpVorbisPay, gst_rtp_vorbis_pay, GST, RTP_VORBIS_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpVorbisPay
 {
@@ -70,13 +60,6 @@ struct _GstRtpVorbisPay
   gint          rate;
   gint          channels;
 };
-
-struct _GstRtpVorbisPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_vorbis_pay_get_type (void);
 
 G_END_DECLS
 

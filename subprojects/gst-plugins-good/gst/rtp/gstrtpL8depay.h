@@ -29,19 +29,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_L8_DEPAY \
-  (gst_rtp_L8_depay_get_type())
-#define GST_RTP_L8_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_L8_DEPAY,GstRtpL8Depay))
-#define GST_RTP_L8_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_L8_DEPAY,GstRtpL8DepayClass))
-#define GST_IS_RTP_L8_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_L8_DEPAY))
-#define GST_IS_RTP_L8_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_L8_DEPAY))
-
-typedef struct _GstRtpL8Depay GstRtpL8Depay;
-typedef struct _GstRtpL8DepayClass GstRtpL8DepayClass;
+#define GST_TYPE_RTP_L8_DEPAY (gst_rtp_L8_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpL8Depay, gst_rtp_L8_depay, GST, RTP_L8_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpL8Depay
 {
@@ -50,13 +40,6 @@ struct _GstRtpL8Depay
   GstAudioInfo info;
   const GstRTPChannelOrder *order;
 };
-
-struct _GstRtpL8DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_L8_depay_get_type (void);
 
 G_END_DECLS
 

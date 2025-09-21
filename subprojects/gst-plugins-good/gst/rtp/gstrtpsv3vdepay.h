@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_SV3V_DEPAY \
-  (gst_rtp_sv3v_depay_get_type())
-#define GST_RTP_SV3V_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_SV3V_DEPAY,GstRtpSV3VDepay))
-#define GST_RTP_SV3V_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_SV3V_DEPAY,GstRtpSV3VDepayClass))
-#define GST_IS_RTP_SV3V_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_SV3V_DEPAY))
-#define GST_IS_RTP_SV3V_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_SV3V_DEPAY))
-
-typedef struct _GstRtpSV3VDepay GstRtpSV3VDepay;
-typedef struct _GstRtpSV3VDepayClass GstRtpSV3VDepayClass;
+#define GST_TYPE_RTP_SV3V_DEPAY (gst_rtp_sv3v_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpSV3VDepay, gst_rtp_sv3v_depay, GST, RTP_SV3V_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpSV3VDepay
 {
@@ -47,18 +37,11 @@ struct _GstRtpSV3VDepay
   GstAdapter *adapter;
 
   gboolean configured;
-  
+
   guint16 nextseq;
   guint width;
   guint height;
 };
-
-struct _GstRtpSV3VDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_sv3v_depay_get_type (void);
 
 G_END_DECLS
 

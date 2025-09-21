@@ -30,18 +30,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RG_ANALYSIS \
-  (gst_rg_analysis_get_type())
-#define GST_RG_ANALYSIS(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RG_ANALYSIS,GstRgAnalysis))
-#define GST_RG_ANALYSIS_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RG_ANALYSIS,GstRgAnalysisClass))
-#define GST_IS_RG_ANALYSIS(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RG_ANALYSIS))
-#define GST_IS_RG_ANALYSIS_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RG_ANALYSIS))
-typedef struct _GstRgAnalysis GstRgAnalysis;
-typedef struct _GstRgAnalysisClass GstRgAnalysisClass;
+#define GST_TYPE_RG_ANALYSIS (gst_rg_analysis_get_type())
+G_DECLARE_FINAL_TYPE (GstRgAnalysis, gst_rg_analysis, GST, RG_ANALYSIS,
+    GstBaseTransform)
 
 /**
  * GstRgAnalysis:
@@ -73,13 +64,6 @@ struct _GstRgAnalysis
   gboolean has_album_gain;
   gboolean has_album_peak;
 };
-
-struct _GstRgAnalysisClass
-{
-  GstBaseTransformClass parent_class;
-};
-
-GType gst_rg_analysis_get_type (void);
 
 G_END_DECLS
 

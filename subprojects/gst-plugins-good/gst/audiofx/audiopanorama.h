@@ -27,15 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_PANORAMA            (gst_audio_panorama_get_type())
-#define GST_AUDIO_PANORAMA(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_PANORAMA,GstAudioPanorama))
-#define GST_IS_AUDIO_PANORAMA(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_PANORAMA))
-#define GST_AUDIO_PANORAMA_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_PANORAMA,GstAudioPanoramaClass))
-#define GST_IS_AUDIO_PANORAMA_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_PANORAMA))
-#define GST_AUDIO_PANORAMA_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_PANORAMA,GstAudioPanoramaClass))
-
-typedef struct _GstAudioPanorama      GstAudioPanorama;
-typedef struct _GstAudioPanoramaClass GstAudioPanoramaClass;
+#define GST_TYPE_AUDIO_PANORAMA (gst_audio_panorama_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioPanorama, gst_audio_panorama, GST, AUDIO_PANORAMA,
+    GstBaseTransform)
 
 typedef void (*GstAudioPanoramaProcessFunc)(gfloat, guint8*, guint8*, guint);
 
@@ -56,12 +50,6 @@ struct _GstAudioPanorama {
   GstAudioPanoramaProcessFunc process;
   GstAudioInfo info;
 };
-
-struct _GstAudioPanoramaClass {
-  GstBaseTransformClass parent_class;
-};
-
-GType gst_audio_panorama_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiopanorama);
 

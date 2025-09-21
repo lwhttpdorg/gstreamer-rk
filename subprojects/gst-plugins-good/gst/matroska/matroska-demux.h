@@ -32,16 +32,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_MATROSKA_DEMUX \
-  (gst_matroska_demux_get_type ())
-#define GST_MATROSKA_DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_MATROSKA_DEMUX, GstMatroskaDemux))
-#define GST_MATROSKA_DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_MATROSKA_DEMUX, GstMatroskaDemuxClass))
-#define GST_IS_MATROSKA_DEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_MATROSKA_DEMUX))
-#define GST_IS_MATROSKA_DEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_MATROSKA_DEMUX))
+#define GST_TYPE_MATROSKA_DEMUX (gst_matroska_demux_get_type ())
+G_DECLARE_FINAL_TYPE (GstMatroskaDemux, gst_matroska_demux, GST, MATROSKA_DEMUX,
+    GstElement)
 
 typedef struct _GstMatroskaDemux {
   GstElement              parent;
@@ -139,10 +132,6 @@ typedef struct _GstMatroskaDemux {
   /* Cached upstream length (default G_MAXUINT64) */
   guint64	           cached_length;
 } GstMatroskaDemux;
-
-typedef struct _GstMatroskaDemuxClass {
-  GstElementClass parent;
-} GstMatroskaDemuxClass;
 
 G_END_DECLS
 

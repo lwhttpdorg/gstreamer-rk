@@ -33,31 +33,15 @@
 #include <gstvideofilter.h>
 #include <string.h>
 
-#define GST_TYPE_VIDEOTEMPLATE \
-  (gst_videotemplate_get_type())
-#define GST_VIDEOTEMPLATE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEOTEMPLATE,GstVideotemplate))
-#define GST_VIDEOTEMPLATE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEOTEMPLATE,GstVideotemplateClass))
-#define GST_IS_VIDEOTEMPLATE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEOTEMPLATE))
-#define GST_IS_VIDEOTEMPLATE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEOTEMPLATE))
-
-typedef struct _GstVideotemplate GstVideotemplate;
-typedef struct _GstVideotemplateClass GstVideotemplateClass;
+#define GST_TYPE_VIDEOTEMPLATE (gst_videotemplate_get_type())
+G_DECLARE_FINAL_TYPE (GstVideotemplate, gst_videotemplate, GST, VIDEOTEMPLATE,
+    GstVideofilter);
 
 struct _GstVideotemplate
 {
   GstVideofilter videofilter;
 
 };
-
-struct _GstVideotemplateClass
-{
-  GstVideofilterClass parent_class;
-};
-
 
 /* GstVideotemplate signals and args */
 enum
@@ -223,8 +207,10 @@ GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     videotemplate,
     "Template for a video filter",
-    plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
-     static void gst_videotemplate_setup (GstVideofilter * videofilter)
+    plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN);
+
+static void
+gst_videotemplate_setup (GstVideofilter * videofilter)
 {
   GstVideotemplate *videotemplate;
 

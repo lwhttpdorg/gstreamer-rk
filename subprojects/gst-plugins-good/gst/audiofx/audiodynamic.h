@@ -28,14 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_DYNAMIC            (gst_audio_dynamic_get_type())
-#define GST_AUDIO_DYNAMIC(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_DYNAMIC,GstAudioDynamic))
-#define GST_IS_AUDIO_DYNAMIC(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_DYNAMIC))
-#define GST_AUDIO_DYNAMIC_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass) ,GST_TYPE_AUDIO_DYNAMIC,GstAudioDynamicClass))
-#define GST_IS_AUDIO_DYNAMIC_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass) ,GST_TYPE_AUDIO_DYNAMIC))
-#define GST_AUDIO_DYNAMIC_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj) ,GST_TYPE_AUDIO_DYNAMIC,GstAudioDynamicClass))
-typedef struct _GstAudioDynamic GstAudioDynamic;
-typedef struct _GstAudioDynamicClass GstAudioDynamicClass;
+#define GST_TYPE_AUDIO_DYNAMIC (gst_audio_dynamic_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioDynamic, gst_audio_dynamic, GST, AUDIO_DYNAMIC,
+    GstAudioFilter)
 
 typedef void (*GstAudioDynamicProcessFunc) (GstAudioDynamic *, guint8 *, guint);
 
@@ -50,13 +45,6 @@ struct _GstAudioDynamic
   gfloat threshold;
   gfloat ratio;
 };
-
-struct _GstAudioDynamicClass
-{
-  GstAudioFilterClass parent;
-};
-
-GType gst_audio_dynamic_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiodynamic);
 

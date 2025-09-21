@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_H263_DEPAY \
-  (gst_rtp_h263_depay_get_type())
-#define GST_RTP_H263_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_H263_DEPAY,GstRtpH263Depay))
-#define GST_RTP_H263_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_H263_DEPAY,GstRtpH263DepayClass))
-#define GST_IS_RTP_H263_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_H263_DEPAY))
-#define GST_IS_RTP_H263_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_H263_DEPAY))
-
-typedef struct _GstRtpH263Depay GstRtpH263Depay;
-typedef struct _GstRtpH263DepayClass GstRtpH263DepayClass;
+#define GST_TYPE_RTP_H263_DEPAY (gst_rtp_h263_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpH263Depay, gst_rtp_h263_depay, GST, RTP_H263_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpH263Depay
 {
@@ -50,13 +40,6 @@ struct _GstRtpH263Depay
   GstAdapter *adapter;
   gboolean start;
 };
-
-struct _GstRtpH263DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_h263_depay_get_type (void);
 
 G_END_DECLS
 

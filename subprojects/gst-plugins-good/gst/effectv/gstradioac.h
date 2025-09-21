@@ -34,19 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RADIOACTV \
-  (gst_radioactv_get_type())
-#define GST_RADIOACTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RADIOACTV,GstRadioacTV))
-#define GST_RADIOACTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RADIOACTV,GstRadioacTVClass))
-#define GST_IS_RADIOACTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RADIOACTV))
-#define GST_IS_RADIOACTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RADIOACTV))
-
-typedef struct _GstRadioacTV GstRadioacTV;
-typedef struct _GstRadioacTVClass GstRadioacTVClass;
+#define GST_TYPE_RADIOACTV (gst_radioactv_get_type())
+G_DECLARE_FINAL_TYPE (GstRadioacTV, gst_radioactv, GST, RADIOACTV, GstVideoFilter)
 
 struct _GstRadioacTV
 {
@@ -74,13 +63,6 @@ struct _GstRadioacTV
   gint buf_margin_right;
   gint buf_margin_left;
 };
-
-struct _GstRadioacTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_radioactv_get_type (void);
 
 G_END_DECLS
 

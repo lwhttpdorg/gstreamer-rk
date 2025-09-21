@@ -28,19 +28,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_MPEG_AUDIO_PARSE \
-  (gst_mpeg_audio_parse_get_type())
-#define GST_MPEG_AUDIO_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_MPEG_AUDIO_PARSE, GstMpegAudioParse))
-#define GST_MPEG_AUDIO_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_MPEG_AUDIO_PARSE, GstMpegAudioParseClass))
-#define GST_IS_MPEG_AUDIO_PARSE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_MPEG_AUDIO_PARSE))
-#define GST_IS_MPEG_AUDIO_PARSE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_MPEG_AUDIO_PARSE))
-
-typedef struct _GstMpegAudioParse GstMpegAudioParse;
-typedef struct _GstMpegAudioParseClass GstMpegAudioParseClass;
+#define GST_TYPE_MPEG_AUDIO_PARSE (gst_mpeg_audio_parse_get_type())
+G_DECLARE_FINAL_TYPE (GstMpegAudioParse, gst_mpeg_audio_parse,
+    GST, MPEG_AUDIO_PARSE, GstBaseParse)
 
 /**
  * GstMpegAudioParse:
@@ -112,18 +102,6 @@ struct _GstMpegAudioParse {
   GstClockTime end_padding_time;
   GstClockTime total_padding_time;
 };
-
-/**
- * GstMpegAudioParseClass:
- * @parent_class: Element parent class.
- *
- * The opaque GstMpegAudioParseClass data structure.
- */
-struct _GstMpegAudioParseClass {
-  GstBaseParseClass baseparse_class;
-};
-
-GType gst_mpeg_audio_parse_get_type (void);
 
 G_END_DECLS
 

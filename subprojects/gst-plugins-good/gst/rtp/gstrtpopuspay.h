@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_OPUS_PAY \
-  (gst_rtp_opus_pay_get_type())
-#define GST_RTP_OPUS_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_OPUS_PAY,GstRtpOPUSPay))
-#define GST_RTP_OPUS_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_OPUS_PAY,GstRtpOPUSPayClass))
-#define GST_IS_RTP_OPUS_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_OPUS_PAY))
-#define GST_IS_RTP_OPUS_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_OPUS_PAY))
-
-typedef struct _GstRtpOPUSPay GstRtpOPUSPay;
-typedef struct _GstRtpOPUSPayClass GstRtpOPUSPayClass;
+#define GST_TYPE_RTP_OPUS_PAY (gst_rtp_opus_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpOPUSPay, gst_rtp_opus_pay, GST, RTP_OPUS_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpOPUSPay
 {
@@ -50,13 +40,6 @@ struct _GstRtpOPUSPay
   /* if the next produced buffer should have the MARKER flag */
   gboolean marker;
 };
-
-struct _GstRtpOPUSPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_opus_pay_get_type (void);
 
 G_END_DECLS
 

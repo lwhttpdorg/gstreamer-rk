@@ -38,19 +38,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_AUDIO_WSINC_LIMIT \
-  (gst_audio_wsinclimit_get_type())
-#define GST_AUDIO_WSINC_LIMIT(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_AUDIO_WSINC_LIMIT,GstAudioWSincLimit))
-#define GST_AUDIO_WSINC_LIMIT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_AUDIO_WSINC_LIMIT,GstAudioWSincLimitClass))
-#define GST_IS_AUDIO_WSINC_LIMIT(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_AUDIO_WSINC_LIMIT))
-#define GST_IS_AUDIO_WSINC_LIMIT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_AUDIO_WSINC_LIMIT))
-
-typedef struct _GstAudioWSincLimit GstAudioWSincLimit;
-typedef struct _GstAudioWSincLimitClass GstAudioWSincLimitClass;
+#define GST_TYPE_AUDIO_WSINC_LIMIT (gst_audio_wsinclimit_get_type())
+G_DECLARE_FINAL_TYPE (GstAudioWSincLimit, gst_audio_wsinclimit,
+    GST, AUDIO_WSINC_LIMIT, GstAudioFXBaseFIRFilter)
 
 /**
  * GstAudioWSincLimit:
@@ -68,12 +58,6 @@ struct _GstAudioWSincLimit {
   /* < private > */
   GMutex lock;
 };
-
-struct _GstAudioWSincLimitClass {
-  GstAudioFXBaseFIRFilterClass parent;
-};
-
-GType gst_audio_wsinclimit_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (audiowsinclimit);
 

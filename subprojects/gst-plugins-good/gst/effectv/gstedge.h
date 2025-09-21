@@ -34,19 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_EDGETV \
-  (gst_edgetv_get_type())
-#define GST_EDGETV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EDGETV,GstEdgeTV))
-#define GST_EDGETV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_EDGETV,GstEdgeTVClass))
-#define GST_IS_EDGETV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_EDGETV))
-#define GST_IS_EDGETV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EDGETV))
-
-typedef struct _GstEdgeTV GstEdgeTV;
-typedef struct _GstEdgeTVClass GstEdgeTVClass;
+#define GST_TYPE_EDGETV (gst_edgetv_get_type())
+G_DECLARE_FINAL_TYPE (GstEdgeTV, gst_edgetv, GST, EDGETV, GstVideoFilter)
 
 struct _GstEdgeTV
 {
@@ -57,13 +46,6 @@ struct _GstEdgeTV
   guint32 *map;
   gint video_width_margin;
 };
-
-struct _GstEdgeTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_edgetv_get_type (void);
 
 G_END_DECLS
 

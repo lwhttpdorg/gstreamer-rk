@@ -27,19 +27,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RG_VOLUME \
-  (gst_rg_volume_get_type())
-#define GST_RG_VOLUME(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RG_VOLUME,GstRgVolume))
-#define GST_RG_VOLUME_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RG_VOLUME,GstRgVolumeClass))
-#define GST_IS_RG_VOLUME(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RG_VOLUME))
-#define GST_IS_RG_VOLUME_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RG_VOLUME))
-
-typedef struct _GstRgVolume GstRgVolume;
-typedef struct _GstRgVolumeClass GstRgVolumeClass;
+#define GST_TYPE_RG_VOLUME (gst_rg_volume_get_type())
+G_DECLARE_FINAL_TYPE (GstRgVolume, gst_rg_volume, GST, RG_VOLUME, GstBin)
 
 /**
  * GstRgVolume:
@@ -75,13 +64,6 @@ struct _GstRgVolume
 
   gdouble reference_level;
 };
-
-struct _GstRgVolumeClass
-{
-  GstBinClass parent_class;
-};
-
-GType gst_rg_volume_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (rgvolume);
 

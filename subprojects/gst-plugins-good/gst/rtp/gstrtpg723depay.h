@@ -26,31 +26,14 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_G723_DEPAY \
-  (gst_rtp_g723_depay_get_type())
-#define GST_RTP_G723_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G723_DEPAY,GstRtpG723Depay))
-#define GST_RTP_G723_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G723_DEPAY,GstRtpG723DepayClass))
-#define GST_IS_RTP_G723_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G723_DEPAY))
-#define GST_IS_RTP_G723_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G723_DEPAY))
-
-typedef struct _GstRtpG723Depay GstRtpG723Depay;
-typedef struct _GstRtpG723DepayClass GstRtpG723DepayClass;
+#define GST_TYPE_RTP_G723_DEPAY (gst_rtp_g723_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpG723Depay, gst_rtp_g723_depay, GST, RTP_G723_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpG723Depay
 {
   GstRTPBaseDepayload depayload;
 };
-
-struct _GstRtpG723DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_g723_depay_get_type (void);
 
 G_END_DECLS
 

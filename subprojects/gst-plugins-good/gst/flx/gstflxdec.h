@@ -33,10 +33,6 @@ typedef enum {
   GST_FLXDEC_READ_HEADER,
   GST_FLXDEC_PLAYING,
 } GstFlxDecState;
-	
-
-/* Definition of structure storing data for this element. */
-typedef struct _GstFlxDec  GstFlxDec;
 
 struct _GstFlxDec {
   GstElement element;
@@ -61,26 +57,8 @@ struct _GstFlxDec {
   FlxHeader hdr;
 };
 
-/* Standard definition defining a class for this element. */
-typedef struct _GstFlxDecClass GstFlxDecClass;
-struct _GstFlxDecClass {
-  GstElementClass parent_class;
-};
-
-/* Standard macros for defining types for this element.  */
-#define GST_TYPE_FLXDEC \
-  (gst_flxdec_get_type())
-#define GST_FLXDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FLXDEC,GstFlxDec))
-#define GST_FLXDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FLXDEC,GstFlxDecClass))
-#define GST_IS_FLXDEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FLXDEC))
-#define GST_IS_FLXDEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FLXDEC))
-
-/* Standard function returning type information. */
-GType gst_flxdec_get_type(void);
+#define GST_TYPE_FLXDEC (gst_flxdec_get_type())
+G_DECLARE_FINAL_TYPE (GstFlxDec, gst_flxdec, GST, FLXDEC, GstElement)
 
 GST_ELEMENT_REGISTER_DECLARE (flxdec);
 

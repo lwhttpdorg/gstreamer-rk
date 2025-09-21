@@ -25,26 +25,13 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_APE_DEMUX             (gst_ape_demux_get_type())
-#define GST_APE_DEMUX(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_APE_DEMUX,GstApeDemux))
-#define GST_APE_DEMUX_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_APE_DEMUX,GstApeDemuxClass))
-#define GST_IS_APE_DEMUX(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_APE_DEMUX))
-#define GST_IS_APE_DEMUX_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_APE_DEMUX))
-
-typedef struct _GstApeDemux      GstApeDemux;
-typedef struct _GstApeDemuxClass GstApeDemuxClass;
+#define GST_TYPE_APE_DEMUX (gst_ape_demux_get_type())
+G_DECLARE_FINAL_TYPE (GstApeDemux, gst_ape_demux, GST, APE_DEMUX, GstTagDemux)
 
 struct _GstApeDemux
 {
   GstTagDemux tagdemux;
 };
-
-struct _GstApeDemuxClass 
-{
-  GstTagDemuxClass parent_class;
-};
-
-GType gst_ape_demux_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (apedemux);
 

@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_KLV_DEPAY \
-  (gst_rtp_klv_depay_get_type())
-#define GST_RTP_KLV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_KLV_DEPAY,GstRtpKlvDepay))
-#define GST_RTP_KLV_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_KLV_DEPAY,GstRtpKlvDepayClass))
-#define GST_IS_RTP_KLV_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_KLV_DEPAY))
-#define GST_IS_RTP_KLV_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_KLV_DEPAY))
-
-typedef struct _GstRtpKlvDepay GstRtpKlvDepay;
-typedef struct _GstRtpKlvDepayClass GstRtpKlvDepayClass;
+#define GST_TYPE_RTP_KLV_DEPAY (gst_rtp_klv_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpKlvDepay, gst_rtp_klv_depay, GST, RTP_KLV_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpKlvDepay
 {
@@ -50,13 +40,6 @@ struct _GstRtpKlvDepay
   gint        last_marker_seq;   /* -1 if unset, otherwise 0-G_MAXUINT16 */
   gint64      last_rtp_ts;       /* -1 if unset, otherwise 0-G_MAXUINT32 */
 };
-
-struct _GstRtpKlvDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-G_GNUC_INTERNAL GType     gst_rtp_klv_depay_get_type (void);
 
 G_END_DECLS
 

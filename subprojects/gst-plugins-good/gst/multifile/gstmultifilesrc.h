@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_MULTI_FILE_SRC \
-  (gst_multi_file_src_get_type())
-#define GST_MULTI_FILE_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_MULTI_FILE_SRC,GstMultiFileSrc))
-#define GST_MULTI_FILE_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_MULTI_FILE_SRC,GstMultiFileSrcClass))
-#define GST_IS_MULTI_FILE_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_MULTI_FILE_SRC))
-#define GST_IS_MULTI_FILE_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_MULTI_FILE_SRC))
-
-typedef struct _GstMultiFileSrc GstMultiFileSrc;
-typedef struct _GstMultiFileSrcClass GstMultiFileSrcClass;
+#define GST_TYPE_MULTI_FILE_SRC (gst_multi_file_src_get_type())
+G_DECLARE_FINAL_TYPE (GstMultiFileSrc, gst_multi_file_src, GST, MULTI_FILE_SRC,
+    GstPushSrc)
 
 struct _GstMultiFileSrc
 {
@@ -59,13 +49,6 @@ struct _GstMultiFileSrc
 
   gint fps_n, fps_d;
 };
-
-struct _GstMultiFileSrcClass
-{
-  GstPushSrcClass parent_class;
-};
-
-GType gst_multi_file_src_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (multifilesrc);
 

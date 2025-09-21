@@ -27,14 +27,8 @@ G_BEGIN_DECLS
 #include <gst/gst.h>
 #include <gst/base/gstadapter.h>
 
-#define GST_TYPE_MONOSCOPE            (gst_monoscope_get_type())
-#define GST_MONOSCOPE(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_MONOSCOPE,GstMonoscope))
-#define GST_MONOSCOPE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_MONOSCOPE,GstMonoscopeClass))
-#define GST_IS_MONOSCOPE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_MONOSCOPE))
-#define GST_IS_MONOSCOPE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_MONOSCOPE))
-
-typedef struct _GstMonoscope GstMonoscope;
-typedef struct _GstMonoscopeClass GstMonoscopeClass;
+#define GST_TYPE_MONOSCOPE (gst_monoscope_get_type())
+G_DECLARE_FINAL_TYPE (GstMonoscope, gst_monoscope, GST, MONOSCOPE, GstElement)
 
 struct _GstMonoscope
 {
@@ -70,13 +64,6 @@ struct _GstMonoscope
   /* visualisation state */
   struct monoscope_state *visstate;
 };
-
-struct _GstMonoscopeClass
-{
-  GstElementClass parent_class;
-};
-
-GType gst_monoscope_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (monoscope);
 

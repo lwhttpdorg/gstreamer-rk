@@ -26,30 +26,15 @@
 #include <gst/rtp/gstrtpbaseaudiopayload.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_SIREN_PAY \
-  (gst_rtp_siren_pay_get_type())
-#define GST_RTP_SIREN_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_SIREN_PAY,GstRTPSirenPay))
-#define GST_RTP_SIREN_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_SIREN_PAY,GstRTPSirenPayClass))
-#define GST_IS_RTP_SIREN_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_SIREN_PAY))
-#define GST_IS_RTP_SIREN_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_SIREN_PAY))
-typedef struct _GstRTPSirenPay GstRTPSirenPay;
-typedef struct _GstRTPSirenPayClass GstRTPSirenPayClass;
+
+#define GST_TYPE_RTP_SIREN_PAY (gst_rtp_siren_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPSirenPay, gst_rtp_siren_pay, GST, RTP_SIREN_PAY,
+    GstRTPBaseAudioPayload)
 
 struct _GstRTPSirenPay
 {
   GstRTPBaseAudioPayload audiopayload;
 };
-
-struct _GstRTPSirenPayClass
-{
-  GstRTPBaseAudioPayloadClass parent_class;
-};
-
-GType gst_rtp_siren_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_SIREN_PAY_H__ */

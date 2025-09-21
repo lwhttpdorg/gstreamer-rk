@@ -26,19 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_THEORA_PAY \
-  (gst_rtp_theora_pay_get_type())
-#define GST_RTP_THEORA_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_THEORA_PAY,GstRtpTheoraPay))
-#define GST_RTP_THEORA_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_THEORA_PAY,GstRtpTheoraPayClass))
-#define GST_IS_RTP_THEORA_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_THEORA_PAY))
-#define GST_IS_RTP_THEORA_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_THEORA_PAY))
-
-typedef struct _GstRtpTheoraPay GstRtpTheoraPay;
-typedef struct _GstRtpTheoraPayClass GstRtpTheoraPayClass;
+#define GST_TYPE_RTP_THEORA_PAY (gst_rtp_theora_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpTheoraPay, gst_rtp_theora_pay, GST, RTP_THEORA_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpTheoraPay
 {
@@ -71,13 +61,6 @@ struct _GstRtpTheoraPay
   gint          width;
   gint          height;
 };
-
-struct _GstRtpTheoraPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_theora_pay_get_type (void);
 
 G_END_DECLS
 

@@ -34,19 +34,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_STREAKTV \
-  (gst_streaktv_get_type())
-#define GST_STREAKTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_STREAKTV,GstStreakTV))
-#define GST_STREAKTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_STREAKTV,GstStreakTVClass))
-#define GST_IS_STREAKTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_STREAKTV))
-#define GST_IS_STREAKTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_STREAKTV))
-
-typedef struct _GstStreakTV GstStreakTV;
-typedef struct _GstStreakTVClass GstStreakTVClass;
+#define GST_TYPE_STREAKTV (gst_streaktv_get_type())
+G_DECLARE_FINAL_TYPE (GstStreakTV, gst_streaktv, GST, STREAKTV, GstVideoFilter)
 
 #define PLANES 32
 
@@ -61,13 +50,6 @@ struct _GstStreakTV
   guint32 *planetable[PLANES];
   gint plane;
 };
-
-struct _GstStreakTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_streaktv_get_type (void);
 
 G_END_DECLS
 

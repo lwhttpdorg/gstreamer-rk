@@ -25,33 +25,17 @@
 #include <gst/gst.h>
 #include <gst/rtp/gstrtpbasedepayload.h>
 
-G_BEGIN_DECLS typedef struct _GstRTPSirenDepay GstRTPSirenDepay;
-typedef struct _GstRTPSirenDepayClass GstRTPSirenDepayClass;
+G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_SIREN_DEPAY \
-  (gst_rtp_siren_depay_get_type())
-#define GST_RTP_SIREN_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_SIREN_DEPAY,GstRTPSirenDepay))
-#define GST_RTP_SIREN_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_SIREN_DEPAY,GstRTPSirenDepayClass))
-#define GST_IS_RTP_SIREN_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_SIREN_DEPAY))
-#define GST_IS_RTP_SIREN_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_SIREN_DEPAY))
-
+#define GST_TYPE_RTP_SIREN_DEPAY (gst_rtp_siren_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPSirenDepay, gst_rtp_siren_depay,
+    GST, RTP_SIREN_DEPAY, GstRTPBaseDepayload)
 
 struct _GstRTPSirenDepay
 {
   GstRTPBaseDepayload depayload;
 
 };
-
-struct _GstRTPSirenDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_siren_depay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_SIREN_DEPAY_H__ */

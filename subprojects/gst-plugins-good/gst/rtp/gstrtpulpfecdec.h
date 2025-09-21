@@ -27,23 +27,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_ULPFEC_DEC \
-  (gst_rtp_ulpfec_dec_get_type())
-#define GST_RTP_ULPFEC_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_ULPFEC_DEC,GstRtpUlpFecDec))
-#define GST_RTP_ULPFEC_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_ULPFEC_DEC,GstRtpUlpFecDecClass))
-#define GST_IS_RTP_ULPFEC_DEC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_ULPFEC_DEC))
-#define GST_IS_RTP_ULPFEC_DEC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_ULPFEC_DEC))
-
-typedef struct _GstRtpUlpFecDec GstRtpUlpFecDec;
-typedef struct _GstRtpUlpFecDecClass GstRtpUlpFecDecClass;
-
-struct _GstRtpUlpFecDecClass {
-  GstElementClass parent_class;
-};
+#define GST_TYPE_RTP_ULPFEC_DEC (gst_rtp_ulpfec_dec_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpUlpFecDec, gst_rtp_ulpfec_dec,
+    GST, RTP_ULPFEC_DEC, GstElement)
 
 struct _GstRtpUlpFecDec {
   GstElement parent;
@@ -78,8 +64,6 @@ struct _GstRtpUlpFecDec {
   gsize fec_packets_rejected;
   gsize packets_rejected;
 };
-
-GType gst_rtp_ulpfec_dec_get_type (void);
 
 G_END_DECLS
 

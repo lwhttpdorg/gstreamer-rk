@@ -26,32 +26,14 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPGSMPay GstRTPGSMPay;
-typedef struct _GstRTPGSMPayClass GstRTPGSMPayClass;
-
-#define GST_TYPE_RTP_GSM_PAY \
-  (gst_rtp_gsm_pay_get_type())
-#define GST_RTP_GSM_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_GSM_PAY,GstRTPGSMPay))
-#define GST_RTP_GSM_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_GSM_PAY,GstRTPGSMPayClass))
-#define GST_IS_RTP_GSM_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_GSM_PAY))
-#define GST_IS_RTP_GSM_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_GSM_PAY))
+#define GST_TYPE_RTP_GSM_PAY (gst_rtp_gsm_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPGSMPay, gst_rtp_gsm_pay, GST, RTP_GSM_PAY,
+    GstRTPBasePayload)
 
 struct _GstRTPGSMPay
 {
   GstRTPBasePayload payload;
 };
-
-struct _GstRTPGSMPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_gsm_pay_get_type (void);
-
 
 G_END_DECLS
 

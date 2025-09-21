@@ -30,20 +30,10 @@
 #include <gst/audio/audio.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_SBC_DEPAY \
-	(gst_rtp_sbc_depay_get_type())
-#define GST_RTP_SBC_DEPAY(obj) \
-	(G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_SBC_DEPAY,\
-		GstRtpSbcDepay))
-#define GST_RTP_SBC_DEPAY_CLASS(klass) \
-	(G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_SBC_DEPAY,\
-		GstRtpSbcDepayClass))
-#define GST_IS_RTP_SBC_DEPAY(obj) \
-	(G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_SBC_DEPAY))
-#define GST_IS_RTP_SBC_DEPAY_CLASS(obj) \
-	(G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_SBC_DEPAY))
-typedef struct _GstRtpSbcDepay GstRtpSbcDepay;
-typedef struct _GstRtpSbcDepayClass GstRtpSbcDepayClass;
+
+#define GST_TYPE_RTP_SBC_DEPAY (gst_rtp_sbc_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpSbcDepay, gst_rtp_sbc_depay, GST, RTP_SBC_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpSbcDepay
 {
@@ -56,13 +46,6 @@ struct _GstRtpSbcDepay
   /* Timestamp tracking when ignoring input timestamps */
   GstAudioStreamAlign *stream_align;
 };
-
-struct _GstRtpSbcDepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_sbc_depay_get_type (void);
 
 G_END_DECLS
 #endif

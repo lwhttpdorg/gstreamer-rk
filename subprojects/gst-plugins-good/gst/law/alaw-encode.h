@@ -25,19 +25,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ALAW_ENC \
-  (gst_alaw_enc_get_type())
-#define GST_ALAW_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_ALAW_ENC,GstALawEnc))
-#define GST_ALAW_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_ALAW_ENC,GstALawEncClass))
-#define GST_IS_ALAW_ENC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_ALAW_ENC))
-#define GST_IS_ALAW_ENC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ALAW_ENC))
-
-typedef struct _GstALawEnc GstALawEnc;
-typedef struct _GstALawEncClass GstALawEncClass;
+#define GST_TYPE_ALAW_ENC (gst_alaw_enc_get_type())
+G_DECLARE_FINAL_TYPE (GstALawEnc, gst_alaw_enc, GST, ALAW_ENC, GstAudioEncoder)
 
 struct _GstALawEnc {
   GstAudioEncoder encoder;
@@ -45,12 +34,6 @@ struct _GstALawEnc {
   gint channels;
   gint rate;
 };
-
-struct _GstALawEncClass {
-  GstAudioEncoderClass parent_class;
-};
-
-GType gst_alaw_enc_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (alawenc);
 

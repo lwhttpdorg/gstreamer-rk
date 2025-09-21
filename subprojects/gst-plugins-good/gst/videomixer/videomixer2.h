@@ -30,17 +30,8 @@
 G_BEGIN_DECLS
 
 #define GST_TYPE_VIDEO_MIXER2 (gst_videomixer2_get_type())
-#define GST_VIDEO_MIXER2(obj) \
-        (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDEO_MIXER2, GstVideoMixer2))
-#define GST_VIDEO_MIXER2_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDEO_MIXER2, GstVideoMixer2Class))
-#define GST_IS_VIDEO_MIXER2(obj) \
-        (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDEO_MIXER2))
-#define GST_IS_VIDEO_MIXER2_CLASS(klass) \
-        (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDEO_MIXER2))
-
-typedef struct _GstVideoMixer2 GstVideoMixer2;
-typedef struct _GstVideoMixer2Class GstVideoMixer2Class;
+G_DECLARE_FINAL_TYPE (GstVideoMixer2, gst_videomixer2, GST, VIDEO_MIXER2,
+    GstElement)
 
 /**
  * GstVideoMixer2Background:
@@ -121,13 +112,6 @@ struct _GstVideoMixer2
 
   GstTagList *pending_tags;
 };
-
-struct _GstVideoMixer2Class
-{
-  GstElementClass parent_class;
-};
-
-GType gst_videomixer2_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_VIDEO_MIXER2_H__ */

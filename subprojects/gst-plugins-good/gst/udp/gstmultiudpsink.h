@@ -125,6 +125,8 @@ void            gst_multiudpsink_remove         (GstMultiUDPSink *sink, const gc
 void            gst_multiudpsink_clear          (GstMultiUDPSink *sink);
 GstStructure*   gst_multiudpsink_get_stats      (GstMultiUDPSink *sink, const gchar *host, gint port);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GstMultiUDPSink, gst_object_unref)
+
 G_END_DECLS
 
 #endif /* __GST_MULTIUDPSINK_H__ */

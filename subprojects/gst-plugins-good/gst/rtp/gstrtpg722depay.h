@@ -25,22 +25,10 @@
 
 G_BEGIN_DECLS
 
-/* Standard macros for defining types for this element.  */
-#define GST_TYPE_RTP_G722_DEPAY \
-  (gst_rtp_g722_depay_get_type())
-#define GST_RTP_G722_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_G722_DEPAY,GstRtpG722Depay))
-#define GST_RTP_G722_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_G722_DEPAY,GstRtpG722DepayClass))
-#define GST_IS_RTP_G722_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_G722_DEPAY))
-#define GST_IS_RTP_G722_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_G722_DEPAY))
+#define GST_TYPE_RTP_G722_DEPAY (gst_rtp_g722_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpG722Depay, gst_rtp_g722_depay, GST, RTP_G722_DEPAY,
+    GstRTPBaseDepayload)
 
-typedef struct _GstRtpG722Depay GstRtpG722Depay;
-typedef struct _GstRtpG722DepayClass GstRtpG722DepayClass;
-
-/* Definition of structure storing data for this element. */
 struct _GstRtpG722Depay
 {
   GstRTPBaseDepayload depayload;
@@ -48,14 +36,6 @@ struct _GstRtpG722Depay
   guint rate;
   guint channels;
 };
-
-/* Standard definition defining a class for this element. */
-struct _GstRtpG722DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_g722_depay_get_type (void);
 
 G_END_DECLS
 

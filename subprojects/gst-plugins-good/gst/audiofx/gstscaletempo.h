@@ -26,14 +26,10 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_SCALETEMPO            (gst_scaletempo_get_type())
-#define GST_SCALETEMPO(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_SCALETEMPO, GstScaletempo))
-#define GST_SCALETEMPO_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),  GST_TYPE_SCALETEMPO, GstScaletempoClass))
-#define GST_IS_SCALETEMPO(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_SCALETEMPO))
-#define GST_IS_SCALETEMPO_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),  GST_TYPE_SCALETEMPO))
+#define GST_TYPE_SCALETEMPO (gst_scaletempo_get_type())
+G_DECLARE_FINAL_TYPE (GstScaletempo, gst_scaletempo, GST, SCALETEMPO,
+    GstBaseTransform)
 
-typedef struct _GstScaletempo GstScaletempo;
-typedef struct _GstScaletempoClass GstScaletempoClass;
 typedef struct _GstScaletempoPrivate GstScaletempoPrivate;
 
 /**
@@ -102,13 +98,6 @@ struct _GstScaletempo
   /* threads */
   gboolean reinit_buffers;
 };
-
-struct _GstScaletempoClass
-{
-  GstBaseTransformClass parent_class;
-};
-
-GType gst_scaletempo_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (scaletempo);
 

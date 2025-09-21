@@ -27,19 +27,9 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstRTPMP2TPay GstRTPMP2TPay;
-typedef struct _GstRTPMP2TPayClass GstRTPMP2TPayClass;
-
-#define GST_TYPE_RTP_MP2T_PAY \
-  (gst_rtp_mp2t_pay_get_type())
-#define GST_RTP_MP2T_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP2T_PAY,GstRTPMP2TPay))
-#define GST_RTP_MP2T_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP2T_PAY,GstRTPMP2TPayClass))
-#define GST_IS_RTP_MP2T_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP2T_PAY))
-#define GST_IS_RTP_MP2T_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP2T_PAY))
+#define GST_TYPE_RTP_MP2T_PAY (gst_rtp_mp2t_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRTPMP2TPay, gst_rtp_mp2t_pay, GST, RTP_MP2T_PAY,
+    GstRTPBasePayload)
 
 struct _GstRTPMP2TPay
 {
@@ -49,13 +39,6 @@ struct _GstRTPMP2TPay
   GstClockTime first_ts;
   GstClockTime duration;
 };
-
-struct _GstRTPMP2TPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_mp2t_pay_get_type (void);
 
 G_END_DECLS
 

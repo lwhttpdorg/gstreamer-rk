@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_MP4A_DEPAY \
-  (gst_rtp_mp4a_depay_get_type())
-#define GST_RTP_MP4A_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_MP4A_DEPAY,GstRtpMP4ADepay))
-#define GST_RTP_MP4A_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_MP4A_DEPAY,GstRtpMP4ADepayClass))
-#define GST_IS_RTP_MP4A_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_MP4A_DEPAY))
-#define GST_IS_RTP_MP4A_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_MP4A_DEPAY))
-
-typedef struct _GstRtpMP4ADepay GstRtpMP4ADepay;
-typedef struct _GstRtpMP4ADepayClass GstRtpMP4ADepayClass;
+#define GST_TYPE_RTP_MP4A_DEPAY (gst_rtp_mp4a_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpMP4ADepay, gst_rtp_mp4a_depay, GST, RTP_MP4A_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpMP4ADepay
 {
@@ -48,13 +38,6 @@ struct _GstRtpMP4ADepay
 
   gboolean framed;
 };
-
-struct _GstRtpMP4ADepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
-
-GType gst_rtp_mp4a_depay_get_type (void);
 
 G_END_DECLS
 

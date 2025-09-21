@@ -25,19 +25,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_SPLITMUX_SRC \
-  (gst_splitmux_src_get_type())
-#define GST_SPLITMUX_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SPLITMUX_SRC,GstSplitMuxSrc))
-#define GST_SPLITMUX_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SPLITMUX_SRC,GstSplitMuxSrcClass))
-#define GST_IS_SPLITMUX_SRC(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SPLITMUX_SRC))
-#define GST_IS_SPLITMUX_SRC_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SPLITMUX_SRC))
-
-typedef struct _GstSplitMuxSrc GstSplitMuxSrc;
-typedef struct _GstSplitMuxSrcClass GstSplitMuxSrcClass;
+#define GST_TYPE_SPLITMUX_SRC (gst_splitmux_src_get_type())
+G_DECLARE_FINAL_TYPE (GstSplitMuxSrc, gst_splitmux_src, GST, SPLITMUX_SRC,
+    GstBin)
 
 struct _GstSplitMuxSrc
 {
@@ -76,11 +66,6 @@ struct _GstSplitMuxSrc
   gboolean lookahead_check_pending;
 };
 
-struct _GstSplitMuxSrcClass
-{
-  GstBinClass parent_class;
-};
-
 GType splitmux_src_pad_get_type (void);
 #define SPLITMUX_TYPE_SRC_PAD splitmux_src_pad_get_type()
 #define SPLITMUX_SRC_PAD_CAST(p) ((SplitMuxSrcPad *)(p))
@@ -109,8 +94,6 @@ struct _SplitMuxSrcPadClass
 {
   GstPadClass parent;
 };
-
-GType gst_splitmux_src_get_type (void);
 
 #define SPLITMUX_SRC_LOCK(s) g_mutex_lock(&(s)->lock)
 #define SPLITMUX_SRC_UNLOCK(s) g_mutex_unlock(&(s)->lock)

@@ -26,28 +26,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_RTP_VP9_DEPAY \
-  (gst_rtp_vp9_depay_get_type())
-#define GST_RTP_VP9_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_RTP_VP9_DEPAY, GstRtpVP9Depay))
-#define GST_RTP_VP9_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_RTP_VP9_DEPAY, \
-    GstRtpVP9DepayClass))
-#define GST_IS_RTP_VP9_DEPAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_RTP_VP9_DEPAY))
-#define GST_IS_RTP_VP9_DEPAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_RTP_VP9_DEPAY))
-#define GST_RTP_VP9_DEPAY_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_RTP_VP9_DEPAY, \
-    GstRtpVP9DepayClass))
-
-typedef struct _GstRtpVP9Depay GstRtpVP9Depay;
-typedef struct _GstRtpVP9DepayClass GstRtpVP9DepayClass;
-
-struct _GstRtpVP9DepayClass
-{
-  GstRTPBaseDepayloadClass parent_class;
-};
+#define GST_TYPE_RTP_VP9_DEPAY (gst_rtp_vp9_depay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpVP9Depay, gst_rtp_vp9_depay, GST, RTP_VP9_DEPAY,
+    GstRTPBaseDepayload)
 
 struct _GstRtpVP9Depay
 {
@@ -76,8 +57,6 @@ struct _GstRtpVP9Depay
   gboolean wait_for_keyframe;
   gboolean request_keyframe;
 };
-
-GType gst_rtp_vp9_depay_get_type (void);
 
 G_END_DECLS
 

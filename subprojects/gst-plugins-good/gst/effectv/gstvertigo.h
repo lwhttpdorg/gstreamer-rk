@@ -31,19 +31,9 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_VERTIGOTV \
-  (gst_vertigotv_get_type())
-#define GST_VERTIGOTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VERTIGOTV,GstVertigoTV))
-#define GST_VERTIGOTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VERTIGOTV,GstVertigoTVClass))
-#define GST_IS_VERTIGOTV(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VERTIGOTV))
-#define GST_IS_VERTIGOTV_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VERTIGOTV))
-
-typedef struct _GstVertigoTV GstVertigoTV;
-typedef struct _GstVertigoTVClass GstVertigoTVClass;
+#define GST_TYPE_VERTIGOTV (gst_vertigotv_get_type())
+G_DECLARE_FINAL_TYPE (GstVertigoTV, gst_vertigotv, GST, VERTIGOTV,
+    GstVideoFilter)
 
 struct _GstVertigoTV
 {
@@ -58,13 +48,6 @@ struct _GstVertigoTV
   gdouble phase_increment;
   gdouble zoomrate;
 };
-
-struct _GstVertigoTVClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_vertigotv_get_type (void);
 
 G_END_DECLS
 

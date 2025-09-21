@@ -139,7 +139,6 @@ static gboolean perform_seek_to_offset (GstMatroskaParse * parse,
 static GstCaps *gst_matroska_parse_forge_caps (gboolean is_webm,
     gboolean has_video);
 
-GType gst_matroska_parse_get_type (void);
 #define parent_class gst_matroska_parse_parent_class
 G_DEFINE_TYPE (GstMatroskaParse, gst_matroska_parse, GST_TYPE_ELEMENT);
 #define _do_init \

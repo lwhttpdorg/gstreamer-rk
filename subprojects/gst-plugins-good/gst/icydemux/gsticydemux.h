@@ -27,19 +27,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ICYDEMUX \
-  (gst_icydemux_get_type())
-#define GST_ICYDEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_ICYDEMUX,GstICYDemux))
-#define GST_ICYDEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_ICYDEMUX,GstICYDemuxClass))
-#define GST_IS_ICYDEMUX(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_ICYDEMUX))
-#define GST_IS_ICYDEMUX_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ICYDEMUX))
-
-typedef struct _GstICYDemux      GstICYDemux;
-typedef struct _GstICYDemuxClass GstICYDemuxClass;
+#define GST_TYPE_ICYDEMUX (gst_icydemux_get_type())
+G_DECLARE_FINAL_TYPE (GstICYDemux, gst_icydemux, GST, ICYDEMUX, GstElement)
 
 struct _GstICYDemux
 {
@@ -74,13 +63,6 @@ struct _GstICYDemux
   /* upstream HTTP Content-Type */
   gchar *content_type;
 };
-
-struct _GstICYDemuxClass 
-{
-  GstElementClass parent_class;
-};
-
-GType gst_icydemux_get_type (void);
 
 GST_ELEMENT_REGISTER_DECLARE (icydemux);
 

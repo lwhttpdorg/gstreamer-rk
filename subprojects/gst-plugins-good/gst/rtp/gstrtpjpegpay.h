@@ -24,18 +24,10 @@
 #include <gst/rtp/gstrtpbasepayload.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_RTP_JPEG_PAY \
-  (gst_rtp_jpeg_pay_get_type())
-#define GST_RTP_JPEG_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTP_JPEG_PAY,GstRtpJPEGPay))
-#define GST_RTP_JPEG_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTP_JPEG_PAY,GstRtpJPEGPayClass))
-#define GST_IS_RTP_JPEG_PAY(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTP_JPEG_PAY))
-#define GST_IS_RTP_JPEG_PAY_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTP_JPEG_PAY))
-typedef struct _GstRtpJPEGPay GstRtpJPEGPay;
-typedef struct _GstRtpJPEGPayClass GstRtpJPEGPayClass;
+
+#define GST_TYPE_RTP_JPEG_PAY (gst_rtp_jpeg_pay_get_type())
+G_DECLARE_FINAL_TYPE (GstRtpJPEGPay, gst_rtp_jpeg_pay, GST, RTP_JPEG_PAY,
+    GstRTPBasePayload)
 
 struct _GstRtpJPEGPay
 {
@@ -49,13 +41,6 @@ struct _GstRtpJPEGPay
 
   guint8 quant;
 };
-
-struct _GstRtpJPEGPayClass
-{
-  GstRTPBasePayloadClass parent_class;
-};
-
-GType gst_rtp_jpeg_pay_get_type (void);
 
 G_END_DECLS
 #endif /* __GST_RTP_JPEG_PAY_H__ */

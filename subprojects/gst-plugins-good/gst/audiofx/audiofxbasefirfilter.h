@@ -97,6 +97,8 @@ void gst_audio_fx_base_fir_filter_set_kernel (GstAudioFXBaseFIRFilter *filter, g
                                               guint kernel_length, guint64 latency, const GstAudioInfo * info);
 void gst_audio_fx_base_fir_filter_push_residue (GstAudioFXBaseFIRFilter *filter);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GstAudioFXBaseFIRFilter, gst_object_unref)
+
 G_END_DECLS
 
 #endif /* __GST_AUDIO_FX_BASE_FIR_FILTER_H__ */

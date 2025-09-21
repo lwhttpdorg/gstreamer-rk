@@ -29,18 +29,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_EBML_WRITE \
-  (gst_ebml_write_get_type ())
-#define GST_EBML_WRITE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_EBML_WRITE, GstEbmlWrite))
-#define GST_EBML_WRITE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_EBML_WRITE, GstEbmlWriteClass))
-#define GST_IS_EBML_WRITE(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_EBML_WRITE))
-#define GST_IS_EBML_WRITE_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_EBML_WRITE))
-#define GST_EBML_WRITE_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_EBML_WRITE, GstEbmlWriteClass))
+#define GST_TYPE_EBML_WRITE (gst_ebml_write_get_type ())
+G_DECLARE_FINAL_TYPE (GstEbmlWrite, gst_ebml_write, GST, EBML_WRITE, GstObject)
 
 typedef struct _GstEbmlWrite {
   GstObject object;
@@ -65,13 +55,8 @@ typedef struct _GstEbmlWrite {
   gboolean streamable;
 } GstEbmlWrite;
 
-typedef struct _GstEbmlWriteClass {
-  GstObjectClass parent;
-} GstEbmlWriteClass;
-
-GType   gst_ebml_write_get_type      (void);
-
 GstEbmlWrite *gst_ebml_write_new     (GstAggregator *agg);
+
 void    gst_ebml_write_reset         (GstEbmlWrite *ebml);
 
 GstFlowReturn gst_ebml_last_write_result (GstEbmlWrite *ebml);

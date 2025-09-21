@@ -30,19 +30,8 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_GAMMA \
-  (gst_gamma_get_type())
-#define GST_GAMMA(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_GAMMA,GstGamma))
-#define GST_GAMMA_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_GAMMA,GstGammaClass))
-#define GST_IS_GAMMA(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_GAMMA))
-#define GST_IS_GAMMA_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_GAMMA))
-
-typedef struct _GstGamma GstGamma;
-typedef struct _GstGammaClass GstGammaClass;
+#define GST_TYPE_GAMMA (gst_gamma_get_type())
+G_DECLARE_FINAL_TYPE (GstGamma, gst_gamma, GST, GAMMA, GstVideoFilter)
 
 /**
  * GstGamma:
@@ -62,13 +51,6 @@ struct _GstGamma
 
   void (*process) (GstGamma *gamma, GstVideoFrame *frame);
 };
-
-struct _GstGammaClass
-{
-  GstVideoFilterClass parent_class;
-};
-
-GType gst_gamma_get_type(void);
 
 GST_ELEMENT_REGISTER_DECLARE (gamma);
 

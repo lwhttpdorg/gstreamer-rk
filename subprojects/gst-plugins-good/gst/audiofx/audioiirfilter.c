@@ -134,8 +134,7 @@ gst_audio_iir_filter_class_init (GstAudioIIRFilterClass * klass)
    */
   gst_audio_iir_filter_signals[SIGNAL_RATE_CHANGED] =
       g_signal_new ("rate-changed", G_TYPE_FROM_CLASS (klass),
-      G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstAudioIIRFilterClass, rate_changed),
-      NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
+      G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
 
   gst_element_class_set_static_metadata (gstelement_class,
       "Audio IIR filter", "Filter/Effect/Audio",
