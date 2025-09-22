@@ -894,7 +894,7 @@ gst_rtp_base_depayload_handle_buffer (GstRTPBaseDepayload * filter,
 
   if (discont) {
     gst_rtp_base_depayload_reset_hdrext_buffers (filter);
-    g_assert_null (priv->hdrext_delayed);
+    g_assert (priv->hdrext_delayed == NULL);
   }
 
   /* update RTP buffer cache for header extensions if any */
@@ -939,7 +939,7 @@ gst_rtp_base_depayload_handle_buffer (GstRTPBaseDepayload * filter,
      a buffer that's pushed, either way the buffer cache should be
      empty here and we append the delayed buffer */
   if (priv->hdrext_delayed) {
-    g_assert_true (gst_buffer_list_length (priv->hdrext_buffers) == 0);
+    g_assert (gst_buffer_list_length (priv->hdrext_buffers) == 0);
     gst_buffer_list_add (priv->hdrext_buffers, priv->hdrext_delayed);
     priv->hdrext_delayed = NULL;
   }

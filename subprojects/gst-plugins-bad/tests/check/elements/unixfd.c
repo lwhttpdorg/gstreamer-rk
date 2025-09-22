@@ -60,7 +60,7 @@ GST_START_TEST (test_unixfd_videotestsrc)
 
   /* Ensure we don't have socket from previous failed test */
   gchar *tempdir = g_dir_make_tmp ("unixfd-test-XXXXXX", &error);
-  g_assert_no_error (error);
+  fail_if (error);
   gchar *socket_path = g_strdup_printf ("%s/socket", tempdir);
 
   /* Setup source */
@@ -68,7 +68,7 @@ GST_START_TEST (test_unixfd_videotestsrc)
       g_strdup_printf ("videotestsrc name=src ! unixfdsink socket-path=%s",
       socket_path);
   GstElement *pipeline_service = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   g_free (pipeline_str);
 
   /* Add a custom meta on each buffer */
@@ -86,7 +86,7 @@ GST_START_TEST (test_unixfd_videotestsrc)
       g_strdup_printf ("unixfdsrc socket-path=%s ! fakesink name=sink",
       socket_path);
   GstElement *pipeline_client_1 = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   wait_preroll (pipeline_client_1);
 
   /* disconnect, reconnect */
@@ -96,7 +96,7 @@ GST_START_TEST (test_unixfd_videotestsrc)
 
   /* Connect 2nd sink */
   GstElement *pipeline_client_2 = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   wait_preroll (pipeline_client_2);
 
   /* Check we received our custom meta */
@@ -142,7 +142,7 @@ GST_START_TEST (test_unixfd_segment)
 
   /* Ensure we don't have socket from previous failed test */
   gchar *tempdir = g_dir_make_tmp ("unixfd-test-XXXXXX", &error);
-  g_assert_no_error (error);
+  fail_if (error);
   gchar *socket_path = g_strdup_printf ("%s/socket", tempdir);
 
   GstCaps *caps = gst_caps_new_empty_simple ("video/x-raw");
@@ -153,7 +153,7 @@ GST_START_TEST (test_unixfd_segment)
       ("appsrc name=src format=time handle-segment-change=true ! unixfdsink socket-path=%s sync=false async=false wait-for-connection=true",
       socket_path);
   GstElement *pipeline_service = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (gst_element_set_state (pipeline_service,
           GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS);
   GstElement *appsrc = gst_bin_get_by_name (GST_BIN (pipeline_service), "src");
@@ -166,7 +166,7 @@ GST_START_TEST (test_unixfd_segment)
       ("unixfdsrc socket-path=%s ! appsink name=sink sync=false async=false",
       socket_path);
   GstElement *pipeline_client = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (gst_element_set_state (pipeline_client,
           GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS);
   GstElement *appsink = gst_bin_get_by_name (GST_BIN (pipeline_client), "sink");
@@ -230,7 +230,7 @@ GST_START_TEST (test_unixfd_copy)
 
   /* Ensure we don't have socket from previous failed test */
   gchar *tempdir = g_dir_make_tmp ("unixfd-test-XXXXXX", &error);
-  g_assert_no_error (error);
+  fail_if (error);
   gchar *socket_path = g_strdup_printf ("%s/socket", tempdir);
 
   GstCaps *caps = gst_caps_new_empty_simple ("video/x-raw");
@@ -241,7 +241,7 @@ GST_START_TEST (test_unixfd_copy)
       ("appsrc name=src format=time ! unixfdsink socket-path=%s sync=false async=false wait-for-connection=true",
       socket_path);
   GstElement *pipeline_service = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (gst_element_set_state (pipeline_service,
           GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS);
   GstElement *appsrc = gst_bin_get_by_name (GST_BIN (pipeline_service), "src");
@@ -254,7 +254,7 @@ GST_START_TEST (test_unixfd_copy)
       ("unixfdsrc socket-path=%s ! appsink name=sink sync=false async=false",
       socket_path);
   GstElement *pipeline_client = gst_parse_launch (pipeline_str, &error);
-  g_assert_no_error (error);
+  fail_if (error);
   fail_unless (gst_element_set_state (pipeline_client,
           GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS);
   GstElement *appsink = gst_bin_get_by_name (GST_BIN (pipeline_client), "sink");

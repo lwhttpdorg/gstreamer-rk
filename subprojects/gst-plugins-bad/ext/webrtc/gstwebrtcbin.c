@@ -7629,7 +7629,7 @@ on_rtpbin_pad_added (GstElement * rtpbin, GstPad * new_pad,
         /* Can't use the mid_entry if the mid doesn't exist */
         rtp_trans = _find_transceiver_for_mid (webrtc, mid_entry->mid);
         if (rtp_trans) {
-          g_assert_cmpint (rtp_trans->mline, ==, mid_entry->media_idx);
+          g_assert (rtp_trans->mline == mid_entry->media_idx);
         }
       }
 

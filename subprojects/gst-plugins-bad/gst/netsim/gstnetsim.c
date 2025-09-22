@@ -188,7 +188,7 @@ gst_net_sim_src_activatemode (GstPad * pad, GstObject * parent,
       id = g_source_attach (source,
           g_main_loop_get_context (netsim->main_loop));
       g_source_unref (source);
-      g_assert_cmpuint (id, >, 0);
+      g_assert (id > 0);
       g_main_loop_unref (netsim->main_loop);
       netsim->main_loop = NULL;
 

@@ -409,7 +409,7 @@ cc_data_extract_cea608 (const guint8 * cc_data, guint cc_data_len,
     }
   }
 
-  g_assert_cmpint (i * 3, <=, cc_data_len);
+  g_assert (i * 3 <= cc_data_len);
 
   GST_LOG ("Extracted cea608-1 of length %u and cea608-2 of length %u, "
       "ccp_offset %i", VAL_OR_0 (cea608_field1_len),
@@ -809,9 +809,9 @@ cc_buffer_get_out_sizes (CCBuffer * buf, const struct cdp_fps_entry *fps_entry,
     if (write_field1) {
       if (extra_cea608_1 > 0) {
         extra_cea608_1 -= 2;
-        g_assert_cmpint (extra_cea608_1, >=, 0);
+        g_assert (extra_cea608_1 >= 0);
         write_cea608_1_size += 2;
-        g_assert_cmpint (write_cea608_1_size, <=, buf->cea608_1->len);
+        g_assert (write_cea608_1_size <= buf->cea608_1->len);
       } else {
         *field1_padding += 2;
       }
@@ -824,9 +824,9 @@ cc_buffer_get_out_sizes (CCBuffer * buf, const struct cdp_fps_entry *fps_entry,
 
     if (extra_cea608_2 > 0) {
       extra_cea608_2 -= 2;
-      g_assert_cmpint (extra_cea608_2, >=, 0);
+      g_assert (extra_cea608_2 >= 0);
       write_cea608_2_size += 2;
-      g_assert_cmpint (write_cea608_2_size, <=, buf->cea608_2->len);
+      g_assert (write_cea608_2_size <= buf->cea608_2->len);
     } else {
       /* we need to insert field 2 padding if we don't have data and are
        * requested to start with field2 */

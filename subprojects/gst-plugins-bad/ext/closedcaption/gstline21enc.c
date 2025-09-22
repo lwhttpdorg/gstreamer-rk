@@ -418,7 +418,7 @@ cc_data_extract_cea608 (guint8 * cc_data, guint cc_data_len,
     }
   }
 
-  g_assert_cmpint (i * 3, <=, cc_data_len);
+  g_assert (i * 3 <= cc_data_len);
 
   GST_LOG ("Extracted cea608-1 of length %u and cea608-2 of length %u",
       VAL_OR_0 (cea608_field1_len), VAL_OR_0 (cea608_field2_len));

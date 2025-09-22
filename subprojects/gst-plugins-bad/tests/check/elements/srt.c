@@ -67,13 +67,13 @@ check_play (const gchar * src_uri,
 
   src_element = gst_bin_get_by_name (GST_BIN (h_src->element), "src");
   g_object_get (src_element, "stats", &stats, NULL);
-  g_assert_cmpstr (gst_structure_get_name (stats), ==,
+  fail_unless_equals_string (gst_structure_get_name (stats),
       "application/x-srt-statistics");
 
   if (src_mode == GST_SRT_CONNECTION_MODE_CALLER) {
     fail_unless (gst_structure_get_int64 (stats,
             "packets-received", &packets_received));
-    g_assert_cmpint (packets_received, ==, 1);
+    fail_unless_equals_int (packets_received, 1);
   } else {
     const GValue *array_value;
     const GValue *value;
@@ -86,7 +86,7 @@ check_play (const gchar * src_uri,
     caller_stats = GST_STRUCTURE (g_value_get_boxed (value));
     fail_unless (gst_structure_get_int64 (caller_stats,
             "packets-received", &packets_received));
-    g_assert_cmpint (packets_received, ==, 1);
+    fail_unless_equals_int (packets_received, 1);
   }
 
   gst_element_set_state (h_src->element, GST_STATE_NULL);
@@ -104,13 +104,13 @@ GST_START_TEST (test_create_and_unref)
   GstElement *e;
 
   e = gst_element_factory_make (elements[__i__], NULL);
-  g_assert_nonnull (e);
+  fail_unless (e);
 
   gst_element_set_state (e, GST_STATE_NULL);
   gst_object_unref (e);
 
   e = gst_element_factory_make (elements[__i__], NULL);
-  g_assert_nonnull (e);
+  fail_unless (e);
 
   gst_element_set_state (e, GST_STATE_NULL);
   gst_object_unref (e);
@@ -138,13 +138,13 @@ GST_START_TEST (test_uri_to_properties)
       "localport", &localport, "localaddress", &localaddress, NULL);
 
   /* Make sure these values are in sync with the one from the URI. */
-  g_assert_cmpint (latency, ==, 300);
-  g_assert_cmpint (mode, ==, 2);
-  g_assert_cmpstr (streamid, ==, "the-stream-id");
-  g_assert_cmpint (pbkeylen, ==, 32);
-  g_assert_cmpint (poll_timeout, ==, 500);
-  g_assert_cmpstr (localaddress, ==, "83.0.2.14");
-  g_assert_cmpint (localport, ==, 4847);
+  fail_unless_equals_int (latency, 300);
+  fail_unless_equals_int (mode, 2);
+  fail_unless_equals_string (streamid, "the-stream-id");
+  fail_unless_equals_int (pbkeylen, 32);
+  fail_unless_equals_int (poll_timeout, 500);
+  fail_unless_equals_string (localaddress, "83.0.2.14");
+  fail_unless_equals_int (localport, 4847);
 
   g_free (streamid);
   g_free (localaddress);

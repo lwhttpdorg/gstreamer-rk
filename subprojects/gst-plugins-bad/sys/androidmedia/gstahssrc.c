@@ -472,8 +472,8 @@ gst_ahs_src_start (GstBaseSrc * src)
   JNIEnv *env = gst_amc_jni_get_env ();
   GstAHSSrc *self = GST_AHS_SRC (src);
 
-  g_assert_null (self->manager);
-  g_assert_null (self->listener);
+  g_assert (self->manager);
+  g_assert (self->listener);
 
   self->manager = gst_ah_sensor_get_manager ();
   if (!self->manager) {
@@ -505,9 +505,9 @@ gst_ahs_src_stop (GstBaseSrc * src)
 {
   GstAHSSrc *self = GST_AHS_SRC (src);
 
-  g_assert_nonnull (self->manager);
-  g_assert_nonnull (self->sensor);
-  g_assert_nonnull (self->listener);
+  g_assert (self->manager);
+  g_assert (self->sensor);
+  g_assert (self->listener);
 
   gst_ah_sensor_unregister_listener (self->manager, self->listener);
   self->previous_time = GST_CLOCK_TIME_NONE;

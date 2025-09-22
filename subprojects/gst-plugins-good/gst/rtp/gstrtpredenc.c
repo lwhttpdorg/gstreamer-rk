@@ -266,7 +266,7 @@ _red_history_get_redundant_block (GstRtpRedEnc * self,
   }
 
   /* _red_history_trim should take care it never happens */
-  g_assert_cmpint (self->rtp_history->length, <=, distance);
+  g_assert (self->rtp_history->length <= distance);
 
   if (G_UNLIKELY (self->rtp_history->length < distance))
     GST_DEBUG_OBJECT (self,

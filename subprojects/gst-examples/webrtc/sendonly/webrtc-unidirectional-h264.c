@@ -512,7 +512,7 @@ soup_websocket_message_cb (G_GNUC_UNUSED SoupWebsocketConnection * connection,
     gst_println ("Received SDP:\n%s", sdp_string);
 
     ret = gst_sdp_message_new (&sdp);
-    g_assert_cmphex (ret, ==, GST_SDP_OK);
+    g_assert (ret == GST_SDP_OK);
 
     ret =
         gst_sdp_message_parse_buffer ((guint8 *) sdp_string,
@@ -524,7 +524,7 @@ soup_websocket_message_cb (G_GNUC_UNUSED SoupWebsocketConnection * connection,
 
     answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
         sdp);
-    g_assert_nonnull (answer);
+    g_assert (answer);
 
     promise = gst_promise_new ();
     g_signal_emit_by_name (receiver_entry->webrtcbin, "set-remote-description",

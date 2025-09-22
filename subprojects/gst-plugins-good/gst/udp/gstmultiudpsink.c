@@ -754,7 +754,7 @@ gst_multiudpsink_render_buffers (GstMultiUDPSink * sink, GstBuffer ** buffers,
     for (j = 1; send_duplicates && j < client->add_count; ++j)
       clients[i++] = gst_udp_client_ref (client);
   }
-  g_assert_cmpuint (i, ==, num_addr);
+  g_assert (i == num_addr);
 
   g_mutex_unlock (&sink->client_lock);
 

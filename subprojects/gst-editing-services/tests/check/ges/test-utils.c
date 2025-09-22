@@ -202,7 +202,7 @@ my_bus_callback (GstBus * bus, GstMessage * message, GMainLoop * loop)
 
       gst_message_parse_error (message, &err, &debug);
 
-      g_assert_no_error (err);
+      g_assert (err == NULL);
       g_error_free (err);
       g_free (debug);
       g_main_loop_quit (loop);

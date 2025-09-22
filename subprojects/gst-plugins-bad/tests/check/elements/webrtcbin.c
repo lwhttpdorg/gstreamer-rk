@@ -2286,9 +2286,9 @@ GST_START_TEST (test_data_channel_create)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   g_object_get (channel, "label", &label, NULL);
-  g_assert_cmpstr (label, ==, "label");
+  fail_unless_equals_string (label, "label");
 
   test_validate_sdp (t, &offer, &offer);
 
@@ -2328,9 +2328,9 @@ GST_START_TEST (test_data_channel_create_two_channels)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   g_object_get (channel, "label", &label, NULL);
-  g_assert_cmpstr (label, ==, "label");
+  fail_unless_equals_string (label, "label");
   g_free (label);
   g_object_unref (channel);
 
@@ -2351,9 +2351,9 @@ GST_START_TEST (test_data_channel_create_two_channels)
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label2", options,
       &channel2);
   gst_structure_free (options);
-  g_assert_nonnull (channel2);
+  fail_unless (channel2);
   g_object_get (channel2, "label", &label, NULL);
-  g_assert_cmpstr (label, ==, "label2");
+  fail_unless_equals_string (label, "label2");
   g_free (label);
   g_object_unref (channel2);
 
@@ -2369,12 +2369,12 @@ have_data_channel (struct test_webrtc *t, GstElement * element,
   GObject *other = user_data;
   gchar *our_label, *other_label;
 
-  g_assert_true (t->error_signal_handler_id > 0);
+  fail_unless (t->error_signal_handler_id > 0);
 
   g_object_get (our, "label", &our_label, NULL);
   g_object_get (other, "label", &other_label, NULL);
 
-  g_assert_cmpstr (our_label, ==, other_label);
+  fail_unless_equals_string (our_label, other_label);
 
   g_free (our_label);
   g_free (other_label);
@@ -2401,7 +2401,7 @@ GST_START_TEST (test_data_channel_remote_notify)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
 
   fail_if (gst_element_set_state (t->webrtc1,
@@ -2429,7 +2429,7 @@ on_message_string (GObject * channel, const gchar * str, struct test_webrtc *t)
   fail_unless_equals_int (GST_WEBRTC_DATA_CHANNEL_STATE_OPEN, state);
 
   expected = g_object_steal_data (channel, "expected");
-  g_assert_cmpstr (expected, ==, str);
+  fail_unless_equals_string (expected, str);
   g_free (expected);
 
   test_webrtc_signal_state (t, STATE_CUSTOM);
@@ -2450,7 +2450,7 @@ have_data_channel_transfer_string (struct test_webrtc *t, GstElement * element,
 
   fail_unless (gst_webrtc_data_channel_send_string_full (GST_WEBRTC_DATA_CHANNEL
           (other), test_string, &error));
-  g_assert_null (error);
+  fail_if (error);
 }
 
 GST_START_TEST (test_data_channel_transfer_string)
@@ -2472,7 +2472,7 @@ GST_START_TEST (test_data_channel_transfer_string)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
   g_signal_connect (channel, "on-error",
       G_CALLBACK (on_channel_error_not_reached), NULL);
@@ -2490,12 +2490,13 @@ GST_START_TEST (test_data_channel_transfer_string)
 
 GST_END_TEST;
 
-#define g_assert_cmpbytes(b1, b2)                       \
+#define fail_unless_cmpbytes(b1, b2)                       \
     G_STMT_START {                                      \
       gsize l1, l2;                                     \
       const guint8 *d1 = g_bytes_get_data (b1, &l1);    \
       const guint8 *d2 = g_bytes_get_data (b2, &l2);    \
-      g_assert_cmpmem (d1, l1, d2, l2);                 \
+      fail_unless_equals_uint64 (l1, l2);               \
+      fail_if (memcmp (d1, d2, l1));                    \
     } G_STMT_END;
 
 static void
@@ -2508,7 +2509,7 @@ on_message_data (GObject * channel, GBytes * data, struct test_webrtc *t)
   fail_unless_equals_int (GST_WEBRTC_DATA_CHANNEL_STATE_OPEN, state);
 
   expected = g_object_steal_data (channel, "expected");
-  g_assert_cmpbytes (data, expected);
+  fail_unless_cmpbytes (data, expected);
   g_bytes_unref (expected);
 
   test_webrtc_signal_state (t, STATE_CUSTOM);
@@ -2531,7 +2532,7 @@ have_data_channel_transfer_data (struct test_webrtc *t, GstElement * element,
 
   fail_unless (gst_webrtc_data_channel_send_data_full (GST_WEBRTC_DATA_CHANNEL
           (other), data, &error));
-  g_assert_null (error);
+  fail_if (error);
   g_bytes_unref (data);
 }
 
@@ -2554,7 +2555,7 @@ GST_START_TEST (test_data_channel_transfer_data)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
   g_signal_connect (channel, "on-error",
       G_CALLBACK (on_channel_error_not_reached), NULL);
@@ -2583,7 +2584,7 @@ have_data_channel_create_data_channel (struct test_webrtc *t,
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &another);
-  g_assert_nonnull (another);
+  fail_unless (another);
   t->data_channel_data = another;
   t->data_channel_notify = (GDestroyNotify) g_object_unref;
 }
@@ -2607,7 +2608,7 @@ GST_START_TEST (test_data_channel_create_after_negotiate)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "prev-label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
 
   fail_if (gst_element_set_state (t->webrtc1,
@@ -2714,7 +2715,7 @@ GST_START_TEST (test_data_channel_close)
 
     g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
         &tdc.dc1);
-    g_assert_nonnull (tdc.dc1);
+    fail_unless (tdc.dc1);
     g_weak_ref_init (&dc1_ref, tdc.dc1);
     sigid = g_signal_connect (tdc.dc1, "notify::ready-state",
         G_CALLBACK (on_data_channel_open), t);
@@ -2821,7 +2822,7 @@ GST_START_TEST (test_data_channel_low_threshold)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
 
   fail_if (gst_element_set_state (t->webrtc1,
@@ -2862,7 +2863,7 @@ have_data_channel_transfer_large_data (struct test_webrtc *t,
       G_CALLBACK (on_channel_error_not_reached), NULL);
   fail_if (gst_webrtc_data_channel_send_data_full (GST_WEBRTC_DATA_CHANNEL
           (other), data, &error));
-  g_assert_nonnull (error);
+  fail_unless (error);
   g_clear_error (&error);
   g_bytes_unref (data);
 
@@ -2888,7 +2889,7 @@ GST_START_TEST (test_data_channel_max_message_size)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
   t->data_channel_data = channel;
 
   fail_if (gst_element_set_state (t->webrtc1,
@@ -2943,10 +2944,10 @@ GST_START_TEST (test_data_channel_pre_negotiated)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", s,
       &channel1);
-  g_assert_nonnull (channel1);
+  fail_unless (channel1);
   g_signal_emit_by_name (t->webrtc2, "create-data-channel", "label", s,
       &channel2);
-  g_assert_nonnull (channel2);
+  fail_unless (channel2);
 
   fail_if (gst_element_set_state (t->webrtc1,
           GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE);
@@ -3045,7 +3046,7 @@ GST_START_TEST (test_data_channel_ice_stats)
 
   g_signal_emit_by_name (t->webrtc1, "create-data-channel", "label", NULL,
       &channel);
-  g_assert_nonnull (channel);
+  fail_unless (channel);
 
   fail_if (gst_element_set_state (t->webrtc1, GST_STATE_PLAYING) ==
       GST_STATE_CHANGE_FAILURE);
@@ -3060,8 +3061,8 @@ GST_START_TEST (test_data_channel_ice_stats)
   remote_ice_cand_stats =
       get_typed_stats (t->webrtc1, GST_WEBRTC_STATS_REMOTE_CANDIDATE);
 
-  g_assert_nonnull (local_ice_cand_stats);
-  g_assert_nonnull (remote_ice_cand_stats);
+  fail_unless (local_ice_cand_stats);
+  fail_unless (remote_ice_cand_stats);
   gst_structure_free (local_ice_cand_stats);
   gst_structure_free (remote_ice_cand_stats);
 

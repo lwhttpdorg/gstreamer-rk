@@ -150,7 +150,7 @@ gst_ah_sensor_sensor_sizes_init (void)
     ,
   };
 
-  g_assert_null (sensor_sizes);
+  g_assert (sensor_sizes);
 
   sensor_sizes = g_hash_table_new (g_int_hash, g_int_equal);
   for (i = 0; i < G_N_ELEMENTS (types); i++)

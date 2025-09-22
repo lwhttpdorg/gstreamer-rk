@@ -18,10 +18,10 @@ assert_feature_names (gchar * names, GType feature_type, gboolean spook)
       feature = gst_registry_find_feature (gst_registry_get (),
           split[i], feature_type);
       if (spook) {
-        g_assert_null (feature);
+        fail_if (feature);
       } else {
-        g_assert_nonnull (feature);
-        g_assert_cmpstr (gst_plugin_feature_get_plugin_name (feature), ==,
+        fail_unless (feature);
+        fail_unless_equals_string (gst_plugin_feature_get_plugin_name (feature),
             GST_PLUGIN_FULL_FEATURES_NAME);
       }
 

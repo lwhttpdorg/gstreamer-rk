@@ -1600,7 +1600,7 @@ gst_base_ts_mux_aggregate_buffer (GstBaseTsMux * mux,
     tsmux_resend_pat (mux->tsmux);
     tsmux_resend_si (mux->tsmux);
     prog = best->prog;
-    g_assert_nonnull (prog);
+    g_assert (prog);
 
     /* output PMT for each program */
     for (cur = mux->tsmux->programs; cur; cur = cur->next) {

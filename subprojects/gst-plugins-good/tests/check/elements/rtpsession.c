@@ -486,8 +486,8 @@ GST_START_TEST (test_multiple_senders_roundrobin_rbs)
     for (j = 0; j < expected_rb_count; j++) {
       gst_rtcp_packet_get_rb (&rtcp_packet, j, &ssrc, NULL, NULL,
           NULL, NULL, NULL, NULL);
-      g_assert_cmpint (ssrc, >=, 10000);
-      g_assert_cmpint (ssrc, <=, 10035);
+      fail_unless (ssrc >= 10000);
+      fail_unless (ssrc <= 10035);
       g_hash_table_add (tmp_set, GUINT_TO_POINTER (ssrc));
     }
 
@@ -549,8 +549,8 @@ GST_START_TEST (test_no_rbs_for_internal_senders)
 
     gst_rtcp_packet_sr_get_sender_info (&rtcp_packet, &ssrc, NULL, NULL,
         NULL, NULL);
-    g_assert_cmpint (ssrc, >=, 10000);
-    g_assert_cmpint (ssrc, <=, 10001);
+    g_assert (ssrc >= 10000);
+    g_assert (ssrc <= 10001);
     g_hash_table_add (sr_ssrcs, GUINT_TO_POINTER (ssrc));
 
     /* There should be no RBs as there are no remote senders */
@@ -591,8 +591,8 @@ GST_START_TEST (test_no_rbs_for_internal_senders)
 
     gst_rtcp_packet_sr_get_sender_info (&rtcp_packet, &ssrc, NULL, NULL,
         NULL, NULL);
-    g_assert_cmpint (ssrc, >=, 10000);
-    g_assert_cmpint (ssrc, <=, 10001);
+    g_assert (ssrc >= 10000);
+    g_assert (ssrc <= 10001);
     g_hash_table_add (sr_ssrcs, GUINT_TO_POINTER (ssrc));
 
     /* There should be 2 RBs: one for each remote sender */
@@ -604,8 +604,8 @@ GST_START_TEST (test_no_rbs_for_internal_senders)
     for (j = 0; j < 2; j++) {
       gst_rtcp_packet_get_rb (&rtcp_packet, j, &ssrc, NULL, NULL,
           NULL, NULL, NULL, NULL);
-      g_assert_cmpint (ssrc, >=, 20000);
-      g_assert_cmpint (ssrc, <=, 20001);
+      g_assert (ssrc >= 20000);
+      g_assert (ssrc <= 20001);
       g_hash_table_add (tmp_set, GUINT_TO_POINTER (ssrc));
     }
 
@@ -715,11 +715,11 @@ GST_START_TEST (test_internal_sources_timeout)
       gst_rtcp_packet_sr_get_sender_info (&rtcp_packet, &ssrc, NULL, NULL, NULL,
           NULL);
       if (ssrc == 0x01BADBAD) {
-        g_assert_cmpint (ssrc, ==, internal_ssrc);
+        fail_unless_equals_int_hex (ssrc, internal_ssrc);
         j |= 0x1;
       } else {
-        g_assert_cmpint (ssrc, !=, internal_ssrc);
-        g_assert_cmpint (ssrc, ==, 0x01020304);
+        fail_unless (ssrc, internal_ssrc);
+        fail_unless_equals_int_hex (ssrc, 0x01020304);
         j |= 0x4;
       }
     } else if (rtcp_type == GST_RTCP_TYPE_RR) {
@@ -759,12 +759,12 @@ GST_START_TEST (test_internal_sources_timeout)
         fail_unless_equals_int (2, gst_rtcp_buffer_get_packet_count (&rtcp));
       } else if (ssrc == 0x01020304) {
         j |= 0x4;
-        g_assert_cmpint (ssrc, !=, internal_ssrc);
+        fail_unless (ssrc, internal_ssrc);
         /* 2 => RR, SDES. There is no BYE here */
-        g_assert_cmpint (gst_rtcp_buffer_get_packet_count (&rtcp), ==, 2);
+        fail_unless_equals_int (gst_rtcp_buffer_get_packet_count (&rtcp), 2);
       } else if (ssrc == 0xDEADBEEF) {
         j |= 0x2;
-        g_assert_cmpint (ssrc, !=, internal_ssrc);
+        fail_unless (ssrc != internal_ssrc);
         /* 3 => RR, SDES, BYE */
         if (gst_rtcp_buffer_get_packet_count (&rtcp) == 3) {
           fail_unless (gst_rtcp_packet_move_to_next (&rtcp_packet));

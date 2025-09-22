@@ -71,7 +71,7 @@ rtp_red_block_set_timestamp_offset (gpointer red_block,
   RedBlockHeader *hdr = (RedBlockHeader *) red_block;
 
   g_assert (rtp_red_block_is_redundant (red_block));
-  g_assert_cmpint (timestamp_offset, <=, RED_BLOCK_TIMESTAMP_OFFSET_MAX);
+  g_assert (timestamp_offset <= RED_BLOCK_TIMESTAMP_OFFSET_MAX);
 
   hdr->timestamp_offset_lo = timestamp_offset & 0x3f;
   hdr->timestamp_offset_hi = timestamp_offset >> 6;
@@ -83,7 +83,7 @@ rtp_red_block_set_payload_length (gpointer red_block, guint16 length)
   RedBlockHeader *hdr = (RedBlockHeader *) red_block;
 
   g_assert (rtp_red_block_is_redundant (red_block));
-  g_assert_cmpint (length, <=, RED_BLOCK_LENGTH_MAX);
+  g_assert (length <= RED_BLOCK_LENGTH_MAX);
 
   hdr->length_lo = length & 0xff;
   hdr->length_hi = length >> 8;
