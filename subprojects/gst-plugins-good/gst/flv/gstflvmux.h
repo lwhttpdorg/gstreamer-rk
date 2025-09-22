@@ -115,6 +115,7 @@ struct _GstFlvMux {
   guint64 last_dts;
 
   gboolean sent_header;
+  gboolean multitrack_support;
 };
 
 struct _GstFlvMuxClass {

@@ -69,6 +69,14 @@ typedef enum
   CUSTOM_CH_ORDER = 2,
 } GstFlvAudioChannelOrder;
 
+enum
+{
+  CAPS_EX_MASK_RECONNECT = 0x01,                            /* Support for reconnection */
+  CAPS_EX_MASK_MULTITRACK = 0x02,                           /* Support for multitrack */
+  CAPS_EX_MASK_MODEX = 0x04,                                /* Can parse ModEx signal */
+  CAPS_EX_MASK_TIMESTAMPNANOOFFSET = 0x08,                  /* Support for nano offset */
+};
+
 #define MESSAGE_HEADER_LEN 11
 #define EXHEADER_PLUS_PACKETYPE_LEN 1
 #define MUTLITRACKTYPE_PLUS_PACKETYPE_LEN 1

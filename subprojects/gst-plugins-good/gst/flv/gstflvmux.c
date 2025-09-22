@@ -355,6 +355,7 @@ gst_flv_mux_init (GstFlvMux * mux)
   mux->enforce_increasing_timestamps = DEFAULT_ENFORCE_INCREASING_TIMESTAMPS;
 
   mux->new_metadata = FALSE;
+  mux->multitrack_support = FALSE;
 
   gst_flv_mux_reset (GST_ELEMENT (mux));
 }
@@ -1685,6 +1686,7 @@ gst_flv_mux_prepare_src_caps (GstFlvMux * mux, GstBuffer ** header_buf,
   GstCaps *caps;
   GstStructure *structure;
   GValue streamheader = { 0 };
+  guint8 caps_ex = 0;
   GList *l;
   GstBufferList *codec_tag_list = NULL;
   GstBufferList *changed_codec_tag_list = NULL;
@@ -1757,6 +1759,43 @@ gst_flv_mux_prepare_src_caps (GstFlvMux * mux, GstBuffer ** header_buf,
   structure = gst_caps_get_structure (caps, 0);
   gst_structure_set_value (structure, "streamheader", &streamheader);
   g_value_unset (&streamheader);
+
+  if (mux->multitrack_support) {
+    caps_ex |= CAPS_EX_MASK_MULTITRACK;
+  }
+
+  gst_structure_set (structure, "caps-ex", G_TYPE_UINT, caps_ex, NULL);
+
+  GValue codec_list = { 0 };
+  g_value_init (&codec_list, GST_TYPE_ARRAY);
+
+  // iterate through audio_pads
+  for (GList * p = mux->audio_pads; p; p = p->next) {
+    // get the caps of the pad
+    GstFlvMuxPad *pad = p->data;
+    gchar *fourcc;
+    GValue codec = { 0 };
+
+    g_value_init (&codec, G_TYPE_STRING);
+
+    switch (pad->codec_fourcc) {
+      case GST_MAKE_FOURCC ('m', 'p', '4', 'a'):
+        fourcc = g_strdup ("mp4a");
+        break;
+      case GST_MAKE_FOURCC ('.', 'm', 'p', '3'):
+        fourcc = g_strdup (".mp3");
+        break;
+    }
+
+    g_value_set_string (&codec, fourcc);
+
+    // append to the array
+    gst_value_array_append_value (&codec_list, &codec);
+
+    g_value_unset (&codec);
+  }
+  gst_structure_set_value (structure, "audio-codec-list", &codec_list);
+  g_value_unset (&codec_list);
 
   if (header_buf) {
     *header_buf = header;
