@@ -695,6 +695,9 @@ gst_buffer_copy_into (GstBuffer * dest, GstBuffer * src,
       /* Don't copy memory metas if we only copied part of the buffer, didn't
        * copy memories or merged memories. In all these cases the memory
        * structure has changed and the memory meta becomes meaningless.
+       *
+       * Similarly, don't copy timestamp metas if
+       * we didn't copy the full buffer.
        */
       if ((region || !(flags & GST_BUFFER_COPY_MEMORY)
               || (flags & GST_BUFFER_COPY_MERGE))
@@ -707,6 +710,12 @@ gst_buffer_copy_into (GstBuffer * dest, GstBuffer * src,
         GST_CAT_DEBUG (GST_CAT_BUFFER,
             "don't copy memory reference meta %p of API type %s", meta,
             g_type_name (info->api));
+      } else if ((region || !(flags & GST_BUFFER_COPY_TIMESTAMPS))
+          && gst_meta_api_type_has_tag (info->api, _gst_meta_tag_timestamps)) {
+        GST_CAT_DEBUG (GST_CAT_BUFFER,
+            "don't copy timestamp meta %p of API type %s", meta,
+            g_type_name (info->api));
+
       } else if (info->transform_func) {
         GstMetaTransformCopy copy_data;
 
@@ -3007,6 +3016,287 @@ gst_reference_timestamp_meta_get_info (void)
     info->transform_func = _gst_reference_timestamp_meta_transform;
     info->serialize_func = timestamp_meta_serialize;
     info->deserialize_func = timestamp_meta_deserialize;
+    meta = gst_meta_info_register (info);
+    g_once_init_leave ((GstMetaInfo **) & meta_info, (GstMetaInfo *) meta);
+  }
+
+  return meta_info;
+}
+
+GST_DEBUG_CATEGORY_STATIC (gst_original_timestamp_meta_debug);
+
+/**
+ * gst_buffer_add_original_timestamp_meta:
+ * @buffer: (transfer none): a #GstBuffer
+ * @reference: (transfer none): identifier for the timestamp reference.
+ * @dts: original DTS, or -1
+ * @pts: original PTS, or -1
+ * @duration: original duration, or -1
+ * @timescale_num: numerator part of timescale
+ * @timescale_denom: denominator part of timescale
+ *
+ * Adds a #GstOriginalTimestampMeta to @buffer, which holds precise timestamps
+ * in an arbitrary timescale @timescale_num / @timescale_denom. See the
+ * documentation of #GstOriginalTimestampMeta for details.
+ *
+ * Returns: (transfer none) (nullable): The #GstOriginalTimestampMeta that was added to the buffer
+ *
+ * Since: 1.28
+ */
+GstOriginalTimestampMeta *
+gst_buffer_add_original_timestamp_meta (GstBuffer * buffer,
+    GstCaps * reference, gint64 dts, gint64 pts, gint64 duration,
+    guint64 timescale_num, guint64 timescale_denom)
+{
+  GstOriginalTimestampMeta *meta;
+
+  g_return_val_if_fail (GST_IS_CAPS (reference), NULL);
+  g_return_val_if_fail (timescale_num != 0, NULL);
+  g_return_val_if_fail (timescale_denom != 0, NULL);
+
+  meta =
+      (GstOriginalTimestampMeta *) gst_buffer_add_meta (buffer,
+      GST_ORIGINAL_TIMESTAMP_META_INFO, NULL);
+
+  if (!meta)
+    return NULL;
+
+  meta->reference = gst_caps_ref (reference);
+  meta->dts = dts;
+  meta->pts = pts;
+  meta->duration = duration;
+  meta->timescale_num = timescale_num;
+  meta->timescale_denom = timescale_denom;
+  meta->info = NULL;
+
+  return meta;
+}
+
+/**
+ * gst_buffer_get_original_timestamp_meta:
+ * @buffer: a #GstBuffer
+ * @reference: (nullable): a reference #GstCaps
+ *
+ * Finds the first #GstOriginalTimestampMeta on @buffer that conforms to
+ * @reference. Conformance is tested by checking if the meta's reference is a
+ * subset of @reference.
+ *
+ * Buffers can contain multiple #GstOriginalTimestampMeta metadata items.
+ *
+ * Returns: (transfer none) (nullable): the #GstOriginalTimestampMeta or %NULL when there
+ * is no such metadata on @buffer.
+ *
+ * Since: 1.28
+ */
+GstOriginalTimestampMeta *
+gst_buffer_get_original_timestamp_meta (GstBuffer * buffer, GstCaps * reference)
+{
+  gpointer state = NULL;
+  GstMeta *meta;
+  const GstMetaInfo *info = GST_ORIGINAL_TIMESTAMP_META_INFO;
+
+  while ((meta = gst_buffer_iterate_meta (buffer, &state))) {
+    if (meta->info->api == info->api) {
+      GstOriginalTimestampMeta *ometa = (GstOriginalTimestampMeta *) meta;
+
+      if (!reference)
+        return ometa;
+      if (gst_caps_is_subset (ometa->reference, reference))
+        return ometa;
+    }
+  }
+  return NULL;
+}
+
+static gboolean
+_gst_original_timestamp_meta_transform (GstBuffer * dest, GstMeta * meta,
+    GstBuffer * buffer, GQuark type, gpointer data)
+{
+  GstOriginalTimestampMeta *smeta, *dmeta;
+
+  smeta = (GstOriginalTimestampMeta *) meta;
+
+  if (GST_META_TRANSFORM_IS_COPY (type)) {
+    GstMetaTransformCopy *copy = data;
+
+    if (copy->region) {
+      GST_CAT_TRACE (gst_original_timestamp_meta_debug,
+          "Not copying original timestamp metadata from buffer %p to %p because not the whole buffer was copied",
+          buffer, dest);
+      return TRUE;
+    }
+
+    dmeta =
+        gst_buffer_add_original_timestamp_meta (dest, smeta->reference,
+        smeta->dts, smeta->pts, smeta->duration, smeta->timescale_num,
+        smeta->timescale_denom);
+    if (!dmeta)
+      return FALSE;
+    if (smeta->info)
+      dmeta->info = gst_structure_copy (smeta->info);
+
+    GST_CAT_DEBUG (gst_original_timestamp_meta_debug,
+        "copy original timestamp metadata from buffer %p to %p", buffer, dest);
+  } else {
+    GST_CAT_TRACE (gst_original_timestamp_meta_debug,
+        "Not copying original timestamp metadata from buffer %p to %p because it is not a copy transform",
+        buffer, dest);
+  }
+
+  return TRUE;
+}
+
+static void
+_gst_original_timestamp_meta_free (GstOriginalTimestampMeta * meta,
+    GstBuffer * buffer)
+{
+  if (meta->reference)
+    gst_caps_unref (meta->reference);
+  if (meta->info)
+    gst_structure_free (meta->info);
+}
+
+static gboolean
+_gst_original_timestamp_meta_init (GstOriginalTimestampMeta * meta,
+    gpointer params, GstBuffer * buffer)
+{
+  static gsize _init;
+
+  if (g_once_init_enter (&_init)) {
+    GST_DEBUG_CATEGORY_INIT (gst_original_timestamp_meta_debug,
+        "originaltimestampmeta", 0, "originaltimestampmeta");
+    g_once_init_leave (&_init, 1);
+  }
+
+  meta->reference = NULL;
+  meta->dts = GST_ORIGINAL_TIMESTAMP_NONE;
+  meta->pts = GST_ORIGINAL_TIMESTAMP_NONE;
+  meta->duration = GST_ORIGINAL_TIMESTAMP_NONE;
+  meta->timescale_num = 0;
+  meta->timescale_denom = 0;
+  meta->info = NULL;
+
+  return TRUE;
+}
+
+/**
+ * gst_original_timestamp_meta_api_get_type: (attributes doc.skip=true)
+ */
+GType
+gst_original_timestamp_meta_api_get_type (void)
+{
+  static GType type = 0;
+  static const gchar *tags[] = { NULL };
+
+  if (g_once_init_enter (&type)) {
+    GType _type =
+        gst_meta_api_type_register ("GstOriginalTimestampMetaAPI", tags);
+    g_once_init_leave (&type, _type);
+  }
+
+  return type;
+}
+
+static gboolean
+original_timestamp_meta_serialize (const GstMeta * meta,
+    GstByteArrayInterface * data, guint8 * version)
+{
+  const GstOriginalTimestampMeta *tsmeta =
+      (const GstOriginalTimestampMeta *) meta;
+  gchar *info_str = tsmeta->info ? gst_structure_serialize_full (tsmeta->info,
+      GST_SERIALIZE_FLAG_STRICT) : NULL;
+  gsize info_str_len = info_str ? strlen (info_str) : 0;
+
+  if (tsmeta->info && !info_str) {
+    GST_WARNING ("Failed serializing GstOriginalTimestampMeta");
+    return FALSE;
+  }
+
+  gchar *caps_str = gst_caps_to_string (tsmeta->reference);
+  gsize caps_str_len = strlen (caps_str);
+
+  gsize size = 5 * 8 + caps_str_len + 1 + (info_str ? info_str_len + 1 : 0);
+  guint8 *ptr = gst_byte_array_interface_append (data, size);
+  if (ptr == NULL) {
+    g_free (caps_str);
+    g_free (info_str);
+    return FALSE;
+  }
+
+  GST_WRITE_UINT64_LE (ptr, (guint64) tsmeta->dts);
+  GST_WRITE_UINT64_LE (ptr + 8, (guint64) tsmeta->pts);
+  GST_WRITE_UINT64_LE (ptr + 16, (guint64) tsmeta->duration);
+  GST_WRITE_UINT64_LE (ptr + 24, tsmeta->timescale_num);
+  GST_WRITE_UINT64_LE (ptr + 32, tsmeta->timescale_denom);
+  memcpy (ptr + 40, caps_str, caps_str_len + 1);
+  g_free (caps_str);
+  if (info_str)
+    memcpy (ptr + 40 + caps_str_len + 1, info_str, info_str_len + 1);
+  g_free (info_str);
+
+  return TRUE;
+}
+
+static GstMeta *
+original_timestamp_meta_deserialize (const GstMetaInfo * info,
+    GstBuffer * buffer, const guint8 * data, gsize size, guint8 version)
+{
+  /* Sanity check: caps_str must be 0-terminated. */
+  if (version != 0 || size < 2 * sizeof (guint64) + 1 || data[size - 1] != '\0')
+    return NULL;
+
+  guint64 dts = (gint64) GST_READ_UINT64_LE (data);
+  guint64 pts = (gint64) GST_READ_UINT64_LE (data + 8);
+  guint64 duration = (gint64) GST_READ_UINT64_LE (data + 16);
+  guint64 timescale_num = GST_READ_UINT64_LE (data + 24);
+  guint64 timescale_denom = GST_READ_UINT64_LE (data + 32);
+
+  const gchar *caps_str = (const gchar *) data + 40;
+  gsize caps_str_len = strlen (caps_str);
+  GstCaps *reference = gst_caps_from_string (caps_str);
+
+  /* Have additional data afterward the reference, which is for the optional
+   * info structure */
+  GstStructure *tsinfo = NULL;
+  if (size > 40 + caps_str_len + 1) {
+    const gchar *info_str = (const gchar *) data + 40 + caps_str_len + 1;
+    tsinfo = gst_structure_from_string (info_str, NULL);
+  }
+
+  GstOriginalTimestampMeta *meta =
+      gst_buffer_add_original_timestamp_meta (buffer, reference, dts, pts,
+      duration, timescale_num, timescale_denom);
+  gst_caps_unref (reference);
+  meta->info = tsinfo;
+
+  return (GstMeta *) meta;
+}
+
+/**
+ * gst_original_timestamp_meta_get_info:
+ *
+ * Gets the global #GstMetaInfo describing the #GstOriginalTimestampMeta meta.
+ *
+ * Returns: (transfer none): The #GstMetaInfo
+ *
+ * Since: 1.28
+ */
+const GstMetaInfo *
+gst_original_timestamp_meta_get_info (void)
+{
+  static const GstMetaInfo *meta_info = NULL;
+
+  if (g_once_init_enter ((GstMetaInfo **) & meta_info)) {
+    const GstMetaInfo *meta = NULL;
+    GstMetaInfo *info =
+        gst_meta_info_new (gst_original_timestamp_meta_api_get_type (),
+        "GstOriginalTimestampMeta",
+        sizeof (GstOriginalTimestampMeta));
+    info->init_func = (GstMetaInitFunction) _gst_original_timestamp_meta_init;
+    info->free_func = (GstMetaFreeFunction) _gst_original_timestamp_meta_free;
+    info->transform_func = _gst_original_timestamp_meta_transform;
+    info->serialize_func = original_timestamp_meta_serialize;
+    info->deserialize_func = original_timestamp_meta_deserialize;
     meta = gst_meta_info_register (info);
     g_once_init_leave ((GstMetaInfo **) & meta_info, (GstMetaInfo *) meta);
   }

@@ -58,6 +58,7 @@ static GRWLock lock;
 GQuark _gst_meta_transform_copy;
 GQuark _gst_meta_tag_memory;
 GQuark _gst_meta_tag_memory_reference;
+GQuark _gst_meta_tag_timestamps;
 static GQuark _gst_meta_tags_quark;
 static GQuark _gst_allocation_meta_params_aggregator_quark;
 
@@ -93,6 +94,7 @@ _priv_gst_meta_initialize (void)
   _gst_meta_tag_memory = g_quark_from_static_string ("memory");
   _gst_meta_tag_memory_reference =
       g_quark_from_static_string ("memory-reference");
+  _gst_meta_tag_timestamps = g_quark_from_static_string ("timestamps");
   _gst_meta_tags_quark = g_quark_from_static_string ("tags");
   _gst_allocation_meta_params_aggregator_quark =
       g_quark_from_static_string ("GstAllocationMetaParamsAggregator");

@@ -107,6 +107,15 @@ typedef enum {
 #define GST_META_TAG_MEMORY_REFERENCE_STR "memory-reference"
 
 /**
+ * GST_META_TAG_TIMESTAMPS_STR:
+ *
+ * This metadata stays relevant until buffer timestamps change.
+ *
+ * Since: 1.28
+ */
+#define GST_META_TAG_TIMESTAMPS_STR "timestamps"
+
+/**
  * GstMeta:
  * @flags: extra flags for the metadata
  * @info: pointer to the #GstMetaInfo
@@ -450,6 +459,7 @@ GstMeta *            gst_meta_deserialize       (GstBuffer *buffer,
 
 GST_API GQuark _gst_meta_tag_memory;
 GST_API GQuark _gst_meta_tag_memory_reference;
+GST_API GQuark _gst_meta_tag_timestamps;
 
 /**
  * GST_META_TAG_MEMORY:
