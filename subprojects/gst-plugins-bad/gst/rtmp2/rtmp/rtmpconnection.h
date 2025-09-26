@@ -66,6 +66,10 @@ void gst_rtmp_connection_set_output_handler (GstRtmpConnection * connection,
     GstRtmpConnectionFunc callback, gpointer user_data,
     GDestroyNotify user_data_destroy);
 
+void
+gst_rtmp_connection_set_error_on_restart (GstRtmpConnection * connection,
+    gboolean error_on_restart);
+
 void gst_rtmp_connection_queue_bytes (GstRtmpConnection *self,
     GBytes * bytes);
 void gst_rtmp_connection_queue_message (GstRtmpConnection * connection,

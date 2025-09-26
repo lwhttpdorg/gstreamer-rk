@@ -34,7 +34,7 @@ void gst_rtmp_chunk_stream_clear (GstRtmpChunkStream * cstream);
 
 guint32 gst_rtmp_chunk_stream_parse_id (const guint8 * data, gsize size);
 guint32 gst_rtmp_chunk_stream_parse_header (GstRtmpChunkStream * cstream,
-    const guint8 * data, gsize size);
+    const guint8 * data, gsize size, gboolean * ts_regression);
 guint32 gst_rtmp_chunk_stream_parse_payload (GstRtmpChunkStream * cstream,
     guint32 chunk_size, guint8 ** data);
 guint32 gst_rtmp_chunk_stream_wrote_payload (GstRtmpChunkStream * cstream,

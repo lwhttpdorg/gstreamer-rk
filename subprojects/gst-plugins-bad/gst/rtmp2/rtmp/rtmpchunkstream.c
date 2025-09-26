@@ -404,7 +404,7 @@ gst_rtmp_chunk_stream_parse_id (const guint8 * data, gsize size)
 
 guint32
 gst_rtmp_chunk_stream_parse_header (GstRtmpChunkStream * cstream,
-    const guint8 * data, gsize size)
+    const guint8 * data, gsize size, gboolean * ts_regression)
 {
   GstBuffer *buffer;
   GstRtmpMeta *meta;
@@ -528,11 +528,13 @@ gst_rtmp_chunk_stream_parse_header (GstRtmpChunkStream * cstream,
       /* In-bounds regression */
       GST_WARNING ("Timestamp regression: %" GST_STIME_FORMAT,
           GST_STIME_ARGS (delta_64));
+      *ts_regression = TRUE;
     } else {
       /* Out-of-bounds regression */
       GST_WARNING ("Timestamp regression: %" GST_STIME_FORMAT ", offsetting",
           GST_STIME_ARGS (delta_64));
       delta_64 = delta_32 * GST_MSECOND;
+      *ts_regression = TRUE;
     }
 
     GST_BUFFER_DTS (buffer) += delta_64;
