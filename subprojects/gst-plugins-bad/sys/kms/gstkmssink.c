@@ -727,7 +727,7 @@ ensure_kms_allocator (GstKMSSink * self)
 }
 
 static gboolean
-configure_mode_setting (GstKMSSink * self, GstVideoInfo * vinfo)
+configure_mode_setting (GstKMSSink * self, GstVideoInfoDmaDrm * drm_info)
 {
   gboolean ret;
   drmModeConnector *conn;
@@ -748,7 +748,8 @@ configure_mode_setting (GstKMSSink * self, GstVideoInfo * vinfo)
   GST_INFO_OBJECT (self, "configuring mode setting");
 
   ensure_kms_allocator (self);
-  kmsmem = (GstKMSMemory *) gst_kms_allocator_bo_alloc (self->allocator, vinfo);
+  kmsmem =
+      (GstKMSMemory *) gst_kms_allocator_bo_alloc (self->allocator, drm_info);
   if (!kmsmem)
     goto bo_failed;
   fb_id = kmsmem->fb_id;
@@ -758,8 +759,8 @@ configure_mode_setting (GstKMSSink * self, GstVideoInfo * vinfo)
     goto connector_failed;
 
   for (i = 0; i < conn->count_modes; i++) {
-    if (conn->modes[i].vdisplay == GST_VIDEO_INFO_HEIGHT (vinfo) &&
-        conn->modes[i].hdisplay == GST_VIDEO_INFO_WIDTH (vinfo)) {
+    if (conn->modes[i].vdisplay == GST_VIDEO_INFO_HEIGHT (&drm_info->vinfo) &&
+        conn->modes[i].hdisplay == GST_VIDEO_INFO_WIDTH (&drm_info->vinfo)) {
       mode = &conn->modes[i];
       break;
     }
@@ -1640,7 +1641,9 @@ gst_kms_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
     self->vinfo_drm = vinfo_drm;
 
     /* Convert the dma to traditional video info */
-    video_format = gst_video_format_from_drm (vinfo_drm.drm_fourcc);
+    video_format =
+        gst_video_dma_drm_format_to_gst_format (vinfo_drm.drm_fourcc,
+        vinfo_drm.drm_modifier);
     if (video_format == GST_VIDEO_FORMAT_UNKNOWN)
       goto invalid_format;
 
@@ -1685,7 +1688,7 @@ gst_kms_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
     self->pool = NULL;
   }
 
-  if (self->modesetting_enabled && !configure_mode_setting (self, &vinfo))
+  if (self->modesetting_enabled && !configure_mode_setting (self, &vinfo_drm))
     goto modesetting_failed;
 
   GST_OBJECT_LOCK (self);
@@ -1965,7 +1968,7 @@ gst_kms_sink_import_dmabuf (GstKMSSink * self, GstBuffer * inbuf,
       prime_fds[1], prime_fds[2], prime_fds[3]);
 
   kmsmem = gst_kms_allocator_dmabuf_import (self->allocator, prime_fds,
-      n_planes, mems_skip, &self->vinfo, self->vinfo_drm.drm_modifier);
+      n_planes, mems_skip, &self->vinfo_drm);
   if (!kmsmem)
     return FALSE;
 

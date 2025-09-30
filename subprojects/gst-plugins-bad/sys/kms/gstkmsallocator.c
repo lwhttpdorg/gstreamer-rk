@@ -349,11 +349,11 @@ gst_kms_allocator_new (int fd)
  * which are relative to the GstBuffer start. */
 static gboolean
 gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
-    gsize in_offsets[GST_VIDEO_MAX_PLANES], GstVideoInfo * vinfo,
-    guint64 modifier, guint32 bo_handles[4])
+    gsize in_offsets[GST_VIDEO_MAX_PLANES], GstVideoInfoDmaDrm * drm_info,
+    guint32 bo_handles[4])
 {
   gint i, ret;
-  gint num_planes = GST_VIDEO_INFO_N_PLANES (vinfo);
+  gint num_planes = GST_VIDEO_INFO_N_PLANES (&drm_info->vinfo);
   guint32 w, h, fmt;
   guint32 pitches[4] = { 0, };
   guint32 offsets[4] = { 0, };
@@ -361,23 +361,23 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   if (kmsmem->fb_id)
     return TRUE;
 
-  w = GST_VIDEO_INFO_WIDTH (vinfo);
-  h = GST_VIDEO_INFO_HEIGHT (vinfo);
-  fmt = gst_drm_format_from_video (GST_VIDEO_INFO_FORMAT (vinfo));
+  w = GST_VIDEO_INFO_WIDTH (&drm_info->vinfo);
+  h = GST_VIDEO_INFO_HEIGHT (&drm_info->vinfo);
+  fmt = gst_drm_format_from_video (GST_VIDEO_INFO_FORMAT (&drm_info->vinfo));
 
   for (i = 0; i < num_planes; i++) {
-    pitches[i] = GST_VIDEO_INFO_PLANE_STRIDE (vinfo, i);
+    pitches[i] = GST_VIDEO_INFO_PLANE_STRIDE (&drm_info->vinfo, i);
     offsets[i] = in_offsets[i];
   }
 
   GST_DEBUG_OBJECT (alloc, "bo handles: %d, %d, %d, %d", bo_handles[0],
       bo_handles[1], bo_handles[2], bo_handles[3]);
 
-  if (modifier != DRM_FORMAT_MOD_LINEAR) {
+  if (drm_info->drm_modifier != DRM_FORMAT_MOD_LINEAR) {
     guint64 modifiers[4];
 
     for (i = 0; i < num_planes; i++)
-      modifiers[i] = modifier;
+      modifiers[i] = drm_info->drm_modifier;
     for (; i < 4; i++)
       modifiers[i] = DRM_FORMAT_MOD_LINEAR;
 
@@ -398,7 +398,8 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
 }
 
 GstMemory *
-gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
+gst_kms_allocator_bo_alloc (GstAllocator * allocator,
+    GstVideoInfoDmaDrm * drm_info)
 {
   GstKMSAllocator *alloc;
   GstKMSMemory *kmsmem;
@@ -412,19 +413,19 @@ gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
 
   mem = GST_MEMORY_CAST (kmsmem);
 
-  if (!gst_kms_allocator_memory_create (alloc, kmsmem, vinfo)) {
+  if (!gst_kms_allocator_memory_create (alloc, kmsmem, &drm_info->vinfo)) {
     g_free (kmsmem);
     return NULL;
   }
 
   gst_memory_init (mem, GST_MEMORY_FLAG_NO_SHARE, allocator, NULL,
-      kmsmem->bo->maxsize, 0, 0, GST_VIDEO_INFO_SIZE (vinfo));
+      kmsmem->bo->maxsize, 0, 0, GST_VIDEO_INFO_SIZE (&drm_info->vinfo));
 
-  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++)
+  for (i = 0; i < GST_VIDEO_INFO_N_PLANES (&drm_info->vinfo); i++)
     bo_handle[i] = gst_drm_dumb_memory_get_handle (kmsmem->bo);
 
-  if (!gst_kms_allocator_add_fb (alloc, kmsmem, vinfo->offset, vinfo,
-          DRM_FORMAT_MOD_LINEAR, bo_handle))
+  if (!gst_kms_allocator_add_fb (alloc, kmsmem, drm_info->vinfo.offset,
+          drm_info, bo_handle))
     goto fail;
 
   return mem;
@@ -438,7 +439,7 @@ fail:
 GstKMSMemory *
 gst_kms_allocator_dmabuf_import (GstAllocator * allocator, gint * prime_fds,
     gint n_planes, gsize offsets[GST_VIDEO_MAX_PLANES],
-    GstVideoInfo * vinfo, guint64 modifier)
+    GstVideoInfoDmaDrm * drm_info)
 {
   GstKMSAllocator *alloc;
   GstKMSMemory *kmsmem;
@@ -452,7 +453,8 @@ gst_kms_allocator_dmabuf_import (GstAllocator * allocator, gint * prime_fds,
 
   mem = GST_MEMORY_CAST (kmsmem);
   gst_memory_init (mem, GST_MEMORY_FLAG_NO_SHARE, allocator, NULL,
-      GST_VIDEO_INFO_SIZE (vinfo), 0, 0, GST_VIDEO_INFO_SIZE (vinfo));
+      GST_VIDEO_INFO_SIZE (&drm_info->vinfo), 0, 0,
+      GST_VIDEO_INFO_SIZE (&drm_info->vinfo));
 
   alloc = GST_KMS_ALLOCATOR (allocator);
   for (i = 0; i < n_planes; i++) {
@@ -461,8 +463,7 @@ gst_kms_allocator_dmabuf_import (GstAllocator * allocator, gint * prime_fds,
       goto import_fd_failed;
   }
 
-  if (!gst_kms_allocator_add_fb (alloc, kmsmem, offsets, vinfo,
-          modifier, gem_handle))
+  if (!gst_kms_allocator_add_fb (alloc, kmsmem, offsets, drm_info, gem_handle))
     goto failed;
 
 done:

@@ -52,6 +52,7 @@ static const struct
 
   /* 16bits/c YUV 4:2:0 */
   DEF_FMT (NV15, NV12_10LE40),
+  DEF_FMT (NV15, NV12_10LE40_4L4),
   DEF_FMT (P010, P010_10LE),
 
   /* YUV 4:4:4 */
@@ -78,6 +79,7 @@ static const struct
   DEF_FMT (YVU420, YV12),
   DEF_FMT (NV21, NV21),
   DEF_FMT (NV12, NV12),
+  DEF_FMT (NV12, NV12_4L4),
 
   /* 16bits/p RGB */
   DEF_FMT (RGB565, RGB16),
