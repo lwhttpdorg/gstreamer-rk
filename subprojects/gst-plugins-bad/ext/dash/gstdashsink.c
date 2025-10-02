@@ -140,6 +140,10 @@ gst_dash_sink_muxer_get_type (void)
      * Since: 1.24
      */
     {GST_DASH_SINK_MUXER_DASHMP4, "Use dashmp4mux", "dashmp4"},
+    /** GstDashSinkMuxerType::webm
+     *
+     * Since: 1.26
+     */
     {GST_DASH_SINK_MUXER_WEBM, "Use webmmux", "webm"},
     {0, NULL, NULL},
   };
