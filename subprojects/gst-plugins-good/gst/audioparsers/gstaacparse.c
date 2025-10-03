@@ -103,8 +103,8 @@ static gboolean gst_aac_parse_src_event (GstBaseParse * parse,
     GstEvent * event);
 
 static gboolean gst_aac_parse_read_audio_specific_config (GstAacParse *
-    aacparse, GstBitReader * br, gint * object_type, gint * sample_rate,
-    gint * channels, gint * frame_samples);
+    aacparse, GstBitReader * br, gint * object_type, gint * inner_sample_rate,
+    gint * sample_rate, gint * channels, gint * frame_samples);
 
 
 #define gst_aac_parse_parent_class parent_class
@@ -325,7 +325,9 @@ gst_aac_parse_sink_setcaps (GstBaseParse * parse, GstCaps * caps)
         return FALSE;
       gst_bit_reader_init (&br, map.data, map.size);
       gst_aac_parse_read_audio_specific_config (aacparse, &br,
-          &aacparse->object_type, &aacparse->sample_rate, &aacparse->channels,
+          &aacparse->object_type,
+          &aacparse->inner_sample_rate,
+          &aacparse->sample_rate, &aacparse->channels,
           &aacparse->frame_samples);
 
       aacparse->header_type = DSPAAC_HEADER_NONE;
@@ -659,21 +661,24 @@ gst_aac_parse_ga_specific_config (GstAacParse * aacparse,
 /* See table 1.13 in ISO/IEC 14496-3 */
 static gboolean
 gst_aac_parse_read_audio_specific_config (GstAacParse * aacparse,
-    GstBitReader * br, gint * object_type, gint * sample_rate, gint * channels,
-    gint * frame_samples)
+    GstBitReader * br, gint * object_type, gint * dst_inner_sample_rate,
+    gint * sample_rate, gint * channels, gint * frame_samples)
 {
   guint8 audio_object_type;
   guint8 G_GNUC_UNUSED extension_audio_object_type;
   guint8 channel_configuration, extension_channel_configuration;
   gboolean G_GNUC_UNUSED sbr = FALSE, ps = FALSE;
+  gint inner_sample_rate;
 
   if (!gst_aac_parse_get_audio_object_type (aacparse, br, &audio_object_type))
     return FALSE;
   if (object_type)
     *object_type = audio_object_type;
 
-  if (!gst_aac_parse_get_audio_sample_rate (aacparse, br, sample_rate))
+  if (!gst_aac_parse_get_audio_sample_rate (aacparse, br, &inner_sample_rate))
     return FALSE;
+  if (dst_inner_sample_rate)
+    *dst_inner_sample_rate = inner_sample_rate;
 
   if (!gst_bit_reader_get_bits_uint8 (br, &channel_configuration, 4))
     return FALSE;
@@ -711,8 +716,9 @@ gst_aac_parse_read_audio_specific_config (GstAacParse * aacparse,
       if (!*channels)
         return FALSE;
     }
-  } else {
+  } else {                      /* no SBR */
     extension_audio_object_type = 0;
+    *sample_rate = inner_sample_rate;
   }
 
   GST_INFO_OBJECT (aacparse, "Parsed AudioSpecificConfig: %d Hz, %d channels",
@@ -842,14 +848,14 @@ gst_aac_parse_read_loas_config (GstAacParse * aacparse, const guint8 * data,
         if (!use_same_config) {
           if (v == 0) {
             if (!gst_aac_parse_read_audio_specific_config (aacparse, &br, NULL,
-                    sample_rate, channels, NULL))
+                    NULL, sample_rate, channels, NULL))
               return FALSE;
           } else {
             guint32 asc_len;
             if (!gst_aac_parse_latm_get_value (aacparse, &br, &asc_len))
               return FALSE;
             if (!gst_aac_parse_read_audio_specific_config (aacparse, &br, NULL,
-                    sample_rate, channels, NULL))
+                    NULL, sample_rate, channels, NULL))
               return FALSE;
             if (!gst_bit_reader_skip (&br, asc_len))
               return FALSE;
@@ -1355,8 +1361,12 @@ gst_aac_parse_prepend_adts_headers (GstAacParse * aacparse,
     GST_ERROR_OBJECT (aacparse, "Unsupported number of channels");
     return FALSE;
   }
+  /* Any potential SBR in this audio stream would be implicitly signalled and
+   * implicit signalling requires encoding the inner sample rate of the AAC
+   * stream (i.e. before adjusting for SBR). */
   sampling_frequency_index =
-      gst_aac_parse_get_audio_sampling_frequency_index (aacparse->sample_rate);
+      gst_aac_parse_get_audio_sampling_frequency_index
+      (aacparse->inner_sample_rate);
   if (sampling_frequency_index == G_MAXUINT8) {
     GST_ERROR_OBJECT (aacparse, "Unsupported sampling frequency");
     return FALSE;
