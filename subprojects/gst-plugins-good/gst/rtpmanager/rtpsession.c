@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <gst/net/gstnetcontrolmessagemeta.h>
 #include <gst/rtp/gstrtpbuffer.h>
 #include <gst/rtp/gstrtcpbuffer.h>
 
@@ -2150,6 +2151,9 @@ update_packet (GstBuffer ** buffer, guint idx, RTPPacketInfo * pinfo)
 
     pinfo->payload_len += gst_rtp_buffer_get_payload_len (&rtp);
     if (idx == 0) {
+#if GLIB_CHECK_VERSION(2, 88, 0)
+      GstNetControlMessageMeta *meta;
+#endif
       gint i;
 
       /* only keep info for first buffer */
@@ -2166,6 +2170,21 @@ update_packet (GstBuffer ** buffer, guint idx, RTPPacketInfo * pinfo)
       /* RTP header extensions */
       pinfo->header_ext = gst_rtp_buffer_get_extension_bytes (&rtp,
           &pinfo->header_ext_bit_pattern);
+
+#if GLIB_CHECK_VERSION(2, 88, 0)
+      /* ECN bits from IP header */
+      meta = gst_buffer_get_net_control_message_meta (*buffer);
+      if (meta && meta->message) {
+        if (G_IS_IP_TOS_MESSAGE (meta->message)) {
+          pinfo->ecn_cp =
+              g_ip_tos_message_get_ecn (G_IP_TOS_MESSAGE (meta->message));
+        } else if (G_IS_IPV6_TCLASS_MESSAGE (meta->message)) {
+          pinfo->ecn_cp =
+              g_ipv6_tclass_message_get_ecn (G_IPV6_TCLASS_MESSAGE
+              (meta->message));
+        }
+      }
+#endif
     }
 
     if (pinfo->ntp64_ext_id != 0 && pinfo->send && !pinfo->have_ntp64_ext) {
