@@ -2148,7 +2148,7 @@ gst_rtp_session_chain_recv_rtp (GstPad * pad, GstObject * parent,
     running_time =
         gst_segment_to_running_time (&rtpsession->recv_rtp_seg, GST_FORMAT_TIME,
         timestamp);
-    ntpnstime = GST_CLOCK_TIME_NONE;
+    ntpnstime = get_packet_ntpnstime (rtpsession, running_time);
   } else {
     get_current_times (rtpsession, &running_time, &ntpnstime);
   }

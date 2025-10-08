@@ -84,6 +84,7 @@ enum
 #define DEFAULT_TWCC_FEEDBACK_INTERVAL GST_CLOCK_TIME_NONE
 #define DEFAULT_UPDATE_NTP64_HEADER_EXT TRUE
 #define DEFAULT_TIMEOUT_INACTIVE_SOURCES TRUE
+#define DEFAULT_CCFB_FEEDBACK_INTERVAL (100 * GST_MSECOND)
 
 enum
 {
@@ -113,6 +114,7 @@ enum
   PROP_TWCC_FEEDBACK_INTERVAL,
   PROP_UPDATE_NTP64_HEADER_EXT,
   PROP_TIMEOUT_INACTIVE_SOURCES,
+  PROP_CCFB_FEEDBACK_INTERVAL,
   PROP_LAST,
 };
 
@@ -678,6 +680,22 @@ rtp_session_class_init (RTPSessionClass * klass)
       DEFAULT_TIMEOUT_INACTIVE_SOURCES,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
+  /**
+   * RTPSession:ccfb-feedback-interval:
+   *
+   * The interval to send CCFB reports on.
+   * In addition, the reports are sent on marker-bits, or when the report size
+   * would exceed the MTU of a RTCP packet.
+   *
+   * Since: 1.30
+   */
+  properties[PROP_CCFB_FEEDBACK_INTERVAL] =
+      g_param_spec_uint64 ("ccfb-feedback-interval",
+      "CCFB Feedback Interval",
+      "The interval to send CCFB reports on",
+      0, G_MAXUINT64, DEFAULT_CCFB_FEEDBACK_INTERVAL,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT);
+
   g_object_class_install_properties (gobject_class, PROP_LAST, properties);
 
   klass->get_source_by_ssrc =
@@ -770,6 +788,8 @@ rtp_session_init (RTPSession * sess)
 
   sess->twcc = rtp_twcc_manager_new (sess->mtu);
   sess->twcc_stats = rtp_twcc_stats_new ();
+
+  sess->ccfb = rtp_ccfb_manager_new (sess->mtu);
 }
 
 static void
@@ -793,6 +813,8 @@ rtp_session_finalize (GObject * object)
 
   g_object_unref (sess->twcc);
   rtp_twcc_stats_free (sess->twcc_stats);
+
+  g_clear_object (&sess->ccfb);
 
   g_mutex_clear (&sess->lock);
 
@@ -915,6 +937,7 @@ rtp_session_set_property (GObject * object, guint prop_id,
     case PROP_RTCP_MTU:
       sess->mtu = g_value_get_uint (value);
       rtp_twcc_manager_set_mtu (sess->twcc, sess->mtu);
+      rtp_ccfb_manager_set_mtu (sess->ccfb, sess->mtu);
       break;
     case PROP_SDES:
       rtp_session_set_sdes_struct (sess, g_value_get_boxed (value));
@@ -971,6 +994,10 @@ rtp_session_set_property (GObject * object, guint prop_id,
       break;
     case PROP_TIMEOUT_INACTIVE_SOURCES:
       sess->timeout_inactive_sources = g_value_get_boolean (value);
+      break;
+    case PROP_CCFB_FEEDBACK_INTERVAL:
+      rtp_ccfb_manager_set_feedback_interval (sess->ccfb,
+          g_value_get_uint64 (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1063,6 +1090,10 @@ rtp_session_get_property (GObject * object, guint prop_id,
       break;
     case PROP_TIMEOUT_INACTIVE_SOURCES:
       g_value_set_boolean (value, sess->timeout_inactive_sources);
+      break;
+    case PROP_CCFB_FEEDBACK_INTERVAL:
+      g_value_set_uint64 (value,
+          rtp_ccfb_manager_get_feedback_interval (sess->ccfb));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -2321,6 +2352,21 @@ process_twcc_packet (RTPSession * sess, RTPPacketInfo * pinfo)
   }
 }
 
+static void
+process_ccfb_packet (RTPSession * sess, RTPPacketInfo * pinfo)
+{
+  if (rtp_ccfb_manager_recv_packet (sess->ccfb, pinfo)) {
+    RTP_SESSION_UNLOCK (sess);
+
+    /* TODO: find a better rational for this number, and possibly tune it based
+       on factors like framerate / bandwidth etc */
+    if (!rtp_session_send_rtcp (sess, 100 * GST_MSECOND)) {
+      GST_INFO ("Could not schedule CCFB straight away");
+    }
+    RTP_SESSION_LOCK (sess);
+  }
+}
+
 static gboolean
 source_update_sender (RTPSession * sess, RTPSource * source,
     gboolean prevsender)
@@ -2401,6 +2447,7 @@ rtp_session_process_rtp (RTPSession * sess, GstBuffer * buffer,
   /* let source process the packet */
   result = rtp_source_process_rtp (source, &pinfo);
   process_twcc_packet (sess, &pinfo);
+  process_ccfb_packet (sess, &pinfo);
 
   /* source became active */
   if (source_update_active (sess, source, prevactive))
@@ -4518,7 +4565,19 @@ remove_closing_sources (const gchar * key, RTPSource * source,
 }
 
 static void
-generate_twcc (const gchar * key, RTPSource * source, ReportData * data)
+queue_rtcp_packet (ReportData * data, RTPSource * source, GstBuffer * buffer,
+    gboolean is_bye)
+{
+  ReportOutput *output = g_new (ReportOutput, 1);
+  output->source = g_object_ref (source);
+  output->is_bye = is_bye;
+  output->buffer = buffer;
+  /* queue the RTCP packet to push later */
+  g_queue_push_tail (&data->output, output);
+}
+
+static void
+generate_fb (const gchar * key, RTPSource * source, ReportData * data)
 {
   RTPSession *sess = data->sess;
   GstBuffer *buf;
@@ -4540,22 +4599,22 @@ generate_twcc (const gchar * key, RTPSource * source, ReportData * data)
   GST_DEBUG ("generating TWCC feedback for source %08x", source->ssrc);
 
   while ((buf = rtp_twcc_manager_get_feedback (sess->twcc, source->ssrc))) {
-    ReportOutput *output = g_new (ReportOutput, 1);
-    output->source = g_object_ref (source);
-    output->is_bye = FALSE;
-    output->buffer = buf;
-    /* queue the RTCP packet to push later */
-    g_queue_push_tail (&data->output, output);
+    queue_rtcp_packet (data, source, buf, FALSE);
+  }
+
+  while ((buf =
+          rtp_ccfb_manager_get_feedback (sess->ccfb, source->ssrc,
+              data->ntpnstime))) {
+    GST_DEBUG ("generating CCFB feedback for source %08x", source->ssrc);
+    queue_rtcp_packet (data, source, buf, FALSE);
   }
 }
-
 
 static void
 generate_rtcp (const gchar * key, RTPSource * source, ReportData * data)
 {
   RTPSession *sess = data->sess;
   gboolean is_bye = FALSE;
-  ReportOutput *output;
   gboolean sr_req_pending = sess->sr_req_pending;
 
   /* only generate RTCP for active internal sources */
@@ -4607,12 +4666,7 @@ generate_rtcp (const gchar * key, RTPSource * source, ReportData * data)
 
   gst_rtcp_buffer_unmap (&data->rtcpbuf);
 
-  output = g_new (ReportOutput, 1);
-  output->source = g_object_ref (source);
-  output->is_bye = is_bye;
-  output->buffer = data->rtcp;
-  /* queue the RTCP packet to push later */
-  g_queue_push_tail (&data->output, output);
+  queue_rtcp_packet (data, source, data->rtcp, is_bye);
 }
 
 static void
@@ -4786,7 +4840,7 @@ rtp_session_on_timeout (RTPSession * sess, GstClockTime current_time,
    * session lock. */
   g_hash_table_foreach (table_copy, (GHFunc) generate_rtcp, &data);
 
-  g_hash_table_foreach (table_copy, (GHFunc) generate_twcc, &data);
+  g_hash_table_foreach (table_copy, (GHFunc) generate_fb, &data);
 
   /* update the generation for all the sources that have been reported */
   g_hash_table_foreach (table_copy, (GHFunc) update_generation, &data);

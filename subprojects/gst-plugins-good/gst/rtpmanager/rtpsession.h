@@ -22,6 +22,7 @@
 
 #include <gst/gst.h>
 
+#include "rtpccfb.h"
 #include "rtpsource.h"
 #include "rtptwcc.h"
 
@@ -322,6 +323,9 @@ struct _RTPSession {
   /* Transport-wide cc-extension */
   RTPTWCCManager *twcc;
   RTPTWCCStats *twcc_stats;
+
+  /* Congestion Control Feedback (RFC8888) */
+  RTPCCFBManager *ccfb;
 };
 
 /**
