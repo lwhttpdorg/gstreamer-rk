@@ -399,7 +399,7 @@ struct _GstDiscovererClass {
    */
   GstDiscovererInfo *
   (*load_serialize_info)          (GstDiscoverer *dc,
-                                   gchar *uri);
+                                   const gchar *uri);
 
   gpointer _reserved[GST_PADDING - 1];
 };
