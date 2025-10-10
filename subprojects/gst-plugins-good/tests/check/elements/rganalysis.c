@@ -1637,6 +1637,7 @@ GST_START_TEST (test_reference_level)
   GstElement *element = setup_rganalysis ();
   GstTagList *tag_list;
   gdouble ref_level;
+  gchar *ref_level_unit;
   gint accumulator = 0;
   gint i;
 
@@ -1656,7 +1657,11 @@ GST_START_TEST (test_reference_level)
   fail_unless (gst_tag_list_get_double (tag_list, GST_TAG_REFERENCE_LEVEL,
           &ref_level) && MATCH_GAIN (ref_level, 89.),
       "Incorrect reference level tag");
+  fail_unless (gst_tag_list_get_string (tag_list, GST_TAG_REFERENCE_LEVEL_UNIT,
+          &ref_level_unit) && g_str_equal (ref_level_unit, "dB"),
+      "Incorrect reference level unit");
   gst_tag_list_unref (tag_list);
+  g_free (ref_level_unit);
 
   g_object_set (element, "reference-level", 83., "num-tracks", 2, NULL);
 

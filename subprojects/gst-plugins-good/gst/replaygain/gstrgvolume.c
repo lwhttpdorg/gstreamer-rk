@@ -479,7 +479,8 @@ gst_rg_volume_tag_event (GstRgVolume * self, GstEvent * event)
 {
   GstTagList *tag_list;
   gboolean has_track_gain, has_track_peak, has_album_gain, has_album_peak;
-  gboolean has_ref_level;
+  gboolean has_ref_level, has_ref_level_unit;
+  gchar *reference_level_unit;
 
   g_return_val_if_fail (event != NULL, NULL);
   g_return_val_if_fail (GST_EVENT_TYPE (event) == GST_EVENT_TAG, event);
@@ -499,9 +500,19 @@ gst_rg_volume_tag_event (GstRgVolume * self, GstEvent * event)
       &self->album_peak);
   has_ref_level = gst_tag_list_get_double (tag_list, GST_TAG_REFERENCE_LEVEL,
       &self->reference_level);
+  has_ref_level_unit = gst_tag_list_get_string (tag_list,
+      GST_TAG_REFERENCE_LEVEL_UNIT, &reference_level_unit);
 
   if (!has_track_gain && !has_track_peak && !has_album_gain && !has_album_peak)
     return event;
+
+  if (has_ref_level_unit) {
+    if (g_str_equal (reference_level_unit, "LUFS")) {
+      GST_DEBUG_OBJECT (self, "got reference level as LUFS, converting to dB");
+      self->reference_level += 107.0;
+    }
+    g_free (reference_level_unit);
+  }
 
   if (has_ref_level && (has_track_gain || has_album_gain)
       && (ABS (self->reference_level - RG_REFERENCE_LEVEL) > 1.e-6)) {
@@ -564,6 +575,7 @@ gst_rg_volume_tag_event (GstRgVolume * self, GstEvent * event)
   gst_tag_list_remove_tag (tag_list, GST_TAG_ALBUM_GAIN);
   gst_tag_list_remove_tag (tag_list, GST_TAG_ALBUM_PEAK);
   gst_tag_list_remove_tag (tag_list, GST_TAG_REFERENCE_LEVEL);
+  gst_tag_list_remove_tag (tag_list, GST_TAG_REFERENCE_LEVEL_UNIT);
 
   gst_rg_volume_update_gain (self);
 
