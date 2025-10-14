@@ -1201,6 +1201,89 @@ get_current_times (GstRtpSession * rtpsession, GstClockTime * running_time,
     *ntpnstime = ntpns;
 }
 
+/* Calculate the NTP time of a packet based on the session configuration
+ * and the running time. */
+static guint64
+get_packet_ntpnstime (GstRtpSession * rtpsession, GstClockTime running_time)
+{
+  GstClock *clock;
+  guint64 ntpnstime;
+
+  GST_OBJECT_LOCK (rtpsession);
+  if (running_time != -1 && (clock = GST_ELEMENT_CLOCK (rtpsession))) {
+    GstClockTime base_time;
+    base_time = GST_ELEMENT_CAST (rtpsession)->base_time;
+    gst_object_ref (clock);
+    GST_OBJECT_UNLOCK (rtpsession);
+
+    if (rtpsession->priv->use_pipeline_clock) {
+      ntpnstime = running_time;
+      /* add constant to convert from 1970 based time to 1900 based time */
+      ntpnstime += (GST_RTP_NTP_UNIX_OFFSET * GST_SECOND);
+    } else {
+      switch (rtpsession->priv->ntp_time_source) {
+        case GST_RTP_NTP_TIME_SOURCE_NTP:
+        case GST_RTP_NTP_TIME_SOURCE_UNIX:{
+          GstClockTime wallclock_now, pipeline_now;
+
+          /* pipeline clock time for this packet */
+          ntpnstime = running_time + base_time;
+
+          /* get current wallclock and pipeline clock time */
+          wallclock_now = g_get_real_time () * GST_USECOND;
+          pipeline_now = gst_clock_get_time (clock);
+
+          /* adjust pipeline clock time by the current diff.
+           * Note that this will include some jitter for each packet */
+          if (wallclock_now > pipeline_now) {
+            GstClockTime diff = wallclock_now - pipeline_now;
+
+            ntpnstime += diff;
+          } else {
+            GstClockTime diff = pipeline_now - wallclock_now;
+
+            if (diff > ntpnstime) {
+              /* This can't really happen unless the clock configuration is
+               * broken */
+              ntpnstime = GST_CLOCK_TIME_NONE;
+            } else {
+              ntpnstime -= diff;
+            }
+          }
+
+          /* add constant to convert from 1970 based time to 1900 based time */
+          if (ntpnstime != GST_CLOCK_TIME_NONE
+              && rtpsession->priv->ntp_time_source ==
+              GST_RTP_NTP_TIME_SOURCE_NTP)
+            ntpnstime += (GST_RTP_NTP_UNIX_OFFSET * GST_SECOND);
+          break;
+        }
+        case GST_RTP_NTP_TIME_SOURCE_RUNNING_TIME:
+          ntpnstime = running_time;
+          break;
+        case GST_RTP_NTP_TIME_SOURCE_CLOCK_TIME:
+          ntpnstime = running_time + base_time;
+          break;
+        default:
+          ntpnstime = -1;
+          g_assert_not_reached ();
+          break;
+      }
+    }
+
+    gst_object_unref (clock);
+  } else {
+    if (!GST_ELEMENT_CLOCK (rtpsession)) {
+      GST_WARNING_OBJECT (rtpsession,
+          "Don't have a clock yet and can't determine NTP time for this packet");
+    }
+    GST_OBJECT_UNLOCK (rtpsession);
+    ntpnstime = GST_CLOCK_TIME_NONE;
+  }
+
+  return ntpnstime;
+}
+
 /* must be called with GST_RTP_SESSION_LOCK */
 static void
 signal_waiting_rtcp_thread_unlocked (GstRtpSession * rtpsession)
@@ -2466,7 +2549,6 @@ gst_rtp_session_chain_send_rtp_common (GstRtpSession * rtpsession,
   GstClockTime timestamp, running_time;
   GstClockTime current_time;
   guint64 ntpnstime;
-  GstClock *clock;
 
   priv = rtpsession->priv;
 
@@ -2513,80 +2595,7 @@ gst_rtp_session_chain_send_rtp_common (GstRtpSession * rtpsession,
   }
 
   current_time = gst_clock_get_time (priv->sysclock);
-
-  /* Calculate the NTP time of this packet based on the session configuration
-   * and the running time from above */
-  GST_OBJECT_LOCK (rtpsession);
-  if (running_time != -1 && (clock = GST_ELEMENT_CLOCK (rtpsession))) {
-    GstClockTime base_time;
-    base_time = GST_ELEMENT_CAST (rtpsession)->base_time;
-    gst_object_ref (clock);
-    GST_OBJECT_UNLOCK (rtpsession);
-
-    if (rtpsession->priv->use_pipeline_clock) {
-      ntpnstime = running_time;
-      /* add constant to convert from 1970 based time to 1900 based time */
-      ntpnstime += (GST_RTP_NTP_UNIX_OFFSET * GST_SECOND);
-    } else {
-      switch (rtpsession->priv->ntp_time_source) {
-        case GST_RTP_NTP_TIME_SOURCE_NTP:
-        case GST_RTP_NTP_TIME_SOURCE_UNIX:{
-          GstClockTime wallclock_now, pipeline_now;
-
-          /* pipeline clock time for this packet */
-          ntpnstime = running_time + base_time;
-
-          /* get current wallclock and pipeline clock time */
-          wallclock_now = g_get_real_time () * GST_USECOND;
-          pipeline_now = gst_clock_get_time (clock);
-
-          /* adjust pipeline clock time by the current diff.
-           * Note that this will include some jitter for each packet */
-          if (wallclock_now > pipeline_now) {
-            GstClockTime diff = wallclock_now - pipeline_now;
-
-            ntpnstime += diff;
-          } else {
-            GstClockTime diff = pipeline_now - wallclock_now;
-
-            if (diff > ntpnstime) {
-              /* This can't really happen unless the clock configuration is
-               * broken */
-              ntpnstime = GST_CLOCK_TIME_NONE;
-            } else {
-              ntpnstime -= diff;
-            }
-          }
-
-          /* add constant to convert from 1970 based time to 1900 based time */
-          if (ntpnstime != GST_CLOCK_TIME_NONE
-              && rtpsession->priv->ntp_time_source ==
-              GST_RTP_NTP_TIME_SOURCE_NTP)
-            ntpnstime += (GST_RTP_NTP_UNIX_OFFSET * GST_SECOND);
-          break;
-        }
-        case GST_RTP_NTP_TIME_SOURCE_RUNNING_TIME:
-          ntpnstime = running_time;
-          break;
-        case GST_RTP_NTP_TIME_SOURCE_CLOCK_TIME:
-          ntpnstime = running_time + base_time;
-          break;
-        default:
-          ntpnstime = -1;
-          g_assert_not_reached ();
-          break;
-      }
-    }
-
-    gst_object_unref (clock);
-  } else {
-    if (!GST_ELEMENT_CLOCK (rtpsession)) {
-      GST_WARNING_OBJECT (rtpsession,
-          "Don't have a clock yet and can't determine NTP time for this packet");
-    }
-    GST_OBJECT_UNLOCK (rtpsession);
-    ntpnstime = GST_CLOCK_TIME_NONE;
-  }
+  ntpnstime = get_packet_ntpnstime (rtpsession, running_time);
 
   ret = rtp_session_send_rtp (priv->session, data, is_list, current_time,
       running_time, ntpnstime);
