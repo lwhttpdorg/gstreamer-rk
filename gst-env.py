@@ -336,6 +336,8 @@ def get_subprocess_env(options, gst_version):
     prepend_env_var(env, "GI_TYPELIB_PATH", os.path.join(PREFIX_DIR, 'lib',
                                                          'lib', 'girepository-1.0'),
                     options)
+    prepend_env_var(env, "GI_GIR_PATH", os.path.join(SCRIPTDIR, 'girs'),
+                    options)
     prepend_env_var(env, "PKG_CONFIG_PATH", os.path.join(PREFIX_DIR, 'lib', 'pkgconfig'),
                     options)
 
