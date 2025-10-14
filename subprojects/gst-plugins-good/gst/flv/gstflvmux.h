@@ -107,6 +107,9 @@ struct _GstFlvMux {
   guint64 last_dts;
 
   gboolean sent_header;
+
+  gboolean cc_insert; // ATOMIC
+  GstBuffer *pending_captions_tag;
 };
 
 struct _GstFlvMuxClass {

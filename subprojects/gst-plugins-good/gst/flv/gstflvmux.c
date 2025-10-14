@@ -41,7 +41,9 @@
 #include <math.h>
 #include <string.h>
 
+#include <gst/base/base.h>
 #include <gst/audio/audio.h>
+#include <gst/video/video.h>
 
 #include "gstflvelements.h"
 #include "gstflvmux.h"
@@ -55,6 +57,7 @@ GST_DEBUG_CATEGORY_STATIC (flvmux_debug);
 enum
 {
   PROP_0,
+  PROP_CC_INSERT,
   PROP_STREAMABLE,
   PROP_METADATACREATOR,
   PROP_ENCODER,
@@ -62,6 +65,7 @@ enum
   PROP_ENFORCE_INCREASING_TIMESTAMPS,
 };
 
+#define DEFAULT_CC_INSERT FALSE
 #define DEFAULT_STREAMABLE FALSE
 #define MAX_INDEX_ENTRIES 128
 #define DEFAULT_METADATACREATOR "GStreamer {VERSION} FLV muxer"
@@ -265,6 +269,26 @@ gst_flv_mux_class_init (GstFlvMuxClass * klass)
   gobject_class->get_property = gst_flv_mux_get_property;
   gobject_class->set_property = gst_flv_mux_set_property;
   gobject_class->finalize = gst_flv_mux_finalize;
+
+  /**
+   * GstFlvMux:cc-insert:
+   *
+   * Insert closed captions from metas on video buffers into the FLV container
+   * in form of [onCaptionInfo meta/script packets][on-caption-info].
+   *
+   * This is an alternative way to signal captions and needed for example for
+   * receivers that can't handle closed captions embedded inside the video
+   * bitstream.
+   *
+   * [on-caption-info]: https://help.twitch.tv/s/article/guide-to-closed-captions?language=en_US
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_CC_INSERT,
+      g_param_spec_boolean ("cc-insert", "CC Insert",
+          "Insert closed captions from metas on video buffers into the FLV "
+          "container in form of onCaptionInfo meta/script packets.",
+          DEFAULT_CC_INSERT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /* FIXME: ideally the right mode of operation should be detected
    * automatically using queries when parameter not specified. */
@@ -1244,10 +1268,58 @@ exit:
   return script_tag;
 }
 
+static gboolean
+gst_flv_mux_write_atsc_caption_data (GstFlvMux * mux, GstByteWriter * bw,
+    GstVideoCaptionMeta * caption_meta)
+{
+  GstVideoCaptionType caption_type = caption_meta->caption_type;
+  const guint8 *cc_data = caption_meta->data;
+  gsize cc_data_size = caption_meta->size;
+
+  if (caption_meta->caption_type != GST_VIDEO_CAPTION_TYPE_CEA708_RAW) {
+    GST_TRACE_OBJECT (mux, "Unhandled caption type %u", caption_type);
+    return FALSE;
+  }
+
+  GST_MEMDUMP ("cea708 caption data", cc_data, cc_data_size);
+
+#define ITU_T35_COUNTRY_CODE_UK 0xb4
+#define ITU_T35_COUNTRY_CODE_USA 0xb5
+
+#define ITU_T35_PROVIDER_CODE_ATSC 0x31
+
+  // Create ATSC caption block
+  gst_byte_writer_put_uint8 (bw, ITU_T35_COUNTRY_CODE_USA);
+  gst_byte_writer_put_uint8 (bw, 0);
+  gst_byte_writer_put_uint8 (bw, ITU_T35_PROVIDER_CODE_ATSC);
+  gst_byte_writer_put_uint8 (bw, 'G');
+  gst_byte_writer_put_uint8 (bw, 'A');
+  gst_byte_writer_put_uint8 (bw, '9');
+  gst_byte_writer_put_uint8 (bw, '4');
+  gst_byte_writer_put_uint8 (bw, 3);    // user_data_type_code
+
+  if (cc_data_size <= 93) {
+    gst_byte_writer_put_uint8 (bw, (cc_data_size / 3) | 0x40);
+  } else {
+    GST_WARNING_OBJECT (mux, "Too many captions! size=%zu bytes, truncating",
+        cc_data_size);
+    gst_byte_writer_put_uint8 (bw, 0x1f | 0x40);
+  }
+
+  gst_byte_writer_put_uint8 (bw, 0);
+  gst_byte_writer_put_data (bw, cc_data, cc_data_size);
+  gst_byte_writer_put_uint8 (bw, 0xff);
+
+  GST_MEMDUMP ("ATSC caption data block", bw->parent.data, bw->parent.size);
+
+  return TRUE;
+}
+
 static GstBuffer *
 gst_flv_mux_buffer_to_tag_internal (GstFlvMux * mux, GstBuffer * buffer,
     GstFlvMuxPad * pad, gboolean is_codec_data)
 {
+  GstVideoCaptionMeta *caption_meta = NULL;
   GstBuffer *tag;
   GstMapInfo map;
   guint size;
@@ -1325,6 +1397,98 @@ gst_flv_mux_buffer_to_tag_internal (GstFlvMux * mux, GstBuffer * buffer,
     gst_buffer_map (buffer, &map, GST_MAP_READ);
     bdata = map.data;
     bsize = map.size;
+  }
+
+  gboolean cc_insert = g_atomic_int_get (&mux->cc_insert);
+
+  if (buffer != NULL && cc_insert) {
+    caption_meta = gst_buffer_get_video_caption_meta (buffer);
+    if (caption_meta != NULL) {
+      GstByteWriter ccdata_bw;
+      guint8 ccdata_buf[256];
+
+      // We know and check there won't be more than 31 triplets + header/footer
+      gst_byte_writer_init_with_data (&ccdata_bw, ccdata_buf, 256, FALSE);
+
+      if (gst_flv_mux_write_atsc_caption_data (mux, &ccdata_bw, caption_meta)) {
+        GstByteWriter bw;
+
+        gst_byte_writer_init (&bw);
+
+        // Tag type meta/script
+        gst_byte_writer_put_uint8 (&bw, 0x12);
+
+        // Length, will be filled in later
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, 0);
+
+        // Timestamp
+        gst_byte_writer_put_uint24_be (&bw, dts);
+        gst_byte_writer_put_uint8 (&bw, (((guint) dts) >> 24) & 0xff);
+
+        // StreamId
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, 0);
+
+        // AMF0
+        gst_byte_writer_put_uint8 (&bw, AMF0_STRING_MARKER);
+        gst_byte_writer_put_uint16_be (&bw, 14);
+        gst_byte_writer_put_data (&bw, (guint8 *) "onCaptionInfo", 14);
+
+        gst_byte_writer_put_uint8 (&bw, AMF0_ECMA_ARRAY_MARKER);
+        gst_byte_writer_put_uint32_be (&bw, 2); // associative-count
+
+        // type=708
+        gst_byte_writer_put_uint16_be (&bw, 4); // index string length
+        gst_byte_writer_put_data (&bw, (guint8 *) "type", 4);
+
+        gst_byte_writer_put_uint8 (&bw, AMF0_STRING_MARKER);
+        gst_byte_writer_put_uint16_be (&bw, 3);
+        gst_byte_writer_put_data (&bw, (guint8 *) "708", 3);
+
+        // data=base64-encoded captions blob
+        gst_byte_writer_put_uint16_be (&bw, 4); // index string length
+        gst_byte_writer_put_data (&bw, (guint8 *) "data", 4);
+
+        gst_byte_reader_set_pos (&ccdata_bw.parent, 0);
+        guint ccdata_size = gst_byte_reader_get_size (&ccdata_bw.parent);
+        const guint8 *ccdata = NULL;
+        gst_byte_reader_peek_data (&ccdata_bw.parent, ccdata_size, &ccdata);
+        gchar *base64_ccdata = g_base64_encode (ccdata, ccdata_size);
+        gsize base64_len = strlen (base64_ccdata);
+        gst_byte_writer_put_uint8 (&bw, AMF0_STRING_MARKER);
+        gst_byte_writer_put_uint16_be (&bw, base64_len);
+        gst_byte_writer_put_data (&bw, (guint8 *) base64_ccdata, base64_len);
+        g_clear_pointer (&base64_ccdata, g_free);
+        gst_byte_writer_reset (&ccdata_bw);
+
+        // Object end type, terminates associative array
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, 0);
+        gst_byte_writer_put_uint8 (&bw, AMF0_OBJECT_END_MARKER);
+
+        // Deduced from sample packet, but unclear if this is in FLV spec
+        gsize written_size = gst_byte_writer_get_size (&bw);
+        gst_byte_writer_put_uint32_be (&bw, written_size);
+
+        // Fill in length in header
+        gst_byte_reader_set_pos (&bw.parent, 1);
+        gst_byte_writer_put_uint24_be (&bw, written_size - 11);
+
+        // Finalise meta tag output buffer and save for later
+        {
+          gsize data_size = gst_byte_writer_get_size (&bw);
+          guint8 *data = gst_byte_writer_reset_and_get_data (&bw);
+
+          GST_MEMDUMP_OBJECT (mux, "onCaptionInfo packet", data, data_size);
+
+          gst_clear_buffer (&mux->pending_captions_tag);
+          mux->pending_captions_tag = gst_buffer_new_wrapped (data, data_size);
+        }
+      }
+    }
   }
 
   size = 11;
@@ -1431,9 +1595,17 @@ gst_flv_mux_buffer_to_tag_internal (GstFlvMux * mux, GstBuffer * buffer,
 
     /* mark the buffer if it's an audio buffer and there's also video being muxed
      * or it's a video interframe */
-    if (mux->video_pad == pad &&
-        GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT))
-      GST_BUFFER_FLAG_SET (tag, GST_BUFFER_FLAG_DELTA_UNIT);
+    if (mux->video_pad == pad) {
+      if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT)) {
+        GST_BUFFER_FLAG_SET (tag, GST_BUFFER_FLAG_DELTA_UNIT);
+      }
+      if (mux->pending_captions_tag != NULL) {
+        GstBuffer *captions_tag = g_steal_pointer (&mux->pending_captions_tag);
+
+        GST_BUFFER_PTS (captions_tag) = GST_BUFFER_PTS (tag);
+        (void) gst_flv_mux_push (mux, captions_tag);
+      }
+    }
   } else {
     GST_BUFFER_FLAG_SET (tag, GST_BUFFER_FLAG_DELTA_UNIT);
     GST_BUFFER_OFFSET (tag) = GST_BUFFER_OFFSET_END (tag) =
@@ -2156,6 +2328,9 @@ gst_flv_mux_get_property (GObject * object,
   GstFlvMux *mux = GST_FLV_MUX (object);
 
   switch (prop_id) {
+    case PROP_CC_INSERT:
+      g_value_set_boolean (value, g_atomic_int_get (&mux->cc_insert));
+      break;
     case PROP_STREAMABLE:
       g_value_set_boolean (value, mux->streamable);
       break;
@@ -2184,6 +2359,9 @@ gst_flv_mux_set_property (GObject * object,
   GstFlvMux *mux = GST_FLV_MUX (object);
 
   switch (prop_id) {
+    case PROP_CC_INSERT:
+      g_atomic_int_set (&mux->cc_insert, g_value_get_boolean (value));
+      break;
     case PROP_STREAMABLE:
       mux->streamable = g_value_get_boolean (value);
       if (mux->streamable)
