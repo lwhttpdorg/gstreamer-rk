@@ -87,9 +87,6 @@ struct _GstOsxAudioSink
   AudioUnit audiounit;
   double volume;
 
-  guint channels;
-  char *channel_map;
-
 #ifdef HAVE_IOS
   gboolean configure_session;
 #endif

@@ -79,7 +79,6 @@ enum
   ARG_DEVICE,
   ARG_UNIQUE_ID,
   ARG_CONFIGURE_SESSION,
-  ARG_INPUT_CHANNELS,
 };
 
 #define DEFAULT_CONFIGURE_SESSION TRUE
@@ -191,21 +190,6 @@ gst_osx_audio_src_class_init (GstOsxAudioSrcClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #endif
 
-  /**
-   * GstOsxAudioSrc:input-channels:
-   *
-   * Comma-separated list of 0-indexed channels to capture. Useful for Audio
-   * interfaces and DACs which expose several unpositioned channels, where you
-   * only want to capture some of them. The default is to capture all of them.
-   *
-   * Since: 1.28
-   */
-  g_object_class_install_property (gobject_class, ARG_INPUT_CHANNELS,
-      g_param_spec_string ("input-channels", "Input Channels",
-          "Comma-separated list of audio channels to capture", NULL,
-          GST_PARAM_MUTABLE_READY | G_PARAM_READWRITE |
-          G_PARAM_STATIC_STRINGS));
-
   gstaudiobasesrc_class->create_ringbuffer =
       GST_DEBUG_FUNCPTR (gst_osx_audio_src_create_ringbuffer);
 
@@ -235,7 +219,6 @@ gst_osx_audio_src_finalize (GObject * object)
 {
   GstOsxAudioSrc *src = GST_OSX_AUDIO_SRC (object);
   g_clear_pointer (&src->unique_id, g_free);
-  g_clear_pointer (&src->channel_map, g_free);
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -257,9 +240,6 @@ gst_osx_audio_src_set_property (GObject * object, guint prop_id,
       src->configure_session = g_value_get_boolean (value);
       break;
 #endif
-    case ARG_INPUT_CHANNELS:
-      src->channel_map = g_value_dup_string (value);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -284,9 +264,6 @@ gst_osx_audio_src_get_property (GObject * object, guint prop_id,
       g_value_set_boolean (value, src->configure_session);
       break;
 #endif
-    case ARG_INPUT_CHANNELS:
-      g_value_set_string (value, src->channel_map);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -433,10 +410,6 @@ gst_osx_audio_src_create_ringbuffer (GstAudioBaseSrc * src)
   ringbuffer->core_audio->osxbuf = GST_OBJECT (ringbuffer);
   ringbuffer->core_audio->element =
       GST_OSX_AUDIO_ELEMENT_GET_INTERFACE (osxsrc);
-
-  if (osxsrc->channel_map)
-    gst_core_audio_parse_channel_map (ringbuffer->core_audio,
-        osxsrc->channel_map);
 
   return GST_AUDIO_RING_BUFFER (ringbuffer);
 }

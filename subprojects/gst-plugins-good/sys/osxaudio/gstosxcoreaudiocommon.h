@@ -55,9 +55,6 @@ gboolean gst_core_audio_set_channel_layout                (GstCoreAudio * core_a
                                                            gint channels,
                                                            GstCaps * caps);
 
-void gst_core_audio_parse_channel_map                     (GstCoreAudio * core_audio,
-                                                           const char * channel_map);
-
 gboolean gst_core_audio_set_channel_map                   (GstCoreAudio * core_audio,
                                                            guint32 channels);
 
