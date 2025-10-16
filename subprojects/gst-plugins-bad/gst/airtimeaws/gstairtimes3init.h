@@ -170,6 +170,13 @@ typedef struct GstAirtimeS3ContextConfig {
      */
     bool ensure_correct_region;
 
+    /**
+     * Whether to elevate S3 errors to std::cout in addition to logging them with GST_ERROR.
+     * This is useful because GST_ERROR logs may not be visible to the user, whereas std::cout output is.
+     * Specifically, this helps to provide context for errors reported by GStreamer's discovery mechanism.
+     */
+    bool elevate_s3_errors_to_cout;
+
 } GstAirtimeS3ContextConfig;
 
 GST_AIRTIME_DLL_PUBLIC GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config();

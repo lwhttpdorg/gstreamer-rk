@@ -100,6 +100,7 @@ gst::airtime::S3URIProviderConfig getConfig(const GstAirtimeS3ContextConfig& c_c
     config.request_timeout_ms = c_config.request_timeout;
     config.validate_credentials = c_config.validate_credentials;
     config.ensure_correct_region = c_config.ensure_correct_region;
+    config.elevate_s3_errors_to_cout = c_config.elevate_s3_errors_to_cout;
     return config;
 }
 
@@ -136,6 +137,7 @@ GstAirtimeS3ContextConfig gst_airtime_s3_context_get_default_config()
     config.request_timeout = default_config.request_timeout_ms;
     config.validate_credentials = default_config.validate_credentials;
     config.ensure_correct_region = default_config.ensure_correct_region;
+    config.elevate_s3_errors_to_cout = default_config.elevate_s3_errors_to_cout;
     return config;
 }
 

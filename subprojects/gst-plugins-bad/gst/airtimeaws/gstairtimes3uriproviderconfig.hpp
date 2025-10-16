@@ -105,6 +105,11 @@ struct S3URIProviderConfig {
 
     /// @brief Ensure that the S3 client is configured for the correct region of the S3 bucket.
     bool ensure_correct_region = false;
+
+    /// @brief Whether to elevate S3 errors to std::cout in addition to logging them with GST_ERROR.
+    /// This is useful because GST_ERROR logs may not be visible to the user, whereas std::cout output is.
+    /// Specifically, this helps to provide context for errors reported by GStreamer's discovery mechanism.
+    bool elevate_s3_errors_to_cout = false;
 };
 
 } // namespace gst::airtime

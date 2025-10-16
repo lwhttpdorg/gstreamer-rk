@@ -46,6 +46,7 @@
 #include "gstairtimes3uriproviders.hpp"
 
 #include <cassert>
+#include <iostream>
 
 #include <gst/gst.h>
 
@@ -121,8 +122,25 @@ std::shared_ptr<S3URIProvider> S3URIProviders::createProvider(std::string_view s
     }
     catch (const std::exception& e)
     {
-        GST_ERROR("Failed to create S3URIProvider for bucket: %s, key: %s: %s", s3_bucket.data(), s3_key.data(),
-                  e.what());
+        const auto error_message = std::format("Failed to create S3URIProvider for bucket: {}, key: {}. Error: {}",
+                                               s3_bucket, s3_key, e.what());
+        GST_ERROR("%s", error_message.c_str());
+
+        if (config_.elevate_s3_errors_to_cout)
+        {
+            // We elevate to the console, as the GST_ERROR log may not be visible to the user. We do this to add context
+            // to the following error message posted directly to the console by GST discovery:
+            //
+            // "Discovery error, domain: 2761,code: 4, message: Stream doesn't contain enough data."
+            //
+            // By posting to the console ourselves, we can at least give the user a hint that the error is likely due to
+            // inability to access the S3 object. This results in the following:
+            //
+            // "Failed to create S3URIProvider for bucket: [bucket], key: [key]. Error: Error retrieving S3 object
+            // metadata: The requested AWS S3 resource was not found"
+            //
+            std::cout << error_message << std::endl;
+        }
         if (++retry_count_ > config_.fetch_max_retry_count)
         {
             GST_ERROR("Failed to create S3URIProvider for bucket: %s, key: %s after %u attempts: %s. Max attempts "
