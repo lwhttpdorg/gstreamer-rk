@@ -208,6 +208,7 @@ gst_h265_parse_reset_frame (GstH265Parse * h265parse)
   h265parse->have_vps_in_frame = FALSE;
   h265parse->have_sps_in_frame = FALSE;
   h265parse->have_pps_in_frame = FALSE;
+  h265parse->have_vcl_in_frame = FALSE;
   gst_adapter_clear (h265parse->frame_out);
   gst_video_clear_user_data (&h265parse->user_data, FALSE);
   gst_video_clear_user_data_unregistered (&h265parse->user_data_unregistered,
@@ -1198,6 +1199,12 @@ gst_h265_parse_handle_frame_packetized (GstBaseParse * parse,
   return ret;
 }
 
+static gboolean
+gst_h265_parse_nal_is_vcl (const GstH265NalUnit * nalu)
+{
+  return (nalu->type <= GST_H265_NAL_SLICE_CRA_NUT);
+}
+
 static GstFlowReturn
 gst_h265_parse_handle_frame (GstBaseParse * parse,
     GstBaseParseFrame * frame, gint * skipsize)
@@ -1213,6 +1220,7 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
   GstH265NalUnit nalu;
   GstH265ParserResult pres;
   gint framesize;
+  gboolean vcl = TRUE;
 
   if (G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (frame->buffer,
               GST_BUFFER_FLAG_DISCONT))) {
@@ -1308,6 +1316,7 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
       case GST_H265_PARSER_OK:
         GST_DEBUG_OBJECT (h265parse, "complete nal (offset, size): (%u, %u) ",
             nalu.offset, nalu.size);
+        vcl = gst_h265_parse_nal_is_vcl (&nalu);
         break;
       case GST_H265_PARSER_NO_NAL_END:
         /* In NAL alignment, assume the NAL is complete */
@@ -1370,7 +1379,6 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
 
     GST_DEBUG_OBJECT (h265parse, "%p complete nal found. Off: %u, Size: %u",
         data, nalu.offset, nalu.size);
-
     if (gst_h265_parse_collect_nal (h265parse, data, size, &nalu)) {
       /* complete current frame, if it exist */
       if (current_off > 0) {
@@ -1413,8 +1421,9 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
     }
 
     /* If the output is NAL, we are done */
-    if (h265parse->align == GST_H265_PARSE_ALIGN_NAL)
+    if (h265parse->align == GST_H265_PARSE_ALIGN_NAL) {
       break;
+    }
 
     GST_DEBUG_OBJECT (h265parse, "Looking for more");
     current_off = nalu.offset + nalu.size;
@@ -1432,6 +1441,8 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
   }
 
 end:
+  h265parse->have_vcl_in_frame |= vcl;
+
   framesize = nalu.offset + nalu.size;
 
   gst_buffer_unmap (buffer, &map);
@@ -1441,6 +1452,7 @@ end:
   return gst_base_parse_finish_frame (parse, frame, framesize);
 
 more:
+  h265parse->have_vcl_in_frame |= vcl;
   *skipsize = 0;
 
   /* Restart parsing from here next time */
@@ -2668,14 +2680,17 @@ gst_h265_parse_parse_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
 
   gst_h265_parse_update_src_caps (h265parse, NULL);
 
-  if (h265parse->fps_num > 0 && h265parse->fps_den > 0) {
-    GstClockTime val =
-        gst_h265_parse_is_field_interlaced (h265parse) ? GST_SECOND /
-        2 : GST_SECOND;
+  if (h265parse->have_vcl_in_frame) {
+    if (h265parse->fps_num > 0 && h265parse->fps_den > 0) {
+      GstClockTime val =
+          gst_h265_parse_is_field_interlaced (h265parse) ? GST_SECOND /
+          2 : GST_SECOND;
 
-    GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (val,
-        h265parse->fps_den, h265parse->fps_num);
-  }
+      GST_BUFFER_DURATION (buffer) = gst_util_uint64_scale (val,
+          h265parse->fps_den, h265parse->fps_num);
+    }
+  } else
+    GST_BUFFER_DURATION (buffer) = 0;
 
   if (h265parse->keyframe)
     GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
