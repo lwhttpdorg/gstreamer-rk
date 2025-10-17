@@ -222,6 +222,10 @@ gst_rtmp_location_copy (GstRtmpLocation * dest, const GstRtmpLocation * src)
   dest->tls_flags = src->tls_flags;
   dest->flash_ver = g_strdup (src->flash_ver);
   dest->publish = src->publish;
+  dest->caps_ex = src->caps_ex;
+  dest->audio_codec_list = src->audio_codec_list ?
+      g_ptr_array_copy (src->audio_codec_list, (GCopyFunc) g_strdup,
+      NULL) : NULL;
 }
 
 void
@@ -239,6 +243,8 @@ gst_rtmp_location_clear (GstRtmpLocation * location)
   g_clear_pointer (&location->extra_connect_args, g_free);
   g_clear_pointer (&location->flash_ver, g_free);
   location->publish = FALSE;
+  location->caps_ex = 0;
+  g_ptr_array_unref (location->audio_codec_list);
 }
 
 gchar *
@@ -432,6 +438,9 @@ socket_connect (GTask * task)
     g_object_unref (task);
     return;
   }
+
+  GST_DEBUG ("capsex: %d ccmap len %d", data->location.caps_ex,
+      data->location.audio_codec_list->len);
 
   socket_client = g_socket_client_new ();
   g_socket_client_set_timeout (socket_client, data->location.timeout);
@@ -805,7 +814,7 @@ send_connect (GTask * task)
 {
   ConnectTaskData *data = g_task_get_task_data (task);
   GPtrArray *arguments = g_ptr_array_new_with_free_func (gst_amf_node_free);
-  GstAmfNode *node;
+  GstAmfNode *node, *audio_fourcc_map;
   const gchar *app, *flash_ver;
   gchar *uri, *appstr = NULL, *uristr = NULL;
   gboolean publish;
@@ -875,6 +884,20 @@ send_connect (GTask * task)
   /* "URL of the Server. It has the following format.
    * protocol://servername:port/appName/appInstance" */
   gst_amf_node_append_field_take_string (node, "tcUrl", uristr, -1);
+
+  if (data->location.caps_ex)
+    gst_amf_node_append_field_number (node, "capsEx", data->location.caps_ex);
+
+  if (data->location.audio_codec_list) {
+    audio_fourcc_map = gst_amf_node_new_object ();
+
+    for (guint i = 0; i < data->location.audio_codec_list->len; i++) {
+      const gchar *codec =
+          g_ptr_array_index (data->location.audio_codec_list, i);
+      gst_amf_node_append_field_number (audio_fourcc_map, codec, 0x02);
+    }
+    gst_amf_node_append_field (node, "audioFourCcInfoMap", audio_fourcc_map);
+  }
 
   if (!publish) {
     /* "True if proxy is being used." */

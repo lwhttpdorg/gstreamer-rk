@@ -293,6 +293,8 @@ gst_rtmp2_sink_init (GstRtmp2Sink * self)
 
   self->headers = g_ptr_array_new_with_free_func
       ((GDestroyNotify) gst_mini_object_unref);
+  self->location.caps_ex = 0;
+  self->location.audio_codec_list = NULL;
 }
 
 static void
@@ -953,6 +955,7 @@ gst_rtmp2_sink_set_caps (GstBaseSink * sink, GstCaps * caps)
   GstRtmp2Sink *self = GST_RTMP2_SINK (sink);
   GstStructure *s;
   const GValue *streamheader;
+  const GValue *audio_codec_list;
   guint i = 0;
 
   GST_DEBUG_OBJECT (self, "setcaps %" GST_PTR_FORMAT, caps);
@@ -991,6 +994,34 @@ gst_rtmp2_sink_set_caps (GstBaseSink * sink, GstCaps * caps)
 
   GST_DEBUG_OBJECT (self, "Collected streamheaders: %u buffers -> %u messages",
       i, self->headers->len);
+
+  if (gst_structure_get_uint (s, "caps-ex", &self->location.caps_ex)) {
+    GST_DEBUG_OBJECT (self,
+        "CapsEx Reconnect: %u, Multitrack: %u, Modex: %u, TsNanoOffset: %u",
+        0 != (self->location.caps_ex & CAPS_EX_MASK_RECONNECT),
+        0 != (self->location.caps_ex & CAPS_EX_MASK_MULTITRACK),
+        0 != (self->location.caps_ex & CAPS_EX_MASK_MODEX),
+        0 != (self->location.caps_ex & CAPS_EX_MASK_TIMESTAMPNANOOFFSET));
+  }
+
+  if (NULL != (audio_codec_list =
+          gst_structure_get_value (s, "audio-codec-list"))) {
+    if (GST_VALUE_HOLDS_ARRAY (audio_codec_list)) {
+
+      self->location.audio_codec_list =
+          g_ptr_array_new_with_free_func ((GDestroyNotify) g_free);
+      guint size = gst_value_array_get_size (audio_codec_list);
+      for (i = 0; i < size; i++) {
+        const GValue *v = gst_value_array_get_value (audio_codec_list, i);
+        const gchar *codec;
+        codec = g_value_dup_string (v);
+        GST_DEBUG_OBJECT (self, "adding codec %s to codec list", codec);
+        g_ptr_array_add (self->location.audio_codec_list, (gpointer) codec);
+      }
+    } else {
+      GST_DEBUG_OBJECT (self, "audio-codec-list does not hold an array");
+    }
+  }
 
   return TRUE;
 }
@@ -1043,6 +1074,7 @@ gst_rtmp2_sink_task_func (gpointer user_data)
 
   g_clear_pointer (&self->context, g_main_context_unref);
   g_ptr_array_set_size (self->headers, 0);
+  g_ptr_array_set_size (self->location.audio_codec_list, 0);
 
   g_mutex_unlock (&self->lock);
   GST_DEBUG_OBJECT (self, "gst_rtmp2_sink_task exiting");

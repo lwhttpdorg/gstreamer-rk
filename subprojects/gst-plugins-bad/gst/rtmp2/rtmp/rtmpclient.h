@@ -106,6 +106,8 @@ typedef struct _GstRtmpLocation
   GTlsCertificateFlags tls_flags;
   gchar *flash_ver;
   gboolean publish;
+  guint caps_ex;   /* extended capabilites in E-RTMP (v2)*/
+  GPtrArray *audio_codec_list;
 } GstRtmpLocation;
 
 void gst_rtmp_location_copy (GstRtmpLocation * dest,
@@ -143,6 +145,14 @@ typedef enum
   GST_RTMP_CONN_PARSING_ERROR_FAILED_PARSING_DOUBLE,
   GST_RTMP_CONN_PARSING_ERROR_UNSUPPORTED,
 } GstRtmpConnParsingError;
+
+typedef enum
+{
+  CAPS_EX_MASK_RECONNECT = 0x01,
+  CAPS_EX_MASK_MULTITRACK = 0x02,
+  CAPS_EX_MASK_MODEX = 0x04,
+  CAPS_EX_MASK_TIMESTAMPNANOOFFSET = 0x08,
+} GstRtmpCapsExMask;
 
 GQuark gst_rtmp_conn_parsing_error_quark (void);
 
