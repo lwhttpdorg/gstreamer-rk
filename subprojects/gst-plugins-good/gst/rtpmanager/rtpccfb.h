@@ -26,6 +26,28 @@
 G_DECLARE_FINAL_TYPE (RTPCCFBManager, rtp_ccfb_manager, RTP, CCFB_MANAGER, GObject)
 #define RTP_TYPE_CCFB_MANAGER (rtp_ccfb_manager_get_type())
 
+typedef struct
+{
+  guint32 ssrc;
+  guint16 begin_seq;
+  GArray * metric_blocks;
+} RTPCCFBReportBlock;
+
+typedef enum
+{
+  RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OK,
+  RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OVER_RANGE,
+  RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_UNAVAILABLE,
+} RTPCCFBNtpArrivalTimeStatus;
+
+typedef struct
+{
+  gboolean received;
+  guint8 ecn_cp;
+  guint32 ntp_arrival_time;
+  RTPCCFBNtpArrivalTimeStatus ntp_arrival_time_status;
+} RTPCCFBMetricBlock;
+
 RTPCCFBManager * rtp_ccfb_manager_new (guint mtu);
 
 void rtp_ccfb_manager_set_mtu (RTPCCFBManager * ccfb, guint mtu);
@@ -40,5 +62,10 @@ gboolean rtp_ccfb_manager_recv_packet (RTPCCFBManager * ccfb,
 
 GstBuffer * rtp_ccfb_manager_get_feedback (RTPCCFBManager * ccfb,
     guint sender_ssrc, guint64 ntptime);
+
+GSList * rtp_ccfb_manager_parse_fci (RTPCCFBManager * ccfb, guint32 media_ssrc,
+    guint8 * fci_data, guint fci_length, guint32 * report_timestamp);
+
+void rtp_ccfb_report_block_free (RTPCCFBReportBlock * report_block);
 
 #endif /* __RTP_CCFB_H__ */

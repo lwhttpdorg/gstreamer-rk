@@ -454,3 +454,115 @@ rtp_ccfb_manager_recv_packet (RTPCCFBManager * ccfb, RTPPacketInfo * pinfo)
 
   return send_feedback;
 }
+
+GSList *
+rtp_ccfb_manager_parse_fci (RTPCCFBManager * ccfb, guint32 media_ssrc,
+    guint8 * fci_data, guint fci_length, guint32 * report_ts)
+{
+  GstByteReader reader = GST_BYTE_READER_INIT (fci_data, fci_length);
+  GSList *report_blocks = NULL;
+  GSList *it;
+
+  if (fci_length < 8) {         /* Minimal metric block + Report Timestamp */
+    goto malformed_packet;
+  }
+
+  while (gst_byte_reader_get_remaining (&reader) > sizeof (guint32)) {
+    guint16 num_reports;
+    guint16 i;
+
+    RTPCCFBReportBlock *report_block = g_new0 (RTPCCFBReportBlock, 1);
+
+    report_blocks = g_slist_append (report_blocks, report_block);
+
+    if (g_slist_length (report_blocks) == 1) {
+      /* media_ssrc is the SSRC of the first report block */
+      report_block->ssrc = media_ssrc;
+    } else {
+      if (!gst_byte_reader_get_uint32_be (&reader, &report_block->ssrc)) {
+        goto malformed_packet;
+      }
+    }
+
+    if (!gst_byte_reader_get_uint16_be (&reader, &report_block->begin_seq) ||
+        !gst_byte_reader_get_uint16_be (&reader, &num_reports)) {
+      goto malformed_packet;
+    }
+
+    report_block->metric_blocks =
+        g_array_sized_new (FALSE, TRUE, sizeof (RTPCCFBMetricBlock),
+        num_reports);
+    g_array_set_size (report_block->metric_blocks, num_reports);
+
+    for (i = 0; i != num_reports; ++i) {
+      guint16 metric;
+      if (!gst_byte_reader_get_uint16_be (&reader, &metric)) {
+        goto malformed_packet;
+      }
+
+      if (metric & 0x8000) {    /* R = 1 */
+        RTPCCFBMetricBlock *metric_block =
+            &g_array_index (report_block->metric_blocks, RTPCCFBMetricBlock, i);
+        metric_block->received = TRUE;
+        metric_block->ecn_cp = (metric >> 13) & 0x03;
+        metric_block->ntp_arrival_time = metric & 0x1FFF;
+      }
+    }
+
+    if (num_reports % 2 != 0) {
+      /* skip padding */
+      gst_byte_reader_skip (&reader, sizeof (guint16));
+    }
+  }
+
+  if (!gst_byte_reader_get_uint32_be (&reader, report_ts)) {
+    goto malformed_packet;
+  }
+
+  if (gst_byte_reader_get_remaining (&reader) != 0) {
+    goto malformed_packet;
+  }
+
+  /* Calculate arrival time of each packet from offset and report timestamp. */
+  for (it = report_blocks; it; it = g_slist_next (it)) {
+    RTPCCFBReportBlock *block = it->data;
+    GArray *metrics = block->metric_blocks;
+    guint i;
+
+    for (i = 0; i != metrics->len; ++i) {
+      RTPCCFBMetricBlock *m = &g_array_index (metrics, RTPCCFBMetricBlock, i);
+      if (m->received) {
+        switch (m->ntp_arrival_time) {
+          case 0x1FFE:
+            m->ntp_arrival_time = 0;
+            m->ntp_arrival_time_status =
+                RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OVER_RANGE;
+            break;
+          case 0x1FFF:
+            m->ntp_arrival_time = 0;
+            m->ntp_arrival_time_status =
+                RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_UNAVAILABLE;
+            break;
+          default:
+            m->ntp_arrival_time = *report_ts - (m->ntp_arrival_time * 64);
+            m->ntp_arrival_time_status = RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OK;
+            break;
+        }
+      }
+    }
+  }
+
+  return report_blocks;
+
+malformed_packet:
+  GST_WARNING ("Malformed CCFB RTCP feedback packet");
+  g_clear_slist (&report_blocks, (GDestroyNotify) rtp_ccfb_report_block_free);
+  return NULL;
+}
+
+void
+rtp_ccfb_report_block_free (RTPCCFBReportBlock * report_block)
+{
+  g_clear_pointer (&report_block->metric_blocks, g_array_unref);
+  g_clear_pointer (&report_block, g_free);
+}

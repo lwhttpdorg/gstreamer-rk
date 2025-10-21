@@ -307,4 +307,6 @@ GstStructure * rtp_twcc_stats_process_packets (RTPTWCCStats * stats,
     GArray * twcc_packets);
 GstStructure * rtp_twcc_stats_get_packets_structure (GArray * twcc_packets);
 
+GstStructure * rtp_ccfb_stats_get_report_structure (GSList * report_blocks, guint32 report_timestamp);
+
 #endif /* __RTP_STATS_H__ */

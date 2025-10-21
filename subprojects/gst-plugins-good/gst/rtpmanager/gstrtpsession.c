@@ -323,6 +323,8 @@ static void gst_rtp_session_notify_twcc (RTPSession * sess,
 static void gst_rtp_session_reconfigure (RTPSession * sess, gpointer user_data);
 static void gst_rtp_session_notify_early_rtcp (RTPSession * sess,
     gpointer user_data);
+static void gst_rtp_session_notify_ccfb (RTPSession * sess,
+    GstStructure * ccfb_report, gpointer user_data);
 static GstFlowReturn gst_rtp_session_chain_recv_rtp (GstPad * pad,
     GstObject * parent, GstBuffer * buffer);
 static GstFlowReturn gst_rtp_session_chain_recv_rtp_list (GstPad * pad,
@@ -346,7 +348,8 @@ static RTPSessionCallbacks callbacks = {
   gst_rtp_session_notify_nack,
   gst_rtp_session_notify_twcc,
   gst_rtp_session_reconfigure,
-  gst_rtp_session_notify_early_rtcp
+  gst_rtp_session_notify_early_rtcp,
+  gst_rtp_session_notify_ccfb
 };
 
 /* GObject vmethods */
@@ -3079,4 +3082,39 @@ gst_rtp_session_notify_early_rtcp (RTPSession * sess, gpointer user_data)
   GST_RTP_SESSION_LOCK (rtpsession);
   signal_waiting_rtcp_thread_unlocked (rtpsession);
   GST_RTP_SESSION_UNLOCK (rtpsession);
+}
+
+static void
+gst_rtp_session_notify_ccfb (RTPSession * sess,
+    GstStructure * ccfb_report, gpointer user_data)
+{
+  GstRtpSession *rtpsession = GST_RTP_SESSION (user_data);
+  GstEvent *event;
+  GstPad *send_rtp_src;
+  GstPad *send_rtp_sink;
+
+  GST_RTP_SESSION_LOCK (rtpsession);
+  if ((send_rtp_sink = rtpsession->send_rtp_sink))
+    gst_object_ref (send_rtp_sink);
+  if ((send_rtp_src = rtpsession->send_rtp_src))
+    gst_object_ref (send_rtp_src);
+  GST_RTP_SESSION_UNLOCK (rtpsession);
+
+  if (send_rtp_sink) {
+    event =
+        gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_copy (ccfb_report));
+    gst_pad_push_event (send_rtp_sink, event);
+    gst_object_unref (send_rtp_sink);
+  }
+
+  if (send_rtp_src) {
+    event =
+        gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM,
+        gst_structure_copy (ccfb_report));
+    gst_pad_push_event (send_rtp_src, event);
+    gst_object_unref (send_rtp_src);
+  }
+
+  gst_structure_free (ccfb_report);
 }

@@ -1339,6 +1339,10 @@ rtp_session_set_callbacks (RTPSession * sess, RTPSessionCallbacks * callbacks,
     sess->callbacks.notify_early_rtcp = callbacks->notify_early_rtcp;
     sess->notify_early_rtcp_user_data = user_data;
   }
+  if (callbacks->notify_ccfb) {
+    sess->callbacks.notify_ccfb = callbacks->notify_ccfb;
+    sess->notify_ccfb_user_data = user_data;
+  }
 }
 
 /**
@@ -3078,6 +3082,36 @@ rtp_session_process_twcc (RTPSession * sess, guint32 sender_ssrc,
 }
 
 static void
+rtp_session_process_ccfb (RTPSession * sess, guint32 sender_ssrc,
+    guint32 media_ssrc, guint8 * fci_data, guint fci_length)
+{
+  GSList *report_blocks;
+  GstStructure *report_s;
+  guint32 report_ts;
+
+  report_blocks = rtp_ccfb_manager_parse_fci (sess->ccfb, media_ssrc, fci_data,
+      fci_length, &report_ts);
+  if (report_blocks == NULL) {
+    return;
+  }
+
+  report_s = rtp_ccfb_stats_get_report_structure (report_blocks, report_ts);
+
+  GST_DEBUG_OBJECT (sess, "Parsed CCFB: %" GST_PTR_FORMAT, report_s);
+
+  g_clear_slist (&report_blocks, (GDestroyNotify) rtp_ccfb_report_block_free);
+
+  RTP_SESSION_UNLOCK (sess);
+  if (sess->callbacks.notify_ccfb)
+    sess->callbacks.notify_ccfb (sess, g_steal_pointer (&report_s),
+        sess->notify_twcc_user_data);
+  else {
+    gst_structure_free (report_s);
+  }
+  RTP_SESSION_LOCK (sess);
+}
+
+static void
 rtp_session_process_feedback (RTPSession * sess, GstRTCPPacket * packet,
     RTPPacketInfo * pinfo, GstClockTime current_time)
 {
@@ -3173,6 +3207,10 @@ rtp_session_process_feedback (RTPSession * sess, GstRTCPPacket * packet,
             break;
           case GST_RTCP_RTPFB_TYPE_TWCC:
             rtp_session_process_twcc (sess, sender_ssrc, media_ssrc,
+                fci_data, fci_length);
+            break;
+          case GST_RTCP_RTPFB_TYPE_CCFB:
+            rtp_session_process_ccfb (sess, sender_ssrc, media_ssrc,
                 fci_data, fci_length);
             break;
           default:

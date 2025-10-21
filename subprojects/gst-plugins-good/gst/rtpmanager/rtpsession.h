@@ -191,6 +191,17 @@ typedef void (*RTPSessionNotifyEarlyRTCP) (RTPSession *sess,
     gpointer user_data);
 
 /**
+ * RTPSessionNotifyCCFB:
+ * @sess: an #RTPSession
+ * @ccfb_report: (transfer full): CCFB report #GstStructure
+ * @user_data: user data specified when registering
+ *
+ * Notifies of Congestion Control Feedback report.
+ */
+typedef void (*RTPSessionNotifyCCFB) (RTPSession *sess,
+    GstStructure * ccfb_report, gpointer user_data);
+
+/**
  * RTPSessionCallbacks:
  * @RTPSessionProcessRTP: callback to process RTP packets
  * @RTPSessionSendRTP: callback for sending RTP packets
@@ -203,6 +214,7 @@ typedef void (*RTPSessionNotifyEarlyRTCP) (RTPSession *sess,
  * @RTPSessionNotifyTWCC: callback for notifying TWCC
  * @RTPSessionReconfigure: callback for requesting reconfiguration
  * @RTPSessionNotifyEarlyRTCP: callback for notifying early RTCP
+ * @RTPSessionNotifyTWCC: callback for notifying CCFB (RFC 8888)
  *
  * These callbacks can be installed on the session manager to get notification
  * when RTP and RTCP packets are ready for further processing. These callbacks
@@ -221,6 +233,7 @@ typedef struct {
   RTPSessionNotifyTWCC  notify_twcc;
   RTPSessionReconfigure reconfigure;
   RTPSessionNotifyEarlyRTCP notify_early_rtcp;
+  RTPSessionNotifyCCFB  notify_ccfb;
 } RTPSessionCallbacks;
 
 /**
@@ -299,6 +312,7 @@ struct _RTPSession {
   gpointer              notify_twcc_user_data;
   gpointer              reconfigure_user_data;
   gpointer              notify_early_rtcp_user_data;
+  gpointer              notify_ccfb_user_data;
 
   RTPSessionStats stats;
   RTPSessionStats bye_stats;
