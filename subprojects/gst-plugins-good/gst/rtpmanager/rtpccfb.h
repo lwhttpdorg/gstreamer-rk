@@ -68,4 +68,7 @@ GSList * rtp_ccfb_manager_parse_fci (RTPCCFBManager * ccfb, guint32 media_ssrc,
 
 void rtp_ccfb_report_block_free (RTPCCFBReportBlock * report_block);
 
+void rtp_ccfb_manager_set_enabled_from_caps_structure (RTPCCFBManager * ccfb,
+    const GstStructure * s);
+
 #endif /* __RTP_CCFB_H__ */

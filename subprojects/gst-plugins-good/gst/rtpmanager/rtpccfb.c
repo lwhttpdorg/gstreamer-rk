@@ -38,6 +38,7 @@ struct _RTPCCFBManager
 {
   GObject object;
 
+  gboolean enabled;
   guint mtu;
   GstClockTime feedback_interval;
   GstClockTime next_feedback_send_time;
@@ -74,6 +75,7 @@ ssrc_packets_free (SSRCPackets * packets)
 static void
 rtp_ccfb_manager_init (RTPCCFBManager * ccfb)
 {
+  ccfb->enabled = FALSE;
   ccfb->feedback_interval = GST_CLOCK_TIME_NONE;
 
   ccfb->recv_packets =
@@ -392,6 +394,10 @@ rtp_ccfb_manager_recv_packet (RTPCCFBManager * ccfb, RTPPacketInfo * pinfo)
   SSRCPackets *packets;
   RecvPacket packet = { 0 };
 
+  if (!ccfb->enabled) {
+    return FALSE;
+  }
+
   g_assert (pinfo->is_list == FALSE);
 
   if (!rtp_ccfb_manager_check_rtcp_size (ccfb, pinfo->ssrc, pinfo->seqnum)) {
@@ -565,4 +571,17 @@ rtp_ccfb_report_block_free (RTPCCFBReportBlock * report_block)
 {
   g_clear_pointer (&report_block->metric_blocks, g_array_unref);
   g_clear_pointer (&report_block, g_free);
+}
+
+void
+rtp_ccfb_manager_set_enabled_from_caps_structure (RTPCCFBManager * ccfb,
+    const GstStructure * s)
+{
+  if (gst_structure_get_boolean (s, "rtcp-fb-ack-ccfb", &ccfb->enabled)) {
+    if (ccfb->enabled) {
+      GST_DEBUG ("Enabling CCFB");
+    }
+  } else {
+    ccfb->enabled = FALSE;
+  }
 }

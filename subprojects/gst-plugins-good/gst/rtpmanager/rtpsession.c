@@ -5278,4 +5278,5 @@ rtp_session_update_recv_caps_structure (RTPSession * sess,
     const GstStructure * s)
 {
   rtp_twcc_manager_parse_recv_ext_id (sess->twcc, s);
+  rtp_ccfb_manager_set_enabled_from_caps_structure (sess->ccfb, s);
 }
