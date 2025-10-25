@@ -196,6 +196,7 @@ static gboolean gst_tee_src_activate_mode (GstPad * pad, GstObject * parent,
     GstPadMode mode, gboolean active);
 static GstFlowReturn gst_tee_src_get_range (GstPad * pad, GstObject * parent,
     guint64 offset, guint length, GstBuffer ** buf);
+static void gst_tee_clear_query_allocation_meta (GstQuery * query);
 
 static void
 gst_tee_dispose (GObject * object)
@@ -613,12 +614,16 @@ gst_tee_query_allocation (const GValue * item, GValue * ret, gpointer user_data)
   query = gst_query_new_allocation (caps, FALSE);
   if (!gst_pad_query (peer_pad, query)) {
     GST_DEBUG_OBJECT (ctx->tee,
-        "Allocation query failed on pad %s, ignoring allocation",
+        "Allocation query unhandled on pad %s, ignoring allocation",
         GST_PAD_NAME (src_pad));
-    g_value_set_boolean (ret, FALSE);
     gst_query_unref (query);
     gst_object_unref (peer_pad);
-    return FALSE;
+    /* If downstream did not handle allocation query, assume it does not support
+     * allocation meta. */
+    gst_tee_clear_query_allocation_meta (ctx->query);
+    ctx->first_query = FALSE;
+    ctx->num_pads++;
+    return TRUE;
   }
 
   gst_object_unref (peer_pad);
@@ -730,6 +735,8 @@ gst_tee_query_allocation (const GValue * item, GValue * ret, gpointer user_data)
   ctx->num_pads++;
   gst_query_unref (query);
 
+  g_value_set_boolean (ret, TRUE);
+
   return TRUE;
 }
 
@@ -758,7 +765,7 @@ gst_tee_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
       struct AllocQueryCtx ctx = { tee, query, };
 
       g_value_init (&ret, G_TYPE_BOOLEAN);
-      g_value_set_boolean (&ret, TRUE);
+      g_value_set_boolean (&ret, FALSE);
 
       ctx.first_query = TRUE;
       gst_allocation_params_init (&ctx.params);
@@ -773,6 +780,7 @@ gst_tee_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
         ctx.min_buffers = 0;
         ctx.num_pads = 0;
         gst_tee_clear_query_allocation_meta (query);
+        g_value_set_boolean (&ret, FALSE);
       }
 
       gst_iterator_free (iter);
