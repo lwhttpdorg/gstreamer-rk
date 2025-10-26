@@ -878,12 +878,13 @@ GST_START_TEST (test_allocation_query_allow_not_linked)
 GST_END_TEST;
 
 
-GST_START_TEST (test_allocation_query_failure)
+GST_START_TEST (test_allocation_query_unhandled)
 {
   GstElement *tee;
   GstPad *sinkpad;
   GstCaps *caps;
   GstQuery *query;
+  guint size, min, max;
 
   tee = gst_check_setup_element ("tee");
   fail_unless (tee);
@@ -892,11 +893,30 @@ GST_START_TEST (test_allocation_query_failure)
   sinkpad = gst_element_get_static_pad (tee, "sink");
   add_sink_pad_and_setup_query_func (tee, allocation_query1);
   add_sink_pad_and_setup_query_func (tee, allocation_query2);
+  add_sink_pad_and_setup_query_func (tee, allocation_query3);
   add_sink_pad_and_setup_query_func (tee, allocation_query_fail);
 
   caps = gst_caps_new_empty_simple ("test/test");
   query = gst_query_new_allocation (caps, TRUE);
-  fail_if (gst_pad_query (sinkpad, query));
+  fail_unless (gst_pad_query (sinkpad, query));
+
+  ck_assert_int_eq (gst_query_get_n_allocation_pools (query), 1);
+  gst_query_parse_nth_allocation_pool (query, 0, NULL, &size, &min, &max);
+  fail_unless (size == 130);
+  /* The tee will allocate one more buffer when multiplexing */
+  fail_unless (min == 2 + 1);
+  fail_unless (max == 0);
+
+  GstAllocationParams param;
+  fail_unless (gst_query_get_n_allocation_params (query), 1);
+  gst_query_parse_nth_allocation_param (query, 0, NULL, &param);
+  fail_unless (param.align == 15);
+  fail_unless (param.prefix == 2);
+  fail_unless (param.padding == 2);
+
+  /* Because we have one pad that did not handle the query, we should have no
+   * allocation meta. */
+  fail_unless (gst_query_get_n_allocation_metas (query) == 0);
 
   gst_caps_unref (caps);
   gst_query_unref (query);
@@ -961,7 +981,7 @@ tee_suite (void)
   tcase_add_test (tc_chain, test_allow_not_linked);
   tcase_add_test (tc_chain, test_allocation_query_aggregation);
   tcase_add_test (tc_chain, test_allocation_query_allow_not_linked);
-  tcase_add_test (tc_chain, test_allocation_query_failure);
+  tcase_add_test (tc_chain, test_allocation_query_unhandled);
   tcase_add_test (tc_chain, test_allocation_query_empty);
 
   return s;
