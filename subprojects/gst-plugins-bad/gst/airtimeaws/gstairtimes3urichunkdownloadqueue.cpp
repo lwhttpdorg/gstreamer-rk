@@ -49,6 +49,56 @@
 #include <cassert>
 #include <utility>
 
+namespace
+{
+
+// Helper functions for chunk calculations. We use these to determine how to initialize the queue.
+// GStreamer when operating on a file tends to need the beginning and end of the file first (we call each that part a
+// segment in the functions below). We prioritize chunks accordingly, i.e. add beginning chunks first - as much as
+// needed to cover the beginning segment, then ending chunks - again, as much as needed to cover the end segment, and
+// finally the middle part.
+
+/// @brief Calculate the number of chunks needed to download a file.
+/// @param total_size The total size in bytes of the file to be downloaded.
+/// @param chunk_size The size in bytes of each chunk.
+/// @return The number of chunks needed to download the file.
+auto calcNumOfChunks(std::uint64_t total_size, std::uint64_t chunk_size) noexcept
+{
+    return (total_size + chunk_size - 1) / chunk_size;
+}
+
+/// @brief Calculate the number of chunks needed to cover a segment of N bytes.
+/// @param chunk_size The size in bytes of each chunk.
+/// @param segment_size The size in bytes of the segment.
+/// @return The number of chunks needed to cover the segment of N bytes.
+auto calcNumOfChunksForSegment(std::uint64_t chunk_size, std::uint64_t segment_size) noexcept
+{
+    return (segment_size + chunk_size - 1) / chunk_size;
+}
+
+/// @brief Calculates the beginning index of the ending range of chunks to prioritize.
+/// @param total_size The total size in bytes of the file to be downloaded.
+/// @param chunk_size The size in bytes of each chunk.
+/// @param num_of_chunks_per_segment The number of chunks that fit in the segment size.
+/// @return The beginning index of the ending range of chunks to prioritize.
+auto calcEngRangeBegIndex(std::uint64_t total_size, std::uint64_t chunk_size,
+                          std::uint64_t num_of_chunks_per_segment) noexcept
+{
+    const auto num_chunks = calcNumOfChunks(total_size, chunk_size);
+    const bool last_chunk_is_full_size = (total_size % chunk_size == 0);
+
+    if (last_chunk_is_full_size)
+    {
+        return (num_chunks > num_of_chunks_per_segment) ? (num_chunks - num_of_chunks_per_segment) : num_chunks;
+    }
+    else
+    {
+        return (num_chunks > num_of_chunks_per_segment + 1) ? (num_chunks - num_of_chunks_per_segment - 1) : num_chunks;
+    }
+}
+
+} // namespace
+
 namespace gst::airtime
 {
 
@@ -56,18 +106,44 @@ S3URIChunkDownloadQueue::S3URIChunkDownloadQueue(std::uint64_t total_size, std::
                                                  DownloadChunkFilter download_chunk_filter)
 {
     // Initialize the queue with chunks based on the total size and chunk size
-    std::size_t index = 0;
-    for (std::uint64_t start_byte = 0; start_byte < total_size; start_byte += chunk_size)
-    {
-        const std::uint64_t chunk_size_adjusted = std::min(chunk_size, total_size - start_byte);
-        S3URIChunkSpec chunk_spec{index, start_byte, chunk_size_adjusted, chunk_size};
+    const auto num_chunks = calcNumOfChunks(total_size, chunk_size);
+    queue_.reserve(num_chunks);
+
+    const auto add_chunk = [&](std::uint64_t index, std::uint64_t start_byte, std::uint64_t actual_size) {
+        S3URIChunkSpec chunk_spec{index, start_byte, actual_size, chunk_size};
         if (download_chunk_filter(chunk_spec))
         {
             // Only add the chunk if it passes the filter
             queue_.emplace_back(std::move(chunk_spec));
         }
-        ++index;
-    }
+    };
+
+    const auto add_range_chunks = [&](std::uint64_t start_index, std::uint64_t end_index) {
+        for (std::uint64_t i = start_index; i < end_index; ++i)
+        {
+            const std::uint64_t start_byte = i * chunk_size;
+            const std::uint64_t chunk_size_adjusted = std::min(chunk_size, total_size - start_byte);
+            add_chunk(i, start_byte, chunk_size_adjusted);
+        }
+    };
+
+    constexpr std::uint64_t segment_2MB = 2 * 1024 * 1024;
+    const std::uint64_t num_chunks_for_2MB_segment = calcNumOfChunksForSegment(chunk_size, segment_2MB);
+
+    const std::uint64_t beg_range_beg_index = 0;
+    const std::uint64_t beg_range_end_index = std::min(num_chunks, num_chunks_for_2MB_segment);
+
+    const std::uint64_t end_range_beg_index =
+        std::max(calcEngRangeBegIndex(total_size, chunk_size, num_chunks_for_2MB_segment), beg_range_end_index);
+    const std::uint64_t end_range_end_index = num_chunks;
+
+    // middle range is what is left
+    const std::uint64_t middle_range_beg_index = beg_range_end_index;
+    const std::uint64_t middle_range_end_index = end_range_beg_index;
+
+    add_range_chunks(beg_range_beg_index, beg_range_end_index);
+    add_range_chunks(end_range_beg_index, end_range_end_index);
+    add_range_chunks(middle_range_beg_index, middle_range_end_index);
 }
 
 void S3URIChunkDownloadQueue::addChunk(S3URIChunkSpec chunk)

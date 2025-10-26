@@ -384,17 +384,21 @@ The next example runs the same decoding pipeline but uses the **`airtimes3src`**
 gst-launch-1.0 airtimes3src location=s3://my-bucket/path/to/media.webm ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
 ```
 
-The tests have been performed multiple times and the table below shows an average durations. The performance depends a lot on the speed of the network. The tests have been performed on a mobile network (LTE), MacBook M3 Pro, 36GB of RAM.
+The tests were run multiple times, and the table below presents average durations for two files: a relatively small 189 MB file and a larger 1.6 GB file. Performance varies significantly depending on network speed. The smaller file was tested over a mobile LTE connection, while the larger file was tested on a fiber network. Both sets of tests were conducted on a MacBook M3 Pro with 36 GB of RAM.
 
-| Test                           | Duration [seconds] |
-| ------------------------------ | ------------------ |
-| `aws s3 cp` + `filesrc`        | 21 + 12 = 33       |
-| `airtimes3src` with cold cache | **15**             |
-| `airtimes3src` with warm cache | **12**             |
+| Operation                      | 189MB file          | Speedup   | 1.6GB file                   | Speedup   |
+| ------------------------------ | ------------------- | --------- | ---------------------------- | --------- |
+| `aws s3 cp` + `filesrc`        | 21s + 12s = **33s** | 1×        | 54s + 2m 43s = **3min 37s**  | 1×        |
+| `airtimes3src` with cold cache | **15s**             | 2.2×      | **2min 46s**                 | 1.3×      |
+| `airtimes3src` with warm cache | **12s**             | 2.8×      | **2min 46s**                 | 1.3×      |
 
-With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`. However, please note that the pipeline starts running immediately, processing the requested byte range as soon as those bytes are available — it does not wait for the entire file to be fetched. With that in mind, comparing aws s3 cp + filesrc to airtimes3src is not entirely fair. The above example pipelines perform very little work, so they run quickly. However, in more realistic pipelines where processing takes longer, it’s possible that even with a arm cold cache, the fetching time could be completely hidden by the processing time.
+With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`. However, please note that the pipeline starts running immediately, processing the requested byte range as soon as those bytes are available — it does not wait for the entire file to be fetched. With that in mind, comparing aws s3 cp + filesrc to airtimes3src is not entirely fair. The above example pipelines perform very little work, so they run quickly. In more realistic scenarios, where pipeline processing takes longer, the time spent fetching data — even with a cold cache — may be completely masked by the processing time, especially for large files.
 
-## Comparison to the existing `awss3src` element
+### Comparison with the existing `awss3src` element
+
+The airtimes3src element offers a range of advanced features and significant performance improvements over the existing Rust-based awss3src element. Below is a summary of the key differences in functionality and performance.
+
+#### Functionality
 
 Although at first glance `airtimes3src` may seem similar to the existing `awss3src` element implemented in Rust, it offers significantly more functionality. In particular:
 
@@ -430,6 +434,34 @@ Although at first glance `airtimes3src` may seem similar to the existing `awss3s
   - `awss3src` can fail on certain URIs, producing errors such as:
     - `"Could not parse URI"`
     - `"Failed to get HEAD object: dispatch failure: io error: ... dns error: failed to lookup address information: nodename nor servname provided, or not known"`
+
+#### Performance
+
+The following pipelines were used to compare the processing times of the existing **awss3src** (baseline, gstreamer 1.26.7) and **airtimes3src**:
+```bash
+gst-launch-1.0 awss3src uri=s3://REGION/BUCKET/KEY ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
+gst-launch-1.0 airtimes3src location=s3://BUCKET/KEY ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
+```
+
+Results:
+- *189MB file, Webm/VP9/Opus, length: 10min 18s*:
+
+| Element                   | Duration | Speedup |
+|-------------------------- |----------|---------|
+| awss3src                  | 53.3s    | 1×      |
+| airtimes3src (cold cache) | 17.7s    | 3.0×    |
+| airtimes3src (warm cache) | 12.5s    | 4.3×    |
+
+
+- *2GB file, Webm/VP8/Opus, length: 7min 11s*:
+
+| Element                   | Duration   | Speedup |
+|-------------------------- |------------|---------|
+| awss3src                  | 21m 58.62s | 1×      |
+| airtimes3src (cold cache) | 2m 51.75s  | 7.7×    |
+| airtimes3src (warm cache) | 2m 45.02s  | 8.0×    |
+
+The substantial performance improvement of **airtimes3src** is primarily due to its parallel byte-range downloading with prioritization and robust, true seeking capabilities.
 
 ## More on the implementation details
 
