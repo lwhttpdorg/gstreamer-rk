@@ -23,6 +23,7 @@
 #endif
 
 #include <gst/check/gstcheck.h>
+#include <gst/check/gstharness.h>
 
 #define NUM_SELECTOR_PADS 4
 #define NUM_INPUT_BUFFERS 4     // buffers to send per each selector pad
@@ -35,6 +36,19 @@ static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS_ANY);
+
+/*
+ * This is a helper enum for generalizing testing the order of how buffers
+ * are sent to different sink pads of the input selector as well as when
+ * to switch between the active sinkpad.
+ */
+enum CommandSequence
+{
+  CMD_SEQ_SEND_SINK0,
+  CMD_SEQ_SEND_SINK1,
+  CMD_SEQ_SWITCH_TO_0,
+  CMD_SEQ_SWITCH_TO_1,
+};
 
 /* Data probe cb to drop everything but count buffers and events */
 static GstPadProbeReturn
@@ -819,6 +833,193 @@ GST_START_TEST (test_output_selector_getcaps_active)
 
 GST_END_TEST;
 
+static void
+test_switch_on_keyuinit (GstBuffer ** buffers_in, GstBuffer ** expected_out,
+    guint size_expected_out, enum CommandSequence *command_sequence,
+    guint size_command_sequence, gboolean switch_on_keyuint)
+{
+  GstBuffer **current_buf_in;
+  GstBuffer *buffer_out;
+  GstPad *sink_0;
+  GstPad *sink_1;
+  GstHarness *h = gst_harness_new_with_padnames ("input-selector", NULL, "src");
+  GstHarness *h0 = gst_harness_new_with_element (h->element, "sink_0", NULL);
+  GstHarness *h1 = gst_harness_new_with_element (h->element, "sink_1", NULL);
+
+  g_object_set (h->element, "switch-on-keyunit", switch_on_keyuint, NULL);
+
+  sink_0 = gst_element_get_static_pad (h->element, "sink_0");
+  sink_1 = gst_element_get_static_pad (h->element, "sink_1");
+
+  fail_unless (sink_0);
+  fail_unless (sink_1);
+
+  g_object_set (h->element, "active-pad", sink_0, NULL);
+
+  // Ignore warning
+  gst_check_add_log_filter ("GStreamer", G_LOG_LEVEL_WARNING,
+      g_regex_new ("Got data flow before (stream-start|segment) event",
+          (GRegexCompileFlags) 0, (GRegexMatchFlags) 0, NULL),
+      NULL, NULL, NULL);
+
+  current_buf_in = buffers_in;
+  for (guint i = 0; i < size_command_sequence; i++) {
+    switch (command_sequence[i]) {
+      case CMD_SEQ_SEND_SINK0:
+        fail_unless_equals_int (GST_FLOW_OK, gst_harness_push (h0,
+                *current_buf_in));
+        current_buf_in++;
+        break;
+      case CMD_SEQ_SEND_SINK1:
+        fail_unless_equals_int (GST_FLOW_OK, gst_harness_push (h1,
+                *current_buf_in));
+        current_buf_in++;
+        break;
+      case CMD_SEQ_SWITCH_TO_0:
+        g_object_set (h->element, "active-pad", sink_0, NULL);
+        break;
+      case CMD_SEQ_SWITCH_TO_1:
+        g_object_set (h->element, "active-pad", sink_1, NULL);
+        break;
+    }
+  }
+
+  fail_unless_equals_int (size_expected_out, gst_harness_buffers_in_queue (h));
+  // let's check if the buffer comes from the correct sinkpad
+  for (guint i = 0; i < size_expected_out; i++) {
+    buffer_out = gst_harness_pull (h);
+    fail_unless (expected_out[i] == buffer_out);
+    gst_buffer_unref (buffer_out);
+  }
+
+  // cleanup
+  gst_object_unref (sink_1);
+  gst_object_unref (sink_0);
+  gst_harness_teardown (h1);
+  gst_harness_teardown (h0);
+  gst_harness_teardown (h);
+}
+
+GST_START_TEST (test_switch_regardless_of_delta_flag_if_sok_false)
+{
+  GstBuffer *buffers_in[2];
+  GstBuffer *expected_out[2];
+  enum CommandSequence command_sequence[3];
+
+  buffers_in[0] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[0], 0, "input1", 6);
+
+  buffers_in[1] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[1], 0, "input2", 6);
+  gst_buffer_set_flags (buffers_in[1], GST_BUFFER_FLAG_DELTA_UNIT);
+
+  expected_out[0] = buffers_in[0];
+  expected_out[1] = buffers_in[1];
+
+  command_sequence[0] = CMD_SEQ_SEND_SINK0;
+  command_sequence[1] = CMD_SEQ_SWITCH_TO_1;
+  command_sequence[2] = CMD_SEQ_SEND_SINK1;
+
+  test_switch_on_keyuinit (buffers_in, expected_out, 2, command_sequence, 3,
+      FALSE);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_dont_switch_on_delta_if_sok_true)
+{
+  GstBuffer *buffers_in[2];
+  GstBuffer *expected_out;
+  enum CommandSequence command_sequence[3];
+
+  buffers_in[0] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[0], 0, "input1", 6);
+
+  buffers_in[1] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[1], 0, "input2", 6);
+  gst_buffer_set_flags (buffers_in[1], GST_BUFFER_FLAG_DELTA_UNIT);
+
+  expected_out = buffers_in[0];
+  // The second buffer will not be sent, because it's a delta unit
+
+  command_sequence[0] = CMD_SEQ_SEND_SINK0;
+  command_sequence[1] = CMD_SEQ_SWITCH_TO_1;
+  command_sequence[2] = CMD_SEQ_SEND_SINK1;
+
+  test_switch_on_keyuinit (buffers_in, &expected_out, 1, command_sequence, 3,
+      TRUE);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_switch_at_non_delta_buffer_if_sok_true)
+{
+  GstBuffer *buffers_in[3];
+  GstBuffer *expected_out[2];
+  enum CommandSequence command_sequence[4];
+
+  buffers_in[0] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[0], 0, "input1", 6);
+
+  buffers_in[1] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[1], 0, "input2", 6);
+  gst_buffer_set_flags (buffers_in[1], GST_BUFFER_FLAG_DELTA_UNIT);
+
+  buffers_in[2] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[2], 0, "input3", 6);
+
+  expected_out[0] = buffers_in[0];
+  // buffers_in[1] must be ignored because it's a delta unit
+  expected_out[1] = buffers_in[2];
+
+  command_sequence[0] = CMD_SEQ_SEND_SINK0;
+  command_sequence[1] = CMD_SEQ_SWITCH_TO_1;
+  command_sequence[2] = CMD_SEQ_SEND_SINK1;
+  command_sequence[3] = CMD_SEQ_SEND_SINK1;
+
+  test_switch_on_keyuinit (buffers_in, expected_out, 2, command_sequence, 4,
+      TRUE);
+}
+
+GST_END_TEST;
+
+GST_START_TEST
+    (test_switch_while_proposed_pad_still_sends_only_delta_units_if_sok_true) {
+  GstBuffer *buffers_in[4];
+  GstBuffer *expected_out[2];
+  enum CommandSequence command_sequence[6];
+
+  buffers_in[0] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[0], 0, "input1", 6);
+
+  buffers_in[1] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[1], 0, "input2", 6);
+  gst_buffer_set_flags (buffers_in[1], GST_BUFFER_FLAG_DELTA_UNIT);
+
+  buffers_in[2] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[2], 0, "input3", 6);
+
+  buffers_in[3] = gst_buffer_new_allocate (NULL, 6, NULL);
+  gst_buffer_fill (buffers_in[3], 0, "input4", 6);
+
+  expected_out[0] = buffers_in[0];
+  // buffers_in[1] must be ignored because it's a delta unit
+  // buffers_in[2] must be ignored again even though it's not a delta unit
+  // because we switch back to the original active_pad inbetween.
+  expected_out[1] = buffers_in[3];
+
+  command_sequence[0] = CMD_SEQ_SEND_SINK0;
+  command_sequence[1] = CMD_SEQ_SWITCH_TO_1;
+  command_sequence[2] = CMD_SEQ_SEND_SINK1;     // DELTA
+  command_sequence[3] = CMD_SEQ_SWITCH_TO_0;
+  command_sequence[4] = CMD_SEQ_SEND_SINK1;
+  command_sequence[5] = CMD_SEQ_SEND_SINK0;
+
+  test_switch_on_keyuinit (buffers_in, expected_out, 2, command_sequence, 6,
+      TRUE);
+}
+
+GST_END_TEST;
 
 static Suite *
 selector_suite (void)
@@ -841,6 +1042,14 @@ selector_suite (void)
   tcase_add_test (tc_chain, test_output_selector_getcaps_none);
   tcase_add_test (tc_chain, test_output_selector_getcaps_all);
   tcase_add_test (tc_chain, test_output_selector_getcaps_active);
+
+  tc_chain = tcase_create ("switch-on-keyunit");
+  suite_add_tcase (s, tc_chain);
+  tcase_add_test (tc_chain, test_switch_regardless_of_delta_flag_if_sok_false);
+  tcase_add_test (tc_chain, test_dont_switch_on_delta_if_sok_true);
+  tcase_add_test (tc_chain, test_switch_at_non_delta_buffer_if_sok_true);
+  tcase_add_test (tc_chain,
+      test_switch_while_proposed_pad_still_sends_only_delta_units_if_sok_true);
 
   return s;
 }
