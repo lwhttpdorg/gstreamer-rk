@@ -2678,10 +2678,7 @@ _gst_debug_nameof_funcptr (GstDebugFuncPtr func)
   } else
 #endif
   {
-    gchar *name = g_strdup_printf ("%p", (gpointer) func);
-    const gchar *iname = g_intern_string (name);
-
-    g_free (name);
+    const gchar *iname = gst_intern_string_from_ptr (func);
 
     _gst_debug_register_funcptr (func, iname);
     return iname;
