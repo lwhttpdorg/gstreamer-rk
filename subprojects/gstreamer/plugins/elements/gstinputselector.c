@@ -99,12 +99,14 @@ enum
   PROP_0,
   PROP_N_PADS,
   PROP_ACTIVE_PAD,
+  PROP_SWITCH_ON_KEYUNIT,
   PROP_SYNC_STREAMS,
   PROP_SYNC_MODE,
   PROP_CACHE_BUFFERS,
   PROP_DROP_BACKWARDS
 };
 
+#define DEFAULT_SWITCH_ON_KEYUNIT FALSE
 #define DEFAULT_SYNC_STREAMS TRUE
 #define DEFAULT_SYNC_MODE GST_INPUT_SELECTOR_SYNC_MODE_ACTIVE_SEGMENT
 #define DEFAULT_CACHE_BUFFERS FALSE
@@ -124,6 +126,9 @@ static void gst_input_selector_active_pad_changed (GstInputSelector * sel,
     GParamSpec * pspec, gpointer user_data);
 static inline gboolean gst_input_selector_is_active_sinkpad (GstInputSelector *
     sel, GstPad * pad);
+static gboolean
+gst_input_selector_set_active_pad_internal (GstInputSelector * self,
+    GstPad * pad);
 static GstPad *gst_input_selector_get_active_sinkpad (GstInputSelector * sel);
 static GstPad *gst_input_selector_get_linked_pad (GstInputSelector * sel,
     GstPad * pad, gboolean strict);
@@ -1076,6 +1081,17 @@ gst_selector_pad_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     goto flushing;
   }
 
+  if (sel->proposed_active_sinkpad == pad) {
+    if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT)) {
+      GST_LOG_OBJECT (pad,
+          "Buffer has delta flag, not switching proposed active pad");
+    } else {
+      GST_LOG_OBJECT (pad, "Buffer is keyunit, switching pad");
+      gst_input_selector_set_active_pad_internal (sel, pad);
+      sel->proposed_active_sinkpad = NULL;
+    }
+  }
+
   GST_LOG_OBJECT (pad, "getting active pad");
 
   prev_active_sinkpad =
@@ -1330,6 +1346,20 @@ gst_input_selector_class_init (GstInputSelectorClass * klass)
           G_PARAM_STATIC_STRINGS));
 
   /**
+   * GstInputSelector:switch-on-keyframe
+   *
+   * If set to %TRUE, when switching the 'active-pad' property,
+   * the input-selector will not switch until it receives a buffer
+   * from the new pad that is not a delta unit.
+   */
+  g_object_class_install_property (gobject_class, PROP_SWITCH_ON_KEYUNIT,
+      g_param_spec_boolean ("switch-on-keyunit", "Switch on keyunit",
+          "Switch active sink pad on keyunit",
+          DEFAULT_SWITCH_ON_KEYUNIT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
+          GST_PARAM_MUTABLE_READY));
+
+  /**
    * GstInputSelector:sync-streams
    *
    * If set to %TRUE all inactive streams will be synced to the
@@ -1431,7 +1461,9 @@ gst_input_selector_init (GstInputSelector * sel)
   gst_element_add_pad (GST_ELEMENT (sel), sel->srcpad);
   /* sinkpad management */
   sel->active_sinkpad = NULL;
+  sel->proposed_active_sinkpad = NULL;
   sel->padcount = 0;
+  sel->switch_on_keyunit = DEFAULT_SWITCH_ON_KEYUNIT;
   sel->sync_streams = DEFAULT_SYNC_STREAMS;
   sel->sync_mode = DEFAULT_SYNC_MODE;
   sel->have_group_id = TRUE;
@@ -1475,23 +1507,14 @@ gst_input_selector_finalize (GObject * object)
 }
 
 /* this function must be called with the SELECTOR_LOCK. It returns TRUE when the
- * active pad changed. */
+ * active pad changed.
+ * It also assumes that pad is a valid sinkpad of this input selector. */
 static gboolean
-gst_input_selector_set_active_pad (GstInputSelector * self, GstPad * pad)
+gst_input_selector_set_active_pad_internal (GstInputSelector * self,
+    GstPad * pad)
 {
   GstSelectorPad *old, *new;
   GstPad **active_pad_p;
-
-  if (pad == self->active_sinkpad)
-    return FALSE;
-
-  /* guard against users setting a src pad or foreign pad as active pad */
-  if (pad != NULL) {
-    g_return_val_if_fail (GST_PAD_IS_SINK (pad), FALSE);
-    g_return_val_if_fail (GST_IS_SELECTOR_PAD (pad), FALSE);
-    g_return_val_if_fail (GST_PAD_PARENT (pad) == GST_ELEMENT_CAST (self),
-        FALSE);
-  }
 
   old = GST_SELECTOR_PAD_CAST (self->active_sinkpad);
   new = GST_SELECTOR_PAD_CAST (pad);
@@ -1525,6 +1548,35 @@ gst_input_selector_set_active_pad (GstInputSelector * self, GstPad * pad)
   }
 
   return TRUE;
+
+}
+
+/* this function must be called with the SELECTOR_LOCK. It returns TRUE when the
+ * active pad changed. */
+static gboolean
+gst_input_selector_set_active_pad (GstInputSelector * self, GstPad * pad)
+{
+  /* while there is a proposed_active_sinkpad, we must be able to switch
+   * back to the currently active sinkpad.
+   */
+  if (pad == self->active_sinkpad && self->proposed_active_sinkpad == NULL)
+    return FALSE;
+
+  /* guard against users setting a src pad or foreign pad as active pad */
+  if (pad != NULL) {
+    g_return_val_if_fail (GST_PAD_IS_SINK (pad), FALSE);
+    g_return_val_if_fail (GST_IS_SELECTOR_PAD (pad), FALSE);
+    g_return_val_if_fail (GST_PAD_PARENT (pad) == GST_ELEMENT_CAST (self),
+        FALSE);
+  }
+
+  if (self->switch_on_keyunit) {
+    GST_DEBUG_OBJECT (self, "proposing new active pad %s:%s",
+        GST_DEBUG_PAD_NAME (pad));
+    self->proposed_active_sinkpad = pad;
+    return TRUE;
+  }
+  return gst_input_selector_set_active_pad_internal (self, pad);
 }
 
 static void
@@ -1556,6 +1608,11 @@ gst_input_selector_set_property (GObject * object, guint prop_id,
       GST_INPUT_SELECTOR_UNLOCK (sel);
       break;
     }
+    case PROP_SWITCH_ON_KEYUNIT:
+      GST_INPUT_SELECTOR_LOCK (sel);
+      sel->switch_on_keyunit = g_value_get_boolean (value);
+      GST_INPUT_SELECTOR_UNLOCK (sel);
+      break;
     case PROP_SYNC_STREAMS:
       GST_INPUT_SELECTOR_LOCK (sel);
       sel->sync_streams = g_value_get_boolean (value);
@@ -1607,6 +1664,11 @@ gst_input_selector_get_property (GObject * object, guint prop_id,
     case PROP_ACTIVE_PAD:
       GST_INPUT_SELECTOR_LOCK (object);
       g_value_set_object (value, sel->active_sinkpad);
+      GST_INPUT_SELECTOR_UNLOCK (object);
+      break;
+    case PROP_SWITCH_ON_KEYUNIT:
+      GST_INPUT_SELECTOR_LOCK (object);
+      g_value_set_boolean (value, sel->switch_on_keyunit);
       GST_INPUT_SELECTOR_UNLOCK (object);
       break;
     case PROP_SYNC_STREAMS:
