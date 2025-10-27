@@ -1322,6 +1322,51 @@ gst_mpegts_descriptor_from_metadata (const GstMpegtsMetadataDescriptor *
   return descriptor;
 }
 
+
+/**
+ * gst_mpegts_descriptor_from_metadata_std:
+ * @metadata_input_leak_rate: (in): the input leak rate in units of 400bits/sec.
+ * @metadata_buffer_size: (in) the buffer size in units of 1024 bytes
+ * @metadata_output_leak_rate: (in): the output leak rate in units of 400bits/sec.
+ *
+ * Inserts the metadata STD descriptor from @descriptor.
+ *
+ * See ISO/IEC 13818-1:2018 Section 2.6.62, 2.6.63 and 2.12.10 for details.
+ *
+ * Returns: new %GstMpegtsDescriptor
+ * 
+ * Since: 1.27
+ *
+ */
+
+GstMpegtsDescriptor *
+gst_mpegts_descriptor_from_metadata_std (guint32 metadata_input_leak_rate,
+    guint32 metadata_buffer_size, guint32 metadata_output_leak_rate)
+{
+  int wr_size = 0;
+  guint8 *add_info = NULL;
+  GstByteWriter writer;
+
+  // metadata_descriptor
+  gst_byte_writer_init_with_size (&writer, 9, FALSE);
+
+  gst_byte_writer_put_uint24_be (&writer, 0xC00000 | metadata_input_leak_rate);
+  gst_byte_writer_put_uint24_be (&writer, 0xC00000 | metadata_buffer_size);
+  gst_byte_writer_put_uint24_be (&writer, 0xC00000 | metadata_output_leak_rate);
+
+
+  wr_size = gst_byte_writer_get_size (&writer);
+  add_info = gst_byte_writer_reset_and_get_data (&writer);
+
+  GstMpegtsDescriptor *descriptor =
+      _new_descriptor (GST_MTS_DESC_METADATA_STD, wr_size);
+  memcpy (descriptor->data + 2, add_info, wr_size);
+  g_free (add_info);
+
+  return descriptor;
+
+}
+
 /**
  * gst_mpegts_descriptor_parse_metadata:
  * @descriptor: a %GST_TYPE_MPEGTS_METADATA_DESCRIPTOR #GstMpegtsDescriptor
@@ -1493,6 +1538,18 @@ gst_buffer_add_mpegts_pes_metadata_meta (GstBuffer * buffer)
       GST_MPEGTS_PES_METADATA_META_INFO, NULL);
   return meta;
 }
+
+
+GstMpegtsPESMetadataMeta *
+gst_buffer_get_mpegts_pes_metadata_meta (GstBuffer * buffer)
+{
+  GstMpegtsPESMetadataMeta *meta;
+  meta =
+      (GstMpegtsPESMetadataMeta *) gst_buffer_get_meta (buffer,
+      GST_MPEGTS_PES_METADATA_META_API_TYPE);
+  return meta;
+}
+
 
 static GstMpegtsMetadataPointerDescriptor *
 _gst_mpegts_metadata_pointer_descriptor_copy (GstMpegtsMetadataPointerDescriptor

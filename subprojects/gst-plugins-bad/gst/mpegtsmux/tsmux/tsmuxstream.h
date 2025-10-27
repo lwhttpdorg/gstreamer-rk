@@ -131,13 +131,14 @@ enum TsMuxStreamType {
   TSMUX_ST_PS_AUDIO_LPCM              = 0x8b,
   TSMUX_ST_PS_DVB_SUBPICTURE          = 0x8c,
   TSMUX_ST_PS_TELETEXT                = 0x8d,
-  TSMUX_ST_PS_KLV                     = 0x8e,    /* only used internally */
+  TSMUX_ST_PS_KLV_ASYNC               = 0x8e,    /* only used internally */
   TSMUX_ST_PS_OPUS                    = 0x8f,    /* only used internally */
   TSMUX_ST_PS_ID3                     = 0x90,    /* only used internally */
   TSMUX_ST_PS_ST_2038                 = 0x91,    /* only used internally */
   TSMUX_ST_PS_S302M                   = 0x92,    /* only used internally */
   TSMUX_ST_PS_VP9                     = 0x93,    /* only used internally */
   TSMUX_ST_PS_VIDEO_AV1               = 0x94,    /* only used internally */
+  TSMUX_ST_PS_KLV_SYNC                = 0x95,    /* only used internally */
   TSMUX_ST_PS_DVD_SUBPICTURE          = 0xff,
 
   /* Non-standard definitions */
@@ -236,6 +237,9 @@ struct TsMuxStream {
 
   /* PMT descriptor for the stream */
   GstMpegtsDescriptor *pmt_descriptor;
+
+  /* Added for KLV metadata, but should be useable for any other TS Metadata ?*/
+  guint8 metadata_sequence_number;
 };
 
 /* stream management */

@@ -228,13 +228,22 @@ tsmux_stream_new (guint16 pid, guint stream_type, guint stream_number)
           TSMUX_PACKET_FLAG_PES_DATA_ALIGNMENT;
 
       break;
-    case TSMUX_ST_PS_KLV:
+    case TSMUX_ST_PS_KLV_ASYNC:
       /* FIXME: assign sequential extended IDs? */
       stream->id = 0xBD;
       stream->stream_type = TSMUX_ST_PRIVATE_DATA;
       stream->pi.flags |=
           TSMUX_PACKET_FLAG_PES_FULL_HEADER |
           TSMUX_PACKET_FLAG_PES_DATA_ALIGNMENT;
+      break;
+    case TSMUX_ST_PS_KLV_SYNC:
+      /* FIXME: assign sequential extended IDs? */
+      stream->id = 0xFC;
+      stream->stream_type = TSMUX_ST_PES_METADATA;
+      stream->pi.flags |=
+          TSMUX_PACKET_FLAG_PES_FULL_HEADER |
+          TSMUX_PACKET_FLAG_PES_DATA_ALIGNMENT |
+          TSMUX_PACKET_FLAG_PES_WRITE_PTS;
       break;
     case TSMUX_ST_PS_ST_2038:
       /* FIXME: assign sequential extended IDs? */
@@ -996,7 +1005,27 @@ tsmux_stream_default_get_es_descrs (TsMuxStream * stream,
         descriptor = gst_mpegts_descriptor_from_registration ((const char *)
             &format_identifier, NULL, 0);
         g_ptr_array_add (pmt_stream->descriptors, descriptor);
+
+      } else if (stream->internal_stream_type == TSMUX_ST_PS_KLV_SYNC) {
+        // Setup for synchronous "General" KLV data.  Metadata descriptor and Metadata 'std' descriptor (rough bitrate data for receiver)
+        GstMpegtsMetadataDescriptor metadata_descriptor;
+        metadata_descriptor.metadata_application_format =
+            GST_MPEGTS_METADATA_APPLICATION_FORMAT_KLV_GENERAL;
+        metadata_descriptor.metadata_format =
+            GST_MPEGTS_METADATA_FORMAT_IDENTIFIER_FIELD;
+        metadata_descriptor.metadata_format_identifier = DRF_ID_KLVA;
+        metadata_descriptor.metadata_service_id = 0x00;
+        metadata_descriptor.decoder_config_flags = 0x00;
+        metadata_descriptor.dsm_cc_flag = FALSE;
+
+
+        descriptor = gst_mpegts_descriptor_from_metadata (&metadata_descriptor);
+        g_ptr_array_add (pmt_stream->descriptors, descriptor);
+
+        descriptor = gst_mpegts_descriptor_from_metadata_std (1250, 4, 0);
+        g_ptr_array_add (pmt_stream->descriptors, descriptor);
       }
+
       break;
     case TSMUX_ST_PS_DVB_SUBPICTURE:
       /* fallthrough ...
@@ -1027,7 +1056,8 @@ tsmux_stream_default_get_es_descrs (TsMuxStream * stream,
 
         g_ptr_array_add (pmt_stream->descriptors, descriptor);
       }
-      if (stream->internal_stream_type == TSMUX_ST_PS_KLV) {
+      if ((stream->internal_stream_type == TSMUX_ST_PS_KLV_ASYNC)
+          || (stream->internal_stream_type == TSMUX_ST_PS_KLV_SYNC)) {
         descriptor = gst_mpegts_descriptor_from_registration ("KLVA", NULL, 0);
         GST_DEBUG ("adding KLVA registration descriptor");
         g_ptr_array_add (pmt_stream->descriptors, descriptor);

@@ -6,6 +6,7 @@ tsmux_sources = [
   'gstbasetsmuxttxt.c',
   'gstbasetsmuxjpeg2000.c',
   'gstbasetsmuxjpegxs.c',
+  'gstbasetsmuxklv.c',
   'gstmpegtsmux.c',
   'gstatscmux.c',
   'tsmux/tsmux.c',
