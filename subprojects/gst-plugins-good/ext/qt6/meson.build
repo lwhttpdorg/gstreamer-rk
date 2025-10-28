@@ -1,3 +1,5 @@
+fs = import('fs')
+
 qt6_sources = [
   'gstplugin.cc',
   'gstqt6element.cc',
@@ -220,12 +222,11 @@ if qt6_option.require(have_qt_windowing, error_message: 'No windowing, enable on
       shaders += [compiled_shader_external]
     endif
   endforeach
-  resource_file = configure_file(input: 'resources.qrc', output: 'resources.qrc', copy: true)
+  resource_file = fs.copyfile('resources.qrc', 'resources.qrc')
   qresources = qt6_mod.compile_resources(sources: resource_file, method: qt6_method)
 
   qml6gl_kwargs = {}
   if host_system == 'darwin'
-    fs = import('fs')
     qt_bindir = fs.parent(find_program('qmake6').full_path())
     qt_libdir = fs.parent(qt_bindir) / 'lib'
     qml6gl_kwargs += {'build_rpath': qt_libdir}
