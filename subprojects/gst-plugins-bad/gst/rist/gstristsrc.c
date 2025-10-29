@@ -1068,6 +1068,7 @@ gst_rist_src_set_bonds (GstRistSrc * src, const gchar * bonds)
   }
 
   g_strfreev (tokens);
+  g_free (addrs);
   return;
 
 missing_address:
@@ -1291,7 +1292,7 @@ gst_rist_src_set_property (GObject * object, guint prop_id,
       if (new_caps_val != NULL)
         new_caps = gst_caps_copy (new_caps_val);
 
-      gst_caps_replace (&src->caps, new_caps);
+      gst_caps_take (&src->caps, new_caps);
 
       break;
     }

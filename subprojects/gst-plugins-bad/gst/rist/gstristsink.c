@@ -1055,6 +1055,7 @@ gst_rist_sink_set_bonds (GstRistSink * sink, const gchar * bonds)
   }
 
   g_strfreev (tokens);
+  g_free (addrs);
   return;
 
 missing_address:
