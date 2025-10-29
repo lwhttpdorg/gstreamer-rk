@@ -1303,8 +1303,10 @@ gst_rist_src_set_property (GObject * object, guint prop_id,
       src->encoding_name = g_value_dup_string (value);
       if (bond->rtp_src) {
         GstCaps *caps = gst_rist_src_request_pt_map (src, 0, 96, NULL);
-        g_object_set (G_OBJECT (bond->rtp_src), "caps", caps, NULL);
-        gst_caps_unref (caps);
+        if (caps) {
+          g_object_set (G_OBJECT (bond->rtp_src), "caps", caps, NULL);
+          gst_caps_unref (caps);
+        }
       }
       break;
     }
