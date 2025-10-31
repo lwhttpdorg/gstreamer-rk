@@ -2152,7 +2152,7 @@ gst_harness_pull_list_internal (GstHarness * h, gboolean wait)
 }
 
 /**
- * gst_harness_pull_list
+ * gst_harness_pull_list:
  * @h: a #GstHarness
  *
  * Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
