@@ -1770,7 +1770,7 @@ gst_harness_push (GstHarness * h, GstBuffer * buffer)
  *
  * Returns: a #GstFlowReturn with the result from the push
  *
- * Since: 1.22
+ * Since: 1.28
  */
 GstFlowReturn
 gst_harness_push_list (GstHarness * h, GstBufferList * buffer_list)
@@ -2167,7 +2167,7 @@ gst_harness_pull_list_internal (GstHarness * h, gboolean wait)
  *
  * Returns: (transfer full): a #GstBufferList or %NULL if timed out,
  *                           or buffer lists are not enabled.
- * Since: 1.22
+ * Since: 1.28
  */
 GstBufferList *
 gst_harness_pull_list (GstHarness * h)
@@ -2188,7 +2188,7 @@ gst_harness_pull_list (GstHarness * h)
  * Returns: (transfer full): a #GstBuffer or %NULL if no buffers are present in
  *                           the internal queue, or buffer lists not enabled.
  *
- * Since: 1.22
+ * Since: 1.28
  */
 GstBufferList *
 gst_harness_try_pull_list (GstHarness * h)
