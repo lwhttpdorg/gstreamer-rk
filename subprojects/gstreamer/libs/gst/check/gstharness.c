@@ -132,6 +132,8 @@
 #include <string.h>
 #include <math.h>
 
+#define HARNESS_DEFAULT_PULL_TIMEOUT (G_USEC_PER_SEC * 60)
+
 static void gst_harness_stress_free (GstHarnessThread * t);
 
 /* Keys used for storing and retrieving associations to pads and elements with
@@ -758,8 +760,8 @@ gst_harness_new_empty (void)
   /* we have forwarding on as a default */
   gst_harness_set_forwarding (h, TRUE);
 
-  /* we default to 60s as pull timeout */
-  gst_harness_set_pull_timeout (h, G_USEC_PER_SEC * 60);
+  /* set the default pull timeout */
+  gst_harness_set_pull_timeout (h, HARNESS_DEFAULT_PULL_TIMEOUT);
 
   return h;
 }
