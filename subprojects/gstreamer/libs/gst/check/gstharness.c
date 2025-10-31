@@ -1956,7 +1956,7 @@ gst_harness_push_and_pull (GstHarness * h, GstBuffer * buffer)
 }
 
 /**
- * gst_ha
+ * gst_harness_buffers_received:
  * @h: a #GstHarness
  *
  * The total number of #GstBuffers that has arrived on the #GstHarness sinkpad.
