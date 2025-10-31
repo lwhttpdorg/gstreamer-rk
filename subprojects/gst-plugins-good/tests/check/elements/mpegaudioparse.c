@@ -323,6 +323,13 @@ GST_START_TEST (test_parse_gapless_and_skip_padding_samples)
   {
     char *full_filename =
         g_build_filename (GST_TEST_FILES_PATH, info.filename, NULL);
+
+    /* Verify that the test file exists before proceeding */
+    if (!g_file_test (full_filename, G_FILE_TEST_EXISTS)) {
+      fail ("Gapless test asset not found: %s (GST_TEST_FILES_PATH=%s)",
+          full_filename, GST_TEST_FILES_PATH);
+    }
+
     g_object_set (G_OBJECT (source), "location", full_filename, NULL);
     g_free (full_filename);
   }
