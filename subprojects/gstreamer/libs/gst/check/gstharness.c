@@ -1653,7 +1653,7 @@ gst_harness_set_forward_pad (GstHarness * h, GstPad * fwdpad)
  *
  * MT safe.
  *
- * Since: 1.27
+ * Since: 1.28
  **/
 void
 gst_harness_set_pull_timeout (GstHarness * h, guint64 timeout)
