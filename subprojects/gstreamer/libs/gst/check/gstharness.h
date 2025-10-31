@@ -186,10 +186,16 @@ GST_CHECK_API
 GstBuffer *    gst_harness_pull (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
 
 GST_CHECK_API
-GstFlowReturn gst_harness_push_list (GstHarness * h, GstBufferList * buffer_list);
+GstBuffer *    gst_harness_try_pull (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
 
 GST_CHECK_API
-GstBuffer *    gst_harness_try_pull (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
+GstFlowReturn gst_harness_push_list (GstHarness * h, GstBufferList * buffer_list) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_CHECK_API
+GstBufferList * gst_harness_pull_list (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_CHECK_API
+GstBufferList * gst_harness_try_pull_list (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
 
 GST_CHECK_API
 gboolean       gst_harness_pull_until_eos (GstHarness * h, GstBuffer ** buf);
@@ -220,12 +226,6 @@ GBytes *       gst_harness_take_all_data_as_bytes (GstHarness * h) G_GNUC_WARN_U
 
 GST_CHECK_API
 GstClockTime   gst_harness_get_last_pushed_timestamp (GstHarness * h);
-
-GST_CHECK_API
-GstBufferList * gst_harness_pull_list (GstHarness * h);
-
-GST_CHECK_API
-GstBufferList *gst_harness_try_pull_list (GstHarness * h);
 
 /* downstream events */
 
