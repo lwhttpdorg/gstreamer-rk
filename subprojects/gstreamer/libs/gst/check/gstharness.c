@@ -2178,10 +2178,6 @@ gst_harness_pull_list (GstHarness * h)
  * gst_harness_try_pull_list:
  * @h: a #GstHarness
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. Unlike
- * gst_harness_pull this will not wait for any buffers if not any are present,
- * and return %NULL straight away.
- *
  * Pulls a #GstBufferList from the #GAsyncQueue on the #GstHarness sinkpad.
  * Unlike gst_harness_pull_list this will not wait for any buffers if not any
  * are present, and return %NULL straight away.
