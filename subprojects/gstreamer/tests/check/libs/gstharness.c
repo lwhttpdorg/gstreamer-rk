@@ -2,7 +2,7 @@
  * Tests and examples of GstHarness
  *
  * Copyright (C) 2022 Frederik Vestre <frederik.vestre@pexip.com>
- * Copyright (C) 2015 Havard Graff <havard@pexip.com>
+ * Copyright (C) 2015-2025 Havard Graff <havard@pexip.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
