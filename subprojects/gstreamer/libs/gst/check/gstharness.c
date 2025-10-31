@@ -1829,7 +1829,7 @@ gst_harness_try_pull_without_notify_locked (GstHarness * h)
  * gst_harness_pull:
  * @h: a #GstHarness
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
  * will timeout in 60 seconds. This is the standard way of getting a buffer
  * from a harnessed #GstElement.
  *
@@ -1871,7 +1871,7 @@ gst_harness_pull (GstHarness * h)
  * @buf: (out) (nullable) (transfer full): A #GstBuffer, or %NULL if EOS or timeout occures
  *   first.
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
  * will block until an EOS event is received, or timeout in 60 seconds.
  * MT safe.
  *
@@ -1903,13 +1903,14 @@ gst_harness_pull_until_eos (GstHarness * h, GstBuffer ** buf)
  * gst_harness_try_pull:
  * @h: a #GstHarness
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. Unlike
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. Unlike
  * gst_harness_pull this will not wait for any buffers if not any are present,
  * and return %NULL straight away.
  *
  * MT safe.
  *
- * Returns: (transfer full) (nullable): a #GstBuffer or %NULL if no buffers are present in the #GAsyncQueue
+ * Returns: (transfer full) (nullable): a #GstBuffer or %NULL if no buffers are
+ *                                      present in the internal queue
  *
  * Since: 1.6
  */
@@ -1979,7 +1980,7 @@ gst_harness_buffers_received (GstHarness * h)
  * gst_harness_buffers_in_queue:
  * @h: a #GstHarness
  *
- * The number of #GstBuffers currently in the #GstHarness sinkpad #GAsyncQueue
+ * The number of #GstBuffers currently in the #GstHarness sinkpad internal queue
  *
  * MT safe.
  *
@@ -2002,7 +2003,7 @@ gst_harness_buffers_in_queue (GstHarness * h)
  * @drop_buffers: a #gboolean specifying to drop outgoing buffers or not
  *
  * When set to %TRUE, instead of placing the buffers arriving from the harnessed
- * #GstElement inside the sinkpads #GAsyncQueue, they are instead unreffed.
+ * #GstElement inside the sinkpads internal queue, they are instead unreffed.
  *
  * MT safe.
  *
@@ -2154,7 +2155,7 @@ gst_harness_pull_list_internal (GstHarness * h, gboolean wait)
  * gst_harness_pull_list
  * @h: a #GstHarness
  *
- * Pulls a #GstBufferList from the #GAsyncQueue on the #GstHarness sinkpad.
+ * Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
  * The pull will timeout in 60 seconds. This is the standard way of getting
  * a buffer list from a harnessed #GstElement.
  *
@@ -2178,14 +2179,14 @@ gst_harness_pull_list (GstHarness * h)
  * gst_harness_try_pull_list:
  * @h: a #GstHarness
  *
- * Pulls a #GstBufferList from the #GAsyncQueue on the #GstHarness sinkpad.
+ * Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
  * Unlike gst_harness_pull_list this will not wait for any buffers if not any
  * are present, and return %NULL straight away.
  *
  * MT safe.
  *
  * Returns: (transfer full): a #GstBuffer or %NULL if no buffers are present in
- *                           the #GAsyncQueue, or buffer lists not enabled.
+ *                           the internal queue, or buffer lists not enabled.
  *
  * Since: 1.22
  */
@@ -2200,7 +2201,7 @@ gst_harness_try_pull_list (GstHarness * h)
  * @h: a #GstHarness
  * @filename: a #gchar with a the name of a file
  *
- * Allows you to dump the #GstBuffers the #GstHarness sinkpad #GAsyncQueue
+ * Allows you to dump the #GstBuffers the #GstHarness sinkpad internal queue
  * to a file.
  *
  * MT safe.
