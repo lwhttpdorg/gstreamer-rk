@@ -18142,6 +18142,50 @@ MT safe.</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="sort_sink_pads" c:identifier="gst_element_sort_sink_pads" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">The element sinkpads list will be sorted according to the
+supplied GCompareDataFunc @compare_func. (see g_list_sort_with_data() for details)</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstelement.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="element" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">a #GstElement to sort the sinkpads of</doc>
+            <type name="Element" c:type="GstElement*"/>
+          </instance-parameter>
+          <parameter name="compare_func" transfer-ownership="none" scope="call" closure="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">the #GCompareDataFunc used to sort the sinkpads</doc>
+            <type name="GLib.CompareDataFunc" c:type="GCompareDataFunc"/>
+          </parameter>
+          <parameter name="user_data" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">user data passed to @compare_func</doc>
+            <type name="gpointer" c:type="gpointer"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="sort_src_pads" c:identifier="gst_element_sort_src_pads" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">The element srcpads list will be sorted according to the
+supplied GCompareDataFunc @compare_func. (see g_list_sort_with_data() for details)</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstelement.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="element" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">a #GstElement to sort the srcpads of</doc>
+            <type name="Element" c:type="GstElement*"/>
+          </instance-parameter>
+          <parameter name="compare_func" transfer-ownership="none" scope="call" closure="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">the #GCompareDataFunc used to sort the srcpads</doc>
+            <type name="GLib.CompareDataFunc" c:type="GCompareDataFunc"/>
+          </parameter>
+          <parameter name="user_data" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">user data passed to @compare_func</doc>
+            <type name="gpointer" c:type="gpointer"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="sync_state_with_parent" c:identifier="gst_element_sync_state_with_parent">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstelement.c">Tries to change the state of the element to the same as its parent.
 If this function returns %FALSE, the state of element is undefined.</doc>

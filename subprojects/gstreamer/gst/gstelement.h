@@ -1309,6 +1309,16 @@ GST_API
 gboolean                gst_element_foreach_pad         (GstElement * element,
                                                          GstElementForeachPadFunc func,
                                                          gpointer     user_data);
+
+GST_API
+void                    gst_element_sort_sink_pads      (GstElement * element,
+                                                         GCompareDataFunc compare_func,
+                                                         gpointer user_data);
+GST_API
+void                    gst_element_sort_src_pads       (GstElement * element,
+                                                         GCompareDataFunc compare_func,
+                                                         gpointer user_data);
+
 /* event/query/format stuff */
 
 GST_API
