@@ -1443,8 +1443,7 @@ gst_rist_src_class_init (GstRistSrcClass * klass)
 
   g_object_class_install_property (object_class, PROP_BONDING_ADDRESSES,
       g_param_spec_string ("bonding-addresses", "Bonding Addresses",
-          "Comma (,) separated list of <address>:<port> to receive from. "
-          "Only used if 'enable-bonding' is set.", NULL,
+          "Comma (,) separated list of <address>:<port> to receive from.", NULL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 /**
