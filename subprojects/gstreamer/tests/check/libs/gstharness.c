@@ -329,7 +329,7 @@ GST_START_TEST (test_src_harness_buflist)
     gst_buffer_list_add (push_list, buffer);
   }
 
-  gst_harness_push_list (h, push_list);
+  fail_unless_equals_int (GST_FLOW_OK, gst_harness_push_list (h, push_list));
   fail_unless_equals_int (gst_harness_buffers_in_queue (h), 2);
 
   /* Verify that identity outputs a buffer by pulling and unreffing */
@@ -350,7 +350,7 @@ GST_START_TEST (test_src_harness_buflist)
     gst_buffer_list_add (push_list, buffer);
   }
 
-  gst_harness_push_list (h, push_list);
+  fail_unless_equals_int (GST_FLOW_OK, gst_harness_push_list (h, push_list));
   fail_unless_equals_int (gst_harness_buffers_in_queue (h), 3);
 
   for (int i = 0; i < 3; ++i) {
@@ -374,7 +374,7 @@ GST_START_TEST (test_src_harness_buflist)
     buffer = gst_buffer_new_allocate (NULL, i * 937, NULL);
     gst_buffer_list_add (push_list, buffer);
   }
-  gst_harness_push_list (h, push_list);
+  fail_unless_equals_int (GST_FLOW_OK, gst_harness_push_list (h, push_list));
   fail_unless_equals_int (gst_harness_buffers_in_queue (h), 5);
 
   /* Try to pull list, which should fail as a buffer is at the front of the queue. */
