@@ -321,6 +321,8 @@ struct _GstVideoDecoderClass
   gboolean      (*src_event)      (GstVideoDecoder *decoder,
 				   GstEvent *event);
 
+  gboolean      (*negotiate_pool)      (GstVideoDecoder *decoder, GstCaps *caps);
+
   gboolean      (*negotiate)      (GstVideoDecoder *decoder);
 
   gboolean      (*decide_allocation)  (GstVideoDecoder *decoder, GstQuery *query);
@@ -359,7 +361,7 @@ struct _GstVideoDecoderClass
                                         GstClockTime duration);
 
   /*< private >*/
-  gpointer padding[GST_PADDING_LARGE-7];
+  gpointer padding[GST_PADDING_LARGE-8];
 };
 
 /**

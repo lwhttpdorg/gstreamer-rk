@@ -7026,6 +7026,20 @@ negotiate fails.</doc>
           </instance-parameter>
         </parameters>
       </virtual-method>
+      <virtual-method name="negotiate_pool">
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="decoder" transfer-ownership="none">
+            <type name="VideoDecoder" c:type="GstVideoDecoder*"/>
+          </instance-parameter>
+          <parameter name="caps" transfer-ownership="none">
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
       <virtual-method name="open">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h">Optional.
                  Called when the element changes to GST_STATE_READY.
@@ -8412,6 +8426,22 @@ and likely as well.  If non-packetized input is supported or expected,
           </parameters>
         </callback>
       </field>
+      <field name="negotiate_pool">
+        <callback name="negotiate_pool">
+          <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="decoder" transfer-ownership="none">
+              <type name="VideoDecoder" c:type="GstVideoDecoder*"/>
+            </parameter>
+            <parameter name="caps" transfer-ownership="none">
+              <type name="Gst.Caps" c:type="GstCaps*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
       <field name="negotiate">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h">Optional.
                  Negotiate with downstream and configure buffer pools, etc.
@@ -8618,7 +8648,7 @@ and likely as well.  If non-packetized input is supported or expected,
         </callback>
       </field>
       <field name="padding" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="13">
+        <array zero-terminated="0" fixed-size="12">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>

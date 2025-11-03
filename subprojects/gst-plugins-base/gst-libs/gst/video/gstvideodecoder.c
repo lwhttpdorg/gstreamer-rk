@@ -520,6 +520,8 @@ static gboolean gst_video_decoder_decide_allocation_default (GstVideoDecoder *
     decoder, GstQuery * query);
 static gboolean gst_video_decoder_propose_allocation_default (GstVideoDecoder *
     decoder, GstQuery * query);
+static gboolean gst_video_decoder_negotiate_pool_default (GstVideoDecoder *
+    decoder, GstCaps * caps);
 static gboolean gst_video_decoder_negotiate_default (GstVideoDecoder * decoder);
 static GstFlowReturn gst_video_decoder_parse_available (GstVideoDecoder * dec,
     gboolean at_eos, gboolean new_buffer);
@@ -612,6 +614,7 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
   klass->src_event = gst_video_decoder_src_event_default;
   klass->decide_allocation = gst_video_decoder_decide_allocation_default;
   klass->propose_allocation = gst_video_decoder_propose_allocation_default;
+  klass->negotiate_pool = gst_video_decoder_negotiate_pool_default;
   klass->negotiate = gst_video_decoder_negotiate_default;
   klass->sink_query = gst_video_decoder_sink_query_default;
   klass->src_query = gst_video_decoder_src_query_default;
@@ -4338,7 +4341,8 @@ gst_video_decoder_propose_allocation_default (GstVideoDecoder * decoder,
 }
 
 static gboolean
-gst_video_decoder_negotiate_pool (GstVideoDecoder * decoder, GstCaps * caps)
+gst_video_decoder_negotiate_pool_default (GstVideoDecoder * decoder,
+    GstCaps * caps)
 {
   GstVideoDecoderClass *klass;
   GstQuery *query = NULL;
@@ -4418,6 +4422,19 @@ no_decide_allocation:
     GST_WARNING_OBJECT (decoder, "Subclass failed to decide allocation");
     goto done;
   }
+}
+
+static gboolean
+gst_video_decoder_negotiate_pool (GstVideoDecoder * decoder, GstCaps * caps)
+{
+  g_return_val_if_fail (GST_IS_VIDEO_DECODER (decoder), FALSE);
+
+  gboolean ret = TRUE;
+  GstVideoDecoderClass *klass = GST_VIDEO_DECODER_GET_CLASS (decoder);
+  if (G_LIKELY (NULL != klass->negotiate_pool)) {
+    ret = klass->negotiate_pool (decoder, caps);
+  }
+  return ret;
 }
 
 static gboolean
