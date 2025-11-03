@@ -262,10 +262,16 @@ gst_harness_chain_list (GstPad * pad, GstObject * parent,
     GstBufferList * buffer_list)
 {
   guint32 listlen;
-  GstHarness *h = g_object_get_data (G_OBJECT (pad), HARNESS_KEY);
-  GstHarnessPrivate *priv = h->priv;
+  GstHarness *h;
+  GstHarnessLink *link;
+  GstHarnessPrivate *priv;
   (void) parent;
+
+  if (!(link = gst_harness_pad_link_lock (pad, &h)))
+    return GST_FLOW_FLUSHING;
   g_assert (h != NULL);
+  priv = h->priv;
+
   g_mutex_lock (&priv->blocking_push_mutex);
   listlen = gst_buffer_list_length (buffer_list);
   (void) g_atomic_int_add (&priv->recv_buffers, listlen);
@@ -289,6 +295,7 @@ gst_harness_chain_list (GstPad * pad, GstObject * parent,
     }
   }
   g_mutex_unlock (&priv->blocking_push_mutex);
+  gst_harness_link_unlock (link);
 
   return GST_FLOW_OK;
 }
