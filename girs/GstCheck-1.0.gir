@@ -497,7 +497,7 @@ gst_clock_wait_id internally.</doc>
         </parameters>
       </method>
       <method name="buffers_in_queue" c:identifier="gst_harness_buffers_in_queue" version="1.6">
-        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">The number of #GstBuffers currently in the #GstHarness sinkpad #GAsyncQueue
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">The number of #GstBuffers currently in the #GstHarness sinkpad internal queue
 
 MT safe.</doc>
         <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
@@ -600,7 +600,7 @@ MT safe.</doc>
         </parameters>
       </method>
       <method name="dump_to_file" c:identifier="gst_harness_dump_to_file" version="1.6">
-        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Allows you to dump the #GstBuffers the #GstHarness sinkpad #GAsyncQueue
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Allows you to dump the #GstBuffers the #GstHarness sinkpad internal queue
 to a file.
 
 MT safe.</doc>
@@ -789,7 +789,7 @@ MT safe.</doc>
         </parameters>
       </method>
       <method name="pull" c:identifier="gst_harness_pull" version="1.6">
-        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
 will timeout in 60 seconds. This is the standard way of getting a buffer
 from a harnessed #GstElement.
 
@@ -823,8 +823,31 @@ MT safe.</doc>
           </instance-parameter>
         </parameters>
       </method>
+      <method name="pull_list" c:identifier="gst_harness_pull_list" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
+The pull will timeout in 60 seconds. This is the standard way of getting
+a buffer list from a harnessed #GstElement.
+
+If a normal buffer is submitted to the GstHarness this function will return
+null as long as that buffer is at the head of the queue
+(use #gst_harness_pull to remove it)
+
+MT safe.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
+        <return-value transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstBufferList or %NULL if timed out,
+                          or buffer lists are not enabled.</doc>
+          <type name="Gst.BufferList" c:type="GstBufferList*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstHarness</doc>
+            <type name="Harness" c:type="GstHarness*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
       <method name="pull_until_eos" c:identifier="gst_harness_pull_until_eos" version="1.18">
-        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
 will block until an EOS event is received, or timeout in 60 seconds.
 MT safe.</doc>
         <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
@@ -943,6 +966,27 @@ MT safe.</doc>
             <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstHarness</doc>
             <type name="Harness" c:type="GstHarness*"/>
           </instance-parameter>
+        </parameters>
+      </method>
+      <method name="push_list" c:identifier="gst_harness_push_list" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pushes a #GstBufferList on the #GstHarness srcpad. The standard way of
+interacting with an harnessed element.
+
+MT safe.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstFlowReturn with the result from the push</doc>
+          <type name="Gst.FlowReturn" c:type="GstFlowReturn"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstHarness</doc>
+            <type name="Harness" c:type="GstHarness*"/>
+          </instance-parameter>
+          <parameter name="buffer_list" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstBufferList to push</doc>
+            <type name="Gst.BufferList" c:type="GstBufferList*"/>
+          </parameter>
         </parameters>
       </method>
       <method name="push_to_sink" c:identifier="gst_harness_push_to_sink" version="1.6">
@@ -1095,7 +1139,7 @@ MT safe.</doc>
       </method>
       <method name="set_drop_buffers" c:identifier="gst_harness_set_drop_buffers" version="1.6">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">When set to %TRUE, instead of placing the buffers arriving from the harnessed
-#GstElement inside the sinkpads #GAsyncQueue, they are instead unreffed.
+#GstElement inside the sinkpads internal queue, they are instead unreffed.
 
 MT safe.</doc>
         <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
@@ -1755,14 +1799,15 @@ MT safe.</doc>
         </parameters>
       </method>
       <method name="try_pull" c:identifier="gst_harness_try_pull" version="1.6">
-        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. Unlike
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. Unlike
 gst_harness_pull this will not wait for any buffers if not any are present,
 and return %NULL straight away.
 
 MT safe.</doc>
         <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
         <return-value transfer-ownership="full" nullable="1">
-          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstBuffer or %NULL if no buffers are present in the #GAsyncQueue</doc>
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstBuffer or %NULL if no buffers are
+                                     present in the internal queue</doc>
           <type name="Gst.Buffer" c:type="GstBuffer*"/>
         </return-value>
         <parameters>
@@ -1781,6 +1826,25 @@ MT safe.</doc>
         <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstEvent or %NULL if no buffers are present in the #GAsyncQueue</doc>
           <type name="Gst.Event" c:type="GstEvent*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstHarness</doc>
+            <type name="Harness" c:type="GstHarness*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="try_pull_list" c:identifier="gst_harness_try_pull_list" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
+Unlike gst_harness_pull_list this will not wait for any buffers if not any
+are present, and return %NULL straight away.
+
+MT safe.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/check/gstharness.h"/>
+        <return-value transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/check/gstharness.c">a #GstBuffer or %NULL if no buffers are present in
+                          the internal queue, or buffer lists not enabled.</doc>
+          <type name="Gst.BufferList" c:type="GstBufferList*"/>
         </return-value>
         <parameters>
           <instance-parameter name="h" transfer-ownership="none">
