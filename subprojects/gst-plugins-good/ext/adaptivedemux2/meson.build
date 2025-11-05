@@ -94,9 +94,12 @@ adaptive_headers = [
 ]
 
 subdir('hls')
+subdir('movpkg')
 
 adaptive_sources += hls_sources
 adaptive_headers += hls_headers
+adaptive_sources += movpkg_sources
+adaptive_headers += movpkg_headers
 doc_sources = []
 foreach s: adaptive_sources + adaptive_headers
   doc_sources += meson.current_source_dir() / s
@@ -143,8 +146,8 @@ adaptive_kwargs = {
   'install_dir': plugins_install_dir,
 }
 adaptive_deps = [gmodule_dep, gst_dep, gsttag_dep, gstnet_dep, gstbase_dep, gstpbutils_dep,
-    gstapp_dep, gio_dep, adaptive_xml2_dep, hls_crypto_dep, libdl, libm]
-adaptive_args = [gst_plugins_good_args, soup_loader_args, hls_cargs,
+    gstapp_dep, gio_dep, adaptive_xml2_dep, movpkg_json_dep, hls_crypto_dep, libdl, libm]
+adaptive_args = [gst_plugins_good_args, soup_loader_args, hls_cargs, movpkg_cargs,
     '-DGST_ISOFF_API=G_GNUC_INTERNAL']
 
 if host_system == 'windows'

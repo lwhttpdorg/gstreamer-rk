@@ -31,6 +31,7 @@ plugin_init (GstPlugin * plugin)
   ret |= GST_ELEMENT_REGISTER (hlsdemux2, plugin);
   ret |= GST_ELEMENT_REGISTER (dashdemux2, plugin);
   ret |= GST_ELEMENT_REGISTER (mssdemux2, plugin);
+  ret |= GST_ELEMENT_REGISTER (movpkgdemux, plugin);
 
   return ret;
 }

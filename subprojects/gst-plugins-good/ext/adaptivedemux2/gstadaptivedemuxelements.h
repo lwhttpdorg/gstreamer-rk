@@ -31,5 +31,6 @@ gboolean adaptivedemux2_base_element_init (GstPlugin * plugin);
 GST_ELEMENT_REGISTER_DECLARE (mssdemux2);
 GST_ELEMENT_REGISTER_DECLARE (hlsdemux2);
 GST_ELEMENT_REGISTER_DECLARE (dashdemux2);
+GST_ELEMENT_REGISTER_DECLARE (movpkgdemux);
 
 #endif
