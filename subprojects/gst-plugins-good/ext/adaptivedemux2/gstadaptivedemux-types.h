@@ -23,6 +23,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#include <gst/gst.h>
+
 #ifndef _GST_ADAPTIVE_DEMUX_TYPES_H_
 #define _GST_ADAPTIVE_DEMUX_TYPES_H_
 
@@ -48,6 +50,9 @@ typedef struct _GstAdaptiveDemuxClass GstAdaptiveDemuxClass;
 #define GST_IS_ADAPTIVE_DEMUX_CLASS(obj) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_ADAPTIVE_DEMUX))
 #define GST_ADAPTIVE_DEMUX_CAST(obj) ((GstAdaptiveDemux *)obj)
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstAdaptiveDemux, gst_object_unref)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstAdaptiveDemux2Stream, gst_object_unref)
 
 G_END_DECLS
 
