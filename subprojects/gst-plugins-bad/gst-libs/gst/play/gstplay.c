@@ -470,12 +470,14 @@ gst_play_dispose (GObject * object)
   gst_bus_set_flushing (self->api_bus, TRUE);
 
   if (self->loop) {
-    g_main_loop_quit (self->loop);
+    if (self->thread == g_thread_self ()) {
+      g_object_ref (self);
+      g_main_context_invoke (NULL, (GSourceFunc) g_object_unref, self);
+      return;
+    }
 
-    if (self->thread != g_thread_self ())
-      g_thread_join (self->thread);
-    else
-      g_thread_unref (self->thread);
+    g_main_loop_quit (self->loop);
+    g_thread_join (self->thread);
     self->thread = NULL;
 
     g_main_loop_unref (self->loop);
