@@ -359,6 +359,12 @@ struct _GstSharedTaskPoolPrivate
 
 #define GST_SHARED_TASK_POOL_CAST(pool)       ((GstSharedTaskPool*)(pool))
 
+enum
+{
+  SHARED_PROP_0,
+  SHARED_PROP_MAX_THREADS,
+};
+
 G_DEFINE_TYPE_WITH_PRIVATE (GstSharedTaskPool, gst_shared_task_pool,
     GST_TYPE_TASK_POOL);
 
@@ -451,9 +457,58 @@ shared_prepare (GstTaskPool * pool, GError ** error)
 }
 
 static void
+gst_shared_task_pool_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstSharedTaskPool *pool = GST_SHARED_TASK_POOL (object);
+
+  switch (prop_id) {
+    case SHARED_PROP_MAX_THREADS:
+      gst_shared_task_pool_set_max_threads (pool, g_value_get_uint (value));
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_shared_task_pool_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstSharedTaskPool *pool = GST_SHARED_TASK_POOL (object);
+
+  switch (prop_id) {
+    case SHARED_PROP_MAX_THREADS:
+      g_value_set_uint (value, gst_shared_task_pool_get_max_threads (pool));
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
 gst_shared_task_pool_class_init (GstSharedTaskPoolClass * klass)
 {
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstTaskPoolClass *taskpoolclass = GST_TASK_POOL_CLASS (klass);
+
+  gobject_class->set_property = gst_shared_task_pool_set_property;
+  gobject_class->get_property = gst_shared_task_pool_get_property;
+
+  /**
+   * GstSharedTaskPool:max-threads:
+   *
+   * Maximum number of threads to spawn.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, SHARED_PROP_MAX_THREADS,
+      g_param_spec_uint ("max-threads", "Max Threads",
+          "Maximum number of threads to spawn (0 to freeze the pool)",
+          0, G_MAXUINT, 1,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT));
 
   taskpoolclass->prepare = shared_prepare;
   taskpoolclass->push = shared_push;
