@@ -2351,6 +2351,12 @@ _priv_gst_value_get_abbrs (gint * n_abbrs)
       {"array", GST_TYPE_ARRAY}
       ,
       {"list", GST_TYPE_LIST}
+      ,
+      {"object", G_TYPE_OBJECT}
+      ,
+      {"obj", G_TYPE_OBJECT}
+      ,
+      {"o", G_TYPE_OBJECT}
     };
     _num = G_N_ELEMENTS (dyn_abbrs);
     /* permanently allocate and copy the array now */
@@ -2677,8 +2683,8 @@ _priv_gst_value_parse_simple_string (gchar * str, gchar ** end)
 }
 
 static gboolean
-_priv_gst_value_parse_struct_or_caps (gchar * str, gchar ** after, GType type,
-    GValue * value)
+_priv_gst_value_parse_struct_or_caps_or_object (gchar * str, gchar ** after,
+    GType type, GValue * value)
 {
   gint openers = 1;
   gboolean ret = FALSE;
@@ -2718,7 +2724,7 @@ _priv_gst_value_parse_struct_or_caps (gchar * str, gchar ** after, GType type,
 }
 
 static gboolean
-_priv_gst_value_parse_range_struct_caps (gchar * s, gchar ** after,
+_priv_gst_value_parse_range_struct_caps_object (gchar * s, gchar ** after,
     GValue * value, GType type)
 {
   gint i;
@@ -2729,8 +2735,10 @@ _priv_gst_value_parse_range_struct_caps (gchar * s, gchar ** after,
     GST_TYPE_CAPS,
   };
 
-  if (type == GST_TYPE_CAPS || type == GST_TYPE_STRUCTURE)
-    ret = _priv_gst_value_parse_struct_or_caps (tmp, &tmp, type, value);
+  if (type == GST_TYPE_CAPS || type == GST_TYPE_STRUCTURE
+      || g_type_is_a (type, G_TYPE_OBJECT))
+    ret =
+        _priv_gst_value_parse_struct_or_caps_or_object (tmp, &tmp, type, value);
 
   if (ret)
     goto ok;
@@ -2745,7 +2753,9 @@ _priv_gst_value_parse_range_struct_caps (gchar * s, gchar ** after,
 
   for (i = 0; i < G_N_ELEMENTS (try_types); i++) {
     tmp = s;
-    ret = _priv_gst_value_parse_struct_or_caps (tmp, &tmp, try_types[i], value);
+    ret =
+        _priv_gst_value_parse_struct_or_caps_or_object (tmp, &tmp, try_types[i],
+        value);
     if (ret)
       goto ok;
   }
@@ -2810,8 +2820,9 @@ _priv_gst_value_parse_value (gchar * str,
   while (g_ascii_isspace (*s))
     s++;
   if (*s == '[') {
-    ret = _priv_gst_value_parse_range_struct_caps (s, &s, value, type);
+    ret = _priv_gst_value_parse_range_struct_caps_object (s, &s, value, type);
   } else if (*s == '{') {
+    /* Lists use curly braces */
     g_value_init (value, GST_TYPE_LIST);
     ret = _priv_gst_value_parse_list (s, &s, value, type, pspec);
   } else if (*s == '<') {
@@ -8908,6 +8919,157 @@ gst_value_transform_object_string (const GValue * src_value,
   dest_value->data[0].v_pointer = str;
 }
 
+static gchar *
+gst_value_serialize_object (const GValue * value)
+{
+  GObject *obj = g_value_get_object (value);
+  GParamSpec **properties;
+  guint n_properties, i;
+  GstStructure *structure;
+
+  GST_DEBUG ("Serializing GObject of type %s", G_VALUE_TYPE_NAME (value));
+
+  if (obj == NULL)
+    return g_strdup ("NULL");
+
+  structure = gst_structure_new_empty (G_OBJECT_TYPE_NAME (obj));
+
+  properties =
+      g_object_class_list_properties (G_OBJECT_GET_CLASS (obj), &n_properties);
+
+  for (i = 0; i < n_properties; i++) {
+    GParamSpec *pspec = properties[i];
+    GValue prop_value = G_VALUE_INIT;
+
+    /* Skip non-readable or non-writable properties */
+    if (!(pspec->flags & G_PARAM_READABLE)
+        || !(pspec->flags & G_PARAM_WRITABLE))
+      continue;
+
+    g_object_get_property (obj, pspec->name, &prop_value);
+
+    /* Skip properties that are using default values */
+    if (g_param_value_defaults (pspec, &prop_value)) {
+      GST_LOG ("Skipping default property %s", pspec->name);
+      g_value_unset (&prop_value);
+      continue;
+    }
+
+    gst_structure_set_value (structure, pspec->name, &prop_value);
+
+    g_value_unset (&prop_value);
+  }
+  g_free (properties);
+
+  return gst_structure_serialize_full (structure, GST_SERIALIZE_FLAG_NONE);
+}
+
+static gboolean
+gst_value_deserialize_object (GValue * dest, const gchar * s)
+{
+  GstStructure *structure;
+  const gchar *type_name;
+  GType type;
+  GObjectClass *klass;
+  GObject *object;
+  gint n_fields, i;
+  gboolean ret = FALSE;
+
+  structure = gst_structure_from_string (s, NULL);
+  if (!structure) {
+    GST_WARNING ("Could not parse GObject definition: '%s'", s);
+    return FALSE;
+  }
+
+  type_name = gst_structure_get_name (structure);
+  type = g_type_from_name (type_name);
+  if (type == G_TYPE_INVALID) {
+    GST_WARNING ("Unknown type: '%s'", type_name);
+    goto done;
+  }
+
+  if (!g_type_is_a (type, G_TYPE_OBJECT)) {
+    GST_WARNING ("Type '%s' is not a GObject", type_name);
+    goto done;
+  }
+
+  klass = g_type_class_ref (type);
+  if (!klass) {
+    GST_WARNING ("Could not get class for type '%s'", type_name);
+    goto done;
+  }
+  dest->g_type = type;
+
+  n_fields = gst_structure_n_fields (structure);
+  GArray *prop_names =
+      g_array_sized_new (FALSE, FALSE, sizeof (const gchar *), n_fields);
+  GArray *prop_values =
+      g_array_sized_new (FALSE, FALSE, sizeof (GValue), n_fields);
+  for (i = 0; i < n_fields; i++) {
+    const gchar *field_name = gst_structure_nth_field_name (structure, i);
+    const GValue *field_value = gst_structure_get_value (structure, field_name);
+    GParamSpec *pspec;
+    GValue prop_value = G_VALUE_INIT;
+    GType field_type;
+
+
+    pspec = g_object_class_find_property (klass, field_name);
+    if (!pspec) {
+      GST_WARNING ("No property '%s' in type '%s'", field_name, type_name);
+      goto cleanup_arrays;
+    }
+
+    field_type = G_VALUE_TYPE (field_value);
+    if (field_type == G_TYPE_INVALID) {
+      GST_WARNING ("Field '%s' has invalid type", field_name);
+      goto cleanup_arrays;
+    }
+
+    /* Convert field value to property type */
+    g_value_init (&prop_value, pspec->value_type);
+    if (!g_value_transform (field_value, &prop_value)) {
+      /* Try deserializing from string */
+      gchar *str = gst_value_serialize (field_value);
+      if (!str || !gst_value_deserialize_with_pspec (&prop_value, str, pspec)) {
+        GST_WARNING ("Cannot convert value for property '%s'", field_name);
+        g_free (str);
+        g_value_unset (&prop_value);
+        goto cleanup_arrays;
+      }
+      g_free (str);
+    }
+
+    g_array_append_val (prop_names, field_name);
+    g_array_append_val (prop_values, prop_value);
+  }
+
+
+  object = g_object_new_with_properties (type, prop_names->len,
+      (const gchar **) prop_names->data, (GValue *) prop_values->data);
+  if (object) {
+    if (g_object_is_floating (object))
+      g_object_ref_sink (object);
+    g_value_take_object (dest, object);
+    ret = TRUE;
+  } else {
+    GST_WARNING ("Failed to create object of type '%s'", type_name);
+  }
+
+cleanup_arrays:
+  for (i = 0; i < (gint) prop_values->len; i++) {
+    GValue *v = &g_array_index (prop_values, GValue, i);
+    g_value_unset (v);
+  }
+  g_array_free (prop_names, TRUE);
+  g_array_free (prop_values, TRUE);
+  g_type_class_unref (klass);
+
+done:
+  gst_structure_free (structure);
+  return ret;
+}
+
+
 /*********
  * GStrv *
  *********/
@@ -9269,10 +9431,9 @@ _priv_gst_value_initialize (void)
   REGISTER_SERIALIZATION_NO_COMPARE (gst_caps_features_get_type (),
       caps_features);
   REGISTER_SERIALIZATION_NO_COMPARE (G_TYPE_STRV, strv);
-
+  REGISTER_SERIALIZATION (G_TYPE_OBJECT, object);
   REGISTER_SERIALIZATION_COMPARE_ONLY (gst_allocation_params_get_type (),
       allocation_params);
-  REGISTER_SERIALIZATION_COMPARE_ONLY (G_TYPE_OBJECT, object);
 
   REGISTER_SERIALIZATION_CONST (G_TYPE_DOUBLE, double);
   REGISTER_SERIALIZATION_CONST (G_TYPE_FLOAT, float);
