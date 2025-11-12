@@ -652,6 +652,7 @@ init_static_plugins (void)
  * - we don't have cases yet where this fails, but in the future
  *   we might and then it's nice to be able to return that
  */
+
 static gboolean
 init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
     GError ** error)
@@ -812,6 +813,8 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   /* Adjust initial plugin rank based on the GST_PLUGIN_FEATURE_RANK
    * environment variable */
   _priv_gst_plugin_feature_rank_initialize ();
+
+  _gst_lttng_init ();
 
 #ifndef GST_DISABLE_GST_TRACER_HOOKS
   _priv_gst_tracing_init ();

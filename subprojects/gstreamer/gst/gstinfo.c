@@ -164,7 +164,7 @@ _gst_getpid (void)
 #else
 typedef pid_t GstPid;
 
-static inline GstPid
+GstPid
 _gst_getpid (void)
 {
   return getpid ();
