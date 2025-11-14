@@ -111,6 +111,7 @@ gst_movpkg_demux_stream_create_tracks (GstAdaptiveDemux2Stream * stream)
 {
   GstMovpkgDemuxStream *self = GST_MOVPKG_DEMUX_STREAM (stream);
   GstHLSRenditionStream *rendition = self->rendition;
+
   GstTagList *rendition_tags = gst_tag_list_new_empty ();
   if (rendition) {
     const gchar *language_code =
@@ -127,6 +128,7 @@ gst_movpkg_demux_stream_create_tracks (GstAdaptiveDemux2Stream * stream)
           rendition->name, NULL);
     }
   }
+
   GstCaps *stream_caps = gst_caps_new_empty ();
   guint n_streams = gst_stream_collection_get_size (stream->stream_collection);
   for (guint i = 0; i < n_streams; i++) {
@@ -137,14 +139,17 @@ gst_movpkg_demux_stream_create_tracks (GstAdaptiveDemux2Stream * stream)
     const gchar *stream_type_name = gst_stream_type_get_name (stream_type);
     gchar *stream_id = g_strdup_printf ("%s-%d-%s", stream_type_name, i,
         GST_OBJECT_NAME (stream));
+
     GstCaps *caps = gst_stream_get_caps (gst_stream);
     gst_caps_append (stream_caps, gst_caps_copy (caps));
+
     GstTagList *stream_tags = gst_stream_get_tags (gst_stream);
     GstTagList *tags = gst_tag_list_merge (stream_tags, rendition_tags,
         GST_TAG_MERGE_KEEP);
     gst_tag_list_add (tags, GST_TAG_MERGE_APPEND,
         GST_TAG_BITRATE, compute_bitrate (self->total_size, self->duration),
         GST_TAG_MAXIMUM_BITRATE, (guint) self->max_fragment_bitrate, NULL);
+
     GstStreamFlags flags = stream_type == GST_STREAM_TYPE_TEXT ?
         GST_STREAM_FLAG_SPARSE : GST_STREAM_FLAG_NONE;
     GstAdaptiveDemuxTrack *track = gst_adaptive_demux_track_new (stream->demux,
@@ -153,11 +158,14 @@ gst_movpkg_demux_stream_create_tracks (GstAdaptiveDemux2Stream * stream)
     if (!gst_adaptive_demux2_stream_add_track (stream, track)) {
       GST_ERROR_OBJECT (stream, "failed to add track");
     }
+
     stream->stream_type |= stream_type;
+
     gst_clear_tag_list (&stream_tags);
     g_clear_pointer (&track, gst_adaptive_demux_track_unref);
     g_clear_pointer (&stream_id, g_free);
   }
+
   gst_adaptive_demux2_stream_set_caps (stream, stream_caps);
   gst_adaptive_demux2_stream_set_tags (stream, rendition_tags);
 }
