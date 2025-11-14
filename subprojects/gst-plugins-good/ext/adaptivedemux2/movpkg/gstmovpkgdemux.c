@@ -32,6 +32,7 @@
  * gst-launch-1.0 playbin3 uri=file:///path/to/movie.movpkg/root.xml
  * ]|
  *
+ * Since: 1.28
  */
 
 #ifdef HAVE_CONFIG_H
