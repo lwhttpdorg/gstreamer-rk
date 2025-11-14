@@ -8,7 +8,7 @@ and/or use gtk-doc annotations.  -->
   <package name="gstreamer-1.0"/>
   <c:include name="gst/gst.h"/>
   <namespace name="Gst" version="1.0" shared-library="libgstreamer-1.0.so.0" c:identifier-prefixes="Gst" c:symbol-prefixes="gst">
-    <alias name="BufferMapInfo" c:type="GstBufferMapInfo" introspectable="0">
+    <alias name="BufferMapInfo" c:type="GstBufferMapInfo" introspectable="0" deprecated="1" deprecated-version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.h">Alias for #GstMapInfo to be used with g_auto():
 ```c
 void my_func(GstBuffer *buf)
@@ -21,10 +21,8 @@ void my_func(GstBuffer *buf)
 }
 ```
 
-#GstMapInfo cannot be used with g_auto() because it is ambiguous whether it
-needs to be unmapped using gst_buffer_unmap() or gst_memory_unmap().
-
 See also #GstMemoryMapInfo.</doc>
+      <doc-deprecated xml:space="preserve">Use #GstMapInfo instead.</doc-deprecated>
       <source-position filename="../subprojects/gstreamer/gst/gstbuffer.h"/>
       <type name="MapInfo" c:type="GstMapInfo"/>
     </alias>
@@ -48,7 +46,7 @@ See also #GstMemoryMapInfo.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstelementfactory.h"/>
       <type name="guint64" c:type="guint64"/>
     </alias>
-    <alias name="MemoryMapInfo" c:type="GstMemoryMapInfo" introspectable="0">
+    <alias name="MemoryMapInfo" c:type="GstMemoryMapInfo" introspectable="0" deprecated="1" deprecated-version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.h">Alias for #GstMapInfo to be used with g_auto():
 ```c
 void my_func(GstMemory *mem)
@@ -61,10 +59,8 @@ void my_func(GstMemory *mem)
 }
 ```
 
-#GstMapInfo cannot be used with g_auto() because it is ambiguous whether it
-needs to be unmapped using gst_buffer_unmap() or gst_memory_unmap().
-
 See also #GstBufferMapInfo.</doc>
+      <doc-deprecated xml:space="preserve">Use #GstMapInfo instead.</doc-deprecated>
       <source-position filename="../subprojects/gstreamer/gst/gstmemory.h"/>
       <type name="MapInfo" c:type="GstMapInfo"/>
     </alias>
@@ -24879,6 +24875,11 @@ gst_mini_object_lock() and gst_mini_object_unlock().</doc>
       <member name="write" value="2" c:identifier="GST_MAP_WRITE" glib:nick="write" glib:name="GST_MAP_WRITE">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.h">map for write access</doc>
       </member>
+      <member name="ref_memory" value="256" c:identifier="GST_MAP_REF_MEMORY" version="1.28" glib:nick="ref-memory" glib:name="GST_MAP_REF_MEMORY">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.h">Take another reference of the memory and store it in the GstMapInfo. This
+makes sure that the memory stays valid  while it is mapped and
+automatically unrefs it on unmap.</doc>
+      </member>
       <member name="flag_last" value="65536" c:identifier="GST_MAP_FLAG_LAST" glib:nick="flag-last" glib:name="GST_MAP_FLAG_LAST">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.h">first flag that can be used for custom purposes</doc>
       </member>
@@ -24925,6 +24926,19 @@ needs to be unmapped using gst_buffer_unmap() or gst_memory_unmap(). Instead,
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
+      <method name="clear" c:identifier="gst_map_info_clear" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.c">Release the memory obtained with gst_memory_map()</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstmemory.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="info" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.c">a #GstMapInfo</doc>
+            <type name="MapInfo" c:type="GstMapInfo*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
       <method name="get_data" c:identifier="gst_map_info_get_data" version="1.28">
         <source-position filename="../subprojects/gstreamer/gst/gstmemory.h"/>
         <return-value transfer-ownership="none" nullable="1">
@@ -24942,6 +24956,19 @@ needs to be unmapped using gst_buffer_unmap() or gst_memory_unmap(). Instead,
             <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.c">Return location of the size of the data.</doc>
             <type name="gsize" c:type="gsize*"/>
           </parameter>
+        </parameters>
+      </method>
+      <method name="init" c:identifier="gst_map_info_init" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.c">Initializes @info.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstmemory.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="info" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstmemory.c">a #GstMapInfo</doc>
+            <type name="MapInfo" c:type="GstMapInfo*"/>
+          </instance-parameter>
         </parameters>
       </method>
     </record>
@@ -47331,7 +47358,12 @@ The album name as it should be displayed, e.g. 'The Jazz Guitar'</doc>
       <type name="utf8" c:type="gchar*"/>
     </constant>
     <constant name="TAG_ALBUM_GAIN" value="replaygain-album-gain" c:type="GST_TAG_ALBUM_GAIN">
-      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">album gain in db (double)</doc>
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">album gain in dB (double)</doc>
+      <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
+      <type name="utf8" c:type="gchar*"/>
+    </constant>
+    <constant name="TAG_ALBUM_GAIN_R128" value="r128-album-gain" c:type="GST_TAG_ALBUM_GAIN_R128" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">track gain in dB (double)</doc>
       <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
       <type name="utf8" c:type="gchar*"/>
     </constant>
@@ -47847,7 +47879,12 @@ The title as it should be sorted, e.g. 'Doll House, The'</doc>
       <type name="utf8" c:type="gchar*"/>
     </constant>
     <constant name="TAG_TRACK_GAIN" value="replaygain-track-gain" c:type="GST_TAG_TRACK_GAIN">
-      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">track gain in db (double)</doc>
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">track gain in dB (double)</doc>
+      <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
+      <type name="utf8" c:type="gchar*"/>
+    </constant>
+    <constant name="TAG_TRACK_GAIN_R128" value="r128-track-gain" c:type="GST_TAG_TRACK_GAIN_R128" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">track gain in dB (double)</doc>
       <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
       <type name="utf8" c:type="gchar*"/>
     </constant>
@@ -55018,6 +55055,32 @@ of @new_caps.</doc>
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstcaps.c">pointer to a #GstCaps that will
     replace the caps pointed to by @old_caps.</doc>
           <type name="Caps" c:type="GstCaps*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="check_version" c:identifier="gst_check_version" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gst.c">Applications might want to check if the runtime GStreamer version is greater
+or equal to the version specified using @major, @minor and @micro.</doc>
+      <source-position filename="../subprojects/gstreamer/gst/gst.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gst.c">%TRUE if the GStreamer version is greater or equal to
+@major\.@minor\.@micro, %FALSE otherwise. Also this function returns %FALSE
+when checking for a different @major version to the current one, as major
+version bumps are ABI breaks anyway.</doc>
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="major" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gst.c">Major version number</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+        <parameter name="minor" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gst.c">Minor version number</doc>
+          <type name="guint" c:type="guint"/>
+        </parameter>
+        <parameter name="micro" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gst.c">Micro version number</doc>
+          <type name="guint" c:type="guint"/>
         </parameter>
       </parameters>
     </function>
