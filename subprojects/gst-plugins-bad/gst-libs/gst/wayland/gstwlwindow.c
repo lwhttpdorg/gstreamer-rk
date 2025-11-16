@@ -25,6 +25,7 @@
 #endif
 
 #include "gstwlwindow.h"
+#include "gstwlbuffer_private.h"
 
 #include "color-management-v1-client-protocol.h"
 #include "color-representation-v1-client-protocol.h"
@@ -81,6 +82,8 @@ typedef struct _GstWlWindowPrivate
   /* when this is not set both the area_surface and the video_surface are not
    * visible and certain steps should be skipped */
   gboolean is_area_surface_mapped;
+
+  gboolean ready_to_finalize;
 
   GMutex window_lock;
   GstWlBuffer *next_buffer;
@@ -213,6 +216,7 @@ gst_wl_window_init (GstWlWindow * self)
 {
   GstWlWindowPrivate *priv = gst_wl_window_get_instance_private (self);
 
+  priv->ready_to_finalize = FALSE;
   priv->configured = TRUE;
   g_cond_init (&priv->configure_cond);
   g_mutex_init (&priv->configure_mutex);
@@ -224,6 +228,15 @@ gst_wl_window_finalize (GObject * gobject)
 {
   GstWlWindow *self = GST_WL_WINDOW (gobject);
   GstWlWindowPrivate *priv = gst_wl_window_get_instance_private (self);
+
+  g_mutex_lock (&priv->window_lock);
+  /* last buffer is rendered but not committed, set used_by_compositor
+   * to avoid memory leak */
+  if (priv->commit_callback && priv->next_buffer) {
+    gst_wl_buffer_set_used_by_compositor (priv->next_buffer, TRUE);
+    priv->ready_to_finalize = TRUE;
+  }
+  g_mutex_unlock (&priv->window_lock);
 
   gst_wl_display_callback_destroy (priv->display, &priv->frame_callback);
   gst_wl_display_callback_destroy (priv->display, &priv->commit_callback);
@@ -739,6 +752,11 @@ commit_callback (void *data, struct wl_callback *callback, uint32_t serial)
   priv->commit_callback = NULL;
 
   g_mutex_lock (&priv->window_lock);
+  if (priv->ready_to_finalize) {
+    priv->ready_to_finalize = FALSE;
+    g_mutex_unlock (&priv->window_lock);
+    return;
+  }
   next_buffer = priv->next_buffer;
   g_mutex_unlock (&priv->window_lock);
 
