@@ -273,6 +273,8 @@ mpegts_base_reset (MpegTSBase * base)
 
   gst_event_replace (&base->seek_event, NULL);
 
+  g_array_set_size (base->pids, 0);
+
   if (klass->reset)
     klass->reset (base);
 }
@@ -305,6 +307,8 @@ mpegts_base_init (MpegTSBase * base)
   base->push_section = TRUE;
   base->ignore_pcr = DEFAULT_IGNORE_PCR;
 
+  base->pids = g_array_sized_new (FALSE, TRUE, sizeof (MpegTSPID), 32);
+
   mpegts_base_reset (base);
 }
 
@@ -334,6 +338,7 @@ mpegts_base_finalize (GObject * object)
     base->pat = NULL;
   }
   g_ptr_array_free (base->programs, TRUE);
+  g_array_unref (base->pids);
 
   gst_event_replace (&base->seek_event, NULL);
 
@@ -1521,6 +1526,26 @@ mpegts_base_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
   return GST_MPEGTS_BASE_GET_CLASS (base)->sink_query (base, query);
 }
 
+static MpegTSPID *
+get_ts_pid (MpegTSBase * base, guint16 pid)
+{
+  guint i;
+  MpegTSPID ts_pid;
+
+  for (i = 0; i < base->pids->len; i++) {
+    MpegTSPID *cand = &g_array_index (base->pids, MpegTSPID, i);
+
+    if (cand->pid == pid)
+      return cand;
+  };
+
+  GST_DEBUG_OBJECT (base, "Creating new MpegTSPID for pid 0x%04x", pid);
+  ts_pid.pid = pid;
+  ts_pid.cc = CONTINUITY_UNSET;
+  g_array_append_val (base->pids, ts_pid);
+  return &g_array_index (base->pids, MpegTSPID, base->pids->len - 1);
+}
+
 static GstFlowReturn
 mpegts_base_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
@@ -1530,6 +1555,7 @@ mpegts_base_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   MpegTSPacketizer2 *packetizer;
   MpegTSPacketizerPacket packet;
   MpegTSBaseClass *klass;
+  MpegTSPID *ts_pid = NULL;
 
   base = GST_MPEGTS_BASE (parent);
   klass = GST_MPEGTS_BASE_GET_CLASS (base);
@@ -1561,6 +1587,7 @@ mpegts_base_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   mpegts_packetizer_push (base->packetizer, buf);
 
   while (res == GST_FLOW_OK) {
+    gboolean cc_discont = FALSE;
     pret = mpegts_packetizer_next_packet (base->packetizer, &packet);
 
     /* If we don't have enough data, return */
@@ -1571,6 +1598,51 @@ mpegts_base_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
       /* bad header, skip the packet */
       GST_DEBUG_OBJECT (base, "bad packet, skipping");
       goto next;
+    }
+
+    if (packet.payload && packet.pid != 0x1fff) {
+      /* Check continuity counter, only applies if payload is present and not a
+       * NULL packet */
+      if (ts_pid == NULL || ts_pid->pid != packet.pid) {
+        ts_pid = get_ts_pid (base, packet.pid);
+      }
+
+      /* FIXME : Handle the special condition where a packet **can** be
+       * duplicated (only once), in which case the only change **can** be the
+       * PCR fields.
+       */
+
+      /* CC can be non-contiguous if the discontinuity_indicator is set */
+      if (G_UNLIKELY (packet.afc_flags & MPEGTS_AFC_DISCONTINUITY_FLAG)) {
+        /* FIXME : Information should be provided to PCR tracker to indicate a
+         * "system time-base discontinuity". See details in 2.4.3.5
+         */
+        ts_pid->cc = CONTINUITY_UNSET;
+      }
+      if (ts_pid->cc != CONTINUITY_UNSET &&
+          (ts_pid->cc + 1) % 16 !=
+          FLAGS_CONTINUITY_COUNTER (packet.scram_afc_cc)) {
+        GST_WARNING_OBJECT (base, "CC Discont PID 0x%04x was:%02d now:%02d",
+            packet.pid, ts_pid->cc,
+            FLAGS_CONTINUITY_COUNTER (packet.scram_afc_cc));
+        cc_discont = TRUE;
+      }
+      ts_pid->cc = FLAGS_CONTINUITY_COUNTER (packet.scram_afc_cc);
+
+      if (!cc_discont) {
+        if (packet.afc_flags & MPEGTS_AFC_PCR_FLAG) {
+          /* No discontinuity, we can record the PCR */
+          mpegts_packetizer_apply_pcr (base->packetizer, &packet);
+        }
+      } else {
+        /* TODO : Notify subclass of discontinuity ! */
+      }
+    } else if (G_UNLIKELY (packet.afc_flags & MPEGTS_AFC_PCR_FLAG)) {
+      /* WARN if the PCR is located on a non-payload stream. This is dangerous
+       * since we can't use the CC consistency checks */
+      GST_WARNING_OBJECT (base,
+          "PCR from a non-payloaded packet. Might introduce timing issues");
+      mpegts_packetizer_apply_pcr (base->packetizer, &packet);
     }
 
     if (klass->inspect_packet)

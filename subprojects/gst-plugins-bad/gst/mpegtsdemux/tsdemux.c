@@ -58,9 +58,6 @@
  * See TODO for explanations on improvements needed
  */
 
-#define CONTINUITY_UNSET 255
-#define MAX_CONTINUITY 15
-
 /* Length of metadata_AU_cell header, see ISO/IEC 13818-1:2018 Section 2.12.4 */
 #define PES_PACKET_METADATA_AU_HEADER_LEN 5
 

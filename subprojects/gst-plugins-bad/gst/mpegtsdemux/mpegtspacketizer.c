@@ -332,6 +332,37 @@ mpegts_packetizer_compute_pcr (const guint8 * data)
   return pcr * 300 + pcr_ext % 300;
 }
 
+void
+mpegts_packetizer_apply_pcr (MpegTSPacketizer2 * packetizer,
+    MpegTSPacketizerPacket * packet)
+{
+  MpegTSPCR *pcrtable;
+
+  PACKETIZER_GROUP_LOCK (packetizer);
+  pcrtable = get_pcr_table (packetizer, packet->pid);
+  if (packetizer->calculate_skew &&
+      GST_CLOCK_TIME_IS_VALID (packetizer->last_in_time)) {
+    /* There is a signalled discontinuity and we deal with regularly timed
+     * input. Reset observations */
+    if (packet->afc_flags & MPEGTS_AFC_DISCONTINUITY_FLAG &&
+        (GST_CLOCK_TIME_IS_VALID (packetizer->last_dts) ||
+            GST_CLOCK_TIME_IS_VALID (packetizer->last_pts))) {
+      MpegTSPCR *fallback = get_pcr_table (packetizer, 0x1fff);
+      GST_DEBUG ("pcr 0x%04x Discontinuity signalled, resetting observations",
+          packet->pid);
+      pcrtable->base_time = GST_CLOCK_TIME_NONE;
+      pcrtable->base_pcrtime = GST_CLOCK_TIME_NONE;
+      fallback->base_time = GST_CLOCK_TIME_NONE;
+    }
+    calculate_skew (packetizer, pcrtable, packet->pcr,
+        packetizer->last_in_time);
+  } else if (packetizer->calculate_offset) {
+    record_pcr (packetizer, pcrtable, packet->pcr, packet->offset);
+  }
+  PACKETIZER_GROUP_UNLOCK (packetizer);
+
+}
+
 static gboolean
 mpegts_packetizer_parse_adaptation_field_control (MpegTSPacketizer2 *
     packetizer, MpegTSPacketizerPacket * packet)
@@ -403,38 +434,12 @@ mpegts_packetizer_parse_adaptation_field_control (MpegTSPacketizer2 *
 
   /* PCR */
   if (afcflags & MPEGTS_AFC_PCR_FLAG) {
-    MpegTSPCR *pcrtable = NULL;
     packet->pcr = mpegts_packetizer_compute_pcr (data);
     data += 6;
     GST_DEBUG ("pcr 0x%04x %" G_GUINT64_FORMAT " (%" GST_TIME_FORMAT
         ") offset:%" G_GUINT64_FORMAT, packet->pid, packet->pcr,
         GST_TIME_ARGS (PCRTIME_TO_GSTTIME (packet->pcr)), packet->offset);
 
-    PACKETIZER_GROUP_LOCK (packetizer);
-    if (packetizer->calculate_skew
-        && GST_CLOCK_TIME_IS_VALID (packetizer->last_in_time)) {
-      pcrtable = get_pcr_table (packetizer, packet->pid);
-      /* There is a signalled discontinuity and we deal with regularly timed
-       * input. Reset observations */
-      if (afcflags & MPEGTS_AFC_DISCONTINUITY_FLAG &&
-          (GST_CLOCK_TIME_IS_VALID (packetizer->last_dts) ||
-              GST_CLOCK_TIME_IS_VALID (packetizer->last_pts))) {
-        MpegTSPCR *fallback = get_pcr_table (packetizer, 0x1fff);
-        GST_DEBUG ("pcr 0x%04x Discontinuity signalled, resetting observations",
-            packet->pid);
-        pcrtable->base_time = GST_CLOCK_TIME_NONE;
-        pcrtable->base_pcrtime = GST_CLOCK_TIME_NONE;
-        fallback->base_time = GST_CLOCK_TIME_NONE;
-      }
-      calculate_skew (packetizer, pcrtable, packet->pcr,
-          packetizer->last_in_time);
-    }
-    if (packetizer->calculate_offset) {
-      if (!pcrtable)
-        pcrtable = get_pcr_table (packetizer, packet->pid);
-      record_pcr (packetizer, pcrtable, packet->pcr, packet->offset);
-    }
-    PACKETIZER_GROUP_UNLOCK (packetizer);
   }
 #ifndef GST_DISABLE_GST_DEBUG
   /* OPCR */
