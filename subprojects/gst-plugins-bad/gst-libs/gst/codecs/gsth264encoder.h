@@ -266,6 +266,9 @@ GST_CODECS_API
 gboolean             gst_h264_encoder_gop_is_b_pyramid       (GstH264Encoder * self);
 
 GST_CODECS_API
+const gchar *        gst_h264_level_get_name                 (GstH264Level level_idc);
+
+GST_CODECS_API
 const GstH264LevelDescriptor *gst_h264_get_level_descriptor  (GstH264Profile profile,
                                                               guint64 bitrate,
                                                               GstVideoInfo * in_info,

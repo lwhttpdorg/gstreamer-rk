@@ -3093,6 +3093,26 @@ gst_h264_encoder_gop_is_b_pyramid (GstH264Encoder * self)
 }
 
 /**
+ * gst_h264_level_get_name:
+ * @level_idc: a #GstH264Level
+ *
+ * Returns: the string representing @level_idc or %NULL
+ *
+ * Since: 1.30
+ */
+const gchar *
+gst_h264_level_get_name (GstH264Level level_idc)
+{
+  for (int i = 0; i < G_N_ELEMENTS (_h264_levels); i++) {
+    const GstH264LevelDescriptor *level = &_h264_levels[i];
+    if (level->level_idc == level_idc)
+      return level->name;
+  }
+
+  return NULL;
+}
+
+/**
  * gst_h264_get_cpb_nal_factor:
  * @profile: (type gint): a #GstH264Profile
  *
