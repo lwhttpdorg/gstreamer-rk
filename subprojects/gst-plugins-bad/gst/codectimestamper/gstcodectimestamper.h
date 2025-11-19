@@ -68,4 +68,6 @@ GType gst_codec_timestamper_get_type (void);
 void  gst_codec_timestamper_set_window_size (GstCodecTimestamper * timestamper,
                                              guint window_size);
 
+guint  gst_codec_timestamper_get_window_size (GstCodecTimestamper * timestamper);
+
 G_END_DECLS
