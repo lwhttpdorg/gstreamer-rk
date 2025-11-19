@@ -255,6 +255,8 @@ gboolean             gst_h264_encoder_reconfigure            (GstH264Encoder * s
                                                               gboolean force);
 
 GST_CODECS_API
+guint32              gst_h264_encoder_get_i_period           (GstH264Encoder * self);
+GST_CODECS_API
 guint32              gst_h264_encoder_get_idr_period         (GstH264Encoder * self);
 
 GST_CODECS_API

@@ -2985,6 +2985,31 @@ gst_h264_encoder_reconfigure (GstH264Encoder * self, gboolean force)
 }
 
 /**
+ * gst_h264_encoder_get_i_period:
+ * @self: a #GstH264Encoder
+ *
+ * Returns the number of frames between I frames [I, B, B, .., B, P, ..., I) in
+ * an open GOP.
+ *
+ * This shall be called in the new_parameters() vmethod or after it.
+ *
+ * Returns: the I period.
+ *
+ * Since: 1.30
+ */
+guint32
+gst_h264_encoder_get_i_period (GstH264Encoder * self)
+{
+  GstH264EncoderPrivate *priv;
+
+  g_return_val_if_fail (GST_IS_H264_ENCODER (self), -1);
+
+  priv = _GET_PRIV (self);
+
+  return priv->gop.i_period;
+}
+
+/**
  * gst_h264_encoder_get_idr_period:
  * @self: a #GstH264Encoder
  *
