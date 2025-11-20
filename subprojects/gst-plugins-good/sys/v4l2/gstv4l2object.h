@@ -374,6 +374,9 @@ gboolean     gst_v4l2_set_controls    (GstV4l2Object * v4l2object, GstStructure 
 gboolean     gst_v4l2_subscribe_event (GstV4l2Object * v4l2object, guint32 event, guint32 id);
 gboolean     gst_v4l2_dequeue_event   (GstV4l2Object * v4l2object, struct v4l2_event *event);
 
+gboolean     gst_v4l2_fill_lists (GstV4l2Object * v4l2object);
+gboolean     gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps, struct v4l2_fmtdesc **format, GstVideoInfoDmaDrm * info);
+
 G_END_DECLS
 
 #endif /* __GST_V4L2_OBJECT_H__ */

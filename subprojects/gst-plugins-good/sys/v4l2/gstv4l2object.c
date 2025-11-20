@@ -2009,7 +2009,7 @@ gst_v4l2_object_probe_template_caps (const gchar * device, gint video_fd,
  * @fps_n/@fps_d: location for framerate
  * @size: location for expected size of the frame or 0 if unknown
  */
-static gboolean
+gboolean
 gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
     struct v4l2_fmtdesc **format, GstVideoInfoDmaDrm * info)
 {
