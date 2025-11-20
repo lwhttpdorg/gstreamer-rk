@@ -71,12 +71,6 @@
 #include <core/providers/vsinpu/vsinpu_provider_factory.h>
 #endif
 
-#ifdef CPUPROVIDER_IN_SUBDIR
-#include <core/providers/cpu/cpu_provider_factory.h>
-#else
-#include <cpu_provider_factory.h>
-#endif
-
 typedef enum
 {
   GST_ONNX_OPTIMIZATION_LEVEL_DISABLE_ALL,
@@ -90,6 +84,7 @@ typedef enum
   GST_ONNX_EXECUTION_PROVIDER_CPU,
   GST_ONNX_EXECUTION_PROVIDER_CUDA,
   GST_ONNX_EXECUTION_PROVIDER_VSI,
+  GST_ONNX_EXECUTION_PROVIDER_OPENVINO
 } GstOnnxExecutionProvider;
 
 struct _GstOnnxInference
@@ -123,6 +118,7 @@ static const OrtApi *api = NULL;
 
 
 GST_DEBUG_CATEGORY (onnx_inference_debug);
+GST_DEBUG_CATEGORY (onnx_runtime_debug);
 
 #define GST_CAT_DEFAULT onnx_inference_debug
 GST_ELEMENT_REGISTER_DEFINE (onnx_inference, "onnxinference",
@@ -236,6 +232,9 @@ gst_onnx_execution_provider_get_type (void)
             "VeriSilicon NPU execution provider (compiled out, will use CPU)",
           "vsi"},
 #endif
+      {GST_ONNX_EXECUTION_PROVIDER_OPENVINO,
+            "OpenVINO execution provider",
+          "openvino"},
       {0, NULL, NULL},
     };
 
@@ -256,7 +255,9 @@ gst_onnx_inference_class_init (GstOnnxInferenceClass * klass)
   GstBaseTransformClass *basetransform_class = (GstBaseTransformClass *) klass;
 
   GST_DEBUG_CATEGORY_INIT (onnx_inference_debug, "onnxinference",
-      0, "onnx_inference");
+      0, "ONNX-Runtime Inference");
+  GST_DEBUG_CATEGORY_INIT (onnx_runtime_debug, "onnxruntime",
+      0, "ONNX-Runtime");
   gobject_class->set_property = gst_onnx_inference_set_property;
   gobject_class->get_property = gst_onnx_inference_get_property;
   gobject_class->finalize = gst_onnx_inference_finalize;
@@ -569,8 +570,8 @@ gst_onnx_log_function (void *param, OrtLoggingLevel severity,
       break;
   }
 
-  gst_debug_log (GST_CAT_DEFAULT, level, code_location, "gst_onnx_log_function",
-      0, obj, "%s", message);
+  gst_debug_log (onnx_runtime_debug, level, code_location,
+      "gst_onnx_log_function", 0, obj, "%s", message);
 }
 
 /* FIXME: This is copied from Gsttfliteinference and we should create something
@@ -689,6 +690,39 @@ gst_onnx_inference_start (GstBaseTransform * trans)
     ret = TRUE;
     goto done;
   }
+
+  // Create environment
+  OrtLoggingLevel ort_logging;
+
+  switch (gst_debug_category_get_threshold (GST_CAT_DEFAULT)) {
+    case GST_LEVEL_NONE:
+    case GST_LEVEL_ERROR:
+      ort_logging = ORT_LOGGING_LEVEL_ERROR;
+      break;
+    case GST_LEVEL_WARNING:
+    case GST_LEVEL_FIXME:
+      ort_logging = ORT_LOGGING_LEVEL_WARNING;
+      break;
+    case GST_LEVEL_INFO:
+      ort_logging = ORT_LOGGING_LEVEL_INFO;
+      break;
+    case GST_LEVEL_DEBUG:
+    case GST_LEVEL_LOG:
+    case GST_LEVEL_TRACE:
+    case GST_LEVEL_MEMDUMP:
+    default:
+      ort_logging = ORT_LOGGING_LEVEL_VERBOSE;
+      break;
+  }
+
+  status = api->CreateEnvWithCustomLogger (gst_onnx_log_function, self,
+      ort_logging, "GstOnnx", &self->env);
+  if (status) {
+    GST_ERROR_OBJECT (self, "Failed to create environment: %s",
+        api->GetErrorMessage (status));
+    goto error;
+  }
+
   // Create session options
   status = api->CreateSessionOptions (&session_options);
   if (status) {
@@ -729,30 +763,24 @@ gst_onnx_inference_start (GstBaseTransform * trans)
       OrtCUDAProviderOptionsV2 *cuda_options = NULL;
       status = api->CreateCUDAProviderOptions (&cuda_options);
       if (status) {
-        GST_WARNING_OBJECT (self,
-            "Failed to create CUDA provider - dropping back to CPU: %s",
-            api->GetErrorMessage (status));
-        api->ReleaseStatus (status);
-        status =
-            OrtSessionOptionsAppendExecutionProvider_CPU (session_options, 1);
-      } else {
-        status =
-            api->SessionOptionsAppendExecutionProvider_CUDA_V2 (session_options,
-            cuda_options);
-        api->ReleaseCUDAProviderOptions (cuda_options);
-        if (status) {
-          GST_WARNING_OBJECT (self,
-              "Failed to append CUDA provider - dropping back to CPU: %s",
-              api->GetErrorMessage (status));
-          api->ReleaseStatus (status);
-          status =
-              OrtSessionOptionsAppendExecutionProvider_CPU (session_options, 1);
-        }
+        GST_ERROR_OBJECT (self,
+            "Failed to create CUDA provider %s", api->GetErrorMessage (status));
+        goto error;
       }
-    }
+
+      status =
+          api->SessionOptionsAppendExecutionProvider_CUDA_V2 (session_options,
+          cuda_options);
+      api->ReleaseCUDAProviderOptions (cuda_options);
+      if (status) {
+        GST_ERROR_OBJECT (self, "Failed to append CUDA provider: %s",
+            api->GetErrorMessage (status));
+        goto error;
+      }
       break;
-#ifdef HAVE_VSI_NPU
+    }
     case GST_ONNX_EXECUTION_PROVIDER_VSI:
+#ifdef HAVE_VSI_NPU
       status =
           OrtSessionOptionsAppendExecutionProvider_VSINPU (session_options);
       if (status) {
@@ -761,50 +789,29 @@ gst_onnx_inference_start (GstBaseTransform * trans)
         goto error;
       }
       api->DisableCpuMemArena (session_options);
-      break;
+#else
+      GST_ERROR_OBJECT (self, "Compiled without VSI support");
+      goto error;
 #endif
-    default:
+      break;
+    case GST_ONNX_EXECUTION_PROVIDER_OPENVINO:
+      const OrtOpenVINOProviderOptions openvino_options = {
+        .device_type = "HETERO:GPU,CPU",
+      };
+
       status =
-          OrtSessionOptionsAppendExecutionProvider_CPU (session_options, 1);
+          api->SessionOptionsAppendExecutionProvider_OpenVINO (session_options,
+            &openvino_options);
       if (status) {
-        GST_ERROR_OBJECT (self, "Failed to append CPU provider: %s",
-            api->GetErrorMessage (status));
+        GST_ERROR_OBJECT (self, "Failed to set OpenVINO execution provider:"
+            " %s", api->GetErrorMessage (status));
         goto error;
       }
       break;
-  }
-
-  OrtLoggingLevel ort_logging;
-
-  switch (gst_debug_category_get_threshold (GST_CAT_DEFAULT)) {
-    case GST_LEVEL_NONE:
-    case GST_LEVEL_ERROR:
-      ort_logging = ORT_LOGGING_LEVEL_ERROR;
-      break;
-    case GST_LEVEL_WARNING:
-    case GST_LEVEL_FIXME:
-      ort_logging = ORT_LOGGING_LEVEL_WARNING;
-      break;
-    case GST_LEVEL_INFO:
-      ort_logging = ORT_LOGGING_LEVEL_INFO;
-      break;
-    case GST_LEVEL_DEBUG:
-    case GST_LEVEL_LOG:
-    case GST_LEVEL_TRACE:
-    case GST_LEVEL_MEMDUMP:
     default:
-      ort_logging = ORT_LOGGING_LEVEL_VERBOSE;
       break;
   }
 
-  // Create environment
-  status = api->CreateEnvWithCustomLogger (gst_onnx_log_function, self,
-      ort_logging, "GstOnnx", &self->env);
-  if (status) {
-    GST_ERROR_OBJECT (self, "Failed to create environment: %s",
-        api->GetErrorMessage (status));
-    goto error;
-  }
   // Create session
   status = api->CreateSession (self->env, self->model_file, session_options,
       &self->session);
@@ -1119,8 +1126,10 @@ error:
   if (session_options)
     api->ReleaseSessionOptions (session_options);
 
+  GST_OBJECT_UNLOCK (self);
+
   gst_onnx_inference_stop (trans);
-  goto done;
+  return ret;
 
 }
 
@@ -1427,7 +1436,9 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   }
 
   if (status) {
-    GST_WARNING_OBJECT (self, "Failed to create input tensor");
+    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
+        ("Failed to create input tensor: %s",
+            api->GetErrorMessage (status)));
     goto error;
   }
 
@@ -1439,7 +1450,8 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
       output_tensors);
 
   if (status) {
-    GST_WARNING_OBJECT (self, "Failed to run inference");
+    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
+        ("Failed to run inference: %s", api->GetErrorMessage (status)));
     goto error;
   }
 
