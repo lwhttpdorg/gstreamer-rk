@@ -172,6 +172,7 @@ static void
 gst_auto_detect_init (GstAutoDetect * self)
 {
   self->sync = DEFAULT_SYNC;
+  self->sync_set = FALSE;
 }
 
 static void
@@ -369,7 +370,7 @@ gst_auto_detect_detect (GstAutoDetect * self)
 
   self->has_sync =
       g_object_class_find_property (G_OBJECT_GET_CLASS (kid), "sync") != NULL;
-  if (self->has_sync)
+  if (self->has_sync && self->sync_set)
     g_object_set (G_OBJECT (kid), "sync", self->sync, NULL);
   if (klass->configure) {
     klass->configure (self, kid);
@@ -452,6 +453,7 @@ gst_auto_detect_set_property (GObject * object, guint prop_id,
       break;
     case PROP_SYNC:
       self->sync = g_value_get_boolean (value);
+      self->sync_set = TRUE;
       if (self->kid && self->has_sync)
         g_object_set_property (G_OBJECT (self->kid), pspec->name, value);
       break;
