@@ -2642,6 +2642,43 @@ selected by the `start-time` property.</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <function-macro name="BASE_IDLE_SRC" c:identifier="GST_BASE_IDLE_SRC" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="obj">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="BASE_IDLE_SRC_CAST" c:identifier="GST_BASE_IDLE_SRC_CAST" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="obj">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="BASE_IDLE_SRC_CLASS" c:identifier="GST_BASE_IDLE_SRC_CLASS" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="klass">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="BASE_IDLE_SRC_GET_CLASS" c:identifier="GST_BASE_IDLE_SRC_GET_CLASS" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="obj">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="BASE_IDLE_SRC_PAD" c:identifier="GST_BASE_IDLE_SRC_PAD" introspectable="0">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Gives the pointer to the #GstPad object of the element.</doc>
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="obj">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">base source instance</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
     <function-macro name="BASE_PARSE" c:identifier="GST_BASE_PARSE" introspectable="0">
       <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseparse.h"/>
       <parameters>
@@ -2996,6 +3033,755 @@ gst_byte_reader_init().</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <class name="BaseIdleSrc" c:symbol-prefix="base_idle_src" c:type="GstBaseIdleSrc" parent="Gst.Element" abstract="1" glib:type-name="GstBaseIdleSrc" glib:get-type="gst_base_idle_src_get_type" glib:type-struct="BaseIdleSrcClass">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">#GstBaseIdleSrc is a base class for source elements that operate purely in
+push mode. Unlike #GstBaseSrc, it does not support pull-based scheduling or
+random access through #GstBaseSrcClass::create, and instead expects subclasses
+to push data downstream at their own pace or from an external producer.
+
+## Purpose
+
+This base class is intended for elements that generate or forward data
+asynchronously, such as live capture devices, idle-loop sources, or
+externally-driven producers. It provides the fundamental mechanics of
+caps negotiation, allocation setup, buffer timestamping, and live-source
+handling, while delegating actual data generation to subclasses.
+
+The element manages a single source pad named `"src"` and operates only
+in push mode.
+
+## Features
+
+- Push-only operation (no getrange/pull support)
+- Optional live-source mode using gst_base_idle_src_set_live()
+- Built-in buffer allocation via gst_base_idle_src_alloc()
+- Negotiation helpers for caps and allocation queries
+- Thread-pool support for external or shared producers
+- Optional automatic timestamping
+
+## Subclass Responsibilities
+
+A typical subclass of #GstBaseIdleSrc needs to:
+
+1. Install a static pad template for the `"src"` pad in `class_init()`.
+2. Implement @start and @stop to open and close resources.
+3. Produce and submit buffers using gst_base_idle_src_submit_buffer() or
+   gst_base_idle_src_submit_buffer_list().
+
+Optionally, the subclass can override virtual methods such as:
+
+- @get_caps, @fixate, @set_caps, @negotiate &#8212; for caps negotiation.
+- @decide_allocation &#8212; to customize memory allocation.
+- @query &#8212; to handle custom queries (e.g., latency, position).
+- @event &#8212; to handle upstream events such as flushes or EOS.
+- @alloc &#8212; to allocate output buffers.
+
+## Live Sources
+
+Live sources are sources that produce data in real time and may discard
+data when paused. Typical examples are capture devices or sensors. Live
+sources should call gst_base_idle_src_set_live() during setup.
+
+A live source does not produce data while in the PAUSED state. The state
+change from READY to PAUSED will therefore return
+%GST_STATE_CHANGE_NO_PREROLL to indicate that no preroll data is available.
+
+When PLAYING, live sources may timestamp buffers using the current running
+time if gst_base_idle_src_set_do_timestamp() was enabled. This makes it
+easier to synchronize generated data to the pipeline clock.
+
+## Thread Pool Management
+
+#GstBaseIdleSrc uses an internal #GstTaskPool to schedule buffer submission
+and auxiliary tasks. This mechanism helps to avoid the overhead of creating
+and destroying threads too frequently when data is submitted in rapid
+successions.
+
+By default, the internal pool is configured with a maximum of one thread,
+which provides a simple but efficient way to handle continuous or bursty
+submission patterns without incurring repeated thread creation and teardown
+costs.
+
+Applications or higher-level elements can override the default pool using
+gst_base_idle_src_set_thread_pool(). This allows sharing a thread pool
+among multiple similar slow-paced sources, reducing context-switch overhead
+and improving resource utilization when several sources push data at a
+modest rate.
+
+The currently configured thread pool can be retrieved with
+gst_base_idle_src_get_thread_pool().
+
+## Example Subclass
+
+|[&lt;!-- language="C" --&gt;
+static void
+my_idle_src_class_init (GstMyIdleSrcClass *klass)
+{
+  GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
+  gst_element_class_add_static_pad_template (element_class, &amp;srctemplate);
+
+  gst_element_class_set_static_metadata (element_class,
+     "My Idle Source",
+     "Source/Push",
+     "Example push-mode idle source",
+     "Author &lt;author@example.com&gt;");
+
+  klass-&gt;start = GST_DEBUG_FUNCPTR (my_idle_src_start);
+  klass-&gt;stop = GST_DEBUG_FUNCPTR (my_idle_src_stop);
+}
+
+static GstFlowReturn
+my_idle_src_loop (GstBaseIdleSrc *src)
+{
+  GstBuffer *buffer = NULL;
+  gst_base_idle_src_alloc (src, FRAME_SIZE, &amp;buffer);
+  // Fill buffer data
+  gst_base_idle_src_submit_buffer (src, buffer);
+  return GST_FLOW_OK;
+}
+]|
+
+## Threading and Data Submission
+
+Data can be produced in any thread, including one managed by a custom
+#GstTaskPool. Use gst_base_idle_src_set_thread_pool() to configure a
+task pool and gst_base_idle_src_submit_buffer() or
+gst_base_idle_src_submit_buffer_list() to submit data.
+
+## Notes
+
+- Only one source pad named "src" is supported.
+- Only push-mode operation is possible.
+- Pull-mode functions (e.g., create/getrange) are not implemented.
+- gst_base_idle_src_set_format() defines the active #GstFormat used for
+  segments and events.
+- Subclasses should avoid blocking indefinitely in @start or @stop, as these
+  are called during state changes.
+
+## Typical Use Cases
+
+- Synthetic or idle data generators
+- Real-time data capture devices
+- Streaming relays or adapters that push data from another thread
+- Sources that wrap asynchronous external APIs or IO loops</doc>
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <virtual-method name="alloc">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Ask the subclass to allocate a buffer with for offset and size. The
+  default implementation will create a new buffer from the negotiated allocator.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.FlowReturn" c:type="GstFlowReturn"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="size" transfer-ownership="none">
+            <type name="guint" c:type="guint"/>
+          </parameter>
+          <parameter name="buf" transfer-ownership="none">
+            <type name="Gst.Buffer" c:type="GstBuffer**"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="decide_allocation">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">configure the allocation query</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="query" transfer-ownership="none">
+            <type name="Gst.Query" c:type="GstQuery*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="event">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Override this to implement custom event handling.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="event" transfer-ownership="none">
+            <type name="Gst.Event" c:type="GstEvent*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="fixate">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Called during negotiation if caps need fixating. Implement instead of
+  setting a fixate function on the source pad.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="full">
+          <type name="Gst.Caps" c:type="GstCaps*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="caps" transfer-ownership="none">
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="get_caps">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Called to get the caps to report.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="full">
+          <type name="Gst.Caps" c:type="GstCaps*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="filter" transfer-ownership="none" nullable="1" allow-none="1">
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="negotiate" invoker="negotiate">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Negotiated the caps with the peer.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="query">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Handle a requested query.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="query" transfer-ownership="none">
+            <type name="Gst.Query" c:type="GstQuery*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="set_caps" invoker="set_caps">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Set new caps on the src source pad.
+This *MUST* be called before submitting any buffers!</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">%TRUE if the caps could be set</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="caps" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstCaps</doc>
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="start">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Start processing. Subclasses should open resources
+        and prepare to produce data.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="stop">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Stop processing. Subclasses should use this to close resources.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </virtual-method>
+      <method name="get_allocator" c:identifier="gst_base_idle_src_get_allocator">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Lets #GstBaseIdleSrc sub-classes to know the memory @allocator
+used by the base class and its @params.
+
+Unref the @allocator after usage.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="allocator" direction="out" caller-allocates="0" transfer-ownership="full" nullable="1" optional="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the #GstAllocator
+used</doc>
+            <type name="Gst.Allocator" c:type="GstAllocator**"/>
+          </parameter>
+          <parameter name="params" direction="out" caller-allocates="1" transfer-ownership="none" optional="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the #GstAllocationParams of @allocator</doc>
+            <type name="Gst.AllocationParams" c:type="GstAllocationParams*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_buffer_pool" c:identifier="gst_base_idle_src_get_buffer_pool">
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="full" nullable="1">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the instance of the #GstBufferPool used
+by the src; unref it after usage.</doc>
+          <type name="Gst.BufferPool" c:type="GstBufferPool*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="get_do_timestamp" c:identifier="gst_base_idle_src_get_do_timestamp" glib:get-property="do-timestamp">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Query if @src timestamps outgoing buffers based on the current running_time.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">%TRUE if the base class will automatically timestamp outgoing buffers.</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the source</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="get_thread_pool" c:identifier="gst_base_idle_src_get_thread_pool">
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the instance of the #GstTaskPool used
+by the src; unref it after usage</doc>
+          <type name="Gst.TaskPool" c:type="GstTaskPool*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="is_live" c:identifier="gst_base_idle_src_is_live">
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="negotiate" c:identifier="gst_base_idle_src_negotiate">
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="query_latency" c:identifier="gst_base_idle_src_query_latency">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Query the source for the latency parameters. @live will be %TRUE when @src is
+configured as a live source. @min_latency and @max_latency will be set
+to the difference between the running time and the timestamp of the first
+buffer.
+
+This function is mostly used by subclasses.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">%TRUE if the query succeeded.</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the source</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="live" direction="out" caller-allocates="0" transfer-ownership="full" optional="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">if the source is live</doc>
+            <type name="gboolean" c:type="gboolean*"/>
+          </parameter>
+          <parameter name="min_latency" direction="out" caller-allocates="0" transfer-ownership="full" optional="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the min latency of the source</doc>
+            <type name="Gst.ClockTime" c:type="GstClockTime*"/>
+          </parameter>
+          <parameter name="max_latency" direction="out" caller-allocates="0" transfer-ownership="full" optional="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the max latency of the source</doc>
+            <type name="Gst.ClockTime" c:type="GstClockTime*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="set_caps" c:identifier="gst_base_idle_src_set_caps">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Set new caps on the src source pad.
+This *MUST* be called before submitting any buffers!</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">%TRUE if the caps could be set</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="caps" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstCaps</doc>
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="set_do_timestamp" c:identifier="gst_base_idle_src_set_do_timestamp" glib:set-property="do-timestamp">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Configure @src to automatically timestamp outgoing buffers based on the
+current running_time of the pipeline. This property is mostly useful for live
+sources.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the source</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="timestamp" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">enable or disable timestamping</doc>
+            <type name="gboolean" c:type="gboolean"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="set_format" c:identifier="gst_base_idle_src_set_format">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Sets the default format of the source. This will be the format used
+for sending SEGMENT events.
+
+This function must only be called in states &lt; %GST_STATE_PAUSED.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">base source instance</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="format" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">the format to use</doc>
+            <type name="Gst.Format" c:type="GstFormat"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="set_live" c:identifier="gst_base_idle_src_set_live">
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="live" transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="set_thread_pool" c:identifier="gst_base_idle_src_set_thread_pool">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Sets the thread pool to be used internally</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="thread_pool" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstTaskPool</doc>
+            <type name="Gst.TaskPool" c:type="GstTaskPool*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="submit_buffer" c:identifier="gst_base_idle_src_submit_buffer">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Subclasses can call this to submit a buffer to be pushed out later.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="buffer" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBuffer</doc>
+            <type name="Gst.Buffer" c:type="GstBuffer*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="submit_buffer_list" c:identifier="gst_base_idle_src_submit_buffer_list">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">Subclasses can call this to submit a buffer list to be pushed out later.</doc>
+        <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+            <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+          </instance-parameter>
+          <parameter name="buffer_list" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBufferList</doc>
+            <type name="Gst.BufferList" c:type="GstBufferList*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <property name="do-timestamp" writable="1" transfer-ownership="none" setter="set_do_timestamp" getter="get_do_timestamp" default-value="FALSE">
+        <type name="gboolean" c:type="gboolean"/>
+      </property>
+      <field name="element">
+        <type name="Gst.Element" c:type="GstElement"/>
+      </field>
+      <field name="srcpad">
+        <type name="Gst.Pad" c:type="GstPad*"/>
+      </field>
+      <field name="is_live">
+        <type name="gboolean" c:type="gboolean"/>
+      </field>
+      <field name="segment">
+        <type name="Gst.Segment" c:type="GstSegment"/>
+      </field>
+      <field name="need_newsegment">
+        <type name="gboolean" c:type="gboolean"/>
+      </field>
+      <field name="num_buffers">
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="num_buffers_left">
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="running">
+        <type name="gboolean" c:type="gboolean"/>
+      </field>
+      <field name="priv">
+        <type name="BaseIdleSrcPrivate" c:type="GstBaseIdleSrcPrivate*"/>
+      </field>
+      <field name="_gst_reserved" readable="0" private="1">
+        <array zero-terminated="0" fixed-size="20">
+          <type name="gpointer" c:type="gpointer"/>
+        </array>
+      </field>
+    </class>
+    <record name="BaseIdleSrcClass" c:type="GstBaseIdleSrcClass" glib:is-gtype-struct-for="BaseIdleSrc">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Subclasses can override any of the available virtual methods or not, as
+needed.</doc>
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <field name="parent_class">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Element parent class</doc>
+        <type name="Gst.ElementClass" c:type="GstElementClass"/>
+      </field>
+      <field name="get_caps">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Called to get the caps to report</doc>
+        <callback name="get_caps">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="full">
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="filter" transfer-ownership="none" nullable="1" allow-none="1">
+              <type name="Gst.Caps" c:type="GstCaps*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="negotiate">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Negotiated the caps with the peer.</doc>
+        <callback name="negotiate">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="fixate">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Called during negotiation if caps need fixating. Implement instead of
+  setting a fixate function on the source pad.</doc>
+        <callback name="fixate">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="full">
+            <type name="Gst.Caps" c:type="GstCaps*"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="caps" transfer-ownership="none">
+              <type name="Gst.Caps" c:type="GstCaps*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="set_caps">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Notify subclass of changed output caps</doc>
+        <callback name="set_caps">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">%TRUE if the caps could be set</doc>
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstBaseIdleSrc</doc>
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="caps" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.c">a #GstCaps</doc>
+              <type name="Gst.Caps" c:type="GstCaps*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="alloc">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Ask the subclass to allocate a buffer with for offset and size. The
+  default implementation will create a new buffer from the negotiated allocator.</doc>
+        <callback name="alloc">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="Gst.FlowReturn" c:type="GstFlowReturn"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="size" transfer-ownership="none">
+              <type name="guint" c:type="guint"/>
+            </parameter>
+            <parameter name="buf" transfer-ownership="none">
+              <type name="Gst.Buffer" c:type="GstBuffer**"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="decide_allocation">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">configure the allocation query</doc>
+        <callback name="decide_allocation">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="query" transfer-ownership="none">
+              <type name="Gst.Query" c:type="GstQuery*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="start">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Start processing. Subclasses should open resources
+        and prepare to produce data.</doc>
+        <callback name="start">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="stop">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Stop processing. Subclasses should use this to close resources.</doc>
+        <callback name="stop">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="query">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Handle a requested query.</doc>
+        <callback name="query">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="query" transfer-ownership="none">
+              <type name="Gst.Query" c:type="GstQuery*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="event">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h">Override this to implement custom event handling.</doc>
+        <callback name="event">
+          <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="src" transfer-ownership="none">
+              <type name="BaseIdleSrc" c:type="GstBaseIdleSrc*"/>
+            </parameter>
+            <parameter name="event" transfer-ownership="none">
+              <type name="Gst.Event" c:type="GstEvent*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="_gst_reserved" readable="0" private="1">
+        <array zero-terminated="0" fixed-size="20">
+          <type name="gpointer" c:type="gpointer"/>
+        </array>
+      </field>
+    </record>
+    <record name="BaseIdleSrcPrivate" c:type="GstBaseIdleSrcPrivate" disguised="1" opaque="1">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+    </record>
     <class name="BaseParse" c:symbol-prefix="base_parse" c:type="GstBaseParse" parent="Gst.Element" abstract="1" glib:type-name="GstBaseParse" glib:get-type="gst_base_parse_get_type" glib:type-struct="BaseParseClass">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/libs/gst/base/gstbaseparse.c">This base class is for parser elements that process data and splits it
 into separate audio/video/whatever frames.
@@ -13414,6 +14200,20 @@ return is the same as the latest obtained #GstFlowReturn.</doc>
     </function-macro>
     <function-macro name="IS_AGGREGATOR_PAD_CLASS" c:identifier="GST_IS_AGGREGATOR_PAD_CLASS" introspectable="0">
       <source-position filename="../subprojects/gstreamer/libs/gst/base/gstaggregator.h"/>
+      <parameters>
+        <parameter name="klass">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="IS_BASE_IDLE_SRC" c:identifier="GST_IS_BASE_IDLE_SRC" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
+      <parameters>
+        <parameter name="obj">
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="IS_BASE_IDLE_SRC_CLASS" c:identifier="GST_IS_BASE_IDLE_SRC_CLASS" introspectable="0">
+      <source-position filename="../subprojects/gstreamer/libs/gst/base/gstbaseidlesrc.h"/>
       <parameters>
         <parameter name="klass">
         </parameter>
