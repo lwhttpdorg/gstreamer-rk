@@ -18,7 +18,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
- 
+
 #ifndef __GST_INPUT_SELECTOR_H__
 #define __GST_INPUT_SELECTOR_H__
 
@@ -67,8 +67,10 @@ struct _GstInputSelector {
 
   gboolean active_sinkpad_from_user;
   GstPad* active_sinkpad;
+  GstPad* proposed_active_sinkpad;
   guint n_pads;           /* number of pads */
   guint padcount;         /* sequence number for pads */
+  gboolean switch_on_keyunit;
   gboolean sync_streams;
   GstInputSelectorSyncMode sync_mode;
   gboolean cache_buffers;
