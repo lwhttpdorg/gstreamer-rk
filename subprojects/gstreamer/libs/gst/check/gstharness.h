@@ -1,6 +1,6 @@
 /* GstHarness - A test-harness for GStreamer testing
  *
- * Copyright (C) 2012-2015 Pexip <pexip.com>
+ * Copyright (C) 2012-2025 Pexip <pexip.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -187,6 +187,15 @@ GstBuffer *    gst_harness_pull (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
 
 GST_CHECK_API
 GstBuffer *    gst_harness_try_pull (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_CHECK_API
+GstFlowReturn gst_harness_push_list (GstHarness * h, GstBufferList * buffer_list) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_CHECK_API
+GstBufferList * gst_harness_pull_list (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_CHECK_API
+GstBufferList * gst_harness_try_pull_list (GstHarness * h) G_GNUC_WARN_UNUSED_RESULT;
 
 GST_CHECK_API
 gboolean       gst_harness_pull_until_eos (GstHarness * h, GstBuffer ** buf);

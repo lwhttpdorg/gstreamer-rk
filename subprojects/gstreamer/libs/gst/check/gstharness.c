@@ -1,6 +1,6 @@
 /* GstHarness - A test-harness for GStreamer testing
  *
- * Copyright (C) 2012-2015 Pexip <pexip.com>
+ * Copyright (C) 2012-2025 Pexip <pexip.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -132,7 +132,13 @@
 #include <string.h>
 #include <math.h>
 
+GST_DEBUG_CATEGORY (gst_harness_debug);
+#define GST_CAT_DEFAULT gst_harness_debug
+
 static void gst_harness_stress_free (GstHarnessThread * t);
+static GstBuffer *gst_harness_try_pull_without_notify_locked (GstHarness * h);
+static GstBufferList *gst_harness_pull_list_internal (GstHarness * h,
+    gboolean wait);
 
 /* Keys used for storing and retrieving associations to pads and elements with
  * g_object_set_data (): */
@@ -180,8 +186,11 @@ struct _GstHarnessPrivate
   gint recv_buffers;
   gint recv_events;
   gint recv_upstream_events;
+  gint queued_buffers;
 
-  GAsyncQueue *buffer_queue;
+  /* Access should be protected by buf_or_eos_mutex */
+  GQueue *buffer_queue;
+
   GAsyncQueue *src_event_queue;
   GAsyncQueue *sink_event_queue;
 
@@ -228,16 +237,16 @@ gst_harness_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   g_mutex_lock (&priv->blocking_push_mutex);
   g_atomic_int_inc (&priv->recv_buffers);
+  g_atomic_int_inc (&priv->queued_buffers);
 
   if (priv->drop_buffers) {
     gst_buffer_unref (buffer);
   } else {
     g_mutex_lock (&priv->buf_or_eos_mutex);
-    g_async_queue_push (priv->buffer_queue, buffer);
+    g_queue_push_tail (priv->buffer_queue, buffer);
     g_cond_signal (&priv->buf_or_eos_cond);
     g_mutex_unlock (&priv->buf_or_eos_mutex);
   }
-
 
   if (priv->blocking_push_mode) {
     g_cond_wait (&priv->blocking_push_cond, &priv->blocking_push_mutex);
@@ -245,6 +254,49 @@ gst_harness_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
   g_mutex_unlock (&priv->blocking_push_mutex);
 
   gst_harness_link_unlock (link);
+  return GST_FLOW_OK;
+}
+
+static GstFlowReturn
+gst_harness_chain_list (GstPad * pad, GstObject * parent,
+    GstBufferList * buffer_list)
+{
+  guint32 listlen;
+  GstHarness *h;
+  GstHarnessLink *link;
+  GstHarnessPrivate *priv;
+  (void) parent;
+
+  if (!(link = gst_harness_pad_link_lock (pad, &h)))
+    return GST_FLOW_FLUSHING;
+  g_assert (h != NULL);
+  priv = h->priv;
+
+  g_mutex_lock (&priv->blocking_push_mutex);
+  listlen = gst_buffer_list_length (buffer_list);
+  (void) g_atomic_int_add (&priv->recv_buffers, listlen);
+  (void) g_atomic_int_add (&priv->queued_buffers, listlen);
+
+  GST_TRACE_OBJECT (pad,
+      "receiving chain list harness: %" GST_PTR_FORMAT " #buffers: (%"
+      G_GUINT32_FORMAT ") %" GST_PTR_FORMAT, h, listlen, buffer_list);
+
+  if (priv->drop_buffers) {
+    gst_buffer_list_unref (buffer_list);
+  } else {
+    g_mutex_lock (&priv->buf_or_eos_mutex);
+    g_queue_push_tail (priv->buffer_queue, buffer_list);
+    g_cond_signal (&priv->buf_or_eos_cond);
+    g_mutex_unlock (&priv->buf_or_eos_mutex);
+  }
+  if (priv->blocking_push_mode) {
+    {
+      g_cond_wait (&priv->blocking_push_cond, &priv->blocking_push_mutex);
+    }
+  }
+  g_mutex_unlock (&priv->blocking_push_mutex);
+  gst_harness_link_unlock (link);
+
   return GST_FLOW_OK;
 }
 
@@ -643,6 +695,7 @@ gst_harness_setup_sink_pad (GstHarness * h,
 
   gst_harness_pad_link_set (h->sinkpad, h);
   gst_pad_set_chain_function (h->sinkpad, gst_harness_chain);
+  gst_pad_set_chain_list_function (h->sinkpad, gst_harness_chain_list);
   gst_pad_set_query_function (h->sinkpad, gst_harness_sink_query);
   gst_pad_set_event_function (h->sinkpad, gst_harness_sink_event);
 
@@ -719,6 +772,8 @@ gst_harness_new_empty (void)
   GstHarness *h;
   GstHarnessPrivate *priv;
 
+  GST_DEBUG_CATEGORY_INIT (gst_harness_debug, "gstharness", 0, "GstHarness");
+
   h = g_new0 (GstHarness, 1);
   g_assert (h != NULL);
   h->priv = g_new0 (GstHarnessPrivate, 1);
@@ -732,8 +787,8 @@ gst_harness_new_empty (void)
   priv->drop_buffers = FALSE;
   priv->testclock = GST_TEST_CLOCK_CAST (gst_test_clock_new ());
 
-  priv->buffer_queue = g_async_queue_new_full (
-      (GDestroyNotify) gst_buffer_unref);
+  priv->buffer_queue = g_queue_new ();
+
   priv->src_event_queue = g_async_queue_new_full (
       (GDestroyNotify) gst_event_unref);
   priv->sink_event_queue = g_async_queue_new_full (
@@ -1101,6 +1156,7 @@ void
 gst_harness_teardown (GstHarness * h)
 {
   GstHarnessPrivate *priv = h->priv;
+  GstMiniObject *queue_element;
 
   if (priv->blocking_push_mode) {
     g_mutex_lock (&priv->blocking_push_mutex);
@@ -1149,6 +1205,7 @@ gst_harness_teardown (GstHarness * h)
      * they try to access this harness through pad data */
     gst_harness_pad_link_tear_down (h->sinkpad);
     gst_pad_set_chain_function (h->sinkpad, NULL);
+    gst_pad_set_chain_list_function (h->sinkpad, NULL);
     gst_pad_set_event_function (h->sinkpad, NULL);
     gst_pad_set_query_function (h->sinkpad, NULL);
 
@@ -1191,8 +1248,12 @@ gst_harness_teardown (GstHarness * h)
   g_cond_clear (&priv->buf_or_eos_cond);
   priv->eos_received = FALSE;
 
-  g_async_queue_unref (priv->buffer_queue);
+  while ((queue_element = g_queue_pop_head (priv->buffer_queue)) != NULL) {
+    gst_mini_object_unref (queue_element);
+  }
+  g_queue_free (priv->buffer_queue);
   priv->buffer_queue = NULL;
+
   g_async_queue_unref (priv->src_event_queue);
   priv->src_event_queue = NULL;
   g_async_queue_unref (priv->sink_event_queue);
@@ -1705,10 +1766,77 @@ gst_harness_push (GstHarness * h, GstBuffer * buffer)
 }
 
 /**
+ * gst_harness_push_list:
+ * @h: a #GstHarness
+ * @buffer_list: (transfer full): a #GstBufferList to push
+ *
+ * Pushes a #GstBufferList on the #GstHarness srcpad. The standard way of
+ * interacting with an harnessed element.
+ *
+ * MT safe.
+ *
+ * Returns: a #GstFlowReturn with the result from the push
+ *
+ * Since: 1.28
+ */
+GstFlowReturn
+gst_harness_push_list (GstHarness * h, GstBufferList * buffer_list)
+{
+  guint32 listlen;
+  GstHarnessPrivate *priv = h->priv;
+  g_assert (buffer_list != NULL);
+  listlen = gst_buffer_list_length (buffer_list);
+  if (listlen > 0) {
+    GstBuffer *last_buffer = gst_buffer_list_get (buffer_list, listlen - 1);
+    priv->last_push_ts = GST_BUFFER_TIMESTAMP (last_buffer);
+  }
+  return gst_pad_push_list (h->srcpad, buffer_list);
+}
+
+static GstBuffer *
+gst_harness_try_pull_without_notify_locked (GstHarness * h)
+{
+  GstBuffer *buf;
+  GstMiniObject *queue_element;
+  GstHarnessPrivate *priv = h->priv;
+
+  buf = NULL;
+  while (TRUE) {
+    queue_element = g_queue_pop_head (priv->buffer_queue);
+    if (queue_element != NULL) {
+      if (GST_IS_BUFFER_LIST (queue_element)) {
+        /* Destruct list and put it on the queue */
+        GstBufferList *list = GST_BUFFER_LIST_CAST (queue_element);
+        guint list_length = gst_buffer_list_length (list);
+        if (list_length == 0) {
+          /* Got empty list, destroy it and see if there are more buffers
+             in the queue */
+          gst_buffer_list_unref (list);
+          continue;
+        }
+        for (int i = list_length - 1; i > 0; --i) {
+          buf = gst_buffer_ref (gst_buffer_list_get (list, i));
+          g_queue_push_head (priv->buffer_queue, buf);
+        }
+        buf = gst_buffer_ref (gst_buffer_list_get (list, 0));
+        gst_buffer_list_unref (list);
+      } else if (GST_IS_BUFFER (queue_element)) {
+        buf = GST_BUFFER_CAST (queue_element);
+      }
+      g_atomic_int_add (&priv->queued_buffers, -1);
+    }
+    /* In the normal case exit the loop and return */
+    break;
+  }
+
+  return buf;
+}
+
+/**
  * gst_harness_pull:
  * @h: a #GstHarness
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
  * will timeout in 60 seconds. This is the standard way of getting a buffer
  * from a harnessed #GstElement.
  *
@@ -1721,9 +1849,19 @@ gst_harness_push (GstHarness * h, GstBuffer * buffer)
 GstBuffer *
 gst_harness_pull (GstHarness * h)
 {
+  GstBuffer *buf;
+  gint64 end_time;
   GstHarnessPrivate *priv = h->priv;
-  GstBuffer *buf = (GstBuffer *) g_async_queue_timeout_pop (priv->buffer_queue,
-      G_USEC_PER_SEC * 60);
+
+  g_mutex_lock (&priv->buf_or_eos_mutex);
+  buf = gst_harness_try_pull_without_notify_locked (h);
+  if (buf == NULL) {
+    end_time = g_get_monotonic_time () + 60 * G_TIME_SPAN_SECOND;
+    g_cond_wait_until (&priv->buf_or_eos_cond, &priv->buf_or_eos_mutex,
+        end_time);
+    buf = gst_harness_try_pull_without_notify_locked (h);
+  }
+  g_mutex_unlock (&priv->buf_or_eos_mutex);
 
   if (priv->blocking_push_mode) {
     g_mutex_lock (&priv->blocking_push_mutex);
@@ -1740,7 +1878,7 @@ gst_harness_pull (GstHarness * h)
  * @buf: (out) (nullable) (transfer full): A #GstBuffer, or %NULL if EOS or timeout occures
  *   first.
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. The pull
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. The pull
  * will block until an EOS event is received, or timeout in 60 seconds.
  * MT safe.
  *
@@ -1757,7 +1895,7 @@ gst_harness_pull_until_eos (GstHarness * h, GstBuffer ** buf)
 
   g_mutex_lock (&priv->buf_or_eos_mutex);
   while (success) {
-    *buf = g_async_queue_try_pop (priv->buffer_queue);
+    *buf = gst_harness_try_pull_without_notify_locked (h);
     if (*buf || priv->eos_received)
       break;
     success = g_cond_wait_until (&priv->buf_or_eos_cond,
@@ -1772,21 +1910,26 @@ gst_harness_pull_until_eos (GstHarness * h, GstBuffer ** buf)
  * gst_harness_try_pull:
  * @h: a #GstHarness
  *
- * Pulls a #GstBuffer from the #GAsyncQueue on the #GstHarness sinkpad. Unlike
+ * Pulls a #GstBuffer from the internal queue on the #GstHarness sinkpad. Unlike
  * gst_harness_pull this will not wait for any buffers if not any are present,
  * and return %NULL straight away.
  *
  * MT safe.
  *
- * Returns: (transfer full) (nullable): a #GstBuffer or %NULL if no buffers are present in the #GAsyncQueue
+ * Returns: (transfer full) (nullable): a #GstBuffer or %NULL if no buffers are
+ *                                      present in the internal queue
  *
  * Since: 1.6
  */
 GstBuffer *
 gst_harness_try_pull (GstHarness * h)
 {
+  GstBuffer *buf;
   GstHarnessPrivate *priv = h->priv;
-  GstBuffer *buf = (GstBuffer *) g_async_queue_try_pop (priv->buffer_queue);
+
+  g_mutex_lock (&priv->buf_or_eos_mutex);
+  buf = gst_harness_try_pull_without_notify_locked (h);
+  g_mutex_unlock (&priv->buf_or_eos_mutex);
 
   if (priv->blocking_push_mode) {
     g_mutex_lock (&priv->blocking_push_mutex);
@@ -1844,7 +1987,7 @@ gst_harness_buffers_received (GstHarness * h)
  * gst_harness_buffers_in_queue:
  * @h: a #GstHarness
  *
- * The number of #GstBuffers currently in the #GstHarness sinkpad #GAsyncQueue
+ * The number of #GstBuffers currently in the #GstHarness sinkpad internal queue
  *
  * MT safe.
  *
@@ -1855,8 +1998,10 @@ gst_harness_buffers_received (GstHarness * h)
 guint
 gst_harness_buffers_in_queue (GstHarness * h)
 {
+  guint ret;
   GstHarnessPrivate *priv = h->priv;
-  return g_async_queue_length (priv->buffer_queue);
+  ret = g_atomic_int_get (&priv->queued_buffers);
+  return ret;
 }
 
 /**
@@ -1865,7 +2010,7 @@ gst_harness_buffers_in_queue (GstHarness * h)
  * @drop_buffers: a #gboolean specifying to drop outgoing buffers or not
  *
  * When set to %TRUE, instead of placing the buffers arriving from the harnessed
- * #GstElement inside the sinkpads #GAsyncQueue, they are instead unreffed.
+ * #GstElement inside the sinkpads internal queue, they are instead unreffed.
  *
  * MT safe.
  *
@@ -1899,9 +2044,9 @@ gst_harness_take_all_data_as_buffer (GstHarness * h)
 
   priv = h->priv;
 
-  g_async_queue_lock (priv->buffer_queue);
+  g_mutex_lock (&priv->buf_or_eos_mutex);
 
-  ret = g_async_queue_try_pop_unlocked (priv->buffer_queue);
+  ret = g_queue_pop_head (priv->buffer_queue);
 
   if (ret == NULL) {
     ret = gst_buffer_new ();
@@ -1909,11 +2054,12 @@ gst_harness_take_all_data_as_buffer (GstHarness * h)
     /* buffer appending isn't very efficient for larger numbers of buffers
      * or lots of memories, but this function is not performance critical and
      * we can still improve it if and when the need arises. For now KISS. */
-    while ((buf = g_async_queue_try_pop_unlocked (priv->buffer_queue)))
+    while ((buf = g_queue_pop_head (priv->buffer_queue)))
       ret = gst_buffer_append (ret, buf);
   }
 
-  g_async_queue_unlock (priv->buffer_queue);
+  g_atomic_int_set (&priv->queued_buffers, 0);
+  g_mutex_unlock (&priv->buf_or_eos_mutex);
 
   return ret;
 }
@@ -1970,13 +2116,99 @@ gst_harness_take_all_data_as_bytes (GstHarness * h)
   return g_bytes_new_take (data, size);
 }
 
+static GstBufferList *
+gst_harness_pull_list_internal (GstHarness * h, gboolean wait)
+{
+  gint64 end_time;
+  GstMiniObject *queue_element;
+  GstHarnessPrivate *priv;
+  g_return_val_if_fail (h != NULL, NULL);
+  priv = h->priv;
+
+  g_mutex_lock (&priv->buf_or_eos_mutex);
+  queue_element = g_queue_peek_head (priv->buffer_queue);
+  if (queue_element == NULL && wait) {
+    end_time = g_get_monotonic_time () + 60 * G_TIME_SPAN_SECOND;
+    g_cond_wait_until (&priv->buf_or_eos_cond, &priv->buf_or_eos_mutex,
+        end_time);
+  }
+  if (queue_element != NULL) {
+    if (GST_IS_BUFFER (queue_element)) {
+      /* Head of queue is a buffer, return null. */
+      queue_element = NULL;
+    } else if (GST_IS_BUFFER_LIST (queue_element)) {
+      GstBufferList *list;
+      guint list_length;
+      /* If head is a bufferlist pop it from the queue and return it */
+      queue_element = g_queue_pop_head (priv->buffer_queue);
+      g_assert (GST_IS_BUFFER_LIST (queue_element));
+      list = GST_BUFFER_LIST_CAST (queue_element);
+      list_length = gst_buffer_list_length (list);
+      g_atomic_int_add (&priv->queued_buffers, list_length * -1);
+    }
+  }
+  g_mutex_unlock (&priv->buf_or_eos_mutex);
+
+  if (priv->blocking_push_mode) {
+    g_mutex_lock (&priv->blocking_push_mutex);
+    g_cond_signal (&priv->blocking_push_cond);
+    g_mutex_unlock (&priv->blocking_push_mutex);
+  }
+
+  return GST_BUFFER_LIST_CAST (queue_element);
+}
+
+/**
+ * gst_harness_pull_list:
+ * @h: a #GstHarness
+ *
+ * Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
+ * The pull will timeout in 60 seconds. This is the standard way of getting
+ * a buffer list from a harnessed #GstElement.
+ *
+ * If a normal buffer is submitted to the GstHarness this function will return
+ * null as long as that buffer is at the head of the queue
+ * (use #gst_harness_pull to remove it)
+ *
+ * MT safe.
+ *
+ * Returns: (transfer full): a #GstBufferList or %NULL if timed out,
+ *                           or buffer lists are not enabled.
+ * Since: 1.28
+ */
+GstBufferList *
+gst_harness_pull_list (GstHarness * h)
+{
+  return gst_harness_pull_list_internal (h, TRUE);
+}
+
+/**
+ * gst_harness_try_pull_list:
+ * @h: a #GstHarness
+ *
+ * Pulls a #GstBufferList from the internal queue on the #GstHarness sinkpad.
+ * Unlike gst_harness_pull_list this will not wait for any buffers if not any
+ * are present, and return %NULL straight away.
+ *
+ * MT safe.
+ *
+ * Returns: (transfer full): a #GstBuffer or %NULL if no buffers are present in
+ *                           the internal queue, or buffer lists not enabled.
+ *
+ * Since: 1.28
+ */
+GstBufferList *
+gst_harness_try_pull_list (GstHarness * h)
+{
+  return gst_harness_pull_list_internal (h, FALSE);
+}
 
 /**
  * gst_harness_dump_to_file:
  * @h: a #GstHarness
  * @filename: a #gchar with a the name of a file
  *
- * Allows you to dump the #GstBuffers the #GstHarness sinkpad #GAsyncQueue
+ * Allows you to dump the #GstBuffers the #GstHarness sinkpad internal queue
  * to a file.
  *
  * MT safe.
