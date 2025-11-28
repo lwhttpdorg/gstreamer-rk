@@ -459,7 +459,7 @@ priv_gst_registry_binary_write_cache (GstRegistry * registry, GList * plugins,
   }
 
   _priv_gst_registry_chunks_save_global_header (&to_write, registry,
-      priv_gst_plugin_loading_get_whitelist_hash ());
+      priv_gst_plugin_loading_get_allowlist_hash ());
 
   GST_INFO ("Writing binary registry cache");
 
@@ -648,7 +648,7 @@ priv_gst_registry_binary_read_cache (GstRegistry * registry,
     goto Error;
   }
 
-  if (filter_env_hash != priv_gst_plugin_loading_get_whitelist_hash ()) {
+  if (filter_env_hash != priv_gst_plugin_loading_get_allowlist_hash ()) {
     GST_INFO_OBJECT (registry, "Plugin loading filter environment changed, "
         "ignoring plugin cache to force update with new filter environment");
     goto done;

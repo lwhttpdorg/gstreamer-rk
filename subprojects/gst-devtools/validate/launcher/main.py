@@ -210,7 +210,7 @@ class LauncherConfig(Loggable):
         self.n_runs = None
         self.fatal_error = False
         self.wanted_tests = []
-        self.blacklisted_tests = []
+        self.skiplisted_tests = []
         self.list_tests = False
         self.mute = True
         self.unmute = not self.mute
@@ -415,8 +415,8 @@ class LauncherConfig(Loggable):
     available. You should configure it using:
 
     * test_manager.add_scenarios: which allows you to register a list of scenario names to be run
-    * test_manager.set_default_blacklist: Lets you set a list of tuple of the form:
-            (@regex_defining_blacklister_test_names, @reason_for_the_blacklisting)
+    * test_manager.set_default_skiplist: Lets you set a list of tuple of the form:
+            (@regex_defining_skiplisted_test_names, @reason_for_the_skiplisting)
     * test_manager.add_generators: which allows you to register a list of #GstValidateTestsGenerator
         to be used to generate tests
     * test_manager.add_encoding_formats:: which allows you to register a list #MediaFormatCombination to be used for transcoding tests
@@ -457,12 +457,15 @@ class LauncherConfig(Loggable):
                             help="Define the tests to execute, it can be a regex."
                             " If it contains defaults_only, only default scenarios"
                             " will be executed")
-        parser.add_argument("-b", "--blacklisted-tests", dest="blacklisted_tests",
+        parser.add_argument("-b", "--skiplisted-tests", dest="skiplisted_tests",
                             action="append",
                             help="Define the tests not to execute, it can be a regex.")
+        parser.add_argument("--blacklisted-tests", dest="skiplisted_tests",
+                            action="append",
+                            help=argparse.SUPPRESS)
         parser.add_argument("--check-bugs", dest="check_bugs_status",
                             action="store_true",
-                            help="Check if the bug linked to blacklisted tests has"
+                            help="Check if the bug linked to skiplisted tests has"
                             " been marked as resolved. (works with gitlab and bugzilla)")
         parser.add_argument("-L", "--list-tests",
                             dest="list_tests",

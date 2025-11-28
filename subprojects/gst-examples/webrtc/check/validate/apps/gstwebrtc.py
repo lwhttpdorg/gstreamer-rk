@@ -84,7 +84,7 @@ SCENARIO_OVERRIDES_SUPPORTED = {
 }
 
 # Things that don't work for some reason or another.
-DEFAULT_BLACKLIST = [
+DEFAULT_SKIPLIST = [
     (r"webrtc\.firefox\.local\..*offer_answer",
      "Firefox doesn't like a SDP without any media"),
     (r"webrtc.*remote.*vp8_send_stream",
@@ -259,7 +259,7 @@ class GstWebRTCTestsManager(TestsManager):
 
     def populate_testsuite(self):
         self.add_scenarios (DEFAULT_SCENARIOS)
-        self.set_default_blacklist(DEFAULT_BLACKLIST)
+        self.set_default_skiplist(DEFAULT_SKIPLIST)
 
     def list_tests(self):
         if self.tests:

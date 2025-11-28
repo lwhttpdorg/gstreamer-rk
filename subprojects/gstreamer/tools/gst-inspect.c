@@ -1340,12 +1340,12 @@ gst_plugin_feature_name_compare_func (gconstpointer p1, gconstpointer p2)
 }
 
 static void
-print_blacklist (void)
+print_blocklist (void)
 {
   GList *plugins, *cur;
   gint count = 0;
 
-  g_print ("%s%s%s\n", HEADING_COLOR, _("Blacklisted files:"), RESET_COLOR);
+  g_print ("%s%s%s\n", HEADING_COLOR, _("Blocklisted files:"), RESET_COLOR);
 
   plugins = gst_registry_get_plugin_list (gst_registry_get ());
   if (sort_output == SORT_TYPE_NAME)
@@ -1353,7 +1353,7 @@ print_blacklist (void)
 
   for (cur = plugins; cur != NULL; cur = g_list_next (cur)) {
     GstPlugin *plugin = (GstPlugin *) (cur->data);
-    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED)) {
+    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED)) {
       g_print ("  %s\n", gst_plugin_get_name (plugin));
       count++;
     }
@@ -1362,7 +1362,7 @@ print_blacklist (void)
   g_print ("\n");
   g_print (_("%sTotal count%s: %s"), PROP_NAME_COLOR, RESET_COLOR,
       PROP_VALUE_COLOR);
-  g_print (ngettext ("%d blacklisted file", "%d blacklisted files", count),
+  g_print (ngettext ("%d blocklisted file", "%d blocklisted files", count),
       count);
   g_print ("%s\n", RESET_COLOR);
   gst_plugin_list_free (plugins);
@@ -1382,7 +1382,7 @@ print_typefind_extensions (const gchar * const *extensions, const gchar * color)
 static void
 print_element_list (gboolean print_all, gchar * ftypes)
 {
-  int plugincount = 0, featurecount = 0, blacklistcount = 0;
+  int plugincount = 0, featurecount = 0, blocklistcount = 0;
   GList *plugins, *orig_plugins;
   gchar **types = NULL;
 
@@ -1407,8 +1407,8 @@ print_element_list (gboolean print_all, gchar * ftypes)
     plugins = g_list_next (plugins);
     plugincount++;
 
-    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED)) {
-      blacklistcount++;
+    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED)) {
+      blocklistcount++;
       continue;
     }
 
@@ -1502,10 +1502,10 @@ print_element_list (gboolean print_all, gchar * ftypes)
   g_print (_("%sTotal count%s: %s"), PROP_NAME_COLOR, RESET_COLOR,
       PROP_VALUE_COLOR);
   g_print (ngettext ("%d plugin", "%d plugins", plugincount), plugincount);
-  if (blacklistcount) {
+  if (blocklistcount) {
     g_print (" (");
-    g_print (ngettext ("%d blacklist entry", "%d blacklist entries",
-            blacklistcount), blacklistcount);
+    g_print (ngettext ("%d blocklist entry", "%d blocklist entries",
+            blocklistcount), blocklistcount);
     g_print (" not shown)");
   }
   g_print ("%s, %s", RESET_COLOR, PROP_VALUE_COLOR);
@@ -2253,7 +2253,7 @@ static int
 real_main (int argc, char *argv[])
 {
   gboolean print_all = FALSE;
-  gboolean do_print_blacklist = FALSE;
+  gboolean do_print_blocklist = FALSE;
   gboolean plugin_name = FALSE;
   gboolean print_aii = FALSE;
   gboolean uri_handlers = FALSE;
@@ -2271,8 +2271,13 @@ real_main (int argc, char *argv[])
   GOptionEntry options[] = {
     {"print-all", 'a', 0, G_OPTION_ARG_NONE, &print_all,
         N_("Print all elements"), NULL},
-    {"print-blacklist", 'b', 0, G_OPTION_ARG_NONE, &do_print_blacklist,
-        N_("Print list of blacklisted files"), NULL},
+    {"print-blocklist", 'b', 0, G_OPTION_ARG_NONE, &do_print_blocklist,
+        N_("Print list of blocklisted files"), NULL},
+    {"print-blacklist", '\0', G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE,
+          &do_print_blocklist,
+          N_
+          ("Print list of blacklisted files (deprecated, use --print-blocklist)"),
+        NULL},
     {"print-plugin-auto-install-info", '\0', 0, G_OPTION_ARG_NONE, &print_aii,
         N_("Print a machine-parsable list of features the specified plugin "
               "or all plugins provide.\n                                       "
@@ -2433,8 +2438,8 @@ real_main (int argc, char *argv[])
   if (uri_handlers) {
     print_all_uri_handlers ();
   } else if (argc == 1 || print_all) {
-    if (do_print_blacklist)
-      print_blacklist ();
+    if (do_print_blocklist)
+      print_blocklist ();
     else {
       if (print_aii)
         print_all_plugin_automatic_install_info ();

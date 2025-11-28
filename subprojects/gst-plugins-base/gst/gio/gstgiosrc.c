@@ -487,7 +487,7 @@ gst_gio_src_query (GstBaseSrc * base_src, GstQuery * query)
         GST_LOG_OBJECT (src, "local URI, assuming random access is possible");
         flags |= GST_SCHEDULING_FLAG_SEEKABLE;
       } else if (strcmp (scheme, "http") == 0 || strcmp (scheme, "https") == 0) {
-        GST_LOG_OBJECT (src, "blacklisted protocol '%s', "
+        GST_LOG_OBJECT (src, "blocklisted protocol '%s', "
             "no random access possible", scheme);
       } else {
         GST_LOG_OBJECT (src, "unhandled protocol '%s', asking parent", scheme);

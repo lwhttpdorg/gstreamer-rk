@@ -168,7 +168,7 @@ copy_and_clean_caps (const GstCaps * caps)
   gst_structure_remove_field (s, "metadata-interval");  /* icy caps */
   /* decoders/encoders almost always handle the usual width/height/channel/rate
    * range (and if we don't remove this then the app will have a much harder
-   * time blacklisting formats it has unsuccessfully tried to install before) */
+   * time blocklisting formats it has unsuccessfully tried to install before) */
   gst_structure_remove_field (s, "width");
   gst_structure_remove_field (s, "depth");
   gst_structure_remove_field (s, "height");

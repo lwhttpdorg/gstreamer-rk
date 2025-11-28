@@ -730,7 +730,7 @@ def setup_tests(test_manager, options):
     print("Setting up tests to validate all elements")
     pipelines_descriptions = []
     test_manager.add_expected_issues(KNOWN_ISSUES)
-    test_manager.set_default_blacklist([
+    test_manager.set_default_skiplist([
         ("validateelements.launch_pipeline.videobox*",
          "Those are broken pipelines."),
         ("validateelements.launch_pipeline.frei0r*",

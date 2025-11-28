@@ -14315,10 +14315,10 @@ usage.</doc>
       <method name="add_children_props" c:identifier="ges_track_element_add_children_props">
         <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-track-element.c">Adds all the properties of a #GstElement that match the criteria as
 children properties of the track element. If the name of @element's
-#GstElementFactory is not in @blacklist, and the factory's
+#GstElementFactory is not in @blocklist, and the factory's
 #GST_ELEMENT_METADATA_KLASS contains at least one member of
 @wanted_categories (e.g. #GST_ELEMENT_FACTORY_KLASS_DECODER), then
-all the properties of @element that are also in @whitelist are added as
+all the properties of @element that are also in @allowlist are added as
 child properties of @self using
 ges_timeline_element_add_child_property().
 
@@ -14338,23 +14338,23 @@ This is intended to be used by subclasses when constructing.</doc>
           </parameter>
           <parameter name="wanted_categories" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-track-element.c">
-An array of element factory "klass" categories to whitelist, or %NULL
+An array of element factory "klass" categories to allowlist, or %NULL
 to accept all categories</doc>
             <array c:type="const gchar**">
               <type name="utf8" c:type="gchar*"/>
             </array>
           </parameter>
-          <parameter name="blacklist" transfer-ownership="none" nullable="1" allow-none="1">
+          <parameter name="blocklist" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-track-element.c">A
-blacklist of element factory names, or %NULL to not blacklist any
+blocklist of element factory names, or %NULL to not blocklist any
 element factory</doc>
             <array c:type="const gchar**">
               <type name="utf8" c:type="gchar*"/>
             </array>
           </parameter>
-          <parameter name="whitelist" transfer-ownership="none" nullable="1" allow-none="1">
+          <parameter name="allowlist" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-track-element.c">A
-whitelist of element property names, or %NULL to whitelist all
+allowlist of element property names, or %NULL to allowlist all
 writeable properties</doc>
             <array c:type="const gchar**">
               <type name="utf8" c:type="gchar*"/>

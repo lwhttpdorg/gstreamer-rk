@@ -425,7 +425,7 @@ plugin_init (GstPlugin * plugin)
 
   context = gst_msdk_context_new (TRUE);
   if (!context)
-    return TRUE;                /* return TRUE to avoid getting blacklisted */
+    return TRUE;                /* return TRUE to avoid getting blocklisted */
 
 #if (MFX_VERSION >= 2000)
   mfxImplDescription *desc = (mfxImplDescription *)

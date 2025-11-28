@@ -12,6 +12,8 @@ namespace Gst {
 	public enum PluginFlags : uint {
 
 		Cached = 16,
+		Blocklisted = 32,
+		[Obsolete("Use Blocklisted instead")]
 		Blacklisted = 32,
 	}
 

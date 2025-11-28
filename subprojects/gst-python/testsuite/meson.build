@@ -57,7 +57,7 @@ foreach i: tests
     env = environment()
     env.set('GST_OVERRIDE_SRC_PATH', join_paths (meson.current_source_dir(), '..', 'gi', 'overrides'))
     env.set('GST_OVERRIDE_BUILD_PATH', join_paths (meson.current_build_dir(), '..', 'gi', 'overrides'))
-    env.set('GST_PLUGIN_LOADING_WHITELIST', 'gstreamer', 'gst-plugins-base',
+    env.set('GST_PLUGIN_LOADING_ALLOWLIST', 'gstreamer', 'gst-plugins-base',
         'gst-python@' + meson.project_build_root())
     env.set('GST_PLUGIN_PATH_1_0', meson.global_build_root(), pluginsdirs + pypluginsdir)
     env.set('GST_REGISTRY', join_paths(meson.current_build_dir(), '@0@.registry'.format(test_name)))

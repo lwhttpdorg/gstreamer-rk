@@ -85,7 +85,7 @@ LONG_VALGRIND_TESTS = [
     (r'check.gst-editing-services.nle_tempochange.test_tempochange_play', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/780'),
 ]
 
-VALGRIND_BLACKLIST = [
+VALGRIND_SKIPLIST = [
     (r'check.gstreamer.gst_gstsystemclock.test_stress_cleanup_unschedule', '?'),
     (r'check.gstreamer.gst_gstsystemclock.test_stress_reschedule', '?'),
     (r'check.gstreamer.tools_gstinspect', '?'),
@@ -128,7 +128,7 @@ VALGRIND_BLACKLIST = [
     (r'check.gst-plugins-bad.elements_curlhttpsrc.test_range_get', '?'),
 ]
 
-BLACKLIST = [
+SKIPLIST = [
     (r'check.gstreamer.gst_gstsystemclock.test_stress_cleanup_unschedule', 'flaky under high server load'),
     (r'check.gstreamer.gst_gstsystemclock.test_stress_reschedule', 'flaky under high server load'),
     (r'check.gstreamer.pipelines_seek.test_loopback_2$', '?'),
@@ -176,7 +176,7 @@ BLACKLIST = [
     (r'check.gst-rtsp-server.gst_rtspserver.test_multiple_transports', 'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/767'),
 ]
 
-CI_BLACKLIST = [
+CI_SKIPLIST = [
     (r'check.gst-plugins-good.elements_souphttpsrc2.test_icy_stream', 'flaky in valgrind, leaks in CI but not locally'),
 ]
 
@@ -267,14 +267,14 @@ KNOWN_ISSUES = {
 def setup_tests(test_manager, options):
     if options.gst_check_leak_trace_testnames == 'known-not-leaky':
         options.gst_check_leak_trace_testnames = KNOWN_NOT_LEAKY
-    test_manager.set_default_blacklist(BLACKLIST)
+    test_manager.set_default_skiplist(SKIPLIST)
     if options.valgrind:
-        test_manager.set_default_blacklist(VALGRIND_BLACKLIST)
+        test_manager.set_default_skiplist(VALGRIND_SKIPLIST)
         if options.long_limit <= utils.LONG_TEST:
-            test_manager.set_default_blacklist(LONG_VALGRIND_TESTS)
+            test_manager.set_default_skiplist(LONG_VALGRIND_TESTS)
 
     if 'CI_COMMIT_SHA' in os.environ:
-        test_manager.set_default_blacklist(CI_BLACKLIST)
+        test_manager.set_default_skiplist(CI_SKIPLIST)
 
     test_manager.add_expected_issues(KNOWN_ISSUES)
 

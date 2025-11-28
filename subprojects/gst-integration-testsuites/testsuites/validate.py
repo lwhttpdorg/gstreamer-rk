@@ -40,34 +40,35 @@ if TYPE_CHECKING:
 
 TEST_MANAGER = "validate"
 
-BLACKLIST = [('validate.file.transcode.to_vorbis_and_vp8_in_webm.GH1_00094_1920x1280_MTS',
-              'Got error: Internal data stream error. -- Debug message: mpegtsbase.c(1371):'
-              'mpegts_base_loop (): ...: stream stopped, reason not-negotiated'),
-             ('validate.testbin.transcode.*',
-              "Encoding testsrc is not so interesting and the source is now unlimited"),
-             ('validate.file.*.simple.fast_forward.synchronized',
-              'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4665'),
-             ('validate.hls.playback.change_state_intensive.*',
-              'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4668'),
-            ('validate.rtsp.*playback.switch.*',
-             'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4664'),
-            ('validate.rtsp.*playback.*seek.*mxf$|validate.rtsp.*playback.*change_state_intensive.*mxf$',
-             'Actions on MXF streams with rtsp-server fail in racy ways.'
-             ' (Deactivating as it is not very important.)'),
-            ('validate.rtsp.*pal-dv25_mxf$',
-             'File has decoding issues with rtsp-server.'
-             ' (Deactivating as it is not very important.)'),
-             ("(?!.*.media_check.qtdemux-test-frag-basic_zero_dur_no_mehd_mp4).*.qtdemux-test-frag-basic_zero_dur_no_mehd_mp4",
-              '`qtdemux-test-frag-basic_zero_dur_no_mehd_mp4` is there only for media_check tests.'),
-             ('validate.rtsp.*playback.*mp3_h265_0_mp4$',
-              'The version of libav shipped by Fedora 29 crashes in various ways with these tests.'),
-             ('validate.rtsp.*playback.seek.*GH1_00094_1920x1280_MTS',
-              'Do not preroll after pause.'),
-             ('validate.file.playback.reverse_playback.sample_mpeg_program_stream_scr_mpg',
-              'Do not decode any frame in reverse playback with SCR.'),
-             ('validate.rtsp.*playback.seek.*sample_mpeg_program_stream_scr_mpg',
-              'Racy with CI. No frames decoded before the end of the stream.'),
-             ]
+SKIPLIST = [
+    ('validate.file.transcode.to_vorbis_and_vp8_in_webm.GH1_00094_1920x1280_MTS',
+     'Got error: Internal data stream error. -- Debug message: mpegtsbase.c(1371):'
+     'mpegts_base_loop (): ...: stream stopped, reason not-negotiated'),
+    ('validate.testbin.transcode.*',
+     "Encoding testsrc is not so interesting and the source is now unlimited"),
+    ('validate.file.*.simple.fast_forward.synchronized',
+     'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4665'),
+    ('validate.hls.playback.change_state_intensive.*',
+     'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4668'),
+    ('validate.rtsp.*playback.switch.*',
+     'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4664'),
+    ('validate.rtsp.*playback.*seek.*mxf$|validate.rtsp.*playback.*change_state_intensive.*mxf$',
+     'Actions on MXF streams with rtsp-server fail in racy ways.'
+     ' (Deactivating as it is not very important.)'),
+    ('validate.rtsp.*pal-dv25_mxf$',
+     'File has decoding issues with rtsp-server.'
+     ' (Deactivating as it is not very important.)'),
+    ("(?!.*.media_check.qtdemux-test-frag-basic_zero_dur_no_mehd_mp4).*.qtdemux-test-frag-basic_zero_dur_no_mehd_mp4",
+     '`qtdemux-test-frag-basic_zero_dur_no_mehd_mp4` is there only for media_check tests.'),
+    ('validate.rtsp.*playback.*mp3_h265_0_mp4$',
+     'The version of libav shipped by Fedora 29 crashes in various ways with these tests.'),
+    ('validate.rtsp.*playback.seek.*GH1_00094_1920x1280_MTS',
+     'Do not preroll after pause.'),
+    ('validate.file.playback.reverse_playback.sample_mpeg_program_stream_scr_mpg',
+     'Do not decode any frame in reverse playback with SCR.'),
+    ('validate.rtsp.*playback.seek.*sample_mpeg_program_stream_scr_mpg',
+     'Racy with CI. No frames decoded before the end of the stream.'),
+]
 
 
 def add_accurate_seek_tests(test_manager, media_dir, extra_data, media_info_dir=None):
@@ -127,7 +128,7 @@ def setup_tests(test_manager: GstValidateTestManager, options: LauncherConfig):
 
     options.add_paths(assets_dir)
     options.set_http_server_dir(media_dir)
-    test_manager.set_default_blacklist(BLACKLIST)
+    test_manager.set_default_skiplist(SKIPLIST)
 
     media_info_dir = os.path.realpath(os.path.join(testsuite_dir, os.path.pardir, "media_info"))
     if os.path.isdir(media_info_dir) and not options.media_info_dir:

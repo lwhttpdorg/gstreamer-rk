@@ -253,7 +253,7 @@ static gboolean win32_plugin_loader_run (Win32PluginLoader * self,
     DWORD timeout);
 
 static void
-gst_plugin_loader_create_blacklist (GstPluginLoader * self,
+gst_plugin_loader_create_blocklist (GstPluginLoader * self,
     PendingPluginEntry * entry)
 {
   GstPlugin *plugin = g_object_new (GST_TYPE_PLUGIN, NULL);
@@ -261,18 +261,18 @@ gst_plugin_loader_create_blacklist (GstPluginLoader * self,
   plugin->filename = g_strdup (entry->filename);
   plugin->file_mtime = entry->file_mtime;
   plugin->file_size = entry->file_size;
-  GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED);
+  GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED);
 
   plugin->basename = g_path_get_basename (plugin->filename);
   plugin->desc.name = g_intern_string (plugin->basename);
-  plugin->desc.description = "Plugin for blacklisted file";
+  plugin->desc.description = "Plugin for blocklisted file";
   plugin->desc.version = "0.0.0";
-  plugin->desc.license = "BLACKLIST";
+  plugin->desc.license = "BLOCKLIST";
   plugin->desc.source = plugin->desc.license;
   plugin->desc.package = plugin->desc.license;
   plugin->desc.origin = plugin->desc.license;
 
-  GST_DEBUG ("Adding blacklist plugin '%s'", plugin->desc.name);
+  GST_DEBUG ("Adding blocklist plugin '%s'", plugin->desc.name);
   gst_registry_add_plugin (self->registry, plugin);
 }
 
@@ -803,7 +803,7 @@ win32_plugin_loader_process_packet (Win32PluginLoader * self)
           new_plugin->registered = TRUE;
           server->got_plugin_detail = TRUE;
         } else if (entry) {
-          gst_plugin_loader_create_blacklist (server, entry);
+          gst_plugin_loader_create_blocklist (server, entry);
           server->got_plugin_detail = TRUE;
         }
 
@@ -1202,7 +1202,7 @@ gst_plugin_loader_retry_pending (GstPluginLoader * self)
 
     if (!gst_plugin_loader_server_load (self, pending)) {
       GST_ERROR ("Loading plugin %s failed", pending->filename);
-      gst_plugin_loader_create_blacklist (self, pending);
+      gst_plugin_loader_create_blocklist (self, pending);
       self->got_plugin_detail = TRUE;
       pending_plugin_entry_free (pending);
       g_queue_pop_head (&self->pending_plugins);

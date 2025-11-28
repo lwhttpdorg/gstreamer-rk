@@ -1311,13 +1311,13 @@ not been tested and explicitly activated if you set use --wanted-tests ALL""")
         Registers the defaults:
             * Scenarios to be used
             * Encoding formats to be used
-            * Blacklisted tests
+            * Skiplisted tests
             * Test generators
         """
         printc("-> Registering default 'validate' tests... ", end='')
         self.register_default_scenarios()
         self.register_default_encoding_formats()
-        self.register_default_blacklist()
+        self.register_default_skiplist()
         self.register_default_test_generators()
         printc("OK", Colors.OKGREEN)
 
@@ -1353,8 +1353,8 @@ not been tested and explicitly activated if you set use --wanted-tests ALL""")
             MediaFormatCombination("mkv", "vorbis", "h264"),
         ])
 
-    def register_default_blacklist(self):
-        self.set_default_blacklist([
+    def register_default_skiplist(self):
+        self.set_default_skiplist([
             # testbin known issues
             ("testbin.media_check.*",
              "Not supported by GstDiscoverer."),

@@ -3199,7 +3199,7 @@ no_audioconvert:
     post_missing_element_message (playsink, "audioconvert");
     GST_ELEMENT_ERROR (playsink, CORE, MISSING_PLUGIN,
         (_("Missing element '%s' - check your GStreamer installation."),
-            "audioconvert"), ("make sure audioconvert isn't blacklisted"));
+            "audioconvert"), ("make sure audioconvert isn't blocklisted"));
     free_chain ((GstPlayChain *) chain);
     return NULL;
   }

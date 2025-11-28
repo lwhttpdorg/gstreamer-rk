@@ -129,7 +129,7 @@ _list_features (const gchar * compatible_with, const gchar * klass,
     plugin = (GstPlugin *) (plugins->data);
     plugins = g_list_next (plugins);
 
-    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED)) {
+    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED)) {
       continue;
     }
 

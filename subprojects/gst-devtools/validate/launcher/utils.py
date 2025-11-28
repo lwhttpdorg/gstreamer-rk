@@ -535,7 +535,7 @@ def check_bugs_resolution(bugs_definitions):
                     closing_issue_project = '%2F'.join([c for c in url.path.split('/') if c][0:2])
                     if project_id == closing_issue_project and issue['iid'] == issue_id:
                         res = False
-                        printc("\n  + %s \n   --> %s: '%s'\n   ==> Will be closed by current MR %s\n\n===> Remove blacklisting before merging." % (
+                        printc("\n  + %s \n   --> %s: '%s'\n   ==> Will be closed by current MR %s\n\n===> Remove skiplisting before merging." % (
                             regex, issue['web_url'], issue['title'], issue['state']), Colors.FAIL)
 
                 gitlab_url = "https://%s/api/v4/projects/%s/issues/%s" % (url.hostname, project_id, issue_id)

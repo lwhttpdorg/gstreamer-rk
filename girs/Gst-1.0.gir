@@ -37915,7 +37915,7 @@ to get a list of plugins that match certain criteria.</doc>
       <member name="cached" value="16" c:identifier="GST_PLUGIN_FLAG_CACHED" glib:nick="cached" glib:name="GST_PLUGIN_FLAG_CACHED">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstplugin.h">Temporarily loaded plugins</doc>
       </member>
-      <member name="blacklisted" value="32" c:identifier="GST_PLUGIN_FLAG_BLACKLISTED" glib:nick="blacklisted" glib:name="GST_PLUGIN_FLAG_BLACKLISTED">
+      <member name="blocklisted" value="32" c:identifier="GST_PLUGIN_FLAG_BLOCKLISTED" glib:nick="blocklisted" glib:name="GST_PLUGIN_FLAG_BLOCKLISTED">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstplugin.h">The plugin won't be scanned (again)</doc>
       </member>
     </bitfield>

@@ -860,7 +860,7 @@ gst_debug_help (void)
     GstPlugin *loaded_plugin;
     GList *features, *orig_features;
 
-    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED))
+    if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED))
       continue;
 
     loaded_plugin = gst_plugin_load (plugin);

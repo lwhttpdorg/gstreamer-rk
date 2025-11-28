@@ -1112,7 +1112,7 @@ ges_container_group (GList * containers)
 /**
  * ges_container_edit:
  * @container: The #GESContainer to edit
- * @layers: (element-type GESLayer) (nullable): A whitelist of layers
+ * @layers: (element-type GESLayer) (nullable): An allowlist of layers
  * where the edit can be performed, %NULL allows all layers in the
  * timeline
  * @new_layer_priority: The priority/index of the layer @container should

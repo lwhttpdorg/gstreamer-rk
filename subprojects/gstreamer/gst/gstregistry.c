@@ -459,12 +459,12 @@ gst_registry_add_plugin (GstRegistry * registry, GstPlugin * plugin)
           "Replacing existing plugin \"%s\" %p with new plugin %p for filename \"%s\"",
           GST_STR_NULL (existing_plugin->filename), existing_plugin, plugin,
           GST_STR_NULL (plugin->filename));
-      /* If the new plugin is blacklisted and the existing one isn't cached, do not
+      /* If the new plugin is blocklisted and the existing one isn't cached, do not
        * accept if it's from a different location than the existing one */
-      if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED) &&
+      if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED) &&
           strcmp (plugin->filename, existing_plugin->filename)) {
         GST_WARNING_OBJECT (registry,
-            "Not replacing plugin because new one (%s) is blacklisted but for a different location than existing one (%s)",
+            "Not replacing plugin because new one (%s) is blocklisted but for a different location than existing one (%s)",
             plugin->filename, existing_plugin->filename);
         /* Keep reference counting consistent */
         gst_object_ref_sink (plugin);

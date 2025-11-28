@@ -215,8 +215,8 @@ GES_API void
 ges_track_element_add_children_props          (GESTrackElement *self,
                                                GstElement *element,
                                                const gchar ** wanted_categories,
-                                               const gchar **blacklist,
-                                               const gchar **whitelist);
+                                               const gchar **blocklist,
+                                               const gchar **allowlist);
 GES_DEPRECATED_FOR(ges_track_element_get_all_control_bindings_full)
 GHashTable *
 ges_track_element_get_all_control_bindings    (GESTrackElement * trackelement);

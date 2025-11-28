@@ -8,7 +8,7 @@ fsmod = import('fs')
 test_defines = [
   '-UG_DISABLE_ASSERT',
   '-UG_DISABLE_CAST_CHECKS',
-  '-DGST_CHECK_TEST_ENVIRONMENT_BEACON="GST_PLUGIN_LOADING_WHITELIST"',
+  '-DGST_CHECK_TEST_ENVIRONMENT_BEACON="GST_PLUGIN_LOADING_ALLOWLIST"',
   '-DGST_TEST_FILES_PATH="' + fsmod.as_posix(meson.current_source_dir()) + '/../files"',
   '-DGST_USE_UNSTABLE_API',
 ]
@@ -63,7 +63,7 @@ foreach t : ugly_tests
     env = environment()
     env.set('GST_PLUGIN_SYSTEM_PATH_1_0', '')
     env.set('CK_DEFAULT_TIMEOUT', '20')
-    env.set('GST_PLUGIN_LOADING_WHITELIST', 'gstreamer', 'gst-plugins-base',
+    env.set('GST_PLUGIN_LOADING_ALLOWLIST', 'gstreamer', 'gst-plugins-base',
       'gst-plugins-good', 'gst-plugins-ugly@' + meson.project_build_root())
     env.set('GST_PLUGIN_PATH_1_0', [meson.global_build_root()] + pluginsdirs)
     env.set('GST_REGISTRY', join_paths(meson.current_build_dir(), '@0@.registry'.format(test_name)))

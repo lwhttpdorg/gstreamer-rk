@@ -818,23 +818,23 @@ GST_END_TEST;
 GST_START_TEST (test_forbidden_pad_template_names)
 {
   const gchar *pad_name;
-  GSList *padname_blacklists = NULL, *item;
+  GSList *padname_blocklists = NULL, *item;
   GstPadTemplate *ignored G_GNUC_UNUSED;
 
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%u%u");
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%u_%s_%s");
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%s_%u");
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%s_%s");
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%s_%s_%s");
-  padname_blacklists =
-      g_slist_append (padname_blacklists, (gpointer) "src_%s_blah");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%u%u");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%u_%s_%s");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%s_%u");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%s_%s");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%s_%s_%s");
+  padname_blocklists =
+      g_slist_append (padname_blocklists, (gpointer) "src_%s_blah");
 
-  item = padname_blacklists;
+  item = padname_blocklists;
 
   /* check invalid request pad name */
   while (item) {
@@ -844,7 +844,7 @@ GST_START_TEST (test_forbidden_pad_template_names)
             GST_PAD_REQUEST, GST_CAPS_ANY));
   }
 
-  g_slist_free (padname_blacklists);
+  g_slist_free (padname_blocklists);
 }
 
 GST_END_TEST;

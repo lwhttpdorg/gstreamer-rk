@@ -1593,12 +1593,12 @@ class TestsManager(Loggable):
         self.args = None
         self.reporter = None
         self.wanted_tests_patterns = []
-        self.blacklisted_tests_patterns = []
+        self.skiplisted_tests_patterns = []
         self._generators = []
         self.check_testslist = True
         self.all_tests = None
         self.expected_issues = {}
-        self.blacklisted_tests = []
+        self.skiplisted_tests = []
 
     def init(self):
         return True
@@ -1679,24 +1679,34 @@ class TestsManager(Loggable):
     def get_generators(self):
         return self._generators
 
-    def _add_blacklist(self, blacklisted_tests):
-        if not isinstance(blacklisted_tests, list):
-            blacklisted_tests = [blacklisted_tests]
+    def _add_skiplist(self, skiplisted_tests):
+        if not isinstance(skiplisted_tests, list):
+            skiplisted_tests = [skiplisted_tests]
 
-        for patterns in blacklisted_tests:
+        for patterns in skiplisted_tests:
             for pattern in patterns.split(","):
-                self.blacklisted_tests_patterns.append(re.compile(pattern))
+                self.skiplisted_tests_patterns.append(re.compile(pattern))
 
-    def set_default_blacklist(self, default_blacklist):
-        for test_regex, reason, *re_flags in default_blacklist:
+    def set_default_skiplist(self, default_skiplist):
+        for test_regex, reason, *re_flags in default_skiplist:
             re_flags = re_flags[0] if re_flags else None
 
             if not test_regex.startswith(self.loading_testsuite + '.'):
                 test_regex = self.loading_testsuite + '.' + test_regex
             if re_flags is not None:
                 test_regex = re_flags + test_regex
-            self.blacklisted_tests.append((test_regex, reason))
-            self._add_blacklist(test_regex)
+            self.skiplisted_tests.append((test_regex, reason))
+            self._add_skiplist(test_regex)
+
+    def set_default_blacklist(self, default_blacklist):
+        """Deprecated: Use set_default_skiplist instead."""
+        import warnings
+        warnings.warn(
+            "set_default_blacklist is deprecated, use set_default_skiplist instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.set_default_skiplist(default_blacklist)
 
     def add_options(self, parser):
         """ Add more arguments. """
@@ -1718,27 +1728,27 @@ class TestsManager(Loggable):
                 for pattern in patterns.split(","):
                     self.wanted_tests_patterns.append(re.compile(pattern))
 
-        if options.blacklisted_tests:
-            for patterns in options.blacklisted_tests:
-                self._add_blacklist(patterns)
+        if options.skiplisted_tests:
+            for patterns in options.skiplisted_tests:
+                self._add_skiplist(patterns)
 
         if options.gdb:
             if get_debugger() is None:
                 raise RuntimeError("No debugger found, can't run tests with --gdb")
 
-    def check_blacklists(self):
+    def check_skiplists(self):
         if self.options.check_bugs_status:
-            if not check_bugs_resolution(self.blacklisted_tests):
+            if not check_bugs_resolution(self.skiplisted_tests):
                 return False
 
         return True
 
-    def log_blacklists(self):
-        if self.blacklisted_tests:
-            self.info("Currently 'hardcoded' %s blacklisted tests:" %
+    def log_skiplists(self):
+        if self.skiplisted_tests:
+            self.info("Currently 'hardcoded' %s skiplisted tests:" %
                       self.name)
 
-        for name, bug in self.blacklisted_tests:
+        for name, bug in self.skiplisted_tests:
             if not self.options.check_bugs_status:
                 self.info("  + %s --> bug: %s" % (name, bug))
 
@@ -1754,20 +1764,20 @@ class TestsManager(Loggable):
 
         return check_bugs_resolution(bugs_definitions.items())
 
-    def _check_blacklisted(self, test):
-        for pattern in self.blacklisted_tests_patterns:
+    def _check_skiplisted(self, test):
+        for pattern in self.skiplisted_tests_patterns:
             if pattern.findall(test.classname):
-                self.info("%s is blacklisted by %s", test.classname, pattern)
+                self.info("%s is skiplisted by %s", test.classname, pattern)
                 return True
 
         return False
 
-    def _check_whitelisted(self, test):
+    def _check_allowlisted(self, test):
         for pattern in self.wanted_tests_patterns:
             if pattern.findall(test.classname):
-                if self._check_blacklisted(test):
-                    # If explicitly white listed that specific test
-                    # bypass the blacklisting
+                if self._check_skiplisted(test):
+                    # If explicitly allowlisted that specific test
+                    # bypass the denylisting
                     if pattern.pattern != test.classname:
                         return False
                 return True
@@ -1783,12 +1793,12 @@ class TestsManager(Loggable):
         return True
 
     def _is_test_wanted(self, test):
-        if self._check_whitelisted(test):
+        if self._check_allowlisted(test):
             if not self._check_duration(test):
                 return False
             return True
 
-        if self._check_blacklisted(test):
+        if self._check_skiplisted(test):
             return False
 
         if not self._check_duration(test):
@@ -2043,10 +2053,10 @@ class _TestsLauncher(Loggable):
             printc("-> Checking bugs resolution... ", end='')
 
         for tester in self.testers:
-            if not tester.check_blacklists():
+            if not tester.check_skiplists():
                 return False
 
-            tester.log_blacklists()
+            tester.log_skiplists()
 
             if not tester.check_expected_issues():
                 return False
@@ -2091,7 +2101,7 @@ class _TestsLauncher(Loggable):
         return False
 
     def _check_defined_tests(self, tester, tests):
-        if self.options.blacklisted_tests or self.options.wanted_tests:
+        if self.options.skiplisted_tests or self.options.wanted_tests:
             return
 
         tests_names = [test.classname for test in tests if test.is_autogenerated()]

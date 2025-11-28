@@ -1658,8 +1658,8 @@ static const gchar *stream_uris[] = { "http://", "https://", "mms://",
 /* list of URIs that need a queue because they are pretty bursty */
 static const gchar *queue_uris[] = { "cdda://", NULL };
 
-/* blacklisted URIs, we know they will always fail. */
-static const gchar *blacklisted_uris[] = { NULL };
+/* blocklisted URIs, we know they will always fail. */
+static const gchar *blocklisted_uris[] = { NULL };
 
 /* media types that use adaptive streaming */
 static const gchar *adaptive_media[] = {
@@ -1669,7 +1669,7 @@ static const gchar *adaptive_media[] = {
 
 #define IS_STREAM_URI(uri)          (array_has_uri_value (stream_uris, uri))
 #define IS_QUEUE_URI(uri)           (array_has_uri_value (queue_uris, uri))
-#define IS_BLACKLISTED_URI(uri)     (array_has_uri_value (blacklisted_uris, uri))
+#define IS_BLOCKLISTED_URI(uri)     (array_has_uri_value (blocklisted_uris, uri))
 #define IS_ADAPTIVE_MEDIA(media)    (array_has_value (adaptive_media, media))
 
 /*
@@ -1691,8 +1691,8 @@ gen_source_element (GstURISourceBin * urisrc)
   if (!gst_uri_is_valid (urisrc->uri))
     goto invalid_uri;
 
-  if (IS_BLACKLISTED_URI (urisrc->uri))
-    goto uri_blacklisted;
+  if (IS_BLOCKLISTED_URI (urisrc->uri))
+    goto uri_blocklisted;
 
   source = gst_element_make_from_uri (GST_URI_SRC, urisrc->uri, NULL, &err);
   if (!source)
@@ -1757,7 +1757,7 @@ invalid_uri:
     g_clear_error (&err);
     return NULL;
   }
-uri_blacklisted:
+uri_blocklisted:
   {
     GST_ELEMENT_ERROR (urisrc, RESOURCE, FAILED,
         (_("This stream type cannot be played yet.")), (NULL));
