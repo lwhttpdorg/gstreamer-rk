@@ -129,6 +129,10 @@ enum
   PROP_QP_MAX_B,
 
   PROP_CONST_QUALITY,
+
+  /* av1 specific */
+  PROP_MAX_NUM_REF_FRAMES_IN_DPB,
+  PROP_NUM_FWD_REFS,
 };
 
 #define DEFAULT_PRESET            GST_NV_ENCODER_PRESET_DEFAULT
@@ -152,6 +156,8 @@ enum
 #define DEFAULT_STRICT_GOP        FALSE
 #define DEFAULT_AQ_STRENGTH       FALSE
 #define DEFAULT_CONST_QUALITY     0
+#define DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB 0
+#define DEFAULT_NUM_FWD_REFS      0
 
 typedef struct _GstNvAv1Encoder
 {
@@ -199,6 +205,8 @@ typedef struct _GstNvAv1Encoder
   gint qp_max_p;
   gint qp_max_b;
   gdouble const_quality;
+  guint max_num_ref_frames_in_dpb;
+  guint num_fwd_refs;
 } GstNvAv1Encoder;
 
 typedef struct _GstNvAv1EncoderClass
@@ -439,6 +447,66 @@ gst_nv_av1_encoder_class_init (GstNvAv1EncoderClass * klass, gpointer data)
           "Target Constant Quality level for VBR mode (0 = automatic)",
           0, 51, DEFAULT_CONST_QUALITY, param_flags));
 
+  /**
+   * GstNvCudaAV1Enc:max-num-ref-frames-in-dpb:
+   *
+   * Maximum number of reference frames in the DPB (Decoded Picture Buffer).
+   * Setting this to 0 will let the NVENC driver use the default DPB size.
+   * For low-latency streaming scenarios with reference frame invalidation (RFI),
+   * a larger DPB allows the encoder to keep old reference frames as fallback.
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvD3D11AV1Enc:max-num-ref-frames-in-dpb:
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvAutoGpuAV1Enc:max-num-ref-frames-in-dpb:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_MAX_NUM_REF_FRAMES_IN_DPB,
+      g_param_spec_uint ("max-num-ref-frames-in-dpb", "Max Num Ref Frames In DPB",
+          "Maximum number of reference frames (DPB size), "
+          "0 = automatic (NVENC driver default)",
+          0, 16, DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB, param_flags));
+
+  /**
+   * GstNvCudaAV1Enc:num-fwd-refs:
+   *
+   * Maximum number of forward reference frames that can be used by hardware
+   * for prediction of a frame. This limits how many reference frames each
+   * P-frame can actually use, while max-num-ref-frames-in-dpb controls the DPB buffer
+   * size.
+   *
+   * For low-latency streaming, setting this to 1 ensures each frame only
+   * references 1 previous frame, minimizing encoding latency while still
+   * allowing a larger DPB for reference frame invalidation (RFI) fallback.
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvD3D11AV1Enc:num-fwd-refs:
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvAutoGpuAV1Enc:num-fwd-refs:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_NUM_FWD_REFS,
+      g_param_spec_uint ("num-fwd-refs", "Num Fwd Refs",
+          "Max number of forward reference frames for prediction, "
+          "0 = automatic (NVENC driver default), 1 = recommended for low latency",
+          0, 7, DEFAULT_NUM_FWD_REFS, param_flags));
+
   GstPadTemplate *pad_templ = gst_pad_template_new ("sink",
       GST_PAD_SINK, GST_PAD_ALWAYS, cdata->sink_caps);
   GstCaps *doc_caps = nullptr;
@@ -546,6 +614,8 @@ gst_nv_av1_encoder_init (GstNvAv1Encoder * self)
   self->qp_max_p = DEFAULT_QP;
   self->qp_max_b = DEFAULT_QP;
   self->const_quality = DEFAULT_CONST_QUALITY;
+  self->max_num_ref_frames_in_dpb = DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB;
+  self->num_fwd_refs = DEFAULT_NUM_FWD_REFS;
 
   gst_nv_encoder_set_device_mode (GST_NV_ENCODER (self), klass->device_mode,
       klass->cuda_device_id, klass->adapter_luid);
@@ -811,6 +881,12 @@ gst_nv_av1_encoder_set_property (GObject * object, guint prop_id,
     case PROP_CONST_QUALITY:
       update_double (self, &self->const_quality, value, UPDATE_RC_PARAM);
       break;
+    case PROP_MAX_NUM_REF_FRAMES_IN_DPB:
+      update_uint (self, &self->max_num_ref_frames_in_dpb, value, UPDATE_INIT_PARAM);
+      break;
+    case PROP_NUM_FWD_REFS:
+      update_uint (self, &self->num_fwd_refs, value, UPDATE_INIT_PARAM);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -918,6 +994,12 @@ gst_nv_av1_encoder_get_property (GObject * object, guint prop_id,
       break;
     case PROP_CONST_QUALITY:
       g_value_set_double (value, self->const_quality);
+      break;
+    case PROP_MAX_NUM_REF_FRAMES_IN_DPB:
+      g_value_set_uint (value, self->max_num_ref_frames_in_dpb);
+      break;
+    case PROP_NUM_FWD_REFS:
+      g_value_set_uint (value, self->num_fwd_refs);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1172,8 +1254,12 @@ gst_nv_av1_encoder_set_format (GstNvEncoder * encoder,
   av1_config->intraRefreshPeriod = 0;
   av1_config->intraRefreshCnt = 0;
 
-  av1_config->maxNumRefFramesInDPB = 0;
-  av1_config->numFwdRefs = NV_ENC_NUM_REF_FRAMES_AUTOSELECT;
+  av1_config->maxNumRefFramesInDPB = self->max_num_ref_frames_in_dpb;
+  if (self->num_fwd_refs > 0) {
+    av1_config->numFwdRefs = (NV_ENC_NUM_REF_FRAMES) self->num_fwd_refs;
+  } else {
+    av1_config->numFwdRefs = NV_ENC_NUM_REF_FRAMES_AUTOSELECT;
+  }
   av1_config->numBwdRefs = NV_ENC_NUM_REF_FRAMES_AUTOSELECT;
 
   GstVideoColorimetry cinfo;

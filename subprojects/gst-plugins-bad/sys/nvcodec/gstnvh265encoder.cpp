@@ -128,6 +128,8 @@ enum
   /* h265 specific */
   PROP_AUD,
   PROP_REPEAT_SEQUENCE_HEADER,
+  PROP_MAX_NUM_REF_FRAMES_IN_DPB,
+  PROP_NUM_REF_L0,
 };
 
 #define DEFAULT_PRESET            GST_NV_ENCODER_PRESET_DEFAULT
@@ -153,6 +155,8 @@ enum
 #define DEFAULT_CONST_QUALITY     0
 #define DEFAULT_AUD               TRUE
 #define DEFAULT_REPEAT_SEQUENCE_HEADER FALSE
+#define DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB 0
+#define DEFAULT_NUM_REF_L0        0
 
 typedef enum
 {
@@ -218,6 +222,8 @@ typedef struct _GstNvH265Encoder
 
   gboolean aud;
   gboolean repeat_sequence_header;
+  guint max_num_ref_frames_in_dpb;
+  guint num_ref_l0;
 } GstNvH265Encoder;
 
 typedef struct _GstNvH265EncoderClass
@@ -602,6 +608,66 @@ gst_nv_h265_encoder_class_init (GstNvH265EncoderClass * klass, gpointer data)
           "ignored if negotiated stream-format is \"hvc1\"",
           DEFAULT_REPEAT_SEQUENCE_HEADER, param_flags));
 
+  /**
+   * GstNvCudaH265Enc:max-num-ref-frames-in-dpb:
+   *
+   * Maximum number of reference frames in the DPB (Decoded Picture Buffer).
+   * Setting this to 0 will let the NVENC driver use the default DPB size.
+   * For low-latency streaming scenarios with reference frame invalidation (RFI),
+   * a larger DPB allows the encoder to keep old reference frames as fallback.
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvD3D11H265Enc:max-num-ref-frames-in-dpb:
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvAutoGpuH265Enc:max-num-ref-frames-in-dpb:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_MAX_NUM_REF_FRAMES_IN_DPB,
+      g_param_spec_uint ("max-num-ref-frames-in-dpb", "Max Num Ref Frames In DPB",
+          "Maximum number of reference frames (DPB size), "
+          "0 = automatic (NVENC driver default)",
+          0, 16, DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB, param_flags));
+
+  /**
+   * GstNvCudaH265Enc:num-ref-l0:
+   *
+   * Maximum number of reference frames in reference picture list L0, that can
+   * be used by hardware for prediction of a frame. This limits how many
+   * reference frames each P-frame can actually use, while max-num-ref-frames-in-dpb
+   * controls the DPB buffer size.
+   *
+   * For low-latency streaming, setting this to 1 ensures each frame only
+   * references 1 previous frame, minimizing encoding latency while still
+   * allowing a larger DPB for reference frame invalidation (RFI) fallback.
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvD3D11H265Enc:num-ref-l0:
+   *
+   * Since: 1.26
+   */
+
+  /**
+   * GstNvAutoGpuH265Enc:num-ref-l0:
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (object_class, PROP_NUM_REF_L0,
+      g_param_spec_uint ("num-ref-l0", "Num Ref L0",
+          "Max number of reference frames in L0 list for prediction, "
+          "0 = automatic (NVENC driver default), 1 = recommended for low latency",
+          0, 7, DEFAULT_NUM_REF_L0, param_flags));
+
   GstPadTemplate *pad_templ = gst_pad_template_new ("sink",
       GST_PAD_SINK, GST_PAD_ALWAYS, cdata->sink_caps);
   GstCaps *doc_caps = nullptr;
@@ -719,6 +785,8 @@ gst_nv_h265_encoder_init (GstNvH265Encoder * self)
   self->const_quality = DEFAULT_CONST_QUALITY;
   self->aud = DEFAULT_AUD;
   self->repeat_sequence_header = DEFAULT_REPEAT_SEQUENCE_HEADER;
+  self->max_num_ref_frames_in_dpb = DEFAULT_MAX_NUM_REF_FRAMES_IN_DPB;
+  self->num_ref_l0 = DEFAULT_NUM_REF_L0;
 
   self->parser = gst_h265_parser_new ();
   self->sei_array = g_array_new (FALSE, FALSE, sizeof (GstH265SEIMessage));
@@ -1005,6 +1073,12 @@ gst_nv_h265_encoder_set_property (GObject * object, guint prop_id,
       update_boolean (self,
           &self->repeat_sequence_header, value, UPDATE_INIT_PARAM);
       break;
+    case PROP_MAX_NUM_REF_FRAMES_IN_DPB:
+      update_uint (self, &self->max_num_ref_frames_in_dpb, value, UPDATE_INIT_PARAM);
+      break;
+    case PROP_NUM_REF_L0:
+      update_uint (self, &self->num_ref_l0, value, UPDATE_INIT_PARAM);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1127,6 +1201,12 @@ gst_nv_h265_encoder_get_property (GObject * object, guint prop_id,
       break;
     case PROP_REPEAT_SEQUENCE_HEADER:
       g_value_set_boolean (value, self->repeat_sequence_header);
+      break;
+    case PROP_MAX_NUM_REF_FRAMES_IN_DPB:
+      g_value_set_uint (value, self->max_num_ref_frames_in_dpb);
+      break;
+    case PROP_NUM_REF_L0:
+      g_value_set_uint (value, self->num_ref_l0);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1605,6 +1685,11 @@ gst_nv_h265_encoder_set_format (GstNvEncoder * encoder,
   } else {
     hevc_config->disableSPSPPS = 0;
     hevc_config->repeatSPSPPS = 0;
+  }
+
+  hevc_config->maxNumRefFramesInDPB = self->max_num_ref_frames_in_dpb;
+  if (self->num_ref_l0 > 0) {
+    hevc_config->numRefL0 = (NV_ENC_NUM_REF_FRAMES) self->num_ref_l0;
   }
 
   GstVideoColorimetry cinfo;
