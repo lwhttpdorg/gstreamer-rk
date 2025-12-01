@@ -1227,6 +1227,359 @@ pack_GRAY8 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
   video_orc_pack_GRAY8 (d, src, width);
 }
 
+#define USE_ORC 1
+
+#define PACK_GRAY10X6_BE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY10X6_BE, 1, \
+    pack_GRAY10X6_BE
+static void
+unpack_GRAY10X6_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const guint16 *restrict s = GET_LINE (y);
+
+  s += x;
+#ifdef USE_C_VERIFICATION_IMPL
+  /* Verification C implementation */
+  int i;
+  guint16 *restrict d = dest;
+
+  for (i = 0; i < width; i++) {
+    guint16 Y = GST_READ_UINT16_BE (s + i);
+    /* Data is in bits 15-6 (10 bits), bits 5-0 are padding */
+    d[i * 4 + 0] = 0xffff;      /* Alpha */
+    d[i * 4 + 1] = Y & 0xFFC0;  /* Keep bits 15-6 */
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE))
+      d[i * 4 + 1] |= ((Y & 0xFFC0) >> 10);     /* Replicate bits 15-10 to bits 5-0 */
+    d[i * 4 + 2] = 0x8000;      /* U */
+    d[i * 4 + 3] = 0x8000;      /* V */
+  }
+#else
+  /* Use ORC for optimized unpacking with parameterized mask and shift */
+  /* GRAY10x6_BE: mask=0xFFC0, shift=10 (shift to replicate bits 15-10 to bits 5-0) */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system reading big-endian format - needs byte swap */
+  video_orc_unpack_GRAY_16_swap ((guint8 *) dest, (const guint16 *) s, 0xFFC0,
+      10, width);
+#else
+  /* Big-endian system reading big-endian format - no swap needed */
+  video_orc_unpack_GRAY_16 ((guint8 *) dest, (const guint16 *) s, 0xFFC0, 10,
+      width);
+#endif
+
+#endif
+}
+
+static void
+pack_GRAY10X6_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  guint16 *restrict d = GET_LINE (y);
+
+#ifdef USE_C_VERIFICATION_IMPL
+  /* Verification C implementation */
+  {
+    int i;
+    const guint16 *restrict s = src;
+    for (i = 0; i < width; i++) {
+      /* Y is in bits 15-6 of AYUV64, keep those bits and write as big-endian */
+      GST_WRITE_UINT16_BE (d + i, s[i * 4 + 1] & 0xFFC0);
+    }
+  }
+#else
+  /* Use ORC for optimized packing with parameterized mask */
+  /* GRAY10x6_BE: mask=0xFFC0 */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system writing big-endian format - needs byte swap */
+  video_orc_pack_GRAY_16_swap (d, src, 0xFFC0, width);
+#else
+  /* Big-endian system writing big-endian format - no swap needed */
+  video_orc_pack_GRAY_16 (d, src, 0xFFC0, width);
+#endif
+#endif
+}
+
+#define PACK_GRAY12X4_BE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY12X4_BE, 1, \
+    pack_GRAY12X4_BE
+static void
+unpack_GRAY12X4_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const guint16 *restrict s = GET_LINE (y);
+  s += x;
+
+#ifdef USE_C_VERIFICATION_IMPL
+  /* Verification C implementation */
+  int i;
+  guint16 *restrict d = dest;
+
+  for (i = 0; i < width; i++) {
+    guint16 Y = GST_READ_UINT16_BE (s + i);
+    /* Data is in bits 15-4 (12 bits), bits 3-0 are padding */
+    d[i * 4 + 0] = 0xffff;      /* Alpha */
+    d[i * 4 + 1] = Y & 0xFFF0;  /* Keep bits 15-4 */
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE))
+      d[i * 4 + 1] |= ((Y & 0xFFF0) >> 12);     /* Replicate bits 15-12 to bits 3-0 */
+    d[i * 4 + 2] = 0x8000;      /* U */
+    d[i * 4 + 3] = 0x8000;      /* V */
+  }
+#else
+  /* Use ORC for optimized unpacking with parameterized mask and shift */
+  /* GRAY12x6_BE: mask=0xFFF0, shift=12 (shift to replicate bits 15-12 to bits 3-0) */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system reading big-endian format - needs byte swap */
+  video_orc_unpack_GRAY_16_swap ((guint8 *) dest, (const guint16 *) s, 0xFFF0,
+      12, width);
+#else
+  /* Big-endian system reading big-endian format - no swap needed */
+  video_orc_unpack_GRAY_16 ((guint8 *) dest, (const guint16 *) s, 0xFFF0, 12,
+      width);
+#endif
+#endif
+}
+
+static void
+pack_GRAY12X4_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  guint16 *restrict d = GET_LINE (y);
+
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  const guint16 *restrict s = src;
+
+  for (i = 0; i < width; i++) {
+    /* Y is in bits 15-4 of AYUV64, keep those bits and write as big-endian */
+    GST_WRITE_UINT16_BE (d + i, s[i * 4 + 1] & 0xFFF0);
+  }
+#else
+  /* Use ORC for optimized packing with parameterized mask */
+  /* GRAY12x4_BE: mask=0xFFF0 */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system writing big-endian format - needs byte swap */
+  video_orc_pack_GRAY_16_swap (d, src, 0xFFF0, width);
+#else
+  /* Big-endian system writing big-endian format - no swap needed */
+  video_orc_pack_GRAY_16 (d, src, 0xFFF0, width);
+#endif
+#endif
+}
+
+#define PACK_GRAY12X4_LE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY12X4_LE, 1, \
+    pack_GRAY12X4_LE
+static void
+unpack_GRAY12X4_LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const guint16 *restrict s = GET_LINE (y);
+  s += x;
+
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  guint16 *restrict d = dest;
+
+  for (i = 0; i < width; i++) {
+    guint16 Y = GST_READ_UINT16_LE (s + i);
+    /* Data is in bits 15-4 (12 bits), bits 3-0 are padding */
+    d[i * 4 + 0] = 0xffff;      /* Alpha */
+    d[i * 4 + 1] = Y & 0xFFF0;  /* Keep bits 15-4 */
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE))
+      d[i * 4 + 1] |= ((Y & 0xFFF0) >> 12);     /* Replicate bits 15-12 to bits 3-0 */
+    d[i * 4 + 2] = 0x8000;      /* U */
+    d[i * 4 + 3] = 0x8000;      /* V */
+  }
+#else
+  /* Use ORC for optimized unpacking with parameterized mask and shift */
+  /* GRAY12x4_LE: mask=0xFFF0, shift=12 (shift to replicate bits 15-12 to bits 3-0) */
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+  /* Little-endian system reading big-endian format - needs byte swap */
+  video_orc_unpack_GRAY_16_swap ((guint8 *) dest, (const guint16 *) s, 0xFFF0,
+      12, width);
+#else
+  /* Big-endian system reading big-endian format - no swap needed */
+  video_orc_unpack_GRAY_16 ((guint8 *) dest, (const guint16 *) s, 0xFFF0, 12,
+      width);
+#endif
+#endif
+
+}
+
+static void
+pack_GRAY12X4_LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  guint16 *restrict d = GET_LINE (y);
+
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  const guint16 *restrict s = src;
+
+  for (i = 0; i < width; i++) {
+    /* Y is in bits 15-4 of AYUV64, keep those bits and write as little-endian */
+    GST_WRITE_UINT16_LE (d + i, s[i * 4 + 1] & 0xFFF0);
+  }
+#else
+  /* Use ORC for optimized packing with parameterized mask */
+  /* GRAY12x4_BE: mask=0xFFF0 */
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+  /* Little-endian system writing big-endian format - needs byte swap */
+  video_orc_pack_GRAY_16_swap (d, src, 0xFFF0, width);
+#else
+  /* Big-endian system writing big-endian format - no swap needed */
+  video_orc_pack_GRAY_16 (d, src, 0xFFF0, width);
+#endif
+#endif
+
+}
+
+#define PACK_GRAY14X2_BE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY14X2_BE, 1, \
+    pack_GRAY14X2_BE
+static void
+unpack_GRAY14X2_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const guint16 *restrict s = GET_LINE (y);
+
+  s += x;
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  guint16 *restrict d = dest;
+
+  for (i = 0; i < width; i++) {
+    guint16 Y = GST_READ_UINT16_BE (s + i);
+    /* Data is in bits 15-2 (14 bits), bits 1-0 are padding */
+    d[i * 4 + 0] = 0xffff;      /* Alpha */
+    d[i * 4 + 1] = Y & 0xFFFC;  /* Keep bits 15-2 */
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE))
+      d[i * 4 + 1] |= ((Y & 0xFFFC) >> 14);     /* Replicate bits 15-14 to bits 1-0 */
+    d[i * 4 + 2] = 0x8000;      /* U */
+    d[i * 4 + 3] = 0x8000;      /* V */
+  }
+#else
+  /* Use ORC for optimized unpacking with parameterized mask and shift */
+  /* GRAY14x2_BE: mask=0xFFFC, shift=14 (shift to replicate bits 15-14 to bits 1-0) */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system reading big-endian format - needs byte swap */
+  video_orc_unpack_GRAY_16_swap ((guint8 *) dest, (const guint16 *) s, 0xFFFC,
+      14, width);
+#else
+  /* Big-endian system reading big-endian format - no swap needed */
+  video_orc_unpack_GRAY_16 ((guint8 *) dest, (const guint16 *) s, 0xFFFC, 14,
+      width);
+#endif
+#endif
+}
+
+static void
+pack_GRAY14X2_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  guint16 *restrict d = GET_LINE (y);
+
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  const guint16 *restrict s = src;
+
+  for (i = 0; i < width; i++) {
+    /* Y is in bits 15-2 of AYUV64, keep those bits and write as big-endian */
+    GST_WRITE_UINT16_BE (d + i, s[i * 4 + 1] & 0xFFFC);
+  }
+#else
+  /* Use ORC for optimized packing with parameterized mask */
+  /* GRAY14x2_BE: mask=0xFFFC */
+#if G_BYTE_ORDER == G_LITTLE_ENDIAN
+  /* Little-endian system writing big-endian format - needs byte swap */
+  video_orc_pack_GRAY_16_swap (d, src, 0xFFFC, width);
+#else
+  /* Big-endian system writing big-endian format - no swap needed */
+  video_orc_pack_GRAY_16 (d, src, 0xFFFC, width);
+#endif
+#endif
+
+}
+
+#define PACK_GRAY14X2_LE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY14X2_LE, 1, \
+    pack_GRAY14X2_LE
+static void
+unpack_GRAY14X2_LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const guint16 *restrict s = GET_LINE (y);
+
+  s += x;
+#ifdef USE_C_VERIFICATION_IMPL
+
+  int i;
+  guint16 *restrict d = dest;
+
+  for (i = 0; i < width; i++) {
+    guint16 Y = GST_READ_UINT16_LE (s + i);
+    /* Data is in bits 15-2 (14 bits), bits 1-0 are padding */
+    d[i * 4 + 0] = 0xffff;      /* Alpha */
+    d[i * 4 + 1] = Y & 0xFFFC;  /* Keep bits 15-2 */
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE))
+      d[i * 4 + 1] |= ((Y & 0xFFFC) >> 14);     /* Replicate bits 15-14 to bits 1-0 */
+    d[i * 4 + 2] = 0x8000;      /* U */
+    d[i * 4 + 3] = 0x8000;      /* V */
+  }
+#else
+  /* Use ORC for optimized unpacking with parameterized mask and shift */
+  /* GRAY14x2_LE: mask=0xFFFC, shift=14 (shift to replicate bits 15-14 to bits 1-0) */
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+  /* Little-endian system reading big-endian format - needs byte swap */
+  video_orc_unpack_GRAY_16_swap ((guint8 *) dest, (const guint16 *) s, 0xFFFC,
+      14, width);
+#else
+  /* Big-endian system reading big-endian format - no swap needed */
+  video_orc_unpack_GRAY_16 ((guint8 *) dest, (const guint16 *) s, 0xFFFC, 14,
+      width);
+#endif
+#endif
+
+}
+
+static void
+pack_GRAY14X2_LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  guint16 *restrict d = GET_LINE (y);
+
+#ifdef USE_C_VERIFICATION_IMPL
+  int i;
+  const guint16 *restrict s = src;
+
+  for (i = 0; i < width; i++) {
+    /* Y is in bits 15-2 of AYUV64, keep those bits and write as little-endian */
+    GST_WRITE_UINT16_LE (d + i, s[i * 4 + 1] & 0xFFFC);
+  }
+#else
+  /* Use ORC for optimized packing with parameterized mask */
+  /* GRAY14x2_BE: mask=0xFFFC */
+#if G_BYTE_ORDER == G_BIG_ENDIAN
+  /* Little-endian system writing big-endian format - needs byte swap */
+  video_orc_pack_GRAY_16_swap (d, src, 0xFFFC, width);
+#else
+  /* Big-endian system writing big-endian format - no swap needed */
+  video_orc_pack_GRAY_16 (d, src, 0xFFFC, width);
+#endif
+#endif
+
+}
+
 #define PACK_GRAY16_BE GST_VIDEO_FORMAT_AYUV64, unpack_GRAY16_BE, 1, pack_GRAY16_BE
 static void
 unpack_GRAY16_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
@@ -6084,7 +6437,7 @@ pack_rgb10a2_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
   guint32 *restrict d = GET_LINE (y);
   const guint16 *restrict s = src;
   guint32 ARGB;
-  guint16 A, R, G, B;
+  guint32 A, R, G, B;
 
   for (i = 0; i < width; i++) {
     A = s[4 * i] & 0xc000;
@@ -6095,6 +6448,411 @@ pack_rgb10a2_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
     ARGB = (R >> 6) | (G << 4) | (B << 14) | (A << 16);
 
     GST_WRITE_UINT32_LE (d + i, ARGB);
+  }
+}
+
+#define PACK_RGB10A2_BE GST_VIDEO_FORMAT_ARGB64, unpack_rgb10a2_be, 1, pack_rgb10a2_be
+static void
+unpack_rgb10a2_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint32 pixel;
+  guint16 A, R, G, B;
+
+  s += x * 4;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT32_BE (s + 4 * i);
+
+    R = ((pixel >> 0) & 0x3ff) << 6;
+    G = ((pixel >> 10) & 0x3ff) << 6;
+    B = ((pixel >> 20) & 0x3ff) << 6;
+    A = ((pixel >> 30) & 0x03) << 14;
+
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE)) {
+      R |= (R >> 10);
+      G |= (G >> 10);
+      B |= (B >> 10);
+      A |= GST_BITS_PROMOTE (A >> 14, 2, 16, guint16);
+    }
+
+    d[4 * i + 0] = A;
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_rgb10a2_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint32 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint32 pixel;
+  guint32 A, R, G, B;
+
+  for (i = 0; i < width; i++) {
+    A = s[4 * i] & 0xc000;
+    R = s[4 * i + 1] & 0xffc0;
+    G = s[4 * i + 2] & 0xffc0;
+    B = s[4 * i + 3] & 0xffc0;
+
+    pixel = (R >> 6) | (G << 4) | (B << 14) | (A << 16);
+
+    GST_WRITE_UINT32_BE (d + i, pixel);
+  }
+}
+
+#define PACK_RGB12A4_LE GST_VIDEO_FORMAT_ARGB64, unpack_rgb12a4_le, 1, pack_rgb12a4_le
+static void
+unpack_rgb12a4_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 A, R, G, B;
+
+  s += x * 5;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT40_LE (s + 5 * i);
+
+    R = ((pixel >> 0) & 0xfff) << 4;
+    G = ((pixel >> 12) & 0xfff) << 4;
+    B = ((pixel >> 24) & 0xfff) << 4;
+    A = ((pixel >> 36) & 0x0f) << 12;
+
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE)) {
+      R |= (R >> 12);
+      G |= (G >> 12);
+      B |= (B >> 12);
+      A |= GST_BITS_PROMOTE (A >> 12, 4, 16, guint16);
+    }
+
+    d[4 * i + 0] = A;
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_rgb12a4_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 A, R, G, B;
+
+  for (i = 0; i < width; i++) {
+    A = s[4 * i] & 0xf000;
+    R = s[4 * i + 1] & 0xfff0;
+    G = s[4 * i + 2] & 0xfff0;
+    B = s[4 * i + 3] & 0xfff0;
+
+    pixel = (R >> 4) | (G << 8) | (B << 20) | (A << 24);
+
+    GST_WRITE_UINT40_LE (d + 5 * i, pixel);
+  }
+}
+
+#define PACK_RGB12A4_BE GST_VIDEO_FORMAT_ARGB64, unpack_rgb12a4_be, 1, pack_rgb12a4_be
+static void
+unpack_rgb12a4_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 A, R, G, B;
+
+  s += x * 5;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT40_BE (s + 5 * i);
+
+    R = ((pixel >> 0) & 0xfff) << 4;
+    G = ((pixel >> 12) & 0xfff) << 4;
+    B = ((pixel >> 24) & 0xfff) << 4;
+    A = ((pixel >> 36) & 0x0f) << 12;
+
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE)) {
+      R |= (R >> 12);
+      G |= (G >> 12);
+      B |= (B >> 12);
+      A |= GST_BITS_PROMOTE (A >> 12, 4, 16, guint16);
+    }
+
+    d[4 * i + 0] = A;
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_rgb12a4_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 A, R, G, B;
+
+  for (i = 0; i < width; i++) {
+    A = s[4 * i] & 0xf000;
+    R = s[4 * i + 1] & 0xfff0;
+    G = s[4 * i + 2] & 0xfff0;
+    B = s[4 * i + 3] & 0xfff0;
+
+    pixel = (R >> 4) | (G << 8) | (B << 20) | (A << 24);
+
+    GST_WRITE_UINT40_BE (d + 5 * i, pixel);
+  }
+}
+
+#define PACK_RGB14A6_LE GST_VIDEO_FORMAT_ARGB64, unpack_rgb14a6_le, 1, pack_rgb14a6_le
+static void
+unpack_rgb14a6_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 A, R, G, B;
+
+  s += x * 6;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT48_LE (s + 6 * i);
+
+    R = ((pixel >> 0) & 0x3fff) << 2;
+    G = ((pixel >> 14) & 0x3fff) << 2;
+    B = ((pixel >> 28) & 0x3fff) << 2;
+    A = ((pixel >> 40) & 0x3f) << 10;
+
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE)) {
+      R |= (R >> 14);
+      G |= (G >> 14);
+      B |= (B >> 14);
+      A |= GST_BITS_PROMOTE (A >> 10, 6, 16, guint16);
+    }
+
+    d[4 * i + 0] = A;
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_rgb14a6_le (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 A, R, G, B;
+
+  for (i = 0; i < width; i++) {
+    A = s[4 * i] & 0xfc00;
+    R = s[4 * i + 1] & 0xfffc;
+    G = s[4 * i + 2] & 0xfffc;
+    B = s[4 * i + 3] & 0xfffc;
+
+    pixel = (R >> 2) | (G << 12) | (B << 26) | (A << 32);
+
+    GST_WRITE_UINT48_LE (d + 6 * i, pixel);
+  }
+}
+
+#define PACK_RGB14A6_BE GST_VIDEO_FORMAT_ARGB64, unpack_rgb14a6_be, 1, pack_rgb14a6_be
+static void
+unpack_rgb14a6_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 A, R, G, B;
+
+  s += x * 6;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT48_BE (s + 6 * i);
+
+    R = ((pixel >> 0) & 0x3fff) << 2;
+    G = ((pixel >> 14) & 0x3fff) << 2;
+    B = ((pixel >> 28) & 0x3fff) << 2;
+    A = ((pixel >> 40) & 0x3f) << 10;
+
+    if (!(flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE)) {
+      R |= (R >> 14);
+      G |= (G >> 14);
+      B |= (B >> 14);
+      A |= GST_BITS_PROMOTE (A >> 10, 6, 16, guint16);
+    }
+
+    d[4 * i + 0] = A;
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_rgb14a6_be (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 A, R, G, B;
+
+  for (i = 0; i < width; i++) {
+    A = s[4 * i] & 0xfc00;
+    R = s[4 * i + 1] & 0xfffc;
+    G = s[4 * i + 2] & 0xfffc;
+    B = s[4 * i + 3] & 0xfffc;
+
+    pixel = (R >> 2) | (G << 12) | (B << 26) | (A << 32);
+
+    GST_WRITE_UINT48_BE (d + 6 * i, pixel);
+  }
+}
+
+#define PACK_RGB16_LE48 GST_VIDEO_FORMAT_ARGB64, unpack_RGB16_le48, 1, pack_RGB16_le48
+static void
+unpack_RGB16_le48 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 R, G, B;
+
+  s += x * 6;
+
+  if (y == 0 && x == 0) {
+    GST_DEBUG ("RGB16_LE48 unpack: width=%d, stride=%d, s=%p, d=%p",
+        width, stride[0], s, d);
+  }
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT48_LE (s + 6 * i);
+
+    R = ((pixel >> 0) & 0xffff);
+    G = ((pixel >> 16) & 0xffff);
+    B = ((pixel >> 32) & 0xffff);
+
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_RGB16_le48 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 R, G, B;
+
+  for (i = 0; i < width; i++) {
+    R = s[4 * i + 1] & 0xffff;
+    G = s[4 * i + 2] & 0xffff;
+    B = s[4 * i + 3] & 0xffff;
+
+    pixel = R | (G << 16) | (B << 32);
+
+    GST_WRITE_UINT48_LE (d + 6 * i, pixel);
+  }
+}
+
+#define PACK_RGB16_BE48 GST_VIDEO_FORMAT_ARGB64, unpack_RGB16_be48, 1, pack_RGB16_be48
+static void
+unpack_RGB16_be48 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    gpointer dest, const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  int i;
+  const guint8 *restrict s = GET_LINE (y);
+  guint16 *restrict d = dest;
+  guint64 pixel;
+  guint16 R, G, B;
+
+  s += x * 6;
+
+  for (i = 0; i < width; i++) {
+    pixel = GST_READ_UINT48_BE (s + 6 * i);
+
+    R = ((pixel >> 0) & 0xffff);
+    G = ((pixel >> 16) & 0xffff);
+    B = ((pixel >> 32) & 0xffff);
+
+    d[4 * i + 1] = R;
+    d[4 * i + 2] = G;
+    d[4 * i + 3] = B;
+  }
+}
+
+static void
+pack_RGB16_be48 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
+    const gpointer src, gint sstride, gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  int i;
+  guint8 *restrict d = GET_LINE (y);
+  const guint16 *restrict s = src;
+  guint64 pixel;
+  guint64 R, G, B;
+
+  for (i = 0; i < width; i++) {
+    R = s[4 * i + 1] & 0xffff;
+    G = s[4 * i + 2] & 0xffff;
+    B = s[4 * i + 3] & 0xffff;
+
+    pixel = R | (G << 16) | (B << 32);
+
+    GST_WRITE_UINT48_BE (d + 6 * i, pixel);
   }
 }
 
@@ -7811,14 +8569,21 @@ typedef struct
 #define DPTH8888         8, 4, { 0, 0, 0, 0 }, { 8, 8, 8, 8 }
 #define DPTH8880         8, 4, { 0, 0, 0, 0 }, { 8, 8, 8, 0 }
 #define DPTH10           10, 1, { 0, 0, 0, 0 }, { 10, 0, 0, 0 }
+#define DPTH10_HI        16, 1, { 6, 0, 0, 0 }, { 10, 0, 0, 0 }
 #define DPTH10_10_10     10, 3, { 0, 0, 0, 0 }, { 10, 10, 10, 0 }
 #define DPTH10_10_10_10  10, 4, { 0, 0, 0, 0 }, { 10, 10, 10, 10 }
 #define DPTH10_10_10_HI  16, 3, { 6, 6, 6, 0 }, { 10, 10, 10, 0 }
 #define DPTH10_10_10_2   10, 4, { 0, 0, 0, 0 }, { 10, 10, 10, 2}
+#define DPTH12_HI        16, 1, { 4, 0, 0, 0 }, { 12, 0, 0, 0 }
 #define DPTH12_12_12     12, 3, { 0, 0, 0, 0 }, { 12, 12, 12, 0 }
 #define DPTH12_12_12_HI  16, 3, { 4, 4, 4, 0 }, { 12, 12, 12, 0 }
 #define DPTH12_12_12_12  12, 4, { 0, 0, 0, 0 }, { 12, 12, 12, 12 }
 #define DPTH12_12_12_12_HI   16, 4, { 4, 4, 4, 4 }, { 12, 12, 12, 12 }
+#define DPTH14_HI        16, 1, { 2, 0, 0, 0 }, { 14, 0, 0, 0 }
+#define DPTH14_14_14     14, 3, { 0, 0, 0, 0 }, { 14, 14, 14, 0 }
+#define DPTH14_14_14_HI  16, 3, { 4, 4, 4, 0 }, { 14, 14, 14, 0 }
+#define DPTH14_14_14_14  14, 4, { 0, 0, 0, 0 }, { 14, 14, 14, 14 }
+#define DPTH14_14_14_14_HI   16, 4, { 4, 4, 4, 4 }, { 14, 14, 14, 14 }
 #define DPTH16           16, 1, { 0, 0, 0, 0 }, { 16, 0, 0, 0 }
 #define DPTH16_16_16     16, 3, { 0, 0, 0, 0 }, { 16, 16, 16, 0 }
 #define DPTH16_16_16_16  16, 4, { 0, 0, 0, 0 }, { 16, 16, 16, 16 }
@@ -7839,6 +8604,8 @@ typedef struct
 #define PSTR244           { 2, 4, 4, 0 }
 #define PSTR444           { 4, 4, 4, 0 }
 #define PSTR4444          { 4, 4, 4, 4 }
+#define PSTR555           { 5, 5, 5, 0 }
+#define PSTR666           { 6, 6, 6, 0 }
 #define PSTR333           { 3, 3, 3, 0 }
 #define PSTR488           { 4, 8, 8, 0 }
 #define PSTR8888          { 8, 8, 8, 8 }
@@ -7945,6 +8712,11 @@ typedef struct
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_GRAY | GST_VIDEO_FORMAT_FLAG_COMPLEX | GST_VIDEO_FORMAT_FLAG_LE, depth, pstride, plane, offs, sub, pack } }
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+
+/* IMPORTANT: the order of formats array MUST match the order of GstVideoFormat
+ * enum values. The enum value is used as a direct index into this array in
+ * gst_video_format_get_info() .
+ */
 static const VideoFormat formats[] = {
   {0x00000000, {GST_VIDEO_FORMAT_UNKNOWN, "UNKNOWN", "unknown video", 0, DPTH0,
           PSTR0, PLANE_NA, OFFS0}},
@@ -8267,8 +9039,34 @@ static const VideoFormat formats[] = {
       OFFS0, SUB422, PACK_NV16_10LE40),
   MAKE_RGB_LE_FORMAT (BGR10x2_LE, "raw video", DPTH10_10_10, PSTR444,
       PLANE0, OFFS0, SUB4444, PACK_BGR10A2_LE),
+  MAKE_RGB_FORMAT (RGB10x2_BE, "raw video", DPTH10_10_10, PSTR444,
+      PLANE0, OFFS0, SUB444, PACK_RGB10A2_BE),
   MAKE_RGB_LE_FORMAT (RGB10x2_LE, "raw video", DPTH10_10_10, PSTR444,
       PLANE0, OFFS0, SUB4444, PACK_RGB10A2_LE),
+  MAKE_RGB_LE_FORMAT (RGB12x4_LE, "raw video", DPTH12_12_12, PSTR555, PLANE0,
+      OFFS0, SUB444, PACK_RGB12A4_LE),
+  MAKE_RGB_FORMAT (RGB12x4_BE, "raw video", DPTH12_12_12, PSTR555, PLANE0,
+      OFFS0, SUB444, PACK_RGB12A4_BE),
+  MAKE_RGB_LE_FORMAT (RGB14x6_LE, "raw video", DPTH14_14_14, PSTR666, PLANE0,
+      OFFS0, SUB444, PACK_RGB14A6_LE),
+  MAKE_RGB_FORMAT (RGB14x6_BE, "raw video", DPTH14_14_14, PSTR666, PLANE0,
+      OFFS0, SUB444, PACK_RGB14A6_BE),
+  MAKE_RGB_LE_FORMAT (RGB16_LE, "raw video", DPTH16_16_16, PSTR666, PLANE0,
+      OFFS0, SUB444, PACK_RGB16_LE48),
+  MAKE_RGB_FORMAT (RGB16_BE, "raw video", DPTH16_16_16, PSTR666, PLANE0,
+      OFFS0, SUB444, PACK_RGB16_BE48),
+  MAKE_GRAY_FORMAT (GRAY10x6_BE, "raw video", DPTH10_HI, PSTR2, PLANE0, OFFS0,
+      SUB4, PACK_GRAY10X6_BE),
+  MAKE_GRAY_FORMAT (GRAY12x4_BE, "raw video", DPTH12_HI, PSTR2, PLANE0, OFFS0,
+      SUB4, PACK_GRAY12X4_BE),
+  MAKE_GRAY_LE_FORMAT (GRAY12x4_LE, "raw video", DPTH12_HI, PSTR2, PLANE0,
+      OFFS0, SUB4, PACK_GRAY12X4_LE),
+  MAKE_GRAY_FORMAT (GRAY14x2_BE, "raw video", DPTH14_HI, PSTR2, PLANE0, OFFS0,
+      SUB4, PACK_GRAY14X2_BE),
+  MAKE_GRAY_LE_FORMAT (GRAY14x2_LE, "raw video", DPTH14_HI, PSTR2, PLANE0,
+      OFFS0,
+      SUB4, PACK_GRAY14X2_LE),
+
 };
 
 G_GNUC_END_IGNORE_DEPRECATIONS;
