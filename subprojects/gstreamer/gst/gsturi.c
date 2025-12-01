@@ -450,6 +450,12 @@ gst_uri_has_protocol (const gchar * uri, const gchar * protocol)
  * the hostname if one is specified. The returned string must be freed using
  * g_free().
  *
+ * file protocol URIs without an explicit authority part (RFC 8089 Appendix A)
+ * are supported. (Since: 1.28)
+ *
+ * The returned string has URI entities decoded so that it can be used as a file
+ * path.
+ *
  * Free-function: g_free
  *
  * Returns: (transfer full) (nullable): the location for this URI. Returns
@@ -460,17 +466,28 @@ gchar *
 gst_uri_get_location (const gchar * uri)
 {
   const gchar *colon;
+  const gchar *location;
   gchar *unescaped = NULL;
 
   if (!gst_uri_is_valid (uri)) {
     return NULL;
   }
 
-  colon = strstr (uri, "://");
+  colon = strstr (uri, ":");
   if (!colon)
     return NULL;
+  if (colon[1] == '/' && colon[2] == '/') {
+    /* URI has an authority, include it in the location.
+     * e.g. http://example.com/foo.txt -> example.com/foo.txt */
+    location = colon + 3;
+  } else {
+    /* URI has no authority part, everything after the colon is part of the
+     * path. This is allowed in RFC 8089 file: URIs (2017).
+     * e.g. file:/foo/bar.txt -> /foo/bar.txt */
+    location = colon + 1;
+  }
 
-  unescaped = unescape_string (colon + 3, "/");
+  unescaped = unescape_string (location, "/");
 
   /* On Windows an URI might look like file:///c:/foo/bar.txt or
    * file:///c|/foo/bar.txt (some Netscape versions) and we want to
