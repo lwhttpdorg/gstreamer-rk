@@ -266,6 +266,81 @@ static inline guint64 __gst_slow_read64_le (const guint8 * data) {
 #endif
 
 /**
+ * GST_READ_UINT40_BE:
+ * @data: memory location
+ *
+ * Read a 40 bit unsigned integer value in big endian format from the memory buffer.
+ */
+
+/**
+ * GST_READ_UINT40_LE:
+ * @data: memory location
+ *
+ * Read a 40 bit unsigned integer value in little endian format from the memory buffer.
+ */
+#define _GST_READ_UINT40_BE(data)	( \
+           _GST_GET (data, 0, 64, 32) | \
+					 _GST_GET (data, 1, 64, 24) | \
+					 _GST_GET (data, 2, 64, 16) | \
+					 _GST_GET (data, 3, 64, 8) | \
+					 _GST_GET (data, 4, 64, 0))
+
+#define _GST_READ_UINT40_LE(data)	( \
+           _GST_GET (data, 4, 64, 32) | \
+					 _GST_GET (data, 3, 64, 24) | \
+					 _GST_GET (data, 2, 64, 16) | \
+					 _GST_GET (data, 1, 64, 8) | \
+					 _GST_GET (data, 0, 64, 0))
+
+#define GST_READ_UINT40_BE(data) __gst_slow_read40_be((const guint8 *)(data))
+static inline guint64 __gst_slow_read40_be (const guint8 * data) {
+  return _GST_READ_UINT40_BE (data);
+}
+#define GST_READ_UINT40_LE(data) __gst_slow_read40_le((const guint8 *)(data))
+static inline guint64 __gst_slow_read40_le (const guint8 * data) {
+  return _GST_READ_UINT40_LE (data);
+}
+/**
+ * GST_READ_UINT48_BE:
+ * @data: memory location
+ *
+ * Read a 48 bit unsigned integer value in big endian format from the memory buffer.
+ */
+
+/**
+ * GST_READ_UINT48_LE:
+ * @data: memory location
+ *
+ * Read a 48 bit unsigned integer value in little endian format from the memory buffer.
+ */
+#define _GST_READ_UINT48_BE(data)	( \
+           _GST_GET (data, 0, 64, 40) | \
+					 _GST_GET (data, 1, 64, 32) | \
+					 _GST_GET (data, 2, 64, 24) | \
+					 _GST_GET (data, 3, 64, 16) | \
+					 _GST_GET (data, 4, 64, 8) | \
+					 _GST_GET (data, 5, 64, 0))
+
+#define _GST_READ_UINT48_LE(data)	( \
+           _GST_GET (data, 5, 64, 40) | \
+					 _GST_GET (data, 4, 64, 32) | \
+					 _GST_GET (data, 3, 64, 24) | \
+					 _GST_GET (data, 2, 64, 16) | \
+					 _GST_GET (data, 1, 64, 8) | \
+					 _GST_GET (data, 0, 64, 0))
+
+#define GST_READ_UINT48_BE(data) __gst_slow_read48_be((const guint8 *)(data))
+
+static inline guint64 __gst_slow_read48_be (const guint8 * data) {
+  return _GST_READ_UINT48_BE (data);
+}
+
+#define GST_READ_UINT48_LE(data) __gst_slow_read48_le((const guint8 *)(data))
+static inline guint64 __gst_slow_read48_le (const guint8 * data) {
+  return _GST_READ_UINT48_LE (data);
+}
+
+/**
  * GST_READ_UINT32_BE:
  * @data: memory location
  *
@@ -381,6 +456,77 @@ static inline guint16 __gst_slow_read16_le (const guint8 * data) {
  * Read an 8 bit unsigned integer value from the memory buffer.
  */
 #define GST_READ_UINT8(data)            (_GST_GET (data, 0,  8,  0))
+
+/**
+ * GST_WRITE_UINT40_BE:
+ * @data: memory location
+ * @val: value to store
+ *
+ * Store a 40 bit unsigned integer value in big endian format into the memory
+ * buffer.
+ */
+#define GST_WRITE_UINT40_BE(data,val)   do { \
+                                          gpointer __put_data = data; \
+                                          guint64 __put_val = val; \
+                                          _GST_PUT (__put_data, 0, 64, 32, __put_val); \
+                                          _GST_PUT (__put_data, 1, 64, 24, __put_val); \
+                                          _GST_PUT (__put_data, 2, 64, 16, __put_val); \
+                                          _GST_PUT (__put_data, 3, 64,  8, __put_val); \
+                                          _GST_PUT (__put_data, 4, 64,  0, __put_val); \
+                                        } while (0)
+
+/**
+ * GST_WRITE_UINT40_LE:
+ * @data: memory location
+ * @val: value to store
+ *
+ * Store a 40 bit unsigned integer value in little endian format into the memory buffer.
+ */
+#define GST_WRITE_UINT40_LE(data,val)   do { \
+                                          gpointer __put_data = data; \
+                                          guint64 __put_val = val; \
+                                          _GST_PUT (__put_data, 0, 64,  0, __put_val); \
+                                          _GST_PUT (__put_data, 1, 64,  8, __put_val); \
+                                          _GST_PUT (__put_data, 2, 64, 16, __put_val); \
+                                          _GST_PUT (__put_data, 3, 64, 24, __put_val); \
+                                          _GST_PUT (__put_data, 4, 64, 32, __put_val); \
+                                        } while (0)
+
+/**
+ * GST_WRITE_UINT48_BE:
+ * @data: memory location
+ * @val: value to store
+ *
+ * Store a 48 bit unsigned integer value in big endian format into the memory buffer.
+ */
+#define GST_WRITE_UINT48_BE(data,val)   do { \
+                                          gpointer __put_data = data; \
+                                          guint64 __put_val = val; \
+                                          _GST_PUT (__put_data, 0, 64, 40, __put_val); \
+                                          _GST_PUT (__put_data, 1, 64, 32, __put_val); \
+                                          _GST_PUT (__put_data, 2, 64, 24, __put_val); \
+                                          _GST_PUT (__put_data, 3, 64, 16, __put_val); \
+                                          _GST_PUT (__put_data, 4, 64,  8, __put_val); \
+                                          _GST_PUT (__put_data, 5, 64,  0, __put_val); \
+                                        } while (0)
+
+/**
+ * GST_WRITE_UINT48_LE:
+ * @data: memory location
+ * @val: value to store
+ *
+ * Store a 48 bit unsigned integer value in little endian format into the memory buffer.
+ */
+#define GST_WRITE_UINT48_LE(data,val)   do { \
+                                          gpointer __put_data = data; \
+                                          guint64 __put_val = val; \
+                                          _GST_PUT (__put_data, 0, 64,  0, __put_val); \
+                                          _GST_PUT (__put_data, 1, 64,  8, __put_val); \
+                                          _GST_PUT (__put_data, 2, 64, 16, __put_val); \
+                                          _GST_PUT (__put_data, 3, 64, 24, __put_val); \
+                                          _GST_PUT (__put_data, 4, 64, 32, __put_val); \
+                                          _GST_PUT (__put_data, 5, 64, 40, __put_val); \
+                                        } while (0)
 
 /**
  * GST_WRITE_UINT64_BE:
@@ -971,7 +1117,24 @@ GST_WRITE_DOUBLE_BE(guint8 *data, gdouble num)
  * power of two.
  */
 #define GST_ROUND_DOWN_N(num,align) (((num) & ~((align) - 1)))
+/**
+ * GST_BITS_PROMOTE:
+ * @val: Value to promote from @srcdpth bits to @dstdpth bits
+ * @from_depth: Source depth in bits
+ * @to_depth: Destination depth in bits
+ * @dtype: Destination type
+ *
+ * Promote a value stored in @from_depth bits in @val to a new value stored in
+ * to_depth bits. The ratio of @val / (((@from_depth)^2) - 1) is maintained in
+ * in GST_BITS_PROMOTE (val, from_depth, to_depth, dtype) / (((@to_depth)^2) - 1)
+ *
+ * Since: 1.30
+ */
+#define GST_BITS_PROMOTE(val, from_depth, to_depth, dtype) \
+  ((dtype)gst_bits_promote ((guint64)(val), (from_depth), (to_depth)))
 
+GST_API
+guint64 gst_bits_promote (guint64 value, guint from_depth, guint to_depth);
 
 GST_API
 void                    gst_object_default_error        (GstObject    * source,
