@@ -980,6 +980,7 @@ gst_video_crop_set_property (GObject * object, guint prop_id,
   GST_OBJECT_UNLOCK (video_crop);
 
   gst_base_transform_reconfigure_src (GST_BASE_TRANSFORM (video_crop));
+  gst_base_transform_reconfigure_sink (GST_BASE_TRANSFORM (video_crop));
 }
 
 static void
