@@ -366,6 +366,8 @@ static GstFlowReturn gst_vpx_enc_handle_frame (GstVideoEncoder *
     video_encoder, GstVideoCodecFrame * frame);
 static gboolean gst_vpx_enc_sink_event (GstVideoEncoder *
     video_encoder, GstEvent * event);
+static gboolean gst_vpx_enc_src_event (GstVideoEncoder *
+    video_encoder, GstEvent * event);
 static gboolean gst_vpx_enc_propose_allocation (GstVideoEncoder * encoder,
     GstQuery * query);
 static gboolean gst_vpx_enc_transform_meta (GstVideoEncoder * encoder,
@@ -396,6 +398,7 @@ gst_vpx_enc_class_init (GstVPXEncClass * klass)
   video_encoder_class->flush = gst_vpx_enc_flush;
   video_encoder_class->finish = gst_vpx_enc_finish;
   video_encoder_class->sink_event = gst_vpx_enc_sink_event;
+  video_encoder_class->src_event = gst_vpx_enc_src_event;
   video_encoder_class->propose_allocation = gst_vpx_enc_propose_allocation;
   video_encoder_class->transform_meta = gst_vpx_enc_transform_meta;
 
@@ -2354,6 +2357,22 @@ gst_vpx_enc_sink_event (GstVideoEncoder * benc, GstEvent * event)
   /* just peeked, baseclass handles the rest */
   return GST_VIDEO_ENCODER_CLASS (parent_class)->sink_event (benc, event);
 }
+
+static gboolean
+gst_vpx_enc_src_event (GstVideoEncoder * benc, GstEvent * event)
+{
+  GstVPXEnc *enc = GST_VPX_ENC (benc);
+  GstVPXEncClass *vpx_enc_class = GST_VPX_ENC_GET_CLASS (enc);
+
+  if (vpx_enc_class->src_event) {
+    if (!vpx_enc_class->src_event (enc, event))
+      return FALSE;
+  }
+
+  /* just peeked, baseclass handles the rest */
+  return GST_VIDEO_ENCODER_CLASS (parent_class)->src_event (benc, event);
+}
+
 
 static gboolean
 gst_vpx_enc_propose_allocation (GstVideoEncoder * encoder, GstQuery * query)

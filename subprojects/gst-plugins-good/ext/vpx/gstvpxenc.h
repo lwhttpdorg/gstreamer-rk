@@ -158,6 +158,8 @@ struct _GstVPXEncClass
   void (*preflight_buffer) (GstVPXEnc *enc,
       GstVideoCodecFrame *frame, GstBuffer *buffer,
       gboolean layer_sync, guint layer_id, guint8 tl0picidx);
+  /*source event handler */
+  gboolean (*src_event) (GstVPXEnc *enc, GstEvent *event);
 };
 
 GType gst_vpx_enc_get_type (void);
