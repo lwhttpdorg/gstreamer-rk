@@ -561,7 +561,8 @@ enum
   PROP_AUDIO_FILTER,
   PROP_VIDEO_FILTER,
   PROP_MULTIVIEW_MODE,
-  PROP_MULTIVIEW_FLAGS
+  PROP_MULTIVIEW_FLAGS,
+  PROP_SHARED_SINK
 };
 
 /* signals */
@@ -833,13 +834,37 @@ gst_play_bin_class_init (GstPlayBinClass * klass)
       g_param_spec_object ("audio-filter", "Audio filter",
           "the audio filter(s) to apply, if possible",
           GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstPlayBin:video-sink
+   *
+   * Get or set the video sink to use for video output. If set to
+   * NULL, one will be auto-selected.
+   */
   g_object_class_install_property (gobject_klass, PROP_VIDEO_SINK,
       g_param_spec_object ("video-sink", "Video Sink",
           "the video output element to use (NULL = default sink)",
           GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstPlayBin:audio-sink
+   *
+   * Get or set the audio sink to use for audio output. If set to
+   * NULL, one will be auto-selected.
+   */
   g_object_class_install_property (gobject_klass, PROP_AUDIO_SINK,
       g_param_spec_object ("audio-sink", "Audio Sink",
           "the audio output element to use (NULL = default sink)",
+          GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstPlayBin:shared-sink
+   *
+   * Set a single sink element for both audio and video output.
+   * See #GstPlaySink:shared-sink for details.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_klass, PROP_SHARED_SINK,
+      g_param_spec_object ("shared-sink", "Shared Sink",
+          "single sink element for both audio and video output",
           GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_klass, PROP_VIS_PLUGIN,
       g_param_spec_object ("vis-plugin", "Vis plugin",
@@ -2433,6 +2458,10 @@ gst_play_bin_set_property (GObject * object, guint prop_id,
       gst_play_bin_set_sink (playbin, GST_PLAY_SINK_TYPE_AUDIO, "audio",
           &playbin->audio_sink, g_value_get_object (value));
       break;
+    case PROP_SHARED_SINK:
+      g_object_set (playbin->playsink, "shared-sink",
+          g_value_get_object (value), NULL);
+      break;
     case PROP_VIS_PLUGIN:
       gst_play_sink_set_vis_plugin (playbin->playsink,
           g_value_get_object (value));
@@ -2702,6 +2731,10 @@ gst_play_bin_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_take_object (value,
           gst_play_bin_get_current_sink (playbin, &playbin->audio_sink,
               "audio", GST_PLAY_SINK_TYPE_AUDIO));
+      break;
+    case PROP_SHARED_SINK:
+      g_object_get_property (G_OBJECT (playbin->playsink), "shared-sink",
+          value);
       break;
     case PROP_VIS_PLUGIN:
       g_value_take_object (value,
