@@ -132,6 +132,22 @@
  * > *note*: gst_structure_to_string() won't use that syntax for backward
  * > compatibility reason, gst_structure_serialize_full() has been added for
  * > that purpose.
+ *
+ * Since 1.28, GObject instances can be serialized using the bracket syntax with
+ * the `(object)` type cast, for example:
+ *
+ * ```
+ * a-struct, pool=(object)[GstSharedTaskPool,max-threads=8]
+ * ```
+ *
+ * Nested GObject properties are recursively serialized, for example:
+ *
+ * ```
+ * a-struct, pad=(object)[GstPad,name=sink,template=(object)[GstPadTemplate,name=sink]]
+ * ```
+ *
+ * The serialized format includes only readable and writable properties, and
+ * skips properties that have their default values.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -3056,7 +3072,14 @@ priv_gst_structure_append_to_gstring (const GstStructure * structure,
     } else if (!nested_structs_brackets
         || (G_VALUE_TYPE (&field->value) != GST_TYPE_STRUCTURE
             && G_VALUE_TYPE (&field->value) != GST_TYPE_CAPS)) {
-      t = gst_value_serialize (&field->value);
+      /* In backward-compat mode, don't serialize GObjects */
+      if (!nested_structs_brackets && G_VALUE_HOLDS_OBJECT (&field->value)) {
+        if (strict)
+          return FALSE;
+        t = NULL;               /* Will fall through to error/NULL handling */
+      } else {
+        t = gst_value_serialize (&field->value);
+      }
     }
 
     type = gst_structure_value_get_generic_type (&field->value);
@@ -3083,6 +3106,16 @@ priv_gst_structure_append_to_gstring (const GstStructure * structure,
 
       g_string_append_printf (s, "[%s]", capsstr);
       g_free (capsstr);
+    } else if (nested_structs_brackets && G_VALUE_HOLDS_OBJECT (&field->value)) {
+      GObject *obj = g_value_get_object (&field->value);
+
+      if (obj) {
+        gchar *objstr = gst_value_serialize (&field->value);
+        g_string_append_printf (s, "[%s]", objstr);
+        g_free (objstr);
+      } else {
+        g_string_append (s, "NULL");
+      }
     } else if (t) {
       g_string_append (s, t);
       g_free (t);

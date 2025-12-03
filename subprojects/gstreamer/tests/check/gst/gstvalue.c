@@ -4888,6 +4888,184 @@ GST_START_TEST (test_hash)
 
 GST_END_TEST;
 
+GST_START_TEST (test_serialize_deserialize_gobject)
+{
+  GValue value = G_VALUE_INIT;
+  GValue deserialized = G_VALUE_INIT;
+  GstTaskPool *pool, *pool2;
+  gchar *serialized;
+  guint max_threads;
+
+  /* Serialize and deserialize GstSharedTaskPool with properties */
+  pool = gst_shared_task_pool_new ();
+  gst_shared_task_pool_set_max_threads (GST_SHARED_TASK_POOL (pool), 8);
+
+  g_value_init (&value, GST_TYPE_TASK_POOL);
+  g_value_take_object (&value, pool);
+
+  serialized = gst_value_serialize (&value);
+  fail_unless (serialized != NULL);
+
+  /* Deserialize */
+  g_value_init (&deserialized, G_TYPE_OBJECT);
+  fail_unless (gst_value_deserialize (&deserialized, serialized));
+
+  pool2 = g_value_get_object (&deserialized);
+  fail_unless (GST_IS_SHARED_TASK_POOL (pool2));
+
+  max_threads =
+      gst_shared_task_pool_get_max_threads (GST_SHARED_TASK_POOL (pool2));
+  fail_unless_equals_int (max_threads, 8);
+
+  g_value_unset (&value);
+  g_value_unset (&deserialized);
+  g_free (serialized);
+
+  /* Deserialize from string with explicit syntax */
+  g_value_init (&value, G_TYPE_OBJECT);
+  fail_unless (gst_value_deserialize (&value,
+          "GstSharedTaskPool,max-threads=4"));
+
+  pool = g_value_get_object (&value);
+  fail_unless (GST_IS_SHARED_TASK_POOL (pool));
+
+  max_threads =
+      gst_shared_task_pool_get_max_threads (GST_SHARED_TASK_POOL (pool));
+  fail_unless_equals_int (max_threads, 4);
+
+  g_value_unset (&value);
+
+  /* Invalid type name should fail */
+  g_value_init (&value, G_TYPE_OBJECT);
+  fail_if (gst_value_deserialize (&value, "NonExistentType,prop=val"));
+  g_value_unset (&value);
+
+  /* Non-GObject type should fail */
+  g_value_init (&value, G_TYPE_OBJECT);
+  fail_if (gst_value_deserialize (&value, "GstCaps,name=test"));
+  g_value_unset (&value);
+
+  /* Test in a structure */
+  GstStructure *s =
+      gst_structure_from_string
+      ("test,pool=(obj)[GstSharedTaskPool,max-threads=16]",
+      NULL);
+  fail_unless (s != NULL);
+
+  fail_unless (gst_structure_has_field_typed (s, "pool",
+          GST_TYPE_SHARED_TASK_POOL),
+      "Structure should have 'pool' field of type GObject, got %s",
+      G_VALUE_TYPE (gst_structure_get_value (s, "pool")));
+
+  gst_structure_get (s, "pool", GST_TYPE_SHARED_TASK_POOL, &pool, NULL);
+  fail_unless (GST_IS_SHARED_TASK_POOL (pool));
+
+  max_threads =
+      gst_shared_task_pool_get_max_threads (GST_SHARED_TASK_POOL (pool));
+  fail_unless_equals_int (max_threads, 16);
+
+  gst_object_unref (pool);
+  gst_structure_free (s);
+
+  /* Round-trip serialization through structure with new format */
+  s = gst_structure_from_string ("a,b=(o)[GstBin,name=yes]", NULL);
+  fail_unless (s != NULL);
+
+  /* Use new serialization format */
+  gchar *s_str = gst_structure_serialize_full (s, GST_SERIALIZE_FLAG_NONE);
+  GstStructure *s2 = gst_structure_from_string (s_str, NULL);
+  fail_unless (s2 != NULL);
+  g_free (s_str);
+
+  /* Second round-trip should also work */
+  gchar *s2_str = gst_structure_serialize_full (s2, GST_SERIALIZE_FLAG_NONE);
+  GstStructure *s3 = gst_structure_from_string (s2_str, NULL);
+  fail_unless (s3 != NULL);
+
+  /* Verify the object is still valid */
+  GObject *bin = NULL;
+  gst_structure_get (s3, "b", GST_TYPE_BIN, &bin, NULL);
+  fail_unless (GST_IS_BIN (bin), "Deserialized object is not a GstBin, got %s",
+      bin ? G_OBJECT_TYPE_NAME (bin) : "NULL");
+
+  g_free (s2_str);
+  gst_object_unref (bin);
+  gst_structure_free (s);
+  gst_structure_free (s2);
+  gst_structure_free (s3);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_serialize_deserialize_nested_gobjects)
+{
+  GstStructure *s, *s2;
+  gchar *serialized;
+  GstPad *pad = NULL, *pad2 = NULL;
+  GstPadTemplate *templ = NULL, *templ2 = NULL;
+  GstCaps *caps;
+  const gchar *templ_name;
+
+  /* Nested objects using GstPad and its template property */
+  caps =
+      gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING, "I420",
+      NULL);
+  templ = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, caps);
+  gst_caps_unref (caps);
+
+  pad = gst_pad_new_from_template (templ, "mypad");
+
+  /* Put the pad in a structure */
+  s = gst_structure_new ("test", "pad", GST_TYPE_PAD, pad, NULL);
+
+  /* Serialize - should serialize the pad with its nested template */
+  serialized = gst_structure_serialize_full (s, GST_SERIALIZE_FLAG_NONE);
+  GST_ERROR ("Serialized structure: %s", serialized);
+  fail_unless (serialized != NULL,
+      "Failed to serialize structure with nested objects");
+
+  /* Verify serialized form contains object with type cast */
+  fail_unless (strstr (serialized, "(GstPad)") != NULL ||
+      strstr (serialized, "(object)") != NULL,
+      "Serialized form should contain type cast: %s", serialized);
+  fail_unless (strstr (serialized, "[GstPad,") != NULL,
+      "Serialized form should contain GstPad type with properties");
+
+  /* Verify the nested template property is present */
+  fail_unless (strstr (serialized, "template=") != NULL,
+      "Serialized form should contain template property: %s", serialized);
+
+  /* Deserialize back */
+  s2 = gst_structure_from_string (serialized, NULL);
+  fail_unless (s2 != NULL,
+      "Failed to deserialize structure with nested objects");
+
+  /* Verify the deserialized pad */
+  gst_structure_get (s2, "pad", GST_TYPE_PAD, &pad2, NULL);
+  fail_unless (GST_IS_PAD (pad2), "Deserialized object is not a GstPad");
+
+  /* Verify the nested template */
+  templ2 = gst_pad_get_pad_template (pad2);
+  fail_unless (templ2 != NULL, "Deserialized pad should have a template");
+  fail_unless (GST_IS_PAD_TEMPLATE (templ2),
+      "Template is not a GstPadTemplate");
+
+  templ_name = GST_PAD_TEMPLATE_NAME_TEMPLATE (templ2);
+  fail_unless_equals_string (templ_name, "sink");
+
+  /* Cleanup */
+  gst_object_unref (pad);
+  gst_object_unref (pad2);
+  gst_object_unref (templ);
+  if (templ2)
+    gst_object_unref (templ2);
+  g_free (serialized);
+  gst_structure_free (s);
+  gst_structure_free (s2);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_value_suite (void)
 {
@@ -4954,6 +5132,8 @@ gst_value_suite (void)
   tcase_add_test (tc_chain, test_serialize_deserialize_tag_list);
   tcase_add_test (tc_chain, test_serialize_deserialize_sample);
   tcase_add_test (tc_chain, test_serialize_deserialize_strv);
+  tcase_add_test (tc_chain, test_serialize_deserialize_gobject);
+  tcase_add_test (tc_chain, test_serialize_deserialize_nested_gobjects);
   tcase_add_test (tc_chain, test_hash);
 
   return s;
