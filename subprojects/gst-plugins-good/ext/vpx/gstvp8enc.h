@@ -46,6 +46,7 @@ struct _GstVP8Enc
   GstVPXEnc base_vpx_encoder;
 
   int keyframe_distance;
+  int frame_flags;
 };
 
 G_END_DECLS
