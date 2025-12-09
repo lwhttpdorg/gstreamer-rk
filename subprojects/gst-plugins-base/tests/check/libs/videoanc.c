@@ -339,6 +339,168 @@ GST_START_TEST (encode_10bit)
 
 GST_END_TEST;
 
+GST_START_TEST (meta_serialize)
+{
+  GByteArray *array = g_byte_array_new ();
+  gboolean ret;
+  guint32 consumed;
+
+  /* GstAncillaryMeta */
+  {
+    GstBuffer *src_buf;
+    GstBuffer *dst_buf;
+
+    GstAncillaryMeta *src_meta;
+    GstAncillaryMeta *dst_meta;
+
+    src_buf = gst_buffer_new ();
+    src_meta = gst_buffer_add_ancillary_meta (src_buf);
+    fail_unless (src_meta);
+
+    src_meta->field = GST_ANCILLARY_META_FIELD_PROGRESSIVE;
+    src_meta->c_not_y_channel = 0;
+    src_meta->line = 0x7fe;
+    src_meta->offset = 0xfff;
+    src_meta->DID = 123;
+    src_meta->SDID_block_number = 456;
+    src_meta->data_count = 2;
+    src_meta->data = g_new0 (guint16, 2);
+    src_meta->data[0] = 7;
+    src_meta->data[1] = 8;
+    src_meta->checksum = 9;
+
+    g_byte_array_set_size (array, 0);
+
+    ret = gst_meta_serialize_simple ((GstMeta *) src_meta, array);
+    fail_unless (ret);
+
+    dst_buf = gst_buffer_new ();
+    dst_meta = (GstAncillaryMeta *) gst_meta_deserialize (dst_buf,
+        array->data, array->len, &consumed);
+    fail_unless (dst_meta);
+    fail_unless_equals_int (consumed, array->len);
+
+    fail_unless_equals_int (src_meta->field, dst_meta->field);
+    fail_unless_equals_int (src_meta->c_not_y_channel,
+        dst_meta->c_not_y_channel);
+    fail_unless_equals_int (src_meta->line, dst_meta->line);
+    fail_unless_equals_int (src_meta->DID, dst_meta->DID);
+    fail_unless_equals_int (src_meta->SDID_block_number,
+        dst_meta->SDID_block_number);
+    fail_unless_equals_int (src_meta->data_count, dst_meta->data_count);
+    fail_unless_equals_int (src_meta->checksum, dst_meta->checksum);
+    fail_unless_equals_int (src_meta->data[0], dst_meta->data[0]);
+    fail_unless_equals_int (src_meta->data[1], dst_meta->data[1]);
+
+    gst_buffer_unref (src_buf);
+    gst_buffer_unref (dst_buf);
+  }
+
+  /* GstVideoAFDMeta */
+  {
+    GstBuffer *src_buf;
+    GstBuffer *dst_buf;
+
+    GstVideoAFDMeta *src_meta;
+    GstVideoAFDMeta *dst_meta;
+
+    src_buf = gst_buffer_new ();
+    src_meta =
+        gst_buffer_add_video_afd_meta (src_buf, 0, GST_VIDEO_AFD_SPEC_ATSC_A53,
+        GST_VIDEO_AFD_GREATER_THAN_16_9);
+    fail_unless (src_meta);
+
+    g_byte_array_set_size (array, 0);
+
+    ret = gst_meta_serialize_simple ((GstMeta *) src_meta, array);
+    fail_unless (ret);
+
+    dst_buf = gst_buffer_new ();
+    dst_meta = (GstVideoAFDMeta *) gst_meta_deserialize (dst_buf,
+        array->data, array->len, &consumed);
+    fail_unless (dst_meta);
+    fail_unless_equals_int (consumed, array->len);
+
+    fail_unless_equals_int (src_meta->field, dst_meta->field);
+    fail_unless_equals_int (src_meta->spec, dst_meta->spec);
+    fail_unless_equals_int (src_meta->afd, dst_meta->afd);
+
+    gst_buffer_unref (src_buf);
+    gst_buffer_unref (dst_buf);
+  }
+
+  /* GstVideoBarMeta */
+  {
+    GstBuffer *src_buf;
+    GstBuffer *dst_buf;
+
+    GstVideoBarMeta *src_meta;
+    GstVideoBarMeta *dst_meta;
+
+    src_buf = gst_buffer_new ();
+    src_meta = gst_buffer_add_video_bar_meta (src_buf, 0, TRUE, 1, 2);
+    fail_unless (src_meta);
+
+    g_byte_array_set_size (array, 0);
+
+    ret = gst_meta_serialize_simple ((GstMeta *) src_meta, array);
+    fail_unless (ret);
+
+    dst_buf = gst_buffer_new ();
+    dst_meta = (GstVideoBarMeta *) gst_meta_deserialize (dst_buf,
+        array->data, array->len, &consumed);
+    fail_unless (dst_meta);
+    fail_unless_equals_int (consumed, array->len);
+
+    fail_unless_equals_int (src_meta->field, dst_meta->field);
+    fail_unless_equals_int (src_meta->is_letterbox, dst_meta->is_letterbox);
+    fail_unless_equals_int (src_meta->bar_data1, dst_meta->bar_data1);
+    fail_unless_equals_int (src_meta->bar_data2, dst_meta->bar_data2);
+
+    gst_buffer_unref (src_buf);
+    gst_buffer_unref (dst_buf);
+  }
+
+  /* GstVideoCaptionMeta */
+  {
+    GstBuffer *src_buf;
+    GstBuffer *dst_buf;
+
+    GstVideoCaptionMeta *src_meta;
+    GstVideoCaptionMeta *dst_meta;
+
+    static const guint8 dummy_data[] = { 0, 1, 2, 3 };
+
+    src_buf = gst_buffer_new ();
+    src_meta = gst_buffer_add_video_caption_meta (src_buf,
+        GST_VIDEO_CAPTION_TYPE_CEA608_RAW, dummy_data, sizeof (dummy_data));
+    fail_unless (src_meta);
+
+    g_byte_array_set_size (array, 0);
+
+    ret = gst_meta_serialize_simple ((GstMeta *) src_meta, array);
+    fail_unless (ret);
+
+    dst_buf = gst_buffer_new ();
+    dst_meta = (GstVideoCaptionMeta *) gst_meta_deserialize (dst_buf,
+        array->data, array->len, &consumed);
+    fail_unless (dst_meta);
+    fail_unless_equals_int (consumed, array->len);
+
+    fail_unless_equals_int (src_meta->caption_type, dst_meta->caption_type);
+    fail_unless_equals_int64 (src_meta->size, dst_meta->size);
+    fail_unless (memcmp (src_meta->data, dst_meta->data,
+            sizeof (dummy_data)) == 0);
+
+    gst_buffer_unref (src_buf);
+    gst_buffer_unref (dst_buf);
+  }
+
+  g_byte_array_unref (array);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_videoanc_suite (void)
 {
@@ -352,6 +514,8 @@ gst_videoanc_suite (void)
 
   tcase_add_test (tc, encode_8bit);
   tcase_add_test (tc, encode_10bit);
+
+  tcase_add_test (tc, meta_serialize);
 
   return s;
 }
