@@ -287,6 +287,7 @@ struct _GstRTSPSrc {
   gboolean          tcp_timestamp;
   gboolean          force_non_compliant_url;
   gboolean          client_managed_mikey;
+  gboolean          mtu_probing;
 
   /* state */
   GstRTSPState       state;
