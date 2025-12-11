@@ -33,7 +33,6 @@ glsc_sources = [
 ]
 
 video_sources = [
-  'base/gsth264encoder.c',
   'gstvkvideocaps.c',
   'vkav1dec.c',
   'vkh264enc.c',
