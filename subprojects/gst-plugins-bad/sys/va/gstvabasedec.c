@@ -566,6 +566,12 @@ gst_va_base_dec_decide_allocation (GstVideoDecoder * decoder, GstQuery * query)
     max = 0;
   }
 
+  if (max != 0 && max < min) {
+    GST_DEBUG_OBJECT (base, "other pool max buffers too low (%u < %u)",
+        max, min);
+    gst_clear_object (&pool);
+  }
+
   if (!allocator) {
     if (!(allocator = _create_allocator (base, caps)))
       goto cleanup;
