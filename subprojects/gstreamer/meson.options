@@ -31,6 +31,9 @@ option('examples', type : 'feature', value : 'auto', yield : true)
 option('tests', type : 'feature', value : 'auto', yield : true)
 option('benchmarks', type : 'feature', value : 'auto', yield : true)
 option('tools', type : 'feature', value : 'auto', yield : true)
+option('gir_dir_prefix',
+       type: 'string',
+       description: 'Intermediate prefix for gir installation under ${prefix}')
 option('introspection', type : 'feature', value : 'auto', yield : true, description : 'Generate gobject-introspection bindings')
 option('nls', type : 'feature', value : 'auto', yield: true, description : 'Enable native language support (translations)')
 option('extra-checks', type : 'feature', value : 'enabled', yield : true, description : 'Enable extra runtime checks')
