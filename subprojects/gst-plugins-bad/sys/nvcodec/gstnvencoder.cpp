@@ -64,7 +64,8 @@ enum
   PROP_0,
   PROP_CC_INSERT,
   PROP_EXTERN_POOL,
-  PROP_EMIT_FRAME_STATS
+  PROP_EMIT_FRAME_STATS,
+  PROP_WRITE_MISB_PRECISION_TIMESTAMP,
 };
 
 enum
@@ -76,6 +77,7 @@ enum
 static guint gst_nv_encoder_signals[LAST_SIGNAL] = { 0 };
 
 #define DEFAULT_CC_INSERT GST_NV_ENCODER_SEI_INSERT
+#define DEFAULT_WRITE_MISB_PRECISION_TIMESTAMP TRUE
 
 struct _GstNvEncoderPrivate
 {
@@ -147,7 +149,17 @@ struct _GstNvEncoderPrivate
   GstBufferPool *extern_pool = nullptr;
   gboolean emit_frame_stats;
   GstStructure *frame_stats;
+  gboolean write_misb_precision_timestamp =
+      DEFAULT_WRITE_MISB_PRECISION_TIMESTAMP;
 };
+
+typedef struct
+{
+  GArray *payload;
+  GstCaps *caps;
+  gboolean precision_timestamp;
+  gboolean cc_insert;
+} GstNvEncoderMetaUserData;
 
 /**
  * GstNvEncoder:
@@ -252,6 +264,22 @@ gst_nv_encoder_class_init (GstNvEncoderClass * klass)
       G_SIGNAL_RUN_LAST, 0, nullptr, nullptr, nullptr, G_TYPE_NONE, 1,
       GST_TYPE_STRUCTURE | G_SIGNAL_TYPE_STATIC_SCOPE);
 
+   /** GstNvEncoder:write-misb-precision-timestamp:
+   *
+   * Enable writing a precision timestamp (MISB ST 0604) to a SEI NAL unit on
+   * the codec header if the #GstVideoMISBPrecisionTimestampMeta is present on
+   * the input buffer.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (object_class,
+      PROP_WRITE_MISB_PRECISION_TIMESTAMP,
+      g_param_spec_boolean ("write-misb-precision-timestamp",
+          "Write MISB Precision Timestamp",
+          "Enable writing a precision timestamp (MISB ST 0604) if the #GstVideoMISBPrecisionTimestampMeta is present on the input buffer",
+          DEFAULT_WRITE_MISB_PRECISION_TIMESTAMP,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
   element_class->set_context = GST_DEBUG_FUNCPTR (gst_nv_encoder_set_context);
 
   videoenc_class->open = GST_DEBUG_FUNCPTR (gst_nv_encoder_open);
@@ -343,6 +371,9 @@ gst_nv_encoder_set_property (GObject * object, guint prop_id,
     case PROP_EMIT_FRAME_STATS:
       priv->emit_frame_stats = g_value_get_boolean (value);
       break;
+    case PROP_WRITE_MISB_PRECISION_TIMESTAMP:
+      priv->write_misb_precision_timestamp = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -365,6 +396,9 @@ gst_nv_encoder_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_EMIT_FRAME_STATS:
       g_value_set_boolean (value, priv->emit_frame_stats);
+      break;
+    case PROP_WRITE_MISB_PRECISION_TIMESTAMP:
+      g_value_set_boolean (value, priv->write_misb_precision_timestamp);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -2106,8 +2140,10 @@ gst_nv_encoder_prepare_task_input (GstNvEncoder * self,
   return ret;
 }
 
+
+
 static gboolean
-gst_nv_encoder_foreach_caption_meta (GstBuffer * buffer, GstMeta ** meta,
+gst_nv_encoder_caption_meta (GstBuffer * buffer, GstMeta ** meta,
     GArray * payload)
 {
   GstVideoCaptionMeta *cc_meta;
@@ -2115,11 +2151,7 @@ gst_nv_encoder_foreach_caption_meta (GstBuffer * buffer, GstMeta ** meta,
   guint payload_size;
   NV_ENC_SEI_PAYLOAD sei_payload;
 
-  if ((*meta)->info->api != GST_VIDEO_CAPTION_META_API_TYPE)
-    return TRUE;
-
   cc_meta = (GstVideoCaptionMeta *) (*meta);
-
   if (cc_meta->caption_type != GST_VIDEO_CAPTION_TYPE_CEA708_RAW)
     return TRUE;
 
@@ -2167,6 +2199,84 @@ gst_nv_encoder_foreach_caption_meta (GstBuffer * buffer, GstMeta ** meta,
   g_array_append_val (payload, sei_payload);
 
   return TRUE;
+}
+
+static gboolean
+gst_nv_encoder_precision_timestamp_meta (GstBuffer * buffer, GstCaps * caps,
+    GstMeta ** meta, GArray * payload)
+{
+  GstVideoMISBPrecisionTimestampMeta *precision_timestamp_meta;
+  NV_ENC_SEI_PAYLOAD sei_payload;
+  guint8 *payload_data;
+  guint8 uuid[16];
+
+  precision_timestamp_meta = (GstVideoMISBPrecisionTimestampMeta *) (*meta);
+
+  if (!gst_video_misb_identifier_from_caps (caps,
+          GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS, uuid)) {
+    return FALSE;
+  }
+
+  payload_data = (guint8 *) g_malloc (28);      // 12 bytes for payload + 16 bytes for UUID
+  memcpy (payload, uuid, sizeof (uuid));
+  if (!gst_video_misb_precision_timestamp_payload_from_meta
+      (precision_timestamp_meta, payload_data + sizeof (uuid))) {
+    return FALSE;
+  }
+
+  sei_payload.payloadSize = 28;
+  sei_payload.payloadType = 5;  /* unregistered user data SEI */
+  sei_payload.payload = payload_data;
+
+  g_array_append_val (payload, sei_payload);
+
+  return TRUE;
+}
+
+static gboolean
+gst_nv_encoder_foreach_meta (GstBuffer * buffer, GstMeta ** meta,
+    GstNvEncoderMetaUserData * user_data)
+{
+  if (user_data->cc_insert
+      && (*meta)->info->api == GST_VIDEO_CAPTION_META_API_TYPE) {
+    return gst_nv_encoder_caption_meta (buffer, meta, user_data->payload);
+  }
+
+  if (user_data->precision_timestamp
+      && (*meta)->info->api ==
+      GST_VIDEO_MISB_PRECISION_TIMESTAMP_META_API_TYPE) {
+    return gst_nv_encoder_precision_timestamp_meta (buffer, user_data->caps,
+        meta, user_data->payload);
+  }
+
+  return TRUE;
+}
+
+static gboolean
+gst_nv_encoder_handle_buffer_meta (GstNvEncoder * self, GstNvEncTask * task,
+    GstBuffer * buffer)
+{
+  GstNvEncoderPrivate *priv = self->priv;
+  GstVideoCodecState *state;
+  GstNvEncoderMetaUserData user_data;
+  gboolean ret = FALSE;
+
+  state = gst_video_encoder_get_output_state (GST_VIDEO_ENCODER (self));
+  if (!state) {
+    return FALSE;
+  }
+
+  user_data.payload = gst_nv_enc_task_get_sei_payload (task);
+  user_data.caps = state->caps;
+  user_data.cc_insert = priv->cc_insert != GST_NV_ENCODER_SEI_DISABLED;
+  user_data.precision_timestamp = priv->write_misb_precision_timestamp;
+
+  gst_video_codec_state_unref (state);
+
+  ret = gst_buffer_foreach_meta (buffer,
+      (GstBufferForeachMetaFunc) gst_nv_encoder_foreach_meta, &user_data);
+
+  return ret;
 }
 
 static GstFlowReturn
@@ -2253,10 +2363,8 @@ gst_nv_encoder_handle_frame (GstVideoEncoder * encoder,
     return ret;
   }
 
-  if (priv->cc_insert != GST_NV_ENCODER_SEI_DISABLED) {
-    gst_buffer_foreach_meta (in_buf,
-        (GstBufferForeachMetaFunc) gst_nv_encoder_foreach_caption_meta,
-        gst_nv_enc_task_get_sei_payload (task));
+  if (!gst_nv_encoder_handle_buffer_meta (self, task, in_buf)) {
+    GST_WARNING_OBJECT (self, "Failed to handle buffer meta");
   }
 
   auto pic_struct = NV_ENC_PIC_STRUCT_FRAME;

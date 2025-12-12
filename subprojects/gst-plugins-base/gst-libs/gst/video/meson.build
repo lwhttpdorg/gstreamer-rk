@@ -30,6 +30,7 @@ video_sources = files([
   'video-info.c',
   'video-info-dma.c',
   'video-multiview.c',
+  'video-misb.c',
   'video-resampler.c',
   'video-scaler.c',
   'video-sei.c',
@@ -68,6 +69,7 @@ video_headers = files([
   'video-info.h',
   'video-info-dma.h',
   'video-frame.h',
+  'video-misb.h',
   'video-prelude.h',
   'video-scaler.h',
   'video-tile.h',
@@ -78,6 +80,7 @@ video_headers = files([
   'video-blend.h',
   'video-overlay-composition.h',
   'video-multiview.h',
+  'video-misb.h',
   'video-sei.h',
 ])
 install_headers(video_headers, subdir : 'gstreamer-1.0/gst/video/')

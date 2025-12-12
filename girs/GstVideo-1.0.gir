@@ -12233,6 +12233,41 @@ mode of the stream.</doc>
         </parameters>
       </function>
     </enumeration>
+    <record name="VideoMISBPrecisionTimestampMeta" c:type="GstVideoMISBPrecisionTimestampMeta" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Metadata for MISB Precision Timestamp messages</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="status" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">ST 0603 Time Status</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="value" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">absolute timestamp in @unit</doc>
+        <type name="guint64" c:type="guint64"/>
+      </field>
+      <field name="unit" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">GstVideoMISBPrecisionTimestampUnit</doc>
+        <type name="VideoMISBPrecisionTimestampUnit" c:type="GstVideoMISBPrecisionTimestampUnit"/>
+      </field>
+      <function name="get_info" c:identifier="gst_video_misb_precision_timestamp_meta_get_info">
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
+    <enumeration name="VideoMISBPrecisionTimestampUnit" version="1.28" c:type="GstVideoMISBPrecisionTimestampUnit">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <member name="microseconds" value="0" c:identifier="GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Microseconds</doc>
+      </member>
+      <member name="nanoseconds" value="1" c:identifier="GST_VIDEO_MISB_PTS_UNIT_NANOSECONDS">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Nanoseconds</doc>
+      </member>
+    </enumeration>
     <record name="VideoMasteringDisplayInfo" c:type="GstVideoMasteringDisplayInfo" version="1.18">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-hdr.h">Mastering display color volume information defined by SMPTE ST 2086
 (a.k.a static HDR metadata).</doc>
@@ -16920,6 +16955,32 @@ gst_buffer_add_video_meta_full() with them.</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="buffer_add_video_misb_precision_timestamp_meta" c:identifier="gst_buffer_add_video_misb_precision_timestamp_meta" version="1.28" introspectable="0">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Adds a #GstVideoMISBPrecisionTimestampMeta to @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="full">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">The #GstVideoMISBPrecisionTimestampMeta added to @buffer</doc>
+        <type name="VideoMISBPrecisionTimestampMeta" c:type="GstVideoMISBPrecisionTimestampMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">A #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="status" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">ST 0603 Time Status</doc>
+          <type name="guint8" c:type="guint8"/>
+        </parameter>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">64-bit absolute time value in the specified @unit</doc>
+          <type name="guint64" c:type="guint64"/>
+        </parameter>
+        <parameter name="unit" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">a #GstVideoMISBPrecisionTimestampUnit</doc>
+          <type name="VideoMISBPrecisionTimestampUnit" c:type="GstVideoMISBPrecisionTimestampUnit"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="buffer_add_video_overlay_composition_meta" c:identifier="gst_buffer_add_video_overlay_composition_meta">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-overlay-composition.c">Sets an overlay composition on a buffer. The buffer will obtain its own
 reference to the composition, meaning this function does not take ownership
@@ -17224,6 +17285,15 @@ on @buffer.</doc>
         </parameter>
       </parameters>
     </function>
+    <function-macro name="buffer_get_video_misb_precision_timestamp_meta" c:identifier="gst_buffer_get_video_misb_precision_timestamp_meta" version="1.28" introspectable="0">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Gets the GstVideoMISBPrecisionTimestampMeta that might be present on @b.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <parameters>
+        <parameter name="b">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">A #GstBuffer</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
     <function-macro name="buffer_get_video_multiview_meta" c:identifier="gst_buffer_get_video_multiview_meta" introspectable="0">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-multiview.h"/>
       <parameters>
@@ -17363,6 +17433,10 @@ between #GstVideoChromaSite and string descriptions.
 
 #GstVideoChromaResample is a utility object for resampling chroma planes
 and converting between different chroma sampling sitings.</doc>
+    </docsection>
+    <docsection name="gstvideomisbp">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.c">A collection of objects and methods to assist with MISB Precision Timestamp
+metadata in H.264 and H.265 streams.</doc>
     </docsection>
     <docsection name="gstvideopool">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideopool.c">Special GstBufferPool subclass for raw video buffers.
@@ -19962,6 +20036,102 @@ see gst_video_formats_raw().</doc>
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.c">a #GQuark</doc>
         <type name="GLib.Quark" c:type="GQuark"/>
       </return-value>
+    </function>
+    <function name="video_misb_identifier_from_caps" c:identifier="gst_video_misb_identifier_from_caps" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Generates a 16-byte identifier for the MISB Precision Timestamp message
+based on the codec and unit.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">%TRUE if the identifier was successfully generated, %FALSE otherwise</doc>
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="caps" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">A #GstCaps</doc>
+          <type name="Gst.Caps" c:type="const GstCaps*"/>
+        </parameter>
+        <parameter name="unit" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">The #GstVideoMISBPrecisionTimestampUnit of the timestamp</doc>
+          <type name="VideoMISBPrecisionTimestampUnit" c:type="GstVideoMISBPrecisionTimestampUnit"/>
+        </parameter>
+        <parameter name="uuid" direction="out" caller-allocates="0" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">The 16-byte UUID</doc>
+          <type name="guint8" c:type="guint8*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="video_misb_precision_timestamp_build_payload" c:identifier="gst_video_misb_precision_timestamp_build_payload" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Builds the 12-byte MISB Precision (or Nano Precision) Time Stamp payload
+(status + interleaved 0xFF + big-endian timestamp bytes) as per ST 0604.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="status" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">ST 0603 Time Status byte</doc>
+          <type name="guint8" c:type="guint8"/>
+        </parameter>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">64-bit absolute time value in the specified @unit</doc>
+          <type name="guint64" c:type="guint64"/>
+        </parameter>
+        <parameter name="payload" direction="out" caller-allocates="0" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">12-byte buffer to fill with the MISB payload</doc>
+          <type name="guint8" c:type="guint8*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="video_misb_precision_timestamp_get_value" c:identifier="gst_video_misb_precision_timestamp_get_value" version="1.28">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">%TRUE if the value was found, %FALSE otherwise</doc>
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="meta" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">A #GstVideoMISBPrecisionTimestampMeta</doc>
+          <type name="VideoMISBPrecisionTimestampMeta" c:type="GstVideoMISBPrecisionTimestampMeta*"/>
+        </parameter>
+        <parameter name="value" direction="out" caller-allocates="0" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">The value of the timestamp in the unit specified by @unit</doc>
+          <type name="guint64" c:type="guint64*"/>
+        </parameter>
+        <parameter name="unit" direction="out" caller-allocates="0" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">The #GstVideoMISBPrecisionTimestampUnit of the timestamp</doc>
+          <type name="VideoMISBPrecisionTimestampUnit" c:type="GstVideoMISBPrecisionTimestampUnit*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="video_misb_precision_timestamp_meta_api_get_type" c:identifier="gst_video_misb_precision_timestamp_meta_api_get_type">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="video_misb_precision_timestamp_meta_get_info" c:identifier="gst_video_misb_precision_timestamp_meta_get_info" moved-to="VideoMISBPrecisionTimestampMeta.get_info">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
+    </function>
+    <function name="video_misb_precision_timestamp_payload_from_meta" c:identifier="gst_video_misb_precision_timestamp_payload_from_meta" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">Convenience wrapper around gst_video_misb_precision_timestamp_build_payload()
+using the values from @meta.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h"/>
+      <return-value transfer-ownership="none">
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="meta" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">a #GstVideoMISBPrecisionTimestampMeta</doc>
+          <type name="VideoMISBPrecisionTimestampMeta" c:type="const GstVideoMISBPrecisionTimestampMeta*"/>
+        </parameter>
+        <parameter name="payload" direction="out" caller-allocates="0" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-misb.h">12-byte buffer to fill with the MISB payload</doc>
+          <type name="guint8" c:type="guint8*"/>
+        </parameter>
+      </parameters>
     </function>
     <function name="video_multiview_get_doubled_height_modes" c:identifier="gst_video_multiview_get_doubled_height_modes" version="1.6">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-multiview.h"/>

@@ -115,6 +115,9 @@ struct _GstX264Enc
   gboolean insert_vui;
   gint nal_hrd;
 
+  /* precision timestamp properties */
+  gboolean write_misb_precision_timestamp;
+
   /* input description */
   GstVideoCodecState *input_state;
 

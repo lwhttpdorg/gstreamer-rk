@@ -19,6 +19,8 @@
 
 #include <gst/check/gstcheck.h>
 #include <gst/check/gstharness.h>
+#include <gst/video/video.h>
+#include <gst/video/video-sei.h>
 
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
@@ -139,6 +141,78 @@ GST_START_TEST (test_encode_simple)
   gst_caps_unref (srccaps);
 
   cleanup_nvenc (nvenc);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_misp_precision_timestamp)
+{
+  GstBuffer *in_buf;
+  GstBuffer *out;
+  GstCaps *caps;
+  GstHarness *h;
+  gboolean found = FALSE;
+  guint64 hand_of_god_ts = 522439740000000;     // Corresponds to 22/07/1986 18:09:00 GMT
+
+
+  h = gst_harness_new_parse
+      ("nvh264enc precision-timestamp=true precision-timestamp-offset=1000000 "
+      "! h264parse config-interval=-1");
+  fail_unless (h != NULL);
+
+  gst_harness_play (h);
+
+  caps =
+      gst_caps_from_string
+      ("video/x-raw,format=NV12,width=320,height=240,framerate=25/1");
+  gst_harness_set_src_caps (h, caps);
+
+  in_buf = gst_buffer_new_and_alloc (320 * 240 * 3 / 2);
+  gst_buffer_memset (in_buf, 0, 0, -1);
+  GST_BUFFER_PTS (in_buf) = GST_CLOCK_TIME_NONE;
+  GST_BUFFER_DTS (in_buf) = GST_CLOCK_TIME_NONE;
+  GST_BUFFER_DURATION (in_buf) = gst_util_uint64_scale (1, GST_SECOND, 25);
+
+  gst_buffer_add_video_misb_precision_timestamp_meta (in_buf, 0x01,
+      hand_of_god_ts, GST_VIDEO_MISB_PTS_UNIT_MICROSECONDS);
+
+  fail_unless (gst_harness_push (h, gst_buffer_ref (in_buf)) == GST_FLOW_OK);
+  fail_unless (gst_harness_push_event (h, gst_event_new_eos ()));
+
+  while ((out = gst_harness_try_pull (h))) {
+    GstVideoSEIUserDataUnregisteredMeta *meta =
+        gst_buffer_get_video_sei_user_data_unregistered_meta (out);
+    if (meta) {
+      guint8 status = 0;
+      guint64 ts_us = 0;
+
+      fail_unless
+          (gst_video_sei_user_data_unregistered_parse_precision_time_stamp
+          (meta, &status, &ts_us));
+      GST_DEBUG ("status: %d, precision timestamp: %" G_GUINT64_FORMAT, status,
+          ts_us);
+      fail_unless_equals_int (status, 0x01);
+      fail_unless_equals_uint64 (ts_us, hand_of_god_ts);
+      found = TRUE;
+    }
+    gst_buffer_unref (out);
+  }
+
+  fail_unless (found, "Did not find SEI user-data-unregistered meta in output");
+
+  for (;;) {
+    GstEvent *ev = gst_harness_pull_event (h);
+    if (!ev)
+      break;
+    gboolean is_eos = GST_EVENT_TYPE (ev) == GST_EVENT_EOS;
+    gst_event_unref (ev);
+    if (is_eos)
+      break;
+  }
+
+  gst_buffer_unref (in_buf);
+  gst_harness_teardown (h);
+  return;
 }
 
 GST_END_TEST;
@@ -437,6 +511,7 @@ nvenc_suite (void)
   tcase_add_test (tc_chain, test_caps_interlace_mode);
   tcase_add_test (tc_chain, test_resolution_change_to_larger);
   tcase_add_test (tc_chain, test_resolution_change_to_smaller);
+  tcase_add_test (tc_chain, test_misp_precision_timestamp);
 
 end:
   return s;
