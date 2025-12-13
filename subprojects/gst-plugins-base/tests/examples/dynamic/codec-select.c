@@ -134,16 +134,13 @@ make_pipeline (void)
   g_object_set (audiocaps, "caps", caps, NULL);
   gst_caps_unref (caps);
 
-  outputselect = gst_element_factory_make ("output-selector", "select");
+  outputselect = gst_element_factory_make ("output-selector", "output-select");
   g_assert (outputselect);
 
-  inputselect = gst_element_factory_make ("input-selector", NULL);
+  inputselect = gst_element_factory_make ("input-selector", "input-select");
   g_assert (inputselect);
-  g_object_set (inputselect, "select-all", TRUE, NULL);
 
-  sink = gst_element_factory_make ("fakesink", NULL);
-  g_object_set (sink, "sync", TRUE, NULL);
-  g_object_set (sink, "silent", TRUE, NULL);
+  sink = gst_element_factory_make ("autoaudiosink", NULL);
   g_assert (sink);
 
   /* add elements */
@@ -205,10 +202,22 @@ do_switch (GstElement * pipeline)
   g_print ("switching to %d\n", rand);
 
   /* find the selector */
-  select = gst_bin_get_by_name (GST_BIN (pipeline), "select");
+  select = gst_bin_get_by_name (GST_BIN (pipeline), "output-select");
 
   /* get the named pad */
   name = g_strdup_printf ("src_%u", rand);
+  pad = gst_element_get_static_pad (select, name);
+  g_free (name);
+
+  /* set the active pad */
+  g_object_set (select, "active-pad", pad, NULL);
+  gst_object_unref (select);
+
+  /* find the selector */
+  select = gst_bin_get_by_name (GST_BIN (pipeline), "input-select");
+
+  /* get the named pad */
+  name = g_strdup_printf ("sink_%u", rand);
   pad = gst_element_get_static_pad (select, name);
   g_free (name);
 
