@@ -1,3 +1,5 @@
+fs = import('fs')
+
 vfilt_sources = [
   'gstzebrastripe.c',
   'gstscenechange.c',
@@ -36,12 +38,8 @@ if have_orcc
     command : orcc_args + ['--implementation', '-o', '@OUTPUT@', '@INPUT@'])
   orc_targets += {'name': orcsrc, 'orc-source': files(orcsrc + '.orc'), 'header': orc_h, 'source': orc_c}
 else
-  orc_h = configure_file(input : orcsrc + '-dist.h',
-    output : orcsrc + '.h',
-    copy : true)
-  orc_c = configure_file(input : orcsrc + '-dist.c',
-    output : orcsrc + '.c',
-    copy : true)
+  orc_h = fs.copyfile(orcsrc + '-dist.h', orcsrc + '.h')
+  orc_c = fs.copyfile(orcsrc + '-dist.c', orcsrc + '.c')
 endif
 
 gstvideofiltersbad = library('gstvideofiltersbad',

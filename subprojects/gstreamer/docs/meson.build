@@ -1,3 +1,5 @@
+fs = import('fs')
+
 build_hotdoc = false
 if meson.is_cross_build()
     if get_option('doc').enabled()
@@ -27,12 +29,11 @@ hotdoc_plugin_scanner = executable('gst-hotdoc-plugins-scanner',
   install: true,
 )
 
-configure_file(
-    input: 'gst-plugins-doc-cache-generator.py',
-    output: 'gst-plugins-doc-cache-generator',
-    install_dir: helpers_install_dir,
-    copy: true
-)
+fs.copyfile('gst-plugins-doc-cache-generator.py', 'gst-plugins-doc-cache-generator')
+run_command('chmod', '+x', join_paths(meson.current_build_dir(), 'gst-plugins-doc-cache-generator'), check: true)
+install_data('gst-plugins-doc-cache-generator.py',
+    rename: 'gst-plugins-doc-cache-generator',
+    install_dir: helpers_install_dir)
 
 plugins_cache_generator = find_program(join_paths(meson.current_build_dir(), 'gst-plugins-doc-cache-generator'))
 plugins_cache = join_paths(meson.current_source_dir(), 'plugins', 'gst_plugins_cache.json')
