@@ -47,6 +47,7 @@ typedef struct _GstAutoDetect {
   /* explicit pointers to stuff used */
   GstPad *pad;
   GstCaps *filter_caps;
+  gboolean sync_set;
   gboolean sync;
 
   /* < private > */ 
