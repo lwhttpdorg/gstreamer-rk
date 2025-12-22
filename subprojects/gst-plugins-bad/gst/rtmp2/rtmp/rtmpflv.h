@@ -18,8 +18,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __RTMP2_FLV_H__
-#define __RTMP2_FLV_H__
+#ifndef _GST_RTMP_FLV_H_
+#define _GST_RTMP_FLV_H_
 
 #include <glib.h>
 #include <gst/gst.h>

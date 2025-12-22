@@ -22,7 +22,7 @@
 #include "config.h"
 #endif
 
-#include "rtmp2flv.h"
+#include "rtmpflv.h"
 #include <string.h>
 
 static guint8

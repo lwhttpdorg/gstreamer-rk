@@ -20,9 +20,55 @@
 #ifndef __GST_RTMP2_SERVER_SRC_H__
 #define __GST_RTMP2_SERVER_SRC_H__
 
-#include "gstrtmp2server.h"
+#include <gst/gst.h>
+#include <gio/gio.h>
+#include "gstrtmp2elements.h"
+#include "rtmp/rtmpconnection.h"
+#include "rtmp/rtmpserver.h"
+#include "rtmp/rtmpflv.h"
 
 G_BEGIN_DECLS
+
+#define GST_TYPE_RTMP2_SERVER_SRC \
+  (gst_rtmp2_server_src_get_type())
+#define GST_RTMP2_SERVER_SRC(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_RTMP2_SERVER_SRC,GstRtmp2ServerSrc))
+#define GST_RTMP2_SERVER_SRC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_RTMP2_SERVER_SRC,GstRtmp2ServerSrcClass))
+#define GST_IS_RTMP2_SERVER_SRC(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_RTMP2_SERVER_SRC))
+#define GST_IS_RTMP2_SERVER_SRC_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_RTMP2_SERVER_SRC))
+
+typedef struct _GstRtmp2ServerSrc GstRtmp2ServerSrc;
+typedef struct _GstRtmp2ServerSrcClass GstRtmp2ServerSrcClass;
+
+/* Server session state */
+typedef enum {
+  SERVER_SESSION_STATE_NEW = 0,
+  SERVER_SESSION_STATE_CONNECTED,
+  SERVER_SESSION_STATE_PUBLISHING,
+  SERVER_SESSION_STATE_DISCONNECTED,
+  SERVER_SESSION_STATE_ERROR,
+} ServerSessionState;
+
+/* Server session - represents one connected RTMP client */
+typedef struct {
+  GSocketConnection *socket_connection;  /* Keep original socket connection */
+  GstRtmpConnection *connection;
+  ServerSessionState state;
+  GstRtmpEnhancedCaps enhanced_caps;
+  gchar *app_name;
+  gchar *stream_key;
+  guint32 stream_id;
+  
+  /* FLV tag queue */
+  GQueue *tag_queue;
+  GMutex queue_lock;
+  
+  /* Back pointer to element */
+  GstRtmp2ServerSrc *src;
+} ServerSession;
 
 /**
  * GstRtmp2ServerSrc:
@@ -30,21 +76,49 @@ G_BEGIN_DECLS
  * RTMP server source element that listens for incoming RTMP connections
  * and outputs the received audio/video stream.
  *
- * ## Example launch line
- * |[
- * gst-launch-1.0 rtmp2serversrc port=1935 ! filesink location=output.flv
- * ]|
- * This pipeline saves an incoming RTMP stream to a file.
- *
- * |[
- * gst-launch-1.0 rtmp2serversrc port=1935 ! flvdemux name=demux \
- *   demux.video ! queue ! h264parse ! mpegtsmux name=mux ! srtsink uri="srt://:9000?mode=listener" \
- *   demux.audio ! queue ! aacparse ! mux.
- * ]|
- * This pipeline re-streams RTMP to SRT.
- *
  * Since: 1.26
  */
+struct _GstRtmp2ServerSrc {
+  GstElement parent;
+
+  /* Properties */
+  gchar *host;
+  guint port;
+  gchar *application;
+  gchar *stream_key;
+  guint timeout;
+
+  /* Server state */
+  GSocketService *service;
+  GMainContext *context;
+  GMainLoop *loop;
+  GThread *thread;
+  gboolean running;
+  
+  /* Sessions */
+  GList *sessions;
+  GMutex sessions_lock;
+  ServerSession *active_session;
+  
+  /* Source pad (always present - outputs raw FLV data) */
+  GstPad *srcpad;
+  gboolean srcpad_started;
+  gint64 eos_wait_start;
+  
+  /* Task for pushing data */
+  GstTask *task;
+  GRecMutex task_lock;
+  
+  /* Stream info */
+  gboolean have_video;
+  gboolean have_audio;
+};
+
+struct _GstRtmp2ServerSrcClass {
+  GstElementClass parent_class;
+};
+
+GType gst_rtmp2_server_src_get_type (void);
 
 G_END_DECLS
 

@@ -5,7 +5,6 @@ rtmp2_sources = [
   'gstrtmp2sink.c',
   'gstrtmp2src.c',
   'gstrtmp2serversrc.c',
-  'gstrtmp2server.c',
   'rtmp/amf.c',
   'rtmp/rtmpchunkstream.c',
   'rtmp/rtmpclient.c',
@@ -13,13 +12,8 @@ rtmp2_sources = [
   'rtmp/rtmphandshake.c',
   'rtmp/rtmpmessage.c',
   'rtmp/rtmputils.c',
-  'server/rtmp2amf.c',
-  'server/rtmp2chunk.c',
-  'server/rtmp2chunk_v2.c',
-  'server/rtmp2client.c',
-  'server/rtmp2enhanced.c',
-  'server/rtmp2flv.c',
-  'server/rtmp2handshake.c',
+  'rtmp/rtmpserver.c',
+  'rtmp/rtmpflv.c',
 ]
 
 rtmp2_headers = [
@@ -28,7 +22,6 @@ rtmp2_headers = [
   'gstrtmp2sink.h',
   'gstrtmp2src.h',
   'gstrtmp2serversrc.h',
-  'gstrtmp2server.h',
 ]
 
 doc_sources = []
