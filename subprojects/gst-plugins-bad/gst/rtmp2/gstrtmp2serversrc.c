@@ -63,6 +63,7 @@ enum {
   PROP_APPLICATION,
   PROP_STREAM_KEY,
   PROP_TIMEOUT,
+  PROP_LOOP,
 };
 
 /* Always pad template - raw FLV output */
@@ -434,15 +435,15 @@ gst_rtmp2_server_src_loop (gpointer user_data)
         gst_caps_new_empty_simple ("video/x-flv")));
 
     {
-      GstSegment segment;
+    GstSegment segment;
       gst_segment_init (&segment, GST_FORMAT_BYTES);
-      gst_pad_push_event (src->srcpad, gst_event_new_segment (&segment));
+    gst_pad_push_event (src->srcpad, gst_event_new_segment (&segment));
     }
 
     buffer = gst_buffer_new_allocate (NULL, 13, NULL);
     gst_buffer_fill (buffer, 0, flv_header, 13);
     gst_pad_push (src->srcpad, buffer);
-
+    
     src->srcpad_started = TRUE;
     GST_DEBUG_OBJECT (src, "Pushed FLV header");
   }
@@ -468,6 +469,29 @@ gst_rtmp2_server_src_loop (gpointer user_data)
         return;
       }
 
+      if (src->loop) {
+        /* Loop mode: reset and wait for new connection */
+        GST_INFO_OBJECT (src, "Client disconnected, waiting for new connection (loop=true)");
+        
+        /* Clean up old session */
+        g_mutex_lock (&src->sessions_lock);
+        if (src->active_session) {
+          src->sessions = g_list_remove (src->sessions, src->active_session);
+          server_session_free (src->active_session);
+          src->active_session = NULL;
+        }
+        g_mutex_unlock (&src->sessions_lock);
+        
+        /* Reset state for next connection */
+        src->srcpad_started = FALSE;
+        src->eos_wait_start = 0;
+        src->have_video = FALSE;
+        src->have_audio = FALSE;
+        
+        g_usleep (50000);  /* 50ms before checking for new connections */
+        return;
+      }
+
       GST_INFO_OBJECT (src, "Client disconnected, sending EOS");
       gst_pad_push_event (src->srcpad, gst_event_new_eos ());
       gst_task_pause (src->task);
@@ -483,7 +507,7 @@ gst_rtmp2_server_src_loop (gpointer user_data)
 
   /* Build FLV tag buffer */
   {
-    GstMapInfo map;
+  GstMapInfo map;
     guint8 tag_header[11];
     guint32 prev_tag_size;
     GstBuffer *flv_buffer;
@@ -531,11 +555,11 @@ gst_rtmp2_server_src_loop (gpointer user_data)
     GST_BUFFER_PTS (flv_buffer) = tag->timestamp * GST_MSECOND;
 
     ret = gst_pad_push (src->srcpad, flv_buffer);
-    if (ret != GST_FLOW_OK) {
+  if (ret != GST_FLOW_OK) {
       GST_WARNING_OBJECT (src, "Pad push returned %s", gst_flow_get_name (ret));
     }
   }
-
+  
   rtmp2_flv_tag_free (tag);
 }
 
@@ -547,9 +571,9 @@ event_loop_thread_func (gpointer user_data)
   GError *error = NULL;
   GInetAddress *addr;
   GSocketAddress *saddr;
-
+  
   GST_INFO_OBJECT (src, "Event loop thread started");
-
+  
   /* Push our context as thread default - socket service will use this */
   g_main_context_push_thread_default (src->context);
 
@@ -765,6 +789,11 @@ gst_rtmp2_server_src_class_init (GstRtmp2ServerSrcClass *klass)
           "Client timeout in seconds", 1, 3600, 30,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_LOOP,
+      g_param_spec_boolean ("loop", "Loop",
+          "Keep listening for new connections after client disconnects", FALSE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_element_class_set_static_metadata (gstelement_class,
       "RTMP2 Server Source",
       "Source/Network",
@@ -789,7 +818,7 @@ gst_rtmp2_server_src_init (GstRtmp2ServerSrc *src)
   src->service = NULL;
   src->context = NULL;
   src->thread = NULL;
-  src->running = FALSE;
+    src->running = FALSE;
 
   /* Startup synchronization */
   g_mutex_init (&src->start_lock);
@@ -862,6 +891,9 @@ gst_rtmp2_server_src_set_property (GObject *object, guint prop_id,
     case PROP_TIMEOUT:
       src->timeout = g_value_get_uint (value);
       break;
+    case PROP_LOOP:
+      src->loop = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -890,8 +922,11 @@ gst_rtmp2_server_src_get_property (GObject *object, guint prop_id,
     case PROP_TIMEOUT:
       g_value_set_uint (value, src->timeout);
       break;
+    case PROP_LOOP:
+      g_value_set_boolean (value, src->loop);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-  }
+            break;
+          }
 }

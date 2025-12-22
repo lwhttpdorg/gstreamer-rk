@@ -92,6 +92,7 @@ struct _GstRtmp2ServerSrc {
   gchar *application;
   gchar *stream_key;
   guint timeout;
+  gboolean loop;
 
   /* Server state */
   GSocketService *service;
