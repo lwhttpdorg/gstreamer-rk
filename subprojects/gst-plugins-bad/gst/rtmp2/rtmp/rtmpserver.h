@@ -96,6 +96,14 @@ void gst_rtmp_server_send_create_stream_result (GstRtmpConnection * connection,
 void gst_rtmp_server_send_publish_start (GstRtmpConnection * connection,
     guint32 stream_id);
 
+/* Send releaseStream result */
+void gst_rtmp_server_send_release_stream_result (GstRtmpConnection * connection,
+    gdouble transaction_id);
+
+/* Send FCPublish result */
+void gst_rtmp_server_send_fcpublish_result (GstRtmpConnection * connection,
+    gdouble transaction_id);
+
 /* Parse Enhanced RTMP capabilities from connect command object */
 gboolean gst_rtmp_enhanced_caps_parse (const GstAmfNode * command_object,
     GstRtmpEnhancedCaps * out);

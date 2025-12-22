@@ -320,6 +320,64 @@ gst_rtmp_server_send_publish_start (GstRtmpConnection * connection,
   gst_rtmp_connection_queue_message (connection, buffer);
 }
 
+void
+gst_rtmp_server_send_release_stream_result (GstRtmpConnection * connection,
+    gdouble transaction_id)
+{
+  GstAmfNode *null_node, *undefined_node;
+  GBytes *payload;
+  gpointer data;
+  gsize size;
+  GstBuffer *buffer;
+
+  g_return_if_fail (connection != NULL);
+
+  null_node = gst_amf_node_new_null ();
+  undefined_node = gst_amf_node_new_null ();  /* _result with undefined */
+
+  payload = gst_amf_serialize_command (transaction_id, "_result",
+      null_node, undefined_node, NULL);
+
+  gst_amf_node_free (null_node);
+  gst_amf_node_free (undefined_node);
+
+  data = g_bytes_unref_to_data (payload, &size);
+  buffer = gst_rtmp_message_new_wrapped (GST_RTMP_MESSAGE_TYPE_COMMAND_AMF0,
+      3, 0, data, size);
+
+  GST_DEBUG ("Sending releaseStream _result (transaction %.0f)", transaction_id);
+  gst_rtmp_connection_queue_message (connection, buffer);
+}
+
+void
+gst_rtmp_server_send_fcpublish_result (GstRtmpConnection * connection,
+    gdouble transaction_id)
+{
+  GstAmfNode *null_node, *undefined_node;
+  GBytes *payload;
+  gpointer data;
+  gsize size;
+  GstBuffer *buffer;
+
+  g_return_if_fail (connection != NULL);
+
+  null_node = gst_amf_node_new_null ();
+  undefined_node = gst_amf_node_new_null ();
+
+  payload = gst_amf_serialize_command (transaction_id, "_result",
+      null_node, undefined_node, NULL);
+
+  gst_amf_node_free (null_node);
+  gst_amf_node_free (undefined_node);
+
+  data = g_bytes_unref_to_data (payload, &size);
+  buffer = gst_rtmp_message_new_wrapped (GST_RTMP_MESSAGE_TYPE_COMMAND_AMF0,
+      3, 0, data, size);
+
+  GST_DEBUG ("Sending FCPublish _result (transaction %.0f)", transaction_id);
+  gst_rtmp_connection_queue_message (connection, buffer);
+}
+
 /* ========== Server command handlers ========== */
 
 typedef struct {

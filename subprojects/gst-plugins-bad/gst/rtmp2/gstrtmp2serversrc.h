@@ -91,9 +91,14 @@ struct _GstRtmp2ServerSrc {
   /* Server state */
   GSocketService *service;
   GMainContext *context;
-  GMainLoop *loop;
   GThread *thread;
   gboolean running;
+
+  /* Startup synchronization */
+  GMutex start_lock;
+  GCond start_cond;
+  gboolean start_complete;
+  gboolean start_error;
   
   /* Sessions */
   GList *sessions;

@@ -165,11 +165,44 @@ static void
 on_create_stream_command (const gchar *command_name, GPtrArray *args, gpointer user_data)
 {
   ServerSession *session = user_data;
+  gdouble transaction_id = 4.0; /* Default */
   
   GST_DEBUG ("Received createStream command");
+
+  /* Transaction ID is the first arg in command args */
+  /* Actually for expected commands, args contains the objects after command name */
+  /* Transaction ID comes before the args passed here, extracted by connection */
   
   /* Send createStream result with stream ID 1 */
-  gst_rtmp_server_send_create_stream_result (session->connection, 2.0, session->stream_id);
+  gst_rtmp_server_send_create_stream_result (session->connection, transaction_id, session->stream_id);
+  GST_INFO ("Sent createStream result with stream_id=%u", session->stream_id);
+}
+
+static void
+on_release_stream_command (const gchar *command_name, GPtrArray *args, gpointer user_data)
+{
+  ServerSession *session = user_data;
+  gdouble transaction_id = 2.0;
+
+  GST_INFO ("Received releaseStream command");
+
+  /* Extract transaction ID from args if available */
+  /* Send _result response to acknowledge */
+  gst_rtmp_server_send_release_stream_result (session->connection, transaction_id);
+  GST_INFO ("Sent releaseStream result");
+}
+
+static void
+on_fcpublish_command (const gchar *command_name, GPtrArray *args, gpointer user_data)
+{
+  ServerSession *session = user_data;
+  gdouble transaction_id = 3.0;
+
+  GST_INFO ("Received FCPublish command");
+
+  /* Send _result to acknowledge - some clients wait for this */
+  gst_rtmp_server_send_fcpublish_result (session->connection, transaction_id);
+  GST_INFO ("Sent FCPublish result");
 }
 
 static void
@@ -204,8 +237,13 @@ on_media_message (GstRtmpConnection *connection, GstBuffer *buffer, gpointer use
   GstMapInfo map;
 
   meta = gst_buffer_get_rtmp_meta (buffer);
-  if (!meta)
+  if (!meta) {
+    GST_DEBUG ("Media message without RTMP meta");
     return;
+  }
+
+  GST_LOG ("Received media message type=%d size=%" G_GSIZE_FORMAT,
+      meta->type, gst_buffer_get_size (buffer));
 
   /* Only process video and audio messages */
   if (meta->type != GST_RTMP_MESSAGE_TYPE_VIDEO &&
@@ -300,15 +338,24 @@ on_handshake_done (GObject *source, GAsyncResult *result, gpointer user_data)
   g_signal_connect (session->connection, "error",
       G_CALLBACK (on_connection_error), session);
 
+  GST_INFO ("Setting up expected commands");
+
   /* Expect connect command */
   gst_rtmp_connection_expect_command (session->connection,
       on_connect_command, session, 0, "connect");
 
-  /* Also expect createStream and publish */
+  /* Also expect releaseStream, FCPublish, createStream and publish 
+   * Note: These all come on stream 0, and publish comes on stream 1 */
+  gst_rtmp_connection_expect_command (session->connection,
+      on_release_stream_command, session, 0, "releaseStream");
+  gst_rtmp_connection_expect_command (session->connection,
+      on_fcpublish_command, session, 0, "FCPublish");
   gst_rtmp_connection_expect_command (session->connection,
       on_create_stream_command, session, 0, "createStream");
   gst_rtmp_connection_expect_command (session->connection,
       on_publish_command, session, 1, "publish");
+
+  GST_INFO ("All expected commands registered");
 
   /* Set as active session if none */
   g_mutex_lock (&src->sessions_lock);
@@ -374,8 +421,12 @@ gst_rtmp2_server_src_loop (gpointer user_data)
     gst_pad_push_event (src->srcpad, gst_event_new_stream_start ("rtmp"));
     gst_pad_push_event (src->srcpad, gst_event_new_caps (
         gst_caps_new_empty_simple ("video/x-flv")));
-    gst_pad_push_event (src->srcpad, gst_event_new_segment (
-        gst_segment_new ()));
+
+    {
+      GstSegment segment;
+      gst_segment_init (&segment, GST_FORMAT_BYTES);
+      gst_pad_push_event (src->srcpad, gst_event_new_segment (&segment));
+    }
 
     buffer = gst_buffer_new_allocate (NULL, 13, NULL);
     gst_buffer_fill (buffer, 0, flv_header, 13);
@@ -477,17 +528,21 @@ gst_rtmp2_server_src_loop (gpointer user_data)
   rtmp2_flv_tag_free (tag);
 }
 
-/* State change */
-static gboolean
-gst_rtmp2_server_src_start (GstRtmp2ServerSrc *src)
+/* Event loop thread function - creates and runs the socket service */
+static gpointer
+event_loop_thread_func (gpointer user_data)
 {
+  GstRtmp2ServerSrc *src = GST_RTMP2_SERVER_SRC (user_data);
   GError *error = NULL;
   GInetAddress *addr;
   GSocketAddress *saddr;
 
-  GST_DEBUG_OBJECT (src, "Starting server on %s:%u", src->host, src->port);
+  GST_INFO_OBJECT (src, "Event loop thread started");
 
-  /* Create socket service */
+  /* Push our context as thread default - socket service will use this */
+  g_main_context_push_thread_default (src->context);
+
+  /* Create socket service in THIS thread */
   src->service = g_socket_service_new ();
 
   addr = g_inet_address_new_from_string (src->host);
@@ -501,21 +556,89 @@ gst_rtmp2_server_src_start (GstRtmp2ServerSrc *src)
   if (!g_socket_listener_add_address (G_SOCKET_LISTENER (src->service),
           saddr, G_SOCKET_TYPE_STREAM, G_SOCKET_PROTOCOL_TCP, NULL, NULL, &error)) {
     GST_ERROR_OBJECT (src, "Failed to bind: %s", error->message);
-    g_error_free (error);
+    g_clear_error (&error);
     g_object_unref (saddr);
-    g_object_unref (src->service);
-    src->service = NULL;
-    return FALSE;
+    g_clear_object (&src->service);
+    src->start_error = TRUE;
+    g_cond_signal (&src->start_cond);
+    g_main_context_pop_thread_default (src->context);
+    return NULL;
   }
   g_object_unref (saddr);
 
   g_signal_connect (src->service, "incoming",
       G_CALLBACK (on_incoming_connection), src);
 
+  /* Start the service - signals will be delivered on this thread */
   g_socket_service_start (src->service);
-  src->running = TRUE;
 
   GST_INFO_OBJECT (src, "Server listening on %s:%u", src->host, src->port);
+
+  /* Signal that startup is complete */
+  g_mutex_lock (&src->start_lock);
+  src->start_complete = TRUE;
+  g_cond_signal (&src->start_cond);
+  g_mutex_unlock (&src->start_lock);
+
+  /* Run the event loop */
+  while (src->running) {
+    g_main_context_iteration (src->context, TRUE);
+  }
+
+  /* Cleanup */
+  if (src->service) {
+    g_socket_service_stop (src->service);
+    g_clear_object (&src->service);
+  }
+
+  g_main_context_pop_thread_default (src->context);
+
+  GST_INFO_OBJECT (src, "Event loop thread stopping");
+  return NULL;
+}
+
+/* State change */
+static gboolean
+gst_rtmp2_server_src_start (GstRtmp2ServerSrc *src)
+{
+  GST_DEBUG_OBJECT (src, "Starting server on %s:%u", src->host, src->port);
+
+  /* Create main context for socket service */
+  src->context = g_main_context_new ();
+
+  /* Initialize startup synchronization */
+  src->start_complete = FALSE;
+  src->start_error = FALSE;
+
+  src->running = TRUE;
+
+  /* Start event loop thread - it will create the socket service */
+  src->thread = g_thread_new ("rtmp-event-loop", event_loop_thread_func, src);
+  if (!src->thread) {
+    GST_ERROR_OBJECT (src, "Failed to create event loop thread");
+    g_main_context_unref (src->context);
+    src->context = NULL;
+    return FALSE;
+  }
+
+  /* Wait for the thread to finish startup */
+  g_mutex_lock (&src->start_lock);
+  while (!src->start_complete && !src->start_error) {
+    g_cond_wait (&src->start_cond, &src->start_lock);
+  }
+  g_mutex_unlock (&src->start_lock);
+
+  if (src->start_error) {
+    GST_ERROR_OBJECT (src, "Failed to start server");
+    src->running = FALSE;
+    g_thread_join (src->thread);
+    src->thread = NULL;
+    g_main_context_unref (src->context);
+    src->context = NULL;
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (src, "Server started successfully");
 
   /* Start task */
   gst_task_start (src->task);
@@ -534,11 +657,21 @@ gst_rtmp2_server_src_stop (GstRtmp2ServerSrc *src)
   gst_task_stop (src->task);
   gst_task_join (src->task);
 
-  /* Stop service */
-  if (src->service) {
-    g_socket_service_stop (src->service);
-    g_object_unref (src->service);
-    src->service = NULL;
+  /* Wake up event loop and wait for thread to finish */
+  if (src->context)
+    g_main_context_wakeup (src->context);
+  if (src->thread) {
+    g_thread_join (src->thread);
+    src->thread = NULL;
+  }
+
+  /* Service is cleaned up by the event loop thread */
+  src->service = NULL;
+
+  /* Free context */
+  if (src->context) {
+    g_main_context_unref (src->context);
+    src->context = NULL;
   }
 
   /* Free sessions */
@@ -644,9 +777,14 @@ gst_rtmp2_server_src_init (GstRtmp2ServerSrc *src)
 
   src->service = NULL;
   src->context = NULL;
-  src->loop = NULL;
   src->thread = NULL;
   src->running = FALSE;
+
+  /* Startup synchronization */
+  g_mutex_init (&src->start_lock);
+  g_cond_init (&src->start_cond);
+  src->start_complete = FALSE;
+  src->start_error = FALSE;
 
   src->sessions = NULL;
   g_mutex_init (&src->sessions_lock);
@@ -676,6 +814,8 @@ gst_rtmp2_server_src_finalize (GObject *object)
   g_free (src->stream_key);
 
   g_mutex_clear (&src->sessions_lock);
+  g_mutex_clear (&src->start_lock);
+  g_cond_clear (&src->start_cond);
   g_rec_mutex_clear (&src->task_lock);
 
   if (src->task) {
