@@ -235,6 +235,8 @@ on_media_message (GstRtmpConnection *connection, GstBuffer *buffer, gpointer use
   GstRtmpMeta *meta;
   Rtmp2FlvTag *tag;
   GstMapInfo map;
+  GstClockTime dts;
+  guint32 timestamp_ms;
 
   meta = gst_buffer_get_rtmp_meta (buffer);
   if (!meta) {
@@ -242,8 +244,16 @@ on_media_message (GstRtmpConnection *connection, GstBuffer *buffer, gpointer use
     return;
   }
 
-  GST_LOG ("Received media message type=%d size=%" G_GSIZE_FORMAT,
-      meta->type, gst_buffer_get_size (buffer));
+  /* Get the absolute timestamp from buffer DTS (set by rtmpchunkstream) */
+  dts = GST_BUFFER_DTS (buffer);
+  if (GST_CLOCK_TIME_IS_VALID (dts)) {
+    timestamp_ms = (guint32) (dts / GST_MSECOND);
+  } else {
+    timestamp_ms = meta->ts_delta;  /* fallback to delta as absolute */
+  }
+
+  GST_LOG ("Received media message type=%d dts=%" GST_TIME_FORMAT " timestamp_ms=%u size=%" G_GSIZE_FORMAT,
+      meta->type, GST_TIME_ARGS(dts), timestamp_ms, gst_buffer_get_size (buffer));
 
   /* Only process video and audio messages */
   if (meta->type != GST_RTMP_MESSAGE_TYPE_VIDEO &&
@@ -263,7 +273,8 @@ on_media_message (GstRtmpConnection *connection, GstBuffer *buffer, gpointer use
     tag->tag_type = RTMP2_FLV_TAG_SCRIPT;
   }
   
-  tag->timestamp = meta->ts_delta;
+  /* Use absolute timestamp from buffer DTS */
+  tag->timestamp = timestamp_ms;
   tag->data_size = gst_buffer_get_size (buffer);
   tag->data = gst_buffer_ref (buffer);
 

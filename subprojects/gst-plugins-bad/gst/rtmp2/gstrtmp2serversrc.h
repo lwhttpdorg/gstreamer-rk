@@ -66,6 +66,11 @@ typedef struct {
   GQueue *tag_queue;
   GMutex queue_lock;
   
+  /* Timestamp tracking - ts_delta needs to be accumulated per-stream */
+  guint32 video_timestamp;
+  guint32 audio_timestamp;
+  guint32 data_timestamp;
+  
   /* Back pointer to element */
   GstRtmp2ServerSrc *src;
 } ServerSession;
