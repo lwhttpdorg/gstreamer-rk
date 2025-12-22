@@ -1,6 +1,6 @@
-/* GStreamer
- * Copyright (C) 2020 Huawei Technologies Co., Ltd.
- *   @Author: Stéphane Cerveau <stephane.cerveau@collabora.com>
+/*
+ * GStreamer
+ * Copyright (C) 2025 Yaron Torbaty <yarontorbaty@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,20 +18,27 @@
  * Boston, MA 02110-1301, USA.
  */
 
-
-#ifndef __GST_RTMP2_ELEMENTS_H__
-#define __GST_RTMP2_ELEMENTS_H__
-
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gst/gst.h>
+#include "gstrtmp2server.h"
+#include "gstrtmp2serversrc.h"
 
-void rtmp2_element_init (GstPlugin * plugin);
+static gboolean
+plugin_init (GstPlugin * plugin)
+{
+  return gst_element_register (plugin, "rtmp2serversrc",
+      GST_RANK_NONE, GST_TYPE_RTMP2_SERVER_SRC);
+}
 
-GST_ELEMENT_REGISTER_DECLARE (rtmp2sink);
-GST_ELEMENT_REGISTER_DECLARE (rtmp2src);
-GST_ELEMENT_REGISTER_DECLARE (rtmp2serversrc);
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+    GST_VERSION_MINOR,
+    rtmp2server,
+    "RTMP2 Server Source Plugin",
+    plugin_init,
+    PACKAGE_VERSION,
+    GST_LICENSE,
+    GST_PACKAGE_NAME,
+    GST_PACKAGE_ORIGIN)
 
-#endif /* __GST_RTMP2_ELEMENTS_H__ */

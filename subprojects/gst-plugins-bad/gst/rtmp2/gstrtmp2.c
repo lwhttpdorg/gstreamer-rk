@@ -33,6 +33,7 @@ plugin_init (GstPlugin * plugin)
 
   ret |= GST_ELEMENT_REGISTER (rtmp2src, plugin);
   ret |= GST_ELEMENT_REGISTER (rtmp2sink, plugin);
+  ret |= GST_ELEMENT_REGISTER (rtmp2serversrc, plugin);
 
   return ret;
 }
