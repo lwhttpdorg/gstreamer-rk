@@ -123,6 +123,7 @@ struct _GstRtmp2ServerSrc {
   /* Stream info */
   gboolean have_video;
   gboolean have_audio;
+  guint stream_count;
 };
 
 struct _GstRtmp2ServerSrcClass {

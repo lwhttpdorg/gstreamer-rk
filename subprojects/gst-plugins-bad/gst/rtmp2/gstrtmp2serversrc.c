@@ -429,15 +429,21 @@ gst_rtmp2_server_src_loop (gpointer user_data)
       0x00, 0x00, 0x00, 0x09,     /* Header size */
       0x00, 0x00, 0x00, 0x00      /* Previous tag size */
     };
+    gchar *stream_id;
 
-    gst_pad_push_event (src->srcpad, gst_event_new_stream_start ("rtmp"));
+    src->stream_count++;
+    stream_id = g_strdup_printf ("rtmp-stream-%u", src->stream_count);
+    
+    GST_INFO_OBJECT (src, "Starting new stream: %s", stream_id);
+    
+    gst_pad_push_event (src->srcpad, gst_event_new_stream_start (stream_id));
     gst_pad_push_event (src->srcpad, gst_event_new_caps (
         gst_caps_new_empty_simple ("video/x-flv")));
 
     {
-    GstSegment segment;
+      GstSegment segment;
       gst_segment_init (&segment, GST_FORMAT_BYTES);
-    gst_pad_push_event (src->srcpad, gst_event_new_segment (&segment));
+      gst_pad_push_event (src->srcpad, gst_event_new_segment (&segment));
     }
 
     buffer = gst_buffer_new_allocate (NULL, 13, NULL);
@@ -445,6 +451,7 @@ gst_rtmp2_server_src_loop (gpointer user_data)
     gst_pad_push (src->srcpad, buffer);
     
     src->srcpad_started = TRUE;
+    g_free (stream_id);
     GST_DEBUG_OBJECT (src, "Pushed FLV header");
   }
 
@@ -472,6 +479,10 @@ gst_rtmp2_server_src_loop (gpointer user_data)
       if (src->loop) {
         /* Loop mode: reset and wait for new connection */
         GST_INFO_OBJECT (src, "Client disconnected, waiting for new connection (loop=true)");
+        
+        /* Send flush events to reset downstream state */
+        gst_pad_push_event (src->srcpad, gst_event_new_flush_start ());
+        gst_pad_push_event (src->srcpad, gst_event_new_flush_stop (TRUE));
         
         /* Clean up old session */
         g_mutex_lock (&src->sessions_lock);
