@@ -119,6 +119,17 @@ static guint8 h264_avc_codec_data[] = {
   0x00, 0x04, 0x68, 0xeb, 0xec, 0xb2
 };
 
+/* codec-data with 1 sps and 5 pps*/
+static guint8 h264_avc_codec_data_multi_pps[] = {
+  0x01, 0x64, 0x0c, 0x1f, 0xff, 0xe1, 0x00, 0x0c,
+  0x27, 0x64, 0x0c, 0x1f, 0xac, 0x13, 0x14, 0x60,
+  0x2d, 0x02, 0x86, 0x40, 0x05, 0x00, 0x04, 0x28,
+  0xee, 0x3c, 0xb0, 0x00, 0x04, 0x28, 0x5b, 0x8f,
+  0x2c, 0x00, 0x04, 0x28, 0x7b, 0x8f, 0x2c, 0x00,
+  0x04, 0x28, 0x26, 0xe3, 0xcb, 0x00, 0x04, 0x28,
+  0x2e, 0xe3, 0xcb
+};
+
 /* codec-data for avc3 where there are no SPS/PPS in the codec_data */
 static guint8 h264_avc3_codec_data[] = {
   0x01,                         /* config version, always == 1 */
@@ -1696,6 +1707,114 @@ GST_START_TEST (test_packetized_avc_drop_corrupt)
 
 GST_END_TEST;
 
+static GstBuffer *
+nalus_to_avc_buffer (GstClockTime pts, GstBufferFlags flags, gint count, ...)
+{
+  va_list vl;
+  GstBuffer *buffer;
+
+  va_start (vl, count);
+  buffer = gst_buffer_new ();
+
+  for (gint i = 0; i < count; i++) {
+    const guint8 *data = va_arg (vl, const guint8 *);
+    gsize size = va_arg (vl, gsize);
+    guint32 nalu_size = GUINT32_TO_BE (size - 4);
+    gpointer dump = g_memdup2 (data, size);
+
+    memcpy (dump, &nalu_size, sizeof (nalu_size));
+    buffer = gst_buffer_append (buffer,
+        gst_buffer_new_wrapped_full (0, dump, size, 0, size, dump, g_free));
+  }
+
+  va_end (vl);
+
+  GST_BUFFER_PTS (buffer) = pts;
+  GST_BUFFER_FLAGS (buffer) |= flags;
+
+  return buffer;
+}
+
+GST_START_TEST (test_parse_multi_pps)
+{
+  GstBuffer *cdata;
+  GstCaps *in_caps, *out_caps;
+  GstHarness *h = gst_harness_new ("h264parse");
+  GstBuffer *buf;
+  GstMapInfo mapout;
+  gint sps_count = 0;
+  gint pps_count = 0;
+  gint other_count = 0;
+  GstH264NalParser *nalparser;
+  GstH264NalUnit nalu;
+  GstH264ParserResult result;
+  guint offset;
+
+  nalparser = gst_h264_nal_parser_new ();
+
+  in_caps = gst_caps_from_string (stream_type_to_caps_str (PACKETIZED_AU));
+  cdata = gst_buffer_new_memdup (h264_avc_codec_data_multi_pps,
+      sizeof (h264_avc_codec_data_multi_pps));
+  gst_caps_set_simple (in_caps, "codec_data", GST_TYPE_BUFFER, cdata,
+      "stream-format", G_TYPE_STRING, "avc", NULL);
+  gst_buffer_unref (cdata);
+  out_caps = gst_caps_from_string (stream_type_to_caps_str (BYTESTREAM_NAL));
+
+  gst_harness_set_caps (h, in_caps, out_caps);
+
+  /* avc idr frame nal prefix with sps, pps */
+  buf = nalus_to_avc_buffer (100, 0, 3,
+      h264_sps, sizeof (h264_sps),
+      h264_pps, sizeof (h264_pps), h264_idrframe, sizeof (h264_idrframe));
+
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  /* EOS for pending buffers to be drained if any */
+  gst_harness_push_event (h, gst_event_new_eos ());
+
+  /* Pull all buffers and count NAL types */
+  while ((buf = gst_harness_try_pull (h)) != NULL) {
+    fail_unless (gst_buffer_map (buf, &mapout, GST_MAP_READ));
+    offset = 0;
+    while (TRUE) {
+      result = gst_h264_parser_identify_nalu (nalparser,
+          mapout.data, offset, mapout.size, &nalu);
+
+      if (result != GST_H264_PARSER_NO_NAL_END && result != GST_H264_PARSER_OK) {
+        break;
+      }
+
+      /* Count by NAL type */
+      switch (nalu.type) {
+        case GST_H264_NAL_SPS:
+          sps_count++;
+          break;
+        case GST_H264_NAL_PPS:
+          pps_count++;
+          break;
+        default:
+          other_count++;
+          break;
+      }
+
+      offset = nalu.offset + nalu.size;
+
+      if (result == GST_H264_PARSER_NO_NAL_END)
+        break;
+    }
+
+    gst_buffer_unmap (buf, &mapout);
+    gst_buffer_unref (buf);
+  }
+
+  fail_unless_equals_int_hex (sps_count, 2);
+  fail_unless_equals_int_hex (pps_count, 6);
+
+  gst_h264_nal_parser_free (nalparser);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
 
 /*
  * TODO:
@@ -1812,6 +1931,7 @@ main (int argc, char **argv)
     tcase_add_test (tc_chain, test_parse_sei_userdefinedunregistered);
     tcase_add_test (tc_chain, test_parse_to_avc3_without_sps);
     tcase_add_test (tc_chain, test_packetized_avc_drop_corrupt);
+    tcase_add_test (tc_chain, test_parse_multi_pps);
     nf += gst_check_run_suite (s, "h264parse", __FILE__);
   }
 
