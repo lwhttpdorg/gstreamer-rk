@@ -170,10 +170,10 @@ GST_DEBUG_CATEGORY_EXTERN (gst_analytics_relation_meta_debug);
 
 static void gst_analytics_segmentation_mtd_clear (GstBuffer * buffer,
     GstAnalyticsMtd * mtd);
-
 static gboolean
-gst_analytics_segmentation_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data);
+gst_analytics_segmentation_mtd_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd);
 
 static const GstAnalyticsMtdImpl segmentation_impl = {
   "segmentation",
@@ -432,15 +432,14 @@ gst_analytics_segmentation_mtd_clear (GstBuffer * buffer, GstAnalyticsMtd * mtd)
 }
 
 static gboolean
-gst_analytics_segmentation_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data)
+gst_analytics_segmentation_mtd_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd)
 {
   GstAnalyticsSegMtdData *segdata =
-      gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-      transmtd->id);
-
-  if (transbuf != buffer)
-    gst_buffer_ref (segdata->masks);
+      gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+      src_mtd->id);
+  GstAnalyticsSegMtdData *new = NULL;
 
   if (GST_VIDEO_META_TRANSFORM_IS_MATRIX (type)) {
     GstVideoMetaTransformMatrix *trans = data;
@@ -452,17 +451,26 @@ gst_analytics_segmentation_mtd_transform (GstBuffer * transbuf,
         trans->matrix[0][0] < 0 || trans->matrix[1][1] < 0) {
       GST_WARNING ("Segmentation meta doesn't support rotations or flips,"
           " not copying from buffer %" GST_PTR_FORMAT " to buffer: %"
-          GST_PTR_FORMAT, buffer, transbuf);
+          GST_PTR_FORMAT, src_buf, dst_buf);
       return FALSE;
     }
 
     if (!gst_video_meta_transform_matrix_rectangle (trans, &rect))
       return FALSE;
 
-    segdata->masks_loc_x = rect.x;
-    segdata->masks_loc_y = rect.y;
-    segdata->masks_loc_w = rect.w;
-    segdata->masks_loc_h = rect.h;
+    if (!gst_analytics_mtd_memcpy (src_mtd, dst_mtd))
+      return FALSE;
+
+    new = gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta, dst_mtd->id);
+
+    if (new->masks)
+      new->masks = gst_buffer_ref (new->masks);
+
+    new->masks_loc_x = rect.x;
+    new->masks_loc_y = rect.y;
+    new->masks_loc_w = rect.w;
+    new->masks_loc_h = rect.h;
+    return TRUE;
   } else if (GST_VIDEO_META_TRANSFORM_IS_SCALE (type)) {
     GstVideoMetaTransform *trans = data;
     gint ow, oh, nw, nh;
@@ -472,21 +480,38 @@ gst_analytics_segmentation_mtd_transform (GstBuffer * transbuf,
     oh = GST_VIDEO_INFO_HEIGHT (trans->in_info);
     nh = GST_VIDEO_INFO_HEIGHT (trans->out_info);
 
-    segdata->masks_loc_x *= nw;
-    segdata->masks_loc_x /= ow;
+    if (!gst_analytics_mtd_memcpy (src_mtd, dst_mtd))
+      return FALSE;
 
-    segdata->masks_loc_w *= nw;
-    segdata->masks_loc_w /= ow;
+    new = gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta, dst_mtd->id);
+    if (new->masks)
+      new->masks = gst_buffer_ref (new->masks);
 
-    segdata->masks_loc_y *= nh;
-    segdata->masks_loc_y /= oh;
+    new->masks_loc_x *= nw;
+    new->masks_loc_x /= ow;
 
-    segdata->masks_loc_h *= nh;
-    segdata->masks_loc_h /= oh;
+    new->masks_loc_w *= nw;
+    new->masks_loc_w /= ow;
 
+    new->masks_loc_y *= nh;
+    new->masks_loc_y /= oh;
+
+    new->masks_loc_h *= nh;
+    new->masks_loc_h /= oh;
+
+    return TRUE;
+  } else if (GST_META_TRANSFORM_IS_COPY (type)) {
+    if (!gst_analytics_mtd_memcpy (src_mtd, dst_mtd))
+      return FALSE;
+
+    new = gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta, dst_mtd->id);
+    if (new->masks)
+      new->masks = gst_buffer_ref (new->masks);
+
+    return TRUE;
   }
 
-  return TRUE;
+  return FALSE;
 }
 
 /**

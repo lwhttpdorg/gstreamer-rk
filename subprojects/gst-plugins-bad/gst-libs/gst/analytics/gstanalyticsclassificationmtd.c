@@ -40,8 +40,14 @@
  * Since: 1.24
  */
 
+static gboolean
+gst_analytics_cls_mtd_meta_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
+    const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
+    GstAnalyticsMtd * dst_mtd);
+
 static const GstAnalyticsMtdImpl cls_impl = {
   "classification",
+  gst_analytics_cls_mtd_meta_transform,
   NULL
 };
 
@@ -263,4 +269,12 @@ gst_analytics_relation_meta_get_cls_mtd (GstAnalyticsRelationMeta * meta,
 {
   return gst_analytics_relation_meta_get_mtd (meta, an_meta_id,
       gst_analytics_cls_mtd_get_mtd_type (), (GstAnalyticsClsMtd *) rlt);
+}
+
+static gboolean
+gst_analytics_cls_mtd_meta_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
+    const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
+    GstAnalyticsMtd * dst_mtd)
+{
+  return gst_analytics_mtd_memcpy (src_mtd, dst_mtd);
 }

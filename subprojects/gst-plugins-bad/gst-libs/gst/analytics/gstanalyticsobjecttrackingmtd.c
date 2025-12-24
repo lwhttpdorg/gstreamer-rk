@@ -61,9 +61,14 @@ struct _GstAnalyticsTrackingMtdData
   gboolean tracking_lost;
 };
 
+static gboolean
+gst_analytics_tracking_mtd_meta_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd);;
 
 static const GstAnalyticsMtdImpl tracking_impl = {
   "object-tracking",
+  gst_analytics_tracking_mtd_meta_transform,
   NULL
 };
 
@@ -215,4 +220,12 @@ gst_analytics_relation_meta_get_tracking_mtd (GstAnalyticsRelationMeta * meta,
   return gst_analytics_relation_meta_get_mtd (meta, an_meta_id,
       gst_analytics_tracking_mtd_get_mtd_type (),
       (GstAnalyticsTrackingMtd *) rlt);
+}
+
+static gboolean
+gst_analytics_tracking_mtd_meta_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd)
+{
+  return gst_analytics_mtd_memcpy (src_mtd, dst_mtd);
 }

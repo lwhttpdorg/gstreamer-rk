@@ -75,34 +75,40 @@ struct _GstAnalyticsODMtdData
 };
 
 static gboolean
-gst_analytics_od_mtd_meta_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data)
+gst_analytics_od_mtd_meta_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
+    const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
+    GstAnalyticsMtd * dst_mtd)
 {
   if (GST_VIDEO_META_TRANSFORM_IS_MATRIX (type)) {
     GstVideoMetaTransformMatrix *trans = data;
     GstAnalyticsODMtdData *oddata =
-        gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-        transmtd->id);
+        gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+        src_mtd->id);
     GstVideoRectangle rect = { oddata->x, oddata->y, oddata->w, oddata->h };
 
     gboolean is_diagonal = trans->matrix[0][1] == 0 && trans->matrix[1][0] == 0;
     gboolean is_antidiagonal = trans->matrix[0][0] == 0 &&
         trans->matrix[1][1] == 0;
 
+    if (oddata->r != 0) {
+      GST_FIXME ("Rotation of object detection not yet implemented");
+      return FALSE;
+    }
+
     if (!is_diagonal && !is_antidiagonal) {
       GST_WARNING ("Transformation not possible from buffer %" GST_PTR_FORMAT
-          " to buffer %" GST_PTR_FORMAT, buffer, transbuf);
+          " to buffer %" GST_PTR_FORMAT, src_buf, dst_buf);
       return FALSE;
     } else if (is_diagonal) {
       if (trans->matrix[0][0] == 0 || trans->matrix[1][1] == 0) {
         GST_WARNING ("Transformation not possible from buffer %" GST_PTR_FORMAT
-            " to buffer %" GST_PTR_FORMAT, buffer, transbuf);
+            " to buffer %" GST_PTR_FORMAT, src_buf, dst_buf);
         return FALSE;
       }
     } else {
       if (trans->matrix[0][1] == 0 || trans->matrix[1][0] == 0) {
         GST_WARNING ("Transformation not possible from buffer %" GST_PTR_FORMAT
-            " to buffer %" GST_PTR_FORMAT, buffer, transbuf);
+            " to buffer %" GST_PTR_FORMAT, src_buf, dst_buf);
         return FALSE;
       }
     }
@@ -110,10 +116,10 @@ gst_analytics_od_mtd_meta_transform (GstBuffer * transbuf,
     if (!gst_video_meta_transform_matrix_rectangle (trans, &rect))
       return FALSE;
 
-    oddata->x = rect.x;
-    oddata->y = rect.y;
-    oddata->w = rect.w;
-    oddata->h = rect.h;
+
+    return gst_analytics_relation_meta_add_od_mtd (dst_mtd->meta,
+        oddata->object_type, rect.x, rect.y, rect.w, rect.h,
+        oddata->location_confidence_lvl, dst_mtd);
   } else if (GST_VIDEO_META_TRANSFORM_IS_SCALE (type)) {
     GstVideoMetaTransform *trans = data;
     gint ow, oh, nw, nh;
@@ -124,8 +130,8 @@ gst_analytics_od_mtd_meta_transform (GstBuffer * transbuf,
     oh = GST_VIDEO_INFO_HEIGHT (trans->in_info);
     nh = GST_VIDEO_INFO_HEIGHT (trans->out_info);
 
-    oddata = gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-        transmtd->id);
+    oddata = gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+        src_mtd->id);
 
     oddata->x *= nw;
     oddata->x /= ow;
@@ -138,11 +144,17 @@ gst_analytics_od_mtd_meta_transform (GstBuffer * transbuf,
 
     oddata->h *= nh;
     oddata->h /= oh;
-  } else {
-    return FALSE;
+
+    return gst_analytics_relation_meta_add_od_mtd (dst_mtd->meta,
+        oddata->object_type, oddata->x * nw / ow, oddata->y * nh / oh,
+        oddata->w * nw / ow, oddata->h * nh / oh,
+        oddata->location_confidence_lvl, dst_mtd);
+
+  } else if (GST_META_TRANSFORM_IS_COPY (type)) {
+    return gst_analytics_mtd_memcpy (src_mtd, dst_mtd);
   }
 
-  return TRUE;
+  return FALSE;
 }
 
 static const GstAnalyticsMtdImpl od_impl = {

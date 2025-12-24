@@ -118,9 +118,9 @@ typedef struct
 {
   const char *name;
 
-gboolean (*mtd_meta_transform) (GstBuffer * transbuf,
-      GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type,
-      gpointer data);
+  gboolean (*mtd_meta_transform) (GstBuffer * dst_buf,
+      GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+      gpointer data, GstAnalyticsMtd * dst_mtd);
 
   void (*mtd_meta_clear) (GstBuffer *buffer, GstAnalyticsMtd *mtd);
 

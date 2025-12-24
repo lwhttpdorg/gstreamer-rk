@@ -361,11 +361,6 @@ gst_analytics_relation_meta_transform (GstBuffer * transbuf,
   guint *free_match = NULL;
   guint *match = NULL;
 
-  if (!GST_META_TRANSFORM_IS_COPY (type) &&
-      !GST_VIDEO_META_TRANSFORM_IS_SCALE (type) &&
-      !GST_VIDEO_META_TRANSFORM_IS_MATRIX (type))
-    return FALSE;
-
   if (dst_rmeta == NULL) {
     GstAnalyticsRelationMetaInitParams init_params = {
       src_rmeta->rel_order, src_rmeta->max_size
@@ -391,35 +386,25 @@ gst_analytics_relation_meta_transform (GstBuffer * transbuf,
     GstAnalyticsRelatableMtdData *src_mtd_data =
         (GstAnalyticsRelatableMtdData *)
         (src_rmeta->mtd_data_lookup[i] + src_rmeta->analysis_results);
-    GstAnalyticsMtd dst_mtd;
+    GstAnalyticsMtd src_mtd = { src_mtd_data->id, src_rmeta };
+    GstAnalyticsMtd dst_mtd = { G_MAXUINT, dst_rmeta };
 
     if (src_mtd_data->impl == NULL) {
       match[i] = G_MAXUINT;
       continue;
     }
 
-    gpointer dst_data = gst_analytics_relation_meta_add_mtd (dst_rmeta,
-        src_mtd_data->impl, src_mtd_data->size, &dst_mtd);
-
-    memcpy (dst_data, src_mtd_data->data, src_mtd_data->size);
-
     if (src_mtd_data->impl->mtd_meta_transform) {
-      if (src_mtd_data->impl->mtd_meta_transform (transbuf, &dst_mtd, buffer,
-              type, data)) {
+      if (src_mtd_data->impl->mtd_meta_transform (transbuf,
+              buffer, &src_mtd, type, data, &dst_mtd)) {
+        g_assert (dst_mtd.meta == dst_rmeta);
         match[i] = dst_mtd.id;
       } else {
-        GstAnalyticsRelatableMtdData *dst_mtd_data =
-            (GstAnalyticsRelatableMtdData *)
-            (dst_rmeta->mtd_data_lookup[dst_mtd.id] +
-            dst_rmeta->analysis_results);
-
-        dst_mtd_data->impl = NULL;
         match[i] = G_MAXUINT;
       }
-    } else {
-      match[i] = dst_mtd.id;
     }
   }
+
 
   for (i = 0; i < src_rmeta->length; i++) {
     GstAnalyticsRelatableMtdData *src_mtd_data_i =
