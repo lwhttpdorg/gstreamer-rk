@@ -1097,6 +1097,24 @@ Get analysis result type.</doc>
           </instance-parameter>
         </parameters>
       </method>
+      <method name="memcpy" c:identifier="gst_analytics_mtd_memcpy" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.c">Copies the data accessible via #GstAnalyticsMtd. Does a memcpy() of
+the Mtd data and should only be used by Mtd implemetations as it
+may not copy or reference any external data.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.c">TRUE if the mtd could be copied</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="src" transfer-ownership="none">
+            <type name="Mtd" c:type="const GstAnalyticsMtd*"/>
+          </instance-parameter>
+          <parameter name="dst" transfer-ownership="none">
+            <type name="Mtd" c:type="GstAnalyticsMtd*"/>
+          </parameter>
+        </parameters>
+      </method>
       <function name="type_get_name" c:identifier="gst_analytics_mtd_type_get_name" version="1.24">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.c">Gets the string version of the name of this type of analytics data</doc>
         <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.h"/>

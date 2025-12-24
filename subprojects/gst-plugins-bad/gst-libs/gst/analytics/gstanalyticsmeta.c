@@ -1134,3 +1134,36 @@ gst_analytics_relation_meta_iterate (GstAnalyticsRelationMeta * meta,
 
   return FALSE;
 }
+
+/**
+ * gst_analytics_mtd_memcpy:
+ * @src_mtd: The #GstAnalyticsMtd to copy
+ * @dst_mtd: (inout): Must be called with the  #GstAnalyticsRelationMeta field
+ *   filled and the return value will fill the id field.
+ *
+ * Copies the data accessible via #GstAnalyticsMtd. Does a memcpy() of
+ * the Mtd data and should only be used by Mtd implemetations as it
+ * may not copy or reference any external data.
+ *
+ * Returns: TRUE if the mtd could be copied
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_mtd_memcpy (const GstAnalyticsMtd * src_mtd,
+    GstAnalyticsMtd * dst_mtd)
+{
+  gsize size = gst_analytics_mtd_get_size (src_mtd);
+  gpointer copy;
+
+  copy = gst_analytics_relation_meta_add_mtd (dst_mtd->meta,
+      (const GstAnalyticsMtdImpl *) gst_analytics_mtd_get_mtd_type (src_mtd),
+      size, dst_mtd);
+  if (copy == NULL)
+    return FALSE;
+
+  memcpy (copy, gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+          src_mtd->id), size);
+
+  return TRUE;
+}
