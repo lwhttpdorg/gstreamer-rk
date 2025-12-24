@@ -276,5 +276,24 @@ gst_analytics_cls_mtd_meta_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
     const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
     GstAnalyticsMtd * dst_mtd)
 {
+  gpointer state = NULL;
+  gsize mysize = gst_analytics_mtd_get_size (src_mtd);
+  gpointer mydata = gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+      src_mtd->id);
+  GstAnalyticsMtd cmpmtd;
+
+  /* First look if it already exists as-is */
+  while (gst_analytics_relation_meta_iterate (dst_mtd->meta, &state,
+          gst_analytics_cls_mtd_get_mtd_type (), &cmpmtd)) {
+    if (gst_analytics_mtd_get_size (&cmpmtd) == mysize) {
+      gpointer cmpdata =
+          gst_analytics_relation_meta_get_mtd_data (cmpmtd.meta, cmpmtd.id);
+      if (!memcmp (mydata, cmpdata, mysize)) {
+        *dst_mtd = cmpmtd;
+        return TRUE;
+      }
+    }
+  }
+
   return gst_analytics_mtd_memcpy (src_mtd, dst_mtd);
 }
