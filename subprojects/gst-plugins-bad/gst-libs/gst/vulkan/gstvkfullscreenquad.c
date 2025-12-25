@@ -220,7 +220,7 @@ create_descriptor_set_layout (GstVulkanFullScreenQuad * self, GError ** error)
       .binding = i+1,
       .descriptorCount = 1,
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImmutableSamplers = NULL,
+      .pImmutableSamplers = self->sampler ? &self->sampler->handle : NULL,
       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
     };
   };
