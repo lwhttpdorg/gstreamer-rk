@@ -23,7 +23,11 @@
 # SPDX-License-Identifier: LGPL-2.0-or-later
 
 from __future__ import annotations
-from typing_extensions import Self
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 import sys
 import inspect
