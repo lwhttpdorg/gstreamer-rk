@@ -137,6 +137,27 @@ gst_aggregator_start_time_selection_get_type (void)
   return gtype;
 }
 
+GType
+gst_aggregator_inactive_pads_policy_get_type (void)
+{
+  static GType gtype = 0;
+
+  if (g_once_init_enter (&gtype)) {
+    static const GEnumValue values[] = {
+      {GST_AGGREGATOR_INACTIVE_PADS_POLICY_TIMEOUT,
+          "GST_AGGREGATOR_INACTIVE_PADS_POLICY_TIMEOUT", "timeout"},
+      {GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT,
+          "GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT", "wait"},
+      {0, NULL, NULL}
+    };
+    GType new_type =
+        g_enum_register_static ("GstAggregatorInactivePadsPolicy", values);
+
+    g_once_init_leave (&gtype, new_type);
+  }
+  return gtype;
+}
+
 static void gst_aggregator_set_latency_property (GstAggregator * agg,
     GstClockTime latency);
 static GstClockTime gst_aggregator_get_latency_property (GstAggregator * agg);
@@ -277,6 +298,10 @@ struct _GstAggregatorPadPrivate
   GstClockTime time_level;      /* how much head is ahead of tail */
   GstSegment head_segment;      /* segment before the queue */
 
+  /* Tracks liveness, only valid after first buffer chained */
+  gboolean peer_latency_live;   /* protected by pad_lock */
+  gboolean has_peer_latency;    /* protected by pad_lock */
+
   gboolean negotiated;
 
   gboolean eos;
@@ -313,6 +338,8 @@ gst_aggregator_pad_reset_unlocked (GstAggregatorPad * aggpad)
   aggpad->priv->first_buffer = TRUE;
   aggpad->priv->waited_once = FALSE;
   aggpad->priv->stream_start_pending = FALSE;
+  aggpad->priv->has_peer_latency = FALSE;
+  aggpad->priv->peer_latency_live = FALSE;
 }
 
 static gboolean
@@ -418,6 +445,7 @@ struct _GstAggregatorPrivate
   gboolean emit_signals;
   gboolean ignore_inactive_pads;
   gboolean force_live;          /* Construct only, doesn't need any locking */
+  GstAggregatorInactivePadsPolicy inactive_pads_policy;
 };
 
 /* With SRC_LOCK */
@@ -446,6 +474,7 @@ typedef struct
 #define DEFAULT_START_TIME           (-1)
 #define DEFAULT_EMIT_SIGNALS         FALSE
 #define DEFAULT_FORCE_LIVE           FALSE
+#define DEFAULT_INACTIVE_PADS_POLICY GST_AGGREGATOR_INACTIVE_PADS_POLICY_TIMEOUT
 
 enum
 {
@@ -455,6 +484,7 @@ enum
   PROP_START_TIME_SELECTION,
   PROP_START_TIME,
   PROP_EMIT_SIGNALS,
+  PROP_INACTIVE_PADS_POLICY,
   PROP_LAST
 };
 
@@ -841,6 +871,22 @@ gst_aggregator_push_eos (GstAggregator * self)
   gst_pad_push_event (self->srcpad, event);
 }
 
+static gboolean
+gst_aggregator_all_pads_have_first_buffer (GstAggregator * self)
+{
+  gboolean all_pads_have_first_buffer = TRUE;
+
+  for (GList * item = GST_ELEMENT (self)->sinkpads; item; item = item->next) {
+    GstAggregatorPad *aggpad = GST_AGGREGATOR_PAD (item->data);
+    if (aggpad->priv->first_buffer) {
+      all_pads_have_first_buffer = FALSE;
+      break;
+    }
+  }
+
+  return all_pads_have_first_buffer;
+}
+
 static GstClockTime
 gst_aggregator_get_next_time (GstAggregator * self)
 {
@@ -916,7 +962,8 @@ gst_aggregator_wait_and_check (GstAggregator * self, gboolean * timeout)
   start = gst_aggregator_get_next_time (self);
 
   /* If we're not live, or if we use the running time
-   * of the first buffer as start time, we wait until
+   * of the first buffer as start time, or if we don't want to timeout
+   * before all pads have seen a first buffer, we wait until
    * all pads have buffers.
    * Otherwise (i.e. if we are live!), we wait on the clock
    * and if a pad does not have a buffer in time we ignore
@@ -929,7 +976,10 @@ gst_aggregator_wait_and_check (GstAggregator * self, gboolean * timeout)
       !GST_CLOCK_TIME_IS_VALID (start) ||
       (self->priv->first_buffer
           && self->priv->start_time_selection ==
-          GST_AGGREGATOR_START_TIME_SELECTION_FIRST)) {
+          GST_AGGREGATOR_START_TIME_SELECTION_FIRST) ||
+      (self->priv->inactive_pads_policy ==
+          GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT
+          && !gst_aggregator_all_pads_have_first_buffer (self))) {
     /* We wake up here when something happened, and below
      * then check if we're ready now. If we return FALSE,
      * we will be directly called again.
@@ -2410,6 +2460,34 @@ gst_aggregator_query_latency_unlocked (GstAggregator * self, GstQuery * query)
 }
 
 /*
+ * MUST be called with the pad_lock held. Temporarily releases the lock
+ * to do the actual query!
+ */
+static gboolean
+gst_aggregator_pad_query_liveness (GstAggregatorPad * aggpad)
+{
+  gboolean ret = TRUE;
+
+  if (!aggpad->priv->has_peer_latency) {
+    GstQuery *query = gst_query_new_latency ();
+
+    PAD_UNLOCK (aggpad);
+    ret = gst_pad_peer_query (GST_PAD (aggpad), query);
+    PAD_LOCK (aggpad);
+
+    if (ret) {
+      gst_query_parse_latency (query, &aggpad->priv->peer_latency_live, NULL,
+          NULL);
+      GST_DEBUG_OBJECT (aggpad, "queried liveness: %d",
+          aggpad->priv->peer_latency_live);
+      aggpad->priv->has_peer_latency = TRUE;
+    }
+  }
+
+  return ret;
+}
+
+/*
  * MUST be called with the src_lock held. Temporarily releases the lock inside
  * gst_aggregator_query_latency_unlocked() to do the actual query!
  *
@@ -3002,6 +3080,9 @@ gst_aggregator_set_property (GObject * object, guint prop_id,
     case PROP_EMIT_SIGNALS:
       agg->priv->emit_signals = g_value_get_boolean (value);
       break;
+    case PROP_INACTIVE_PADS_POLICY:
+      agg->priv->inactive_pads_policy = g_value_get_enum (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -3031,6 +3112,9 @@ gst_aggregator_get_property (GObject * object, guint prop_id,
       break;
     case PROP_EMIT_SIGNALS:
       g_value_set_boolean (value, agg->priv->emit_signals);
+      break;
+    case PROP_INACTIVE_PADS_POLICY:
+      g_value_set_enum (value, agg->priv->inactive_pads_policy);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -3160,6 +3244,13 @@ gst_aggregator_class_init (GstAggregatorClass * klass)
       GST_TYPE_CLOCK_TIME, GST_TYPE_CLOCK_TIME,
       GST_TYPE_STRUCTURE | G_SIGNAL_TYPE_STATIC_SCOPE);
 
+  g_object_class_install_property (gobject_class, PROP_INACTIVE_PADS_POLICY,
+      g_param_spec_enum ("inactive-pads-policy", "Inactive Pads Policy",
+          "Control how to behave before all pads have received their first buffer",
+          gst_aggregator_inactive_pads_policy_get_type (),
+          DEFAULT_INACTIVE_PADS_POLICY,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_meta_register_custom_simple ("GstAggregatorMissingDataMeta");
 }
 
@@ -3276,6 +3367,13 @@ gst_aggregator_pad_has_space (GstAggregator * self, GstAggregatorPad * aggpad)
   if (is_live_unlocked (self) && aggpad->priv->num_buffers < 2)
     return TRUE;
 
+  if (self->priv->inactive_pads_policy ==
+      GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT
+      && aggpad->priv->peer_latency_live
+      && !gst_aggregator_all_pads_have_first_buffer (self)) {
+    return TRUE;
+  }
+
   /* On top of our latency, we also want to allow buffering up to the
    * minimum upstream latency to allow queue free sources with lower then
    * upstream latency. */
@@ -3344,6 +3442,19 @@ gst_aggregator_pad_chain_internal (GstAggregator * self,
       "entering chain internal with %" GST_PTR_FORMAT, buffer);
 
   PAD_LOCK (aggpad);
+  if (G_UNLIKELY (!gst_aggregator_pad_query_liveness (aggpad))) {
+    if (self->priv->inactive_pads_policy ==
+        GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT) {
+      GST_ERROR_OBJECT (self,
+          "Failed to query latency from chain, this should not happen"
+          ". Please file a bug at " PACKAGE_BUGREPORT ".");
+      goto latency_query_failed;
+    } else {
+      GST_WARNING_OBJECT (self,
+          "Failed to query latency from chain, this should not happen"
+          ". Please file a bug at " PACKAGE_BUGREPORT ".");
+    }
+  }
   flow_return = aggpad->priv->flow_return;
   if (flow_return != GST_FLOW_OK)
     goto flushing;
@@ -3464,6 +3575,14 @@ flushing:
     gst_buffer_unref (buffer);
 
   return flow_return;
+
+latency_query_failed:
+  PAD_UNLOCK (aggpad);
+
+  if (buffer)
+    gst_buffer_unref (buffer);
+
+  return GST_FLOW_ERROR;
 }
 
 static GstFlowReturn
