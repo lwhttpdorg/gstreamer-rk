@@ -88,6 +88,25 @@
  *    `-1.0,1.0` - Normalized to [-1,1] range (scale≈0.00784, offset=-1.0)
  *    `16.0,235.0` - TV/limited range (scale≈0.859, offset=16.0)
  *
+ *  `means`: Optional comma-separated list of float values for mean subtraction (since v1.1).
+ *   Number of values must match the number of ranges.
+ *   Example: `means=123.68,116.78,103.94` (ImageNet RGB means)
+ *   Default: 0.0 for all channels (no mean subtraction)
+ *
+ *  `stddevs`: Optional comma-separated list of float values for standard deviation division (since v1.1).
+ *   Number of values must match the number of ranges.
+ *   Example: `stddevs=58.393,57.12,57.375` (ImageNet RGB standard deviations)
+ *   Default: 1.0 for all channels (no division)
+ *   Warning: Values of 0.0 will be replaced with 1.0 to avoid division by zero
+ *
+ *  Complete normalization formula (when means and stddevs are provided):
+ *    output[i] = (input[i] * range_scale[i] + range_offset[i] - mean[i]) / stddev[i]
+ *  Optimized as:
+ *    output[i] = input[i] * combined_scale[i] + combined_offset[i]
+ *  where:
+ *    combined_scale[i] = range_scale[i] / stddev[i]
+ *    combined_offset[i] = (range_offset[i] - mean[i]) / stddev[i]
+ *
  * Other fields are ignored for now.
  *
  * The API is meant to be used by inference elements
@@ -823,6 +842,182 @@ gst_analytics_modelinfo_get_input_scales_offsets (GstAnalyticsModelInfo *
   *num_output_ranges = num_target_ranges;
   g_free (target_mins);
   g_free (target_maxs);
+
+  return TRUE;
+}
+
+/**
+ * gst_analytics_modelinfo_get_means_stddevs:
+ * @modelinfo: Instance of #GstAnalyticsModelInfo
+ * @tensor_name: The name of the tensor
+ * @num_channels: The number of channels (must match number of ranges)
+ * @means: (out) (transfer full) (array length=num_channels): The mean values for each channel
+ * @stddevs: (out) (transfer full) (array length=num_channels): The standard deviation values for each channel
+ *
+ * Retrieve means and standard deviations for input normalization.
+ *
+ * This is a helper function that parses the optional `means` and `stddevs` fields
+ * from the modelinfo file. If these fields are not present or invalid, default values
+ * are used (mean=0.0, stddev=1.0).
+ *
+ * Returns: %TRUE if at least one of means or stddevs was found and parsed, %FALSE otherwise
+ */
+static gboolean
+gst_analytics_modelinfo_get_means_stddevs (GstAnalyticsModelInfo * modelinfo,
+    const gchar * tensor_name, gsize num_channels, gdouble ** means,
+    gdouble ** stddevs)
+{
+  GKeyFile *kf = (GKeyFile *) modelinfo;
+  gchar *means_str = NULL;
+  gchar *stddevs_str = NULL;
+  gchar **means_parts = NULL;
+  gchar **stddevs_parts = NULL;
+  gsize i;
+  gboolean has_means = FALSE;
+  gboolean has_stddevs = FALSE;
+
+  *means = g_new (gdouble, num_channels);
+  *stddevs = g_new (gdouble, num_channels);
+
+  /* Initialize with defaults: mean=0.0, stddev=1.0 (no normalization) */
+  for (i = 0; i < num_channels; i++) {
+    (*means)[i] = 0.0;
+    (*stddevs)[i] = 1.0;
+  }
+
+  /* Parse means field */
+  means_str = g_key_file_get_string (kf, tensor_name, "means", NULL);
+  if (means_str && !g_str_has_prefix (means_str, "PLACEHOLDER")) {
+    means_parts = g_strsplit (means_str, ",", -1);
+    if (g_strv_length (means_parts) == num_channels) {
+      for (i = 0; i < num_channels; i++) {
+        (*means)[i] = g_ascii_strtod (means_parts[i], NULL);
+        GST_DEBUG ("Tensor '%s'[%zu]: mean=%f", tensor_name, i, (*means)[i]);
+      }
+      has_means = TRUE;
+    } else {
+      GST_WARNING ("Tensor '%s': means field has %d values but expected %zu",
+          tensor_name, g_strv_length (means_parts), num_channels);
+    }
+    g_strfreev (means_parts);
+  }
+  g_free (means_str);
+
+  /* Parse stddevs field */
+  stddevs_str = g_key_file_get_string (kf, tensor_name, "stddevs", NULL);
+  if (stddevs_str && !g_str_has_prefix (stddevs_str, "PLACEHOLDER")) {
+    stddevs_parts = g_strsplit (stddevs_str, ",", -1);
+    if (g_strv_length (stddevs_parts) == num_channels) {
+      for (i = 0; i < num_channels; i++) {
+        (*stddevs)[i] = g_ascii_strtod (stddevs_parts[i], NULL);
+        if ((*stddevs)[i] == 0.0) {
+          GST_WARNING ("Tensor '%s'[%zu]: stddev is 0.0, using 1.0 to avoid "
+              "division by zero", tensor_name, i);
+          (*stddevs)[i] = 1.0;
+        }
+        GST_DEBUG ("Tensor '%s'[%zu]: stddev=%f", tensor_name, i,
+            (*stddevs)[i]);
+      }
+      has_stddevs = TRUE;
+    } else {
+      GST_WARNING ("Tensor '%s': stddevs field has %d values but expected %zu",
+          tensor_name, g_strv_length (stddevs_parts), num_channels);
+    }
+    g_strfreev (stddevs_parts);
+  }
+  g_free (stddevs_str);
+
+  return has_means || has_stddevs;
+}
+
+/**
+ * gst_analytics_modelinfo_get_input_scales_offsets_with_normalization:
+ * @modelinfo: Instance of #GstAnalyticsModelInfo
+ * @tensor_name: The name of the tensor
+ * @num_input_ranges: The number of input ranges (channels/dimensions)
+ * @input_mins: (array length=num_input_ranges): The minimum values of the actual input data for each channel
+ * @input_maxs: (array length=num_input_ranges): The maximum values of the actual input data for each channel
+ * @num_output_ranges: (out): The number of output ranges/scale-offset pairs
+ * @output_scales: (out) (transfer full) (array length=num_output_ranges): The combined scale values (incorporating stddev)
+ * @output_offsets: (out) (transfer full) (array length=num_output_ranges): The combined offset values (incorporating mean and stddev)
+ *
+ * Calculate normalization scales and offsets with mean subtraction and standard deviation division.
+ *
+ * This function extends gst_analytics_modelinfo_get_input_scales_offsets() by additionally
+ * applying mean and standard deviation normalization from the modelinfo file. The transformation is:
+ *
+ *   normalized_value[i] = (input[i] * scale[i] + offset[i] - mean[i]) / stddev[i]
+ *
+ * Which is optimized to:
+ *   normalized_value[i] = input[i] * output_scale[i] + output_offset[i]
+ *   where:
+ *     output_scale[i] = (range_scale[i]) / stddev[i]
+ *     output_offset[i] = (range_offset[i] - mean[i]) / stddev[i]
+ *
+ * The means and stddevs are read from the `means` and `stddevs` fields in the modelinfo.
+ * If these fields are not present, they default to mean=0.0 and stddev=1.0 (no additional normalization).
+ *
+ * The caller must free @output_scales and @output_offsets with g_free() when done.
+ *
+ * Returns: %TRUE on success, %FALSE on error or if ranges field is not found
+ *
+ * Since: 1.30
+ */
+gboolean
+    gst_analytics_modelinfo_get_input_scales_offsets_with_normalization
+    (GstAnalyticsModelInfo * modelinfo, const gchar * tensor_name,
+    gsize num_input_ranges, const gdouble * input_mins,
+    const gdouble * input_maxs, gsize * num_output_ranges,
+    gdouble ** output_scales, gdouble ** output_offsets)
+{
+  gdouble *range_scales = NULL;
+  gdouble *range_offsets = NULL;
+  gdouble *means = NULL;
+  gdouble *stddevs = NULL;
+  gsize num_ranges;
+  gsize i;
+
+  *output_scales = NULL;
+  *output_offsets = NULL;
+  *num_output_ranges = 0;
+
+  /* Get base range scales and offsets */
+  if (!gst_analytics_modelinfo_get_input_scales_offsets (modelinfo, tensor_name,
+          num_input_ranges, input_mins, input_maxs, &num_ranges,
+          &range_scales, &range_offsets)) {
+    return FALSE;
+  }
+
+  /* Get means and stddevs (defaults to mean=0.0, stddev=1.0 if not present) */
+  gst_analytics_modelinfo_get_means_stddevs (modelinfo, tensor_name,
+      num_ranges, &means, &stddevs);
+
+  /* Allocate output arrays */
+  *output_scales = g_new (gdouble, num_ranges);
+  *output_offsets = g_new (gdouble, num_ranges);
+
+  /* Combine range normalization with mean/stddev normalization:
+   * final = (input * range_scale + range_offset - mean) / stddev
+   *       = input * (range_scale / stddev) + (range_offset - mean) / stddev
+   */
+  for (i = 0; i < num_ranges; i++) {
+    (*output_scales)[i] = range_scales[i] / stddevs[i];
+    (*output_offsets)[i] = (range_offsets[i] - means[i]) / stddevs[i];
+
+    GST_DEBUG ("Tensor '%s'[%zu]: combined normalization: "
+        "range_scale=%f, range_offset=%f, mean=%f, stddev=%f -> "
+        "final_scale=%f, final_offset=%f",
+        tensor_name, i, range_scales[i], range_offsets[i], means[i],
+        stddevs[i], (*output_scales)[i], (*output_offsets)[i]);
+  }
+
+  *num_output_ranges = num_ranges;
+
+  /* Cleanup */
+  g_free (range_scales);
+  g_free (range_offsets);
+  g_free (means);
+  g_free (stddevs);
 
   return TRUE;
 }
