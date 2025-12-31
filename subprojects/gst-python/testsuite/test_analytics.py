@@ -740,3 +740,365 @@ id=output_logits
                 os.unlink(temp_modelinfo)
             if os.path.exists(model_filename):
                 os.unlink(model_filename)
+
+    def test_modelinfo_version_1_1_accepted(self):
+        """Test that modelinfo version 1.1 is accepted"""
+        import tempfile
+        import os
+
+        # Test case: Version 1.1 (added mean/stddev support)
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=test-model-v1-1
+
+[input_tensor]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,255.0
+
+[output_tensor]
+dims=1,1000
+dir=output
+type=float32
+"""
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            # Verify version string
+            version = modelinfo.get_version()
+            self.assertEqual(version, "1.1")
+
+            # Parse version to verify components
+            version_parts = version.split('.')
+            self.assertEqual(len(version_parts), 2)
+            major_version = int(version_parts[0])
+            minor_version = int(version_parts[1])
+            self.assertEqual(major_version, 1)
+            self.assertEqual(minor_version, 1)
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
+    def test_modelinfo_mean_stddev_normalization(self):
+        """Test modelinfo with mean and stddev normalization (ImageNet-style)"""
+        import tempfile
+        import os
+
+        # Create a modelinfo with means and stddevs (ImageNet RGB values)
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=imagenet-model
+
+[input_rgb]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,255.0;0.0,255.0;0.0,255.0
+means=123.68,116.78,103.94
+stddevs=58.393,57.12,57.375
+
+[output_classes]
+dims=1,1000
+dir=output
+type=float32
+"""
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            # Test get_input_scales_offsets_with_normalization
+            # Input: uint8 [0, 255] for each channel
+            # Target ranges: [0, 255] for each channel
+            # Means: [123.68, 116.78, 103.94]
+            # Stddevs: [58.393, 57.12, 57.375]
+            #
+            # Formula: output = (input * scale + offset - mean) / stddev
+            # Optimized: output = input * combined_scale + combined_offset
+            # where:
+            #   range_scale = (255-0)/(255-0) = 1.0
+            #   range_offset = 0 - 0*1.0 = 0.0
+            #   combined_scale = range_scale / stddev = 1.0 / stddev
+            #   combined_offset = (range_offset - mean) / stddev = -mean / stddev
+
+            input_mins = [0.0, 0.0, 0.0]
+            input_maxs = [255.0, 255.0, 255.0]
+
+            result = modelinfo.get_input_scales_offsets_with_normalization(
+                "input_rgb", input_mins, input_maxs)
+            self.assertTrue(result[0])  # success
+            scales = result[1]
+            offsets = result[2]
+
+            self.assertEqual(len(scales), 3)
+            self.assertEqual(len(offsets), 3)
+
+            # Expected values for each channel:
+            means = [123.68, 116.78, 103.94]
+            stddevs = [58.393, 57.12, 57.375]
+
+            for i in range(3):
+                expected_scale = 1.0 / stddevs[i]
+                expected_offset = -means[i] / stddevs[i]
+                self.assertAlmostEqual(scales[i], expected_scale, 5)
+                self.assertAlmostEqual(offsets[i], expected_offset, 5)
+
+            # Verify the transformation works as expected
+            # For a test value of 128 (middle gray) on channel 0:
+            test_value = 128.0
+            normalized = test_value * scales[0] + offsets[0]
+            # Manual calculation: (128 - 123.68) / 58.393 ≈ 0.074
+            expected_normalized = (test_value - means[0]) / stddevs[0]
+            self.assertAlmostEqual(normalized, expected_normalized, 5)
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
+    def test_modelinfo_normalization_to_0_1_with_mean_stddev(self):
+        """Test normalization to [0,1] range with additional mean/stddev"""
+        import tempfile
+        import os
+
+        # Test normalizing to [0,1] and then applying mean/stddev
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=normalized-model
+
+[input_normalized]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,1.0;0.0,1.0;0.0,1.0
+means=0.485,0.456,0.406
+stddevs=0.229,0.224,0.225
+
+[output]
+dims=1,10
+dir=output
+type=float32
+"""
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            # Input: uint8 [0, 255]
+            # Target ranges: [0, 1]
+            # Means: [0.485, 0.456, 0.406]
+            # Stddevs: [0.229, 0.224, 0.225]
+            #
+            # Formula:
+            #   range_scale = (1-0)/(255-0) = 1/255 ≈ 0.00392
+            #   range_offset = 0 - 0*scale = 0.0
+            #   combined_scale = range_scale / stddev = (1/255) / stddev
+            #   combined_offset = (range_offset - mean) / stddev = -mean / stddev
+
+            input_mins = [0.0, 0.0, 0.0]
+            input_maxs = [255.0, 255.0, 255.0]
+
+            result = modelinfo.get_input_scales_offsets_with_normalization(
+                "input_normalized", input_mins, input_maxs)
+            self.assertTrue(result[0])
+            scales = result[1]
+            offsets = result[2]
+
+            self.assertEqual(len(scales), 3)
+            self.assertEqual(len(offsets), 3)
+
+            # Expected values
+            means = [0.485, 0.456, 0.406]
+            stddevs = [0.229, 0.224, 0.225]
+            range_scale = 1.0 / 255.0
+
+            for i in range(3):
+                expected_scale = range_scale / stddevs[i]
+                expected_offset = (0.0 - means[i]) / stddevs[i]
+                self.assertAlmostEqual(scales[i], expected_scale, 6)
+                self.assertAlmostEqual(offsets[i], expected_offset, 5)
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
+    def test_modelinfo_backward_compatibility_no_mean_stddev(self):
+        """Test that version 1.1 files without means/stddevs default correctly"""
+        import tempfile
+        import os
+
+        # Version 1.1 file without means/stddevs fields
+        # Should default to mean=0.0, stddev=1.0 (no additional normalization)
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=backward-compat-test
+
+[input]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,1.0
+
+[output]
+dims=1,10
+dir=output
+type=float32
+"""
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            # Input: uint8 [0, 255]
+            # Target: [0, 1]
+            # Defaults: mean=0.0, stddev=1.0
+            #
+            # With defaults, the new function should produce the same results
+            # as the old get_input_scales_offsets function
+
+            input_mins = [0.0]
+            input_maxs = [255.0]
+
+            # Test with normalization function (should use defaults)
+            result_with_norm = modelinfo.get_input_scales_offsets_with_normalization(
+                "input", input_mins, input_maxs)
+            self.assertTrue(result_with_norm[0])
+            scales_with_norm = result_with_norm[1]
+            offsets_with_norm = result_with_norm[2]
+
+            # Test with original function (no mean/stddev)
+            result_original = modelinfo.get_input_scales_offsets(
+                "input", input_mins, input_maxs)
+            self.assertTrue(result_original[0])
+            scales_original = result_original[1]
+            offsets_original = result_original[2]
+
+            # Both should produce identical results when mean=0, stddev=1
+            self.assertEqual(len(scales_with_norm), len(scales_original))
+            self.assertEqual(len(offsets_with_norm), len(offsets_original))
+
+            for i in range(len(scales_with_norm)):
+                self.assertAlmostEqual(scales_with_norm[i], scales_original[i], 6)
+                self.assertAlmostEqual(offsets_with_norm[i], offsets_original[i], 6)
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
+    def test_modelinfo_single_channel_with_mean_stddev(self):
+        """Test mean/stddev normalization with single channel (grayscale)"""
+        import tempfile
+        import os
+
+        # Single channel grayscale with normalization
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=grayscale-model
+
+[input_gray]
+dims=1,224,224,1
+dir=input
+type=uint8
+ranges=0.0,255.0
+means=127.5
+stddevs=64.0
+
+[output]
+dims=1,10
+dir=output
+type=float32
+"""
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            input_mins = [0.0]
+            input_maxs = [255.0]
+
+            result = modelinfo.get_input_scales_offsets_with_normalization(
+                "input_gray", input_mins, input_maxs)
+            self.assertTrue(result[0])
+            scales = result[1]
+            offsets = result[2]
+
+            self.assertEqual(len(scales), 1)
+            self.assertEqual(len(offsets), 1)
+
+            # Expected: range_scale=1.0, range_offset=0.0
+            # combined_scale = 1.0 / 64.0 = 0.015625
+            # combined_offset = (0.0 - 127.5) / 64.0 = -1.9921875
+            expected_scale = 1.0 / 64.0
+            expected_offset = -127.5 / 64.0
+
+            self.assertAlmostEqual(scales[0], expected_scale, 6)
+            self.assertAlmostEqual(offsets[0], expected_offset, 6)
+
+            # Test transformation: value of 127.5 should normalize to ~0
+            test_value = 127.5
+            normalized = test_value * scales[0] + offsets[0]
+            self.assertAlmostEqual(normalized, 0.0, 5)
+
+            # Test transformation: value of 0 should normalize to ~-1.99
+            test_value = 0.0
+            normalized = test_value * scales[0] + offsets[0]
+            expected = (0.0 - 127.5) / 64.0
+            self.assertAlmostEqual(normalized, expected, 5)
+
+            # Test transformation: value of 255 should normalize to ~1.99
+            test_value = 255.0
+            normalized = test_value * scales[0] + offsets[0]
+            expected = (255.0 - 127.5) / 64.0
+            self.assertAlmostEqual(normalized, expected, 5)
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
