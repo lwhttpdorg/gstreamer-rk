@@ -43,6 +43,19 @@ The script will interactively prompt you for metadata for each tensor:
     - `-1.0,1.0` - Normalized to [-1,1]
     - `16.0,235.0` - TV/limited range
 
+- **means** (optional, since v1.1): Per-channel mean values for normalization
+  - Comma-separated float values, one per channel
+  - Must have same number of values as ranges
+  - Example: `means=123.68,116.78,103.94` (ImageNet RGB means)
+  - Default: 0.0 (no mean subtraction)
+
+- **stddevs** (optional, since v1.1): Per-channel standard deviation values for normalization
+  - Comma-separated float values, one per channel
+  - Must have same number of values as ranges
+  - Example: `stddevs=58.393,57.12,57.375` (ImageNet RGB standard deviations)
+  - Default: 1.0 (no standard deviation division)
+  - Warning: Values of 0.0 will be replaced with 1.0 to avoid division by zero
+
 ## Example Session
 
 ```
@@ -153,6 +166,28 @@ dims=1,1001
 dir=output
 ```
 
+### With mean and standard deviation normalization (ImageNet-style, v1.1):
+```ini
+[modelinfo]
+version=1.1
+group-id=mobilenet-v2-output
+
+[input]
+id=input
+type=float32
+dims=1,224,224,3
+dir=input
+ranges=0.0,255.0
+means=123.68,116.78,103.94
+stddevs=58.393,57.12,57.375
+
+[MobilenetV2/Predictions/Reshape_1]
+id=classification-scores
+type=float32
+dims=1,1001
+dir=output
+```
+
 ## ModelInfo Fields
 
 ### Required Fields:
@@ -174,14 +209,33 @@ dir=output
 
 ## Tips
 
-### Range Values and Per-Channel Normalization:
+### Complete Normalization Formula:
 The script automatically reads `Image.NominalPixelRange` from ONNX model metadata when available.
-The inference elements convert 8-bit input [0-255] to the specified ranges using:
+The inference elements apply a complete normalization pipeline:
+
+**Basic Range Normalization (v1.0):**
 ```
 output[channel] = input[channel] * scale[channel] + offset[channel]
 where:
   scale[channel] = (max[channel] - min[channel]) / 255.0
   offset[channel] = min[channel]
+```
+
+**With Mean and Standard Deviation (v1.1):**
+```
+output[channel] = ((input[channel] * range_scale[channel] + range_offset[channel])
+                    - mean[channel]) / stddev[channel]
+```
+
+**Optimized implementation (single multiply-add per component):**
+```
+output[channel] = input[channel] * combined_scale[channel] + combined_offset[channel]
+
+where:
+  range_scale[channel] = (max[channel] - min[channel]) / 255.0
+  range_offset[channel] = min[channel]
+  combined_scale[channel] = range_scale[channel] / stddev[channel]
+  combined_offset[channel] = (range_offset[channel] - mean[channel]) / stddev[channel]
 ```
 
 #### Single Range (applies to all channels):
@@ -193,6 +247,12 @@ where:
 #### Per-Channel Ranges (RGB example):
 - `ranges=0.0,255.0;0.0,255.0;0.0,255.0` → All channels passthrough
 - `ranges=0.0,255.0;-1.0,1.0;0.0,1.0` → Different normalization per channel
+
+#### ImageNet Normalization (v1.1):
+- `ranges=0.0,255.0`
+- `means=123.68,116.78,103.94`
+- `stddevs=58.393,57.12,57.375`
+- Result: Per-channel normalization typical for ImageNet pre-trained models
 
 #### Supported ONNX metadata conversions:
 - `NominalRange_0_255` → `ranges=0.0,255.0`
