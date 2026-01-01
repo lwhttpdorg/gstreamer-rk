@@ -1037,6 +1037,8 @@ gst_scaletempo_class_init (GstScaletempoClass * klass)
    * Control how the scaling factor is selected.
    *
    * Since: 1.26
+   * Deprecated: 1.30: known to cause access violations, compatible elements
+   *   should instead expose an overflow=compress property.
    */
   g_object_class_install_property (G_OBJECT_CLASS (klass),
       PROP_MODE, g_param_spec_flags ("mode",
