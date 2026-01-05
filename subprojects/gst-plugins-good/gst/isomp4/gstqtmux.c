@@ -110,6 +110,13 @@ GST_DEBUG_CATEGORY_STATIC (gst_qt_mux_debug);
   } \
 } G_STMT_END
 
+#define READ_BITSTREAM_UINT32(bits, val, nbits) G_STMT_START { \
+  if (!gst_bit_reader_get_bits_uint32 (&bits, &val, nbits)) { \
+    GST_WARNING_OBJECT (qtpad, "Failed to read " G_STRINGIFY (val)); \
+    goto error; \
+  } \
+} G_STMT_END
+
 #define SKIP_BITSTREAM_BITS(bits, nbits) G_STMT_START { \
     if (!gst_bit_reader_skip (&bits, nbits)) { \
       GST_WARNING_OBJECT (qtpad, "Failed to skip %d bits", nbits); \
@@ -1610,6 +1617,291 @@ gst_qt_mux_prepare_parse_eac3_frame (GstQTMuxPad * qtpad, GstBuffer * buf,
   gst_qt_mux_pad_add_eac3_extension (qtpad, buf, qtmux, bitstreamInfo);
 
   g_array_free (bitstreamInfo, TRUE);
+
+done:
+  gst_buffer_unmap (buf, &map);
+  qtpad->prepare_buf_func = NULL;
+  return buf;
+}
+
+static guint
+gst_qt_mux_ac4_parse_variable_bits (GstQTMuxPad * qtpad, GstBitReader * reader,
+    guint8 n_bits)
+{
+  guint32 value = 0;
+  guint8 b_read_more = 0;
+
+  do {
+    guint32 read_value = 0;
+
+    /* Read n_bits into read_value */
+    if (n_bits <= 8) {
+      guint8 read_val_8 = 0;
+      READ_BITSTREAM_UINT8 (*reader, read_val_8, n_bits);
+      read_value = read_val_8;
+    } else if (n_bits <= 16) {
+      guint16 read_val_16 = 0;
+      READ_BITSTREAM_UINT16 (*reader, read_val_16, n_bits);
+      read_value = read_val_16;
+    } else {
+      GST_WARNING_OBJECT (qtpad,
+          "Error when parsing 'variable_bits' field in the TOC: n_bits=%d exceeds 16 bits",
+          n_bits);
+      goto error;
+    }
+
+    value += read_value;
+
+    /* Read b_read_more flag */
+    READ_BITSTREAM_UINT8 (*reader, b_read_more, 1);
+
+    if (b_read_more) {
+      value <<= n_bits;
+      value += (1 << n_bits);
+    }
+  } while (b_read_more);
+
+  return value;
+
+error:
+  return n_bits;
+}
+
+static gboolean
+gst_qt_mux_parse_ac4_presentation_v0 (GstQTMuxPad * qtpad,
+    AC4DsiInfo * info, AC4PresentationInfo * presentation_info)
+{
+  GST_WARNING_OBJECT (qtpad,
+      "AC-4 presentation parsing not implemented yet, required fields in the AC4SpecificBox ('dac4' atom) will be missing");
+  return TRUE;
+}
+
+static gint
+gst_qt_mux_parse_ac4_presentation_v1 (GstQTMuxPad * qtpad,
+    AC4DsiInfo * info, AC4PresentationInfo * presentation_info)
+{
+  GST_WARNING_OBJECT (qtpad,
+      "AC-4 presentation parsing not implemented yet, required fields in the AC4SpecificBox ('dac4' atom) will be missing");
+  return TRUE;
+}
+
+static gboolean
+gst_qt_mux_ac4_parse_toc (GstQTMuxPad * qtpad, GstBitReader * reader,
+    AC4DsiInfo * info)
+{
+  guint8 fs_index = 0;
+  GST_LOG_OBJECT (qtpad, "Parsing AC-4 TOC");
+
+  guint8 bitstream_version = 0;
+  READ_BITSTREAM_UINT8 (*reader, bitstream_version, 2); /* bitstream_version */
+
+  if (bitstream_version == 3) {
+    bitstream_version += gst_qt_mux_ac4_parse_variable_bits (qtpad, reader, 2);
+  }
+  info->bitstream_version = bitstream_version;
+
+  SKIP_BITSTREAM_BITS (*reader, 10);    /* sequence_counter */
+
+  guint8 b_wait_frames = 0;
+  READ_BITSTREAM_UINT8 (*reader, b_wait_frames, 1);     /* b_wait_frames */
+
+  if (b_wait_frames) {
+    guint8 wait_frames = 0;
+    READ_BITSTREAM_UINT8 (*reader, wait_frames, 3);     /* wait_frames */
+    if (wait_frames > 0) {
+      SKIP_BITSTREAM_BITS (*reader, 2); /* br_code */
+      if (wait_frames <= 6)
+        info->bitrate_dsi.bit_rate_mode = 2;
+      else
+        info->bitrate_dsi.bit_rate_mode = 3;
+    } else
+      info->bitrate_dsi.bit_rate_mode = 1;
+  }
+  info->bitrate_dsi.bit_rate_mode = 1;
+
+  READ_BITSTREAM_UINT8 (*reader, fs_index, 1);  /* fs_index */
+  info->fs_index = fs_index;
+
+  guint8 frame_rate_index = 0;
+  READ_BITSTREAM_UINT8 (*reader, frame_rate_index, 4);  /* frame_rate_index */
+  info->frame_rate_index = frame_rate_index;
+
+  SKIP_BITSTREAM_BITS (*reader, 1);     /* b_iframe_global */
+
+  guint8 b_single_presentation = 0;
+  READ_BITSTREAM_UINT8 (*reader, b_single_presentation, 1);     /* b_single_presentation */
+
+  guint8 n_presentations = 0;
+  if (b_single_presentation == 1) {
+    n_presentations = 1;
+  } else {
+    guint8 b_more_presentations = 0;
+    READ_BITSTREAM_UINT8 (*reader, b_more_presentations, 1);    /* b_more_presentations */
+
+    if (b_more_presentations == 1) {
+      n_presentations =
+          gst_qt_mux_ac4_parse_variable_bits (qtpad, reader, 2) + 2;
+    } else {
+      n_presentations = 1;
+    }
+  }
+  info->n_presentations = n_presentations;
+
+  guint8 b_payload_base = 0;
+  READ_BITSTREAM_UINT8 (*reader, b_payload_base, 1);    /* b_payload_base */
+  if (b_payload_base) {
+    guint8 payload_base_minus1 = 0;
+    READ_BITSTREAM_UINT8 (*reader, payload_base_minus1, 5);     /* payload_base_minus1 */
+    if (payload_base_minus1 + 1 == 0x20) {
+      gst_qt_mux_ac4_parse_variable_bits (qtpad, reader, 3);    /* variable_bits(3) */
+    }
+  }
+
+  /* Parse all presentations */
+  if (info->bitstream_version <= 1) {
+
+    for (int i = 0; i < info->n_presentations; i++) {
+      AC4PresentationInfo presentation_info;
+      GST_LOG_OBJECT (qtpad, "Parsing presentation %d of %d", i + 1,
+          info->n_presentations);
+
+      if (!gst_qt_mux_parse_ac4_presentation_v0 (qtpad, info,
+              &presentation_info)) {
+        GST_WARNING_OBJECT (qtpad, "Failed to parse presentation %d", i);
+        goto error;
+      }
+    }
+  } else {
+    guint8 b_program_id = 0;
+    READ_BITSTREAM_UINT8 (*reader, b_program_id, 1);    /* b_program_id */
+    if (b_program_id) {
+      info->b_program_id = b_program_id;
+      guint16 short_program_id = 0;
+      guint8 b_program_uuid_present = 0;
+      READ_BITSTREAM_UINT16 (*reader, short_program_id, 16);    /* short_program_id */
+      info->short_program_id = short_program_id;
+      READ_BITSTREAM_UINT8 (*reader, b_program_uuid_present, 1);        /* b_program_uuid_present */
+      info->b_uuid = b_program_uuid_present;    /* I assume that 'b_program_uuid_present' is the same as  'b_uuid' */
+      if (b_program_uuid_present) {
+        /* Read program_uuid - 16 bytes */
+        for (int i = 0; i < 16; i++) {
+          READ_BITSTREAM_UINT8 (*reader, info->program_uuid[i], 8);
+        }
+      }
+    }
+
+    for (int i = 0; i < info->n_presentations; i++) {
+      AC4PresentationInfo presentation_info;
+      GST_LOG_OBJECT (qtpad, "Parsing presentation %d of %d", i + 1,
+          info->n_presentations);
+
+      if (!gst_qt_mux_parse_ac4_presentation_v1 (qtpad, info,
+              &presentation_info)) {
+        GST_WARNING_OBJECT (qtpad, "Failed to parse presentation %d", i);
+        goto error;
+      }
+    }
+  }
+
+  /* TODO: parse total_n_substream_groups, substream_index_table() and skip byte_align */
+
+  return TRUE;
+
+error:
+  return FALSE;
+}
+
+
+static void
+gst_qt_mux_parse_raw_ac4_frame (GstQTMuxPad * qtpad, GstBitReader * bits,
+    AC4DsiInfo * info)
+{
+  if (gst_qt_mux_ac4_parse_toc (qtpad, bits, info))
+    GST_DEBUG_OBJECT (qtpad, "AC4 TOC parsed successfully");
+  else
+    GST_WARNING_OBJECT (qtpad, "Error parsing AC4 TOC");
+
+  /* Parse fill_area, byte_align, ac4_substream_data... if needed */
+
+}
+
+/* See doc: https://ott.dolby.com/OnDelKits/AC-4/Dolby_AC-4_Online_Delivery_Kit_1.5/Documentation/Specs/AC4_HLS/help_files/topics/ac4_dash_t_ac4_reading.html */
+static gboolean
+gst_qt_mux_strip_ac4_sync_info (GstQTMuxPad * qtpad, GstBitReader * bits,
+    guint * framesize)
+{
+  guint16 syncword;
+  guint16 following;
+
+  if (gst_bit_reader_get_remaining (bits) < 16) {
+    return FALSE;
+  }
+
+  syncword = gst_bit_reader_get_bits_uint16_unchecked (bits, 16);
+  if ((syncword != 0xAC40) && (syncword != 0xAC41)) {
+    return FALSE;
+  }
+
+  following = gst_bit_reader_get_bits_uint16_unchecked (bits, 16);
+  if (following == 0xFFFF) {
+    g_assert (gst_bit_reader_get_remaining (bits) >= 24);
+    *framesize =
+        gst_bit_reader_get_bits_uint16_unchecked (bits,
+        16) << 8 | gst_bit_reader_get_bits_uint8_unchecked (bits, 8);
+  } else {
+    *framesize = following;
+  }
+
+  GST_DEBUG_OBJECT (qtpad, "AC4 syncword found, framesize: %u", *framesize);
+  return TRUE;
+}
+
+static void
+gst_qt_mux_pad_add_ac4_extension (GstQTMuxPad * qtpad, GstBuffer * buf,
+    GstQTMux * qtmux, AC4DsiInfo * info)
+{
+  AtomInfo *ext;
+
+  g_return_if_fail (qtpad->trak_ste);
+
+  ext = build_ac4_extension (info);
+
+  sample_table_entry_add_ext_atom (qtpad->trak_ste, ext);
+}
+
+static GstBuffer *
+gst_qt_mux_prepare_parse_ac4_frame (GstQTMuxPad * qtpad, GstBuffer * buf,
+    GstQTMux * qtmux)
+{
+  GstMapInfo map;
+  GstBitReader bits;
+
+  if (!gst_buffer_map (buf, &map, GST_MAP_READ)) {
+    GST_WARNING_OBJECT (qtpad, "Failed to map buffer");
+    return buf;
+  }
+
+  if (G_UNLIKELY (map.size < 8)) {
+    GST_WARNING_OBJECT (qtpad, "AC4 buffer too small, can't parse stream");
+    goto done;
+  }
+
+  gst_bit_reader_init (&bits, map.data, map.size);
+  guint framesize = 0;
+  if (!gst_qt_mux_strip_ac4_sync_info (qtpad, &bits, &framesize)) {
+    GST_WARNING_OBJECT (qtpad,
+        "Can't parse AC-4 syncword or frame size from stream");
+    goto done;
+  }
+
+  AC4DsiInfo info = { 0 };
+  // info.presentations = g_array_new (FALSE, FALSE, sizeof (AC4PresentationInfo));
+  gst_qt_mux_parse_raw_ac4_frame (qtpad, &bits, &info);
+
+  /* Write AC4SpecificBox */
+  gst_qt_mux_pad_add_ac4_extension (qtpad, buf, qtmux, &info);
+
+  // g_array_free (info.presentations, TRUE);
 
 done:
   gst_buffer_unmap (buf, &map);
@@ -6377,7 +6669,14 @@ gst_qt_mux_audio_sink_set_caps (GstQTMuxPad * qtpad, GstCaps * caps)
   /* common info */
   if (!gst_structure_get_int (structure, "channels", &channels) ||
       !gst_structure_get_int (structure, "rate", &rate)) {
-    goto refuse_caps;
+
+    /* For AC-4, channels may not be present (object-based audio) */
+    if (strcmp (mimetype, "audio/x-ac4") != 0) {
+      goto refuse_caps;
+    }
+    /* Use default values for AC-4 when not specified for allowing muxing */
+    channels = 2;
+    rate = 48000;
   }
 
   /* optional */
@@ -6626,6 +6925,14 @@ gst_qt_mux_audio_sink_set_caps (GstQTMuxPad * qtpad, GstCaps * caps)
     entry.sample_size = 16;
 
     qtpad->prepare_buf_func = gst_qt_mux_prepare_parse_eac3_frame;
+  } else if (strcmp (mimetype, "audio/x-ac4") == 0) {
+    entry.fourcc = FOURCC_ac_4;
+
+    /* Again, friendly-fill */
+    entry.channels = channels;
+    entry.sample_size = 16;
+
+    qtpad->prepare_buf_func = gst_qt_mux_prepare_parse_ac4_frame;
   } else if (strcmp (mimetype, "audio/x-opus") == 0) {
     /* Based on the specification defined in:
      * https://www.opus-codec.org/docs/opus_in_isobmff.html */

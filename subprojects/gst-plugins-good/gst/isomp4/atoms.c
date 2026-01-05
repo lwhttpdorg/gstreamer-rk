@@ -4207,6 +4207,7 @@ atom_trak_set_audio_type (AtomTRAK * trak, AtomsContext * context,
   trak->is_h264 = FALSE;
   trak->is_ac3 = (entry->fourcc == FOURCC_ac_3);
   trak->is_eac3 = (entry->fourcc == FOURCC_ec_3);
+  trak->is_ac4 = (entry->fourcc == FOURCC_ac_4);
 
   ste->version = entry->version;
   ste->compression_id = entry->compression_id;
@@ -4267,6 +4268,7 @@ atom_trak_set_timecode_type (AtomTRAK * trak, AtomsContext * context,
   trak->is_h264 = FALSE;
   trak->is_ac3 = FALSE;
   trak->is_eac3 = FALSE;
+  trak->is_ac4 = FALSE;
 
   return ste;
 }
@@ -4307,6 +4309,7 @@ atom_trak_set_caption_type (AtomTRAK * trak, AtomsContext * context,
   trak->is_h264 = FALSE;
   trak->is_ac3 = FALSE;
   trak->is_eac3 = FALSE;
+  trak->is_ac4 = FALSE;
 
   return ste;
 }
@@ -4485,6 +4488,7 @@ atom_trak_set_video_type (AtomTRAK * trak, AtomsContext * context,
         || entry->fourcc == FOURCC_avc3);
     trak->is_ac3 = FALSE;
     trak->is_eac3 = FALSE;
+    trak->is_ac4 = FALSE;
   }
   ste = atom_trak_add_video_entry (trak, context, entry->fourcc);
 
@@ -4537,6 +4541,7 @@ atom_trak_set_subtitle_type (AtomTRAK * trak, AtomsContext * context,
   trak->is_h264 = FALSE;
   trak->is_ac3 = FALSE;
   trak->is_eac3 = FALSE;
+  trak->is_ac4 = FALSE;
 
   return tx3g;
 }
@@ -5898,6 +5903,68 @@ build_eac3_extension (GArray * bitstreamInfo)
 
   if (!hdl) {
     GST_WARNING ("Failed to write EC3SpecificBox");
+  }
+
+  return build_atom_info_wrapper ((Atom *) atom_data, atom_data_copy_data,
+      atom_data_free);
+}
+
+AtomInfo *
+build_ac4_extension (AC4DsiInfo * dsiInfo)
+{
+  /* AC4SpecificBox structure (ETSI TS 103 190-1 Annex E.4 and ETSI TS 103 190-2 Annex E.5):
+   * 
+   * See documentation: 
+   * - https://www.etsi.org/deliver/etsi_ts/103100_103199/10319001/01.04.01_60/ts_10319001v010401p.pdf
+   * - https://www.etsi.org/deliver/etsi_ts/103100_103199/10319002/01.03.01_60/ts_10319002v010301p.pdf
+   */
+
+  guint8 *data;
+  guint size = 0;
+  AtomData *atom_data = atom_data_new (FOURCC_dac4);
+  GstBitWriter bw;
+  gboolean hdl = TRUE;
+
+  size = 100;                   /* Allocate enough space for worst case scenario */
+  atom_data_alloc_mem (atom_data, size);
+  data = atom_data->data;
+
+  gst_bit_writer_init_with_data (&bw, data, size, FALSE);
+
+  hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->ac4_dsi_version, 3);
+  hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->bitstream_version, 7);
+  hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->fs_index, 1);
+  hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->frame_rate_index, 4);
+  hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->n_presentations, 9);
+
+  if (dsiInfo->n_presentations > 1) {
+    hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->b_program_id, 1);
+    if (dsiInfo->b_program_id) {
+      hdl &=
+          gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->short_program_id, 16);
+      hdl &= gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->b_uuid, 1);
+      if (dsiInfo->b_uuid) {
+        for (int i = 0; i < 16; i++) {
+          hdl &=
+              gst_bit_writer_put_bits_uint16 (&bw, dsiInfo->program_uuid[i], 8);
+        }
+      }
+    }
+  }
+
+  hdl &=
+      gst_bit_writer_put_bits_uint8 (&bw, dsiInfo->bitrate_dsi.bit_rate_mode,
+      2);
+  hdl &=
+      gst_bit_writer_put_bits_uint32 (&bw, dsiInfo->bitrate_dsi.bit_rate, 32);
+  hdl &=
+      gst_bit_writer_put_bits_uint32 (&bw,
+      dsiInfo->bitrate_dsi.bit_rate_precision, 32);
+
+  /* TODO: missing implementing the rest of the AC4SpecificBox: byte_align, presentations and skip_area */
+
+  if (!hdl) {
+    GST_WARNING ("Failed to write AC4SpecificBox");
   }
 
   return build_atom_info_wrapper ((Atom *) atom_data, atom_data_copy_data,

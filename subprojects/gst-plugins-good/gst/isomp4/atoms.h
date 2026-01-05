@@ -739,6 +739,7 @@ typedef struct _AtomTRAK
   gboolean is_h264;
   gboolean is_ac3;
   gboolean is_eac3;
+  gboolean is_ac4;
 
   AtomsContext *context;
 } AtomTRAK;
@@ -947,6 +948,36 @@ typedef struct _EAC3BitstreamInfo
 
 } EAC3BitstreamInfo;
 
+typedef struct _AC4BitrateDsi {
+  guint8 bit_rate_mode;
+  guint32 bit_rate;
+  guint32 bit_rate_precision;
+  /* TODO: implement the calculation of bit_rate and bit_rate_precision */
+} AC4BitrateDsi;
+
+typedef struct _AC4DsiInfo
+{
+  guint8 ac4_dsi_version;
+  guint8 bitstream_version;
+  guint8 fs_index;
+  guint8 frame_rate_index;
+  guint16 n_presentations;
+  guint8 b_program_id;
+  guint16 short_program_id;
+  guint8 b_uuid;
+  guint8 program_uuid[16];
+  AC4BitrateDsi bitrate_dsi;
+  // GArray *presentations;
+
+} AC4DsiInfo;
+
+/* Relevant fields extracted from the ac4_presentation_info() to field the ac4_presentation_v0_dsi() */
+typedef struct _AC4PresentationInfo
+{
+  gint toBeFilled; /* Placeholder field to be replaced with actual fields as needed */
+
+} AC4PresentationInfo;
+
 guint64    atoms_get_current_qt_time   (void);
 
 guint64    atom_copy_data              (Atom *atom, guint8 **buffer,
@@ -1125,6 +1156,7 @@ AtomInfo *   build_ac3_extension         (guint8 fscod, guint8 bsid,
                                           guint8 bsmod, guint8 acmod,
                                           guint8 lfe_on, guint8 bitrate_code);
 AtomInfo *   build_eac3_extension        (GArray *bitstreamInfo);
+AtomInfo *   build_ac4_extension         (AC4DsiInfo * dsiInfo);
 AtomInfo *   build_opus_extension        (guint32 rate, guint8 channels, guint8 mapping_family,
                                           guint8 stream_count, guint8 coupled_count,
                                           guint8 channel_mapping[256], guint16 pre_skip,
