@@ -9278,6 +9278,30 @@ qtdemux_parse_node (GstQTDemux * qtdemux, GNode * node, const guint8 * buffer,
         qtdemux_parse_container (qtdemux, node, buffer + 16, end);
         break;
       }
+      case FOURCC_iinf:
+      {
+        guint8 version = buffer[8];
+        guint count = 0;
+
+        if (node_length < 18) {
+          GST_LOG_OBJECT (qtdemux, "skipping small iinf box");
+          break;
+        }
+
+        if (version == 0) {
+          count = QT_UINT16 (buffer + 12);
+          qtdemux_parse_container (qtdemux, node, buffer + 14, end);
+        } else {
+          count = QT_UINT32 (buffer + 12);
+          qtdemux_parse_container (qtdemux, node, buffer + 16, end);
+        }
+        if (count && g_node_n_children (node) != count) {
+          GST_WARNING_OBJECT (qtdemux,
+              "Expected %u children to iinf box, but have %u", count,
+              g_node_n_children (node));
+        }
+        break;
+      }
       case FOURCC_mp4a:
       case FOURCC_alac:
       case FOURCC_fLaC:
@@ -15167,6 +15191,312 @@ error:
   }
 }
 
+static gboolean
+read_variable_size (GstByteReader * data, guint8 size, guint64 * value)
+{
+  if (size == 0) {
+    *value = 0;
+    return TRUE;
+  } else if (size == 4) {
+    guint32 val;
+
+    if (!gst_byte_reader_get_uint32_be (data, &val))
+      return FALSE;
+    *value = val;
+    return TRUE;
+  } else if (size == 8) {
+    return gst_byte_reader_get_uint64_be (data, value);
+  }
+
+  return FALSE;
+}
+
+static gboolean
+qtdemux_find_iloc_item_id (GstQTDemux * qtdemux, GNode * meta,
+    GstByteReader * idat_data, guint32 item_id, const guint8 ** item_data,
+    guint * item_size)
+{
+  GNode *iloc;
+  GstByteReader iloc_data;
+
+  iloc = qtdemux_tree_get_child_by_type_full (meta, FOURCC_iloc, &iloc_data);
+  while (iloc) {
+    guint8 iloc_version;
+    guint offset_size, length_size, base_offset_size, index_size = 0;
+    guint8 tmp8;
+    guint32 item_count;
+    guint i;
+
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &iloc_version))
+      return FALSE;
+
+    /* skip flags */
+    if (!gst_byte_reader_skip (&iloc_data, 3))
+      return FALSE;
+
+    if (iloc_version > 2) {
+      GST_WARNING_OBJECT (qtdemux, "Can't understand iloc version %u > 2",
+          iloc_version);
+      goto skip_iloc;
+    }
+
+    /* read offset_size(4) and length_size(4) */
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &tmp8))
+      return FALSE;
+    offset_size = tmp8 >> 4;
+    length_size = tmp8 & 0x0F;
+
+    if (offset_size != 0 && offset_size != 4 && offset_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid offset_size %u, must be one of"
+          " [0, 4, 8]", offset_size);
+      goto skip_iloc;
+    }
+    if (length_size != 0 && length_size != 4 && length_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid length_size %u, must be one of"
+          " [0, 4, 8]", length_size);
+      goto skip_iloc;
+    }
+
+    /* read base_offset_size(4) and index_size(4) */
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &tmp8))
+      return FALSE;
+    base_offset_size = tmp8 >> 4;
+    if (base_offset_size != 0 && base_offset_size != 4 && base_offset_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid base_offset_size %u, must be one of"
+          " [0, 4, 8]", base_offset_size);
+      goto skip_iloc;
+    }
+
+    if (iloc_version == 1 || iloc_version == 2)
+      index_size = tmp8 & 0x0F;
+
+    if (iloc_version < 2) {
+      guint16 item_count_16;
+
+      if (!gst_byte_reader_get_uint16_be (&iloc_data, &item_count_16))
+        return FALSE;
+      item_count = item_count_16;
+    } else if (iloc_version == 2) {
+      if (!gst_byte_reader_get_uint32_be (&iloc_data, &item_count))
+        return FALSE;
+    } else {
+      g_assert_not_reached ();
+    }
+
+    for (i = 0; i < item_count; i++) {
+      guint32 iloc_item_id;
+      guint16 construction_method = 0;
+      guint64 base_offset = 0;
+      guint16 extent_count;
+      guint64 extent_offset = 0, extent_length = 0;
+
+      if (iloc_version < 2) {
+        guint16 iloc_item_id_16;
+
+        if (!gst_byte_reader_get_uint16_be (&iloc_data, &iloc_item_id_16))
+          return FALSE;
+        iloc_item_id = iloc_item_id_16;
+      } else {
+        if (!gst_byte_reader_get_uint32_be (&iloc_data, &iloc_item_id))
+          return FALSE;
+      }
+
+      if (iloc_version == 1 || iloc_version == 2)
+        if (!gst_byte_reader_get_uint16_be (&iloc_data, &construction_method))
+          return FALSE;
+      construction_method &= 0x0F;
+
+      if (construction_method != 1) {
+        GST_FIXME_OBJECT (qtdemux, "Construction method %u not yet implemented",
+            construction_method);
+        goto skip_iloc;
+      }
+
+      /* Skip data_reference_index */
+      if (!gst_byte_reader_skip (&iloc_data, 2))
+        return FALSE;
+
+      if (!read_variable_size (&iloc_data, base_offset_size, &base_offset))
+        return FALSE;
+
+      if (!gst_byte_reader_get_uint16_be (&iloc_data, &extent_count))
+        return FALSE;
+
+      if (extent_count != 1) {
+        GST_FIXME_OBJECT (qtdemux, "Extent count > 1 not implemneted for iloc");
+        if (!gst_byte_reader_skip (&iloc_data,
+                extent_count * (index_size + offset_size + length_size)))
+          return FALSE;
+        continue;
+      }
+
+      /* Skip extent index */
+      if (!gst_byte_reader_skip (&iloc_data, index_size))
+        return FALSE;
+
+      if (!read_variable_size (&iloc_data, offset_size, &extent_offset))
+        return FALSE;
+      if (!read_variable_size (&iloc_data, length_size, &extent_length))
+        return FALSE;
+
+      if (extent_length > G_MAXUINT32) {
+        GST_FIXME_OBJECT (qtdemux, "Extents larger than 2^32 not implemented");
+        return FALSE;
+      }
+
+      if (iloc_item_id == item_id) {
+        guint64 item_offset = base_offset + extent_offset;
+
+        if (item_offset > G_MAXUINT32) {
+          GST_FIXME_OBJECT (qtdemux,
+              "Item offset %" G_GUINT64_FORMAT " exceeds 32-bit range",
+              item_offset);
+          return FALSE;
+        }
+        if (!gst_byte_reader_set_pos (idat_data, (guint) item_offset)) {
+          GST_WARNING_OBJECT (qtdemux,
+              "idat is too small for the specified offset %" G_GUINT64_FORMAT
+              " and length %" G_GUINT64_FORMAT, item_offset, extent_length);
+          return FALSE;
+        }
+        if (!gst_byte_reader_get_data (idat_data, extent_length, item_data)) {
+          GST_WARNING_OBJECT (qtdemux,
+              "idat is too small for the specified offset %" G_GUINT64_FORMAT
+              " and length %" G_GUINT64_FORMAT, item_offset, extent_length);
+          return FALSE;
+        }
+
+        *item_size = extent_length;
+
+        return TRUE;
+      }
+    }
+
+  skip_iloc:
+    iloc = qtdemux_tree_get_sibling_by_type_full (iloc, FOURCC_iloc,
+        &iloc_data);
+  }
+
+  GST_WARNING_OBJECT (qtdemux, "Could not find matching iloc for infe item %u",
+      item_id);
+
+  return FALSE;
+}
+
+static gboolean
+qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
+    GNode * meta)
+{
+  GNode *idat;
+  GNode *iinf;
+  GstByteReader idat_data;
+
+  idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
+
+  if (!idat) {
+    GST_FIXME_OBJECT (qtdemux, "track meta box without idat,"
+        " can't use it for now");
+    return TRUE;
+  }
+
+  iinf = qtdemux_tree_get_child_by_type (meta, FOURCC_iinf);
+  while (iinf) {
+    GNode *infe;
+    GstByteReader infe_data;
+
+    infe = qtdemux_tree_get_child_by_type_full (iinf, FOURCC_infe, &infe_data);
+    while (infe) {
+      guint8 infe_version;
+      guint32 infe_item_id;
+      guint32 infe_item_type;
+      guint16 infe_protection_index;
+      const gchar *infe_uri_type = NULL;
+
+      if (!gst_byte_reader_get_uint8 (&infe_data, &infe_version))
+        return FALSE;
+
+      /* skip flags */
+      if (!gst_byte_reader_skip (&infe_data, 3))
+        return FALSE;
+
+      if (infe_version == 2) {
+        guint16 infe_item_id_16;
+
+        if (!gst_byte_reader_get_uint16_be (&infe_data, &infe_item_id_16))
+          return FALSE;
+        infe_item_id = infe_item_id_16;
+      } else if (infe_version == 3) {
+        if (!gst_byte_reader_get_uint32_be (&infe_data, &infe_item_id))
+          return FALSE;
+      } else {
+        GST_FIXME_OBJECT (qtdemux, "infe version %u not understood,"
+            "only versions 2 and 3 are parsed", infe_version);
+        goto skip_infe;
+      }
+
+      if (!gst_byte_reader_get_uint16_be (&infe_data, &infe_protection_index))
+        return FALSE;
+
+      if (infe_protection_index != 0) {
+        GST_FIXME_OBJECT (qtdemux, "protected infe not supported, ignoring");
+        goto skip_infe;
+      }
+
+      if (!gst_byte_reader_get_uint32_le (&infe_data, &infe_item_type))
+        return FALSE;
+      if (infe_item_type != FOURCC_uri_) {
+        GST_FIXME_OBJECT (qtdemux, "Only 'uri ' infe supported, '%"
+            GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (infe_item_type));
+        goto skip_infe;
+      }
+
+      /* Skip item_name */
+      if (!gst_byte_reader_skip_string_utf8 (&infe_data))
+        return FALSE;
+
+      if (!gst_byte_reader_get_string_utf8 (&infe_data, &infe_uri_type)) {
+        GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+        return FALSE;
+      }
+
+      if (!strcmp (infe_uri_type,
+              "urn:uuid:15beb8e4-944d-5fc6-a3dd-cb5a7e655c73")) {
+        const guint8 *item_data = NULL;
+        guint item_size = 0;
+        /* GIMI ContentID */
+        if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data, infe_item_id,
+                &item_data, &item_size))
+          return FALSE;
+
+        if (item_size < 2) {
+          GST_WARNING_OBJECT (qtdemux, "GIMI ContentID item size is too small");
+          goto skip_infe;
+        }
+
+        if (item_data[item_size - 1] != 0) {
+          GST_WARNING_OBJECT (qtdemux,
+              "GIMI ContentID is not nul-terminated, skipping");
+          goto skip_infe;
+        }
+
+        gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
+            GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID, item_data, NULL);
+      } else {
+        GST_DEBUG_OBJECT (qtdemux, "Unknown URI %s in infe", infe_uri_type);
+      }
+
+
+    skip_infe:
+      infe = qtdemux_tree_get_sibling_by_type_full (infe, FOURCC_infe,
+          &infe_data);
+    }
+
+    iinf = qtdemux_tree_get_sibling_by_type (iinf, FOURCC_iinf);
+  }
+
+  return TRUE;
+}
+
 /* parse the traks.
  * With each track we associate a new QtDemuxStream that contains all the info
  * about the trak.
@@ -15186,6 +15516,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
   GNode *esds;
   GNode *tref;
   GNode *udta;
+  GNode *meta;
 
   QtDemuxStream *stream = NULL;
   const guint8 *stsd_data;
@@ -17841,6 +18172,12 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
   /* Check for UDTA tags */
   if ((udta = qtdemux_tree_get_child_by_type (trak, FOURCC_udta))) {
     qtdemux_parse_udta (qtdemux, stream->stream_tags, udta);
+  }
+
+  /* Check for meta tags */
+  if ((meta = qtdemux_tree_get_child_by_type (trak, FOURCC_meta))) {
+    if (!qtdemux_parse_track_meta (qtdemux, stream->stream_tags, meta))
+      goto corrupt_file;
   }
 
   /* Insert and sort new stream in track-id order.

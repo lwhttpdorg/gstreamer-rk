@@ -349,6 +349,12 @@ G_BEGIN_DECLS
 #define FOURCC_saiz     GST_MAKE_FOURCC('s','a','i','z')
 #define FOURCC_saio     GST_MAKE_FOURCC('s','a','i','o')
 
+#define FOURCC_idat     GST_MAKE_FOURCC('i','d','a','t')
+#define FOURCC_iinf     GST_MAKE_FOURCC('i','i','n','f')
+#define FOURCC_iloc     GST_MAKE_FOURCC('i','l','o','c')
+#define FOURCC_infe     GST_MAKE_FOURCC('i','n','f','e')
+#define FOURCC_uri_     GST_MAKE_FOURCC('u','r','i',' ')
+
 #define FOURCC_3gg6     GST_MAKE_FOURCC('3','g','g','6')
 #define FOURCC_3gg7     GST_MAKE_FOURCC('3','g','g','7')
 #define FOURCC_3gp4     GST_MAKE_FOURCC('3','g','p','4')

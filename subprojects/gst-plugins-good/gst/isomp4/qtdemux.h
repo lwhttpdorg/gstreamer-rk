@@ -47,6 +47,8 @@ G_BEGIN_DECLS
 #define GST_QT_DEMUX_PRIVATE_TAG "private-qt-tag"
 #define GST_QT_DEMUX_CLASSIFICATION_TAG "classification"
 
+#define GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID "gimi-track-content-id"
+
 typedef struct _GstQTDemux GstQTDemux;
 typedef struct _GstQTDemuxClass GstQTDemuxClass;
 typedef struct _QtDemuxStream QtDemuxStream;

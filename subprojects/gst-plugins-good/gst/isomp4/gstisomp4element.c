@@ -50,6 +50,12 @@ isomp4_element_init (GstPlugin * plugin)
         G_TYPE_STRING, GST_QT_DEMUX_CLASSIFICATION_TAG,
         "content classification", gst_tag_merge_use_first);
 
+    if (!gst_tag_exists (GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID))
+      gst_tag_register_static (GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID,
+          GST_TAG_FLAG_META, G_TYPE_STRING, GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID,
+          "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
+          " and Reconnaissance (ISR) (GIMI) Track ContentID", NULL);
+
     g_once_init_leave (&res, TRUE);
   }
 }
