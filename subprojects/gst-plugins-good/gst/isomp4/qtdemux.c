@@ -4487,6 +4487,81 @@ qtdemux_parse_pssh (GstQTDemux * qtdemux, GNode * node)
 }
 
 static gboolean
+qtdemux_find_saiz_saio (GstQTDemux * qtdemux, GNode * parent_node,
+    guint32 fourcc, GNode ** saiz, GstByteReader * saiz_data, GNode ** saio,
+    GstByteReader * saio_data)
+{
+  GNode *saiz_node = NULL;
+  guint32 flags = 0;
+
+  saiz_node =
+      qtdemux_tree_get_child_by_type_full (parent_node, FOURCC_saiz, saiz_data);
+
+  while (saiz_node) {
+    guint32 aux_info_type = 0;
+    const guint8 *aux_info_type_data;
+
+    if (!gst_byte_reader_get_uint32_be (saiz_data, &flags))
+      return FALSE;
+
+    if (flags & 0x1) {
+      if (!gst_byte_reader_get_data (saiz_data, 4, &aux_info_type_data))
+        return FALSE;
+      aux_info_type = QT_FOURCC (aux_info_type_data);
+      /* skip aux_info_type_parameter */
+      if (!gst_byte_reader_skip (saiz_data, 4))
+        return FALSE;
+    }
+
+    if (aux_info_type == fourcc) {
+      *saio =
+          qtdemux_tree_get_child_by_type_full (parent_node, FOURCC_saio,
+          saio_data);
+      while (*saio) {
+        guint32 saio_aux_info_type = 0;
+        const guint8 *saio_aux_info_type_data;
+
+        if (!gst_byte_reader_get_uint32_be (saio_data, &flags))
+          return FALSE;
+
+        if (flags & 0x1) {
+          if (!gst_byte_reader_get_data (saio_data, 4,
+                  &saio_aux_info_type_data))
+            return FALSE;
+          saio_aux_info_type = QT_FOURCC (saio_aux_info_type_data);
+          /* skip aux_info_type_parameter */
+          if (!gst_byte_reader_skip (saio_data, 4))
+            return FALSE;
+
+        }
+        if (saio_aux_info_type == fourcc) {
+          /* Found matching saiz and saio nodes */
+
+          *saiz = saiz_node;
+          gst_byte_reader_set_pos (saiz_data, 0);
+          gst_byte_reader_set_pos (saio_data, 0);
+
+          return TRUE;
+        }
+
+        *saio =
+            qtdemux_tree_get_sibling_by_type_full (*saio, FOURCC_saio,
+            saio_data);
+      }
+
+      GST_WARNING_OBJECT (qtdemux, "saiz box without a corresponding saio box");
+    }
+    saiz_node = qtdemux_tree_get_sibling_by_type_full (saiz_node, FOURCC_saiz,
+        saiz_data);
+  }
+
+  *saiz = NULL;
+  *saio = NULL;
+
+  return TRUE;
+}
+
+static gboolean
 qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
     guint64 moof_offset, QtDemuxStream * stream)
 {
@@ -4590,9 +4665,19 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
      * data in the fragment (consisting of a saiz box and a corresponding saio
      * box); in theory, however, there could be multiple sets of sample
      * auxiliary data in a fragment. */
-    saiz_node =
-        qtdemux_tree_get_child_by_type_full (traf_node, FOURCC_saiz,
-        &saiz_data);
+
+    if (!qtdemux_find_saiz_saio (qtdemux, traf_node, FOURCC_cenc, &saiz_node,
+            &saiz_data, &saio_node, &saio_data))
+      goto fail;
+    if (saiz_node == NULL)
+      if (!qtdemux_find_saiz_saio (qtdemux, traf_node, FOURCC_cbcs, &saiz_node,
+              &saiz_data, &saio_node, &saio_data))
+        goto fail;
+    if (saiz_node == NULL)
+      if (!qtdemux_find_saiz_saio (qtdemux, traf_node, 0, &saiz_node,
+              &saiz_data, &saio_node, &saio_data))
+        goto fail;
+
     if (saiz_node) {
       guint32 info_type = 0;
       guint64 offset = 0;
@@ -4605,15 +4690,6 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
           &qtdemux->cenc_aux_sample_count);
       if (qtdemux->cenc_aux_info_sizes == NULL) {
         GST_ERROR_OBJECT (qtdemux, "failed to parse saiz box");
-        goto fail;
-      }
-      saio_node =
-          qtdemux_tree_get_child_by_type_full (traf_node, FOURCC_saio,
-          &saio_data);
-      if (!saio_node) {
-        GST_ERROR_OBJECT (qtdemux, "saiz box without a corresponding saio box");
-        g_free (qtdemux->cenc_aux_info_sizes);
-        qtdemux->cenc_aux_info_sizes = NULL;
         goto fail;
       }
 
@@ -16211,7 +16287,8 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
             gst_tag_list_add (stream->stream_tags,
                 GST_TAG_MERGE_REPLACE,
                 GST_QT_DEMUX_PRECISION_CLOCK_TYPE, clock_type_str,
-                GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY, time_uncertainty, NULL);
+                GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY, time_uncertainty,
+                NULL);
         }
 
       }
