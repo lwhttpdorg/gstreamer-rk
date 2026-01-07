@@ -42,14 +42,14 @@ class HTTPServer(loggable.Loggable):
         self._logsfile = None
 
     def _check_is_up(self, timeout=60):
-        """ Check if the server is up, running a simple test based on wget. """
+        """ Check if the server is up"""
         start = time.time()
         while True:
             try:
-                response = urllib.request.urlopen('http://127.0.0.1:%s' % (
+                urllib.request.urlopen('http://127.0.0.1:%s' % (
                     self.options.http_server_port))
                 return True
-            except urllib.error.URLError as e:
+            except urllib.error.URLError:
                 pass
 
             if time.time() - start > timeout:

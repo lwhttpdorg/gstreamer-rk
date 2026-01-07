@@ -16,16 +16,13 @@
 # License along with this program; if not, write to the
 # Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
 # Boston, MA 02110-1301, USA.
-import argparse
 import json
 import os
 import sys
 import re
 import pickle
-import platform
 import shutil
 import subprocess
-import threading
 from pathlib import Path
 import concurrent.futures as conc
 
@@ -33,9 +30,8 @@ import concurrent.futures as conc
 from launcher import config
 from launcher.utils import printc, Colors, get_gst_build_valgrind_suppressions
 from launcher.main import setup_launcher_from_args
-from launcher.baseclasses import VALGRIND_TIMEOUT_FACTOR, GstValidateTest
+from launcher.baseclasses import VALGRIND_TIMEOUT_FACTOR, GstValidateTest, Test, TestsManager, Result
 from launcher.apps.gstvalidate import GstValidateSimpleTest
-
 
 VALIDATE_TOOLS = ['gst-validate-1.0', 'gst-validate-1.0.exe',
                   'ges-launch-1.0', 'ges-launch-1.0.exe',
