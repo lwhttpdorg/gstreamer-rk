@@ -15867,6 +15867,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       GNode *btrt;
       GNode *clli;
       GNode *mdcv;
+      GNode *taic;
       guint32 version;
       gboolean gray;
       gint depth, palette_size, palette_count;
@@ -16043,6 +16044,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       btrt = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_btrt);
       clli = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_clli);
       mdcv = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_mdcv);
+      taic = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_taic);
 
       if (pasp) {
         const guint8 *pasp_data = (const guint8 *) pasp->data;
@@ -16170,6 +16172,48 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
                 GST_TAG_MERGE_REPLACE, GST_TAG_BITRATE, avg_bitrate, NULL);
           }
         }
+      }
+
+      if (taic) {
+        GstByteReader taic_data = GST_BYTE_READER_INIT (taic->data,
+            QT_UINT32 (taic->data));
+        guint64 time_uncertainty;
+        gint32 clock_resolution;
+        gint32 clock_drift_rate;
+        guint8 clock_type;
+
+        /* skip fullbox header */
+        if (gst_byte_reader_skip (&taic_data, 4 + 4 + 4) &&
+            gst_byte_reader_get_uint64_be (&taic_data, &time_uncertainty) &&
+            gst_byte_reader_get_int32_be (&taic_data, &clock_resolution) &&
+            gst_byte_reader_get_int32_be (&taic_data, &clock_drift_rate) &&
+            gst_byte_reader_get_uint8 (&taic_data, &clock_type)) {
+          const gchar *clock_type_str;
+
+          clock_type >>= 6;
+
+          switch (clock_type) {
+            case 0:
+              clock_type_str = "unknown";
+              break;
+            case 1:
+              clock_type_str = "cannot-sync-to-tai";
+              break;
+            case 2:
+              clock_type_str = "can-sync-to-tai";
+              break;
+            default:
+              clock_type_str = NULL;
+              break;
+          }
+
+          if (clock_type_str)
+            gst_tag_list_add (stream->stream_tags,
+                GST_TAG_MERGE_REPLACE,
+                GST_QT_DEMUX_PRECISION_CLOCK_TYPE, clock_type_str,
+                GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY, time_uncertainty, NULL);
+        }
+
       }
 
       if (esds) {

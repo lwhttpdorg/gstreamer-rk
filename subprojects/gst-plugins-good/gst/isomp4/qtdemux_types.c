@@ -274,6 +274,7 @@ static const QtNodeType qt_node_types[] = {
   {FOURCC_infe, "Item Information Entry", 0, 0},
   {FOURCC_iloc, "Item Location Box", 0, 0},
   {FOURCC_idat, "Item Data Box", 0, 0},
+  {FOURCC_taic, "TAI clock information box", 0, 0},
   {0, "unknown", 0,},
 };
 

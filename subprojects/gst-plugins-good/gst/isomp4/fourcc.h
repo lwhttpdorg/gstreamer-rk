@@ -497,6 +497,10 @@ G_BEGIN_DECLS
 #define FOURCC_cmpC     GST_MAKE_FOURCC('c','m','p','C')
 #define FOURCC_gcmp     GST_MAKE_FOURCC('g','c','m','p')
 
+/* TAI Precision Timestamps */
+#define FOURCC_taic     GST_MAKE_FOURCC ('t','a','i','c')
+
+
 G_END_DECLS
 
 #endif /* __FOURCC_H__ */

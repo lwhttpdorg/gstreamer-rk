@@ -50,6 +50,9 @@ G_BEGIN_DECLS
 #define GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID "gimi-track-content-id"
 #define GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID "gimi-component-content-id"
 
+#define GST_QT_DEMUX_PRECISION_CLOCK_TYPE "precision-clock-type"
+#define GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY "precision-clock-time-uncertainty-nanoseconds"
+
 typedef struct _GstQTDemux GstQTDemux;
 typedef struct _GstQTDemuxClass GstQTDemuxClass;
 typedef struct _QtDemuxStream QtDemuxStream;
