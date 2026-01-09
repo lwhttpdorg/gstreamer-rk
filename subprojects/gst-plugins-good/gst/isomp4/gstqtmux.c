@@ -891,6 +891,8 @@ gst_qt_mux_init (GstQTMux * qtmux, GstQTMuxClass * qtmux_klass)
 
   /* internals to initial state */
   gst_qt_mux_reset (qtmux, TRUE);
+
+  g_mutex_init (&qtmux->pads_mutex);
 }
 
 
@@ -905,6 +907,7 @@ gst_qt_mux_finalize (GObject * object)
   g_free (qtmux->moov_recov_file_path);
 
   atoms_context_free (qtmux->context);
+  g_mutex_clear (&qtmux->pads_mutex);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -6190,6 +6193,7 @@ gst_qt_mux_aggregate (GstAggregator * agg, gboolean timeout)
   if (G_UNLIKELY (qtmux->state == GST_QT_MUX_STATE_EOS))
     return GST_FLOW_EOS;
 
+  g_mutex_lock (&qtmux->pads_mutex);
   best_pad = find_best_pad (qtmux);
 
   /* clipping already converted to running time */
@@ -6199,8 +6203,10 @@ gst_qt_mux_aggregate (GstAggregator * agg, gboolean timeout)
     /* FIXME: the function should always return flow_status information, that
      * is supposed to be stored each time buffers (collected from the pads)
      * are pushed. */
-    if (best_pad->flow_status != GST_FLOW_OK)
+    if (best_pad->flow_status != GST_FLOW_OK) {
+      g_mutex_unlock (&qtmux->pads_mutex);
       return best_pad->flow_status;
+    }
 
     if (qtmux->mux_mode != GST_QT_MUX_MODE_ROBUST_RECORDING_PREFILL ||
         best_pad->raw_audio_adapter == NULL ||
@@ -6226,6 +6232,7 @@ gst_qt_mux_aggregate (GstAggregator * agg, gboolean timeout)
           gst_flow_get_name (ret));
     }
   }
+  g_mutex_unlock (&qtmux->pads_mutex);
 
   return ret;
 }
@@ -7666,6 +7673,7 @@ gst_qt_mux_release_pad (GstElement * element, GstPad * pad)
   GstQTMux *mux = GST_QT_MUX_CAST (element);
   GstQTMuxPad *muxpad = GST_QT_MUX_PAD_CAST (pad);
 
+  g_mutex_lock (&mux->pads_mutex);
   GST_DEBUG_OBJECT (element, "Releasing %s:%s", GST_DEBUG_PAD_NAME (pad));
 
   /* Take a ref to the pad so we can clean it up after removing it from the element */
@@ -7692,6 +7700,7 @@ gst_qt_mux_release_pad (GstElement * element, GstPad * pad)
   GST_OBJECT_UNLOCK (mux);
 
   gst_object_unref (pad);
+  g_mutex_unlock (&mux->pads_mutex);
 }
 
 static GstAggregatorPad *
