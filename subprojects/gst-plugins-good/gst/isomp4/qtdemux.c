@@ -2597,6 +2597,7 @@ gst_qtdemux_stream_clear (QtDemuxStream * stream)
   stream->redirect_uri = NULL;
   stream->sent_eos = FALSE;
   stream->protected = FALSE;
+  stream->tc_track_id = 0;
   if (stream->protection_scheme_info) {
     if (stream->protection_scheme_type == FOURCC_cenc
         || stream->protection_scheme_type == FOURCC_cbcs) {
@@ -5259,6 +5260,8 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
    * respective keyframes */
   for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
     QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
+    if (!str->pad)
+      continue;
 
     /* No candidate yet, take the first stream */
     if (!ref_str) {
@@ -6546,6 +6549,113 @@ gst_qtdemux_process_buffer_wvtt (GstQTDemux * qtdemux, QtDemuxStream * stream,
   return outbuf;
 }
 
+static GstVideoTimeCode *
+qtdemux_pull_timecode_for_gst_pts (GstQTDemux * qtdemux, QtDemuxStream * stream,
+    GstClockTime pts)
+{
+  QtDemuxStream *tc_stream;
+  QtDemuxStreamStsdEntry *tc_entry;
+  QtDemuxSample *tc_sample;
+  GstBuffer *tc_buf = NULL;
+  GstMapInfo map;
+  guint32 tc_sample_index;
+  guint32 tc_frames;
+  GstVideoTimeCodeFlags tc_flags = 0;
+  GstVideoTimeCode *tc = NULL;
+  gint tc_fps_n, tc_fps_d;
+  GstClockTime tc_gsttime;
+  gchar *tc_str;
+
+  tc_stream = qtdemux_find_stream (qtdemux, stream->tc_track_id);
+  if (!tc_stream) {
+    GST_WARNING_OBJECT (qtdemux, "TC stream with ID %d not found!",
+        stream->tc_track_id);
+    goto invalid_tc_data;
+  }
+
+  if (tc_stream->n_samples == 0) {
+    GST_WARNING_OBJECT (qtdemux, "Timecode stream has no samples");
+    goto invalid_tc_data;
+  }
+
+  tc_entry = CUR_STREAM (tc_stream);
+  if (tc_entry->tc_fps_n == 0 || tc_entry->tc_fps_d == 0) {
+    GST_WARNING_OBJECT (qtdemux,
+        "Timecode track has no timescale or frame duration");
+    goto invalid_tc_data;
+  }
+
+  tc_sample_index = gst_qtdemux_find_index_linear (qtdemux, tc_stream, pts);
+  if (tc_sample_index == -1) {
+    GST_DEBUG_OBJECT (qtdemux, "No timecode sample for PTS %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (pts));
+    return NULL;
+  }
+
+  tc_sample = &tc_stream->samples[tc_sample_index];
+  if (tc_sample->size < 4) {
+    GST_WARNING_OBJECT (qtdemux, "Timecode sample too small");
+    return NULL;
+  }
+
+  if (gst_qtdemux_pull_atom (qtdemux, tc_sample->offset, tc_sample->size,
+          &tc_buf) != GST_FLOW_OK) {
+    GST_WARNING_OBJECT (qtdemux, "Failed to read timecode sample data");
+    return NULL;
+  }
+
+  /* Let's assume it's always in the counter format, even though the flag (0x0008)
+   * is almost never set. That's how ffmpeg and QuickTime player do it too. */
+  gst_buffer_map (tc_buf, &map, GST_MAP_READ);
+  tc_frames = GST_READ_UINT32_BE (map.data);
+  gst_buffer_unmap (tc_buf, &map);
+  gst_buffer_unref (tc_buf);
+
+  /* Note: this code currently ignores the tc_entry->tc_nb_frames field.
+   * The spec is slightly confusing regarding its usage, but to my understanding
+   * that field is not relevant for what we want here (frame count).
+   * Apple's QuickTime player on macOS 26.0 seems to agree - we get identical output TC.
+   * Other software such as FFmpeg or DaVinci Resolve does not ignore that and ends up
+   * with different values. */
+
+  /* Some samples I found had framerates like 90000/3003 instead of 30000/1001,
+   * which makes it unable to pass gst_video_time_code_is_valid(). */
+  gst_video_guess_framerate (GST_SECOND * tc_entry->tc_fps_d /
+      tc_entry->tc_fps_n, &tc_fps_n, &tc_fps_d);
+
+  tc_gsttime = QTSTREAMTIME_TO_GSTTIME (tc_stream, tc_sample->timestamp);
+  tc_frames +=
+      gst_util_uint64_scale_round (pts - tc_gsttime, tc_fps_n,
+      GST_SECOND * tc_fps_d);
+
+  if (tc_entry->tc_flags & 0x0001)
+    tc_flags |= GST_VIDEO_TIME_CODE_FLAGS_DROP_FRAME;
+
+  tc = gst_video_time_code_new (tc_fps_n, tc_fps_d, NULL, tc_flags, 0, 0, 0, 0,
+      0);
+  gst_video_time_code_add_frames (tc, tc_frames);
+
+  if (!gst_video_time_code_is_valid (tc)) {
+    GST_DEBUG_OBJECT (qtdemux,
+        "Invalid timecode: frames %d, fps %u/%u, PTS %" GST_TIME_FORMAT,
+        tc_frames, tc_fps_n, tc_fps_d, GST_TIME_ARGS (pts));
+    gst_video_time_code_free (tc);
+    return NULL;
+  }
+
+  tc_str = gst_video_time_code_to_string (tc);
+  GST_LOG_OBJECT (qtdemux, "Got timecode %s for PTS %" GST_TIME_FORMAT, tc_str,
+      GST_TIME_ARGS (pts));
+  g_free (tc_str);
+
+  return tc;
+
+invalid_tc_data:
+  /* Avoid retrying this forever if the TC entry is invalid */
+  stream->tc_track_id = 0;
+  return NULL;
+}
+
 static GstFlowReturn
 gst_qtdemux_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
     GstBuffer * buf, guint64 dts, guint64 pts, guint64 duration,
@@ -6739,6 +6849,17 @@ gst_qtdemux_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
       QTSTREAMTIME_TO_GSTTIME (stream, pts);
   GST_BUFFER_DURATION (buf) = (duration == -1) ? GST_CLOCK_TIME_NONE :
       QTSTREAMTIME_TO_GSTTIME (stream, duration) + round_up_duration;
+
+  if (qtdemux->pullbased && stream->tc_track_id != 0 && pts != -1) {
+    GstVideoTimeCode *tc;
+
+    tc = qtdemux_pull_timecode_for_gst_pts (qtdemux, stream,
+        GST_BUFFER_PTS (buf));
+    if (tc) {
+      gst_buffer_add_video_time_code_meta (buf, tc);
+      gst_video_time_code_free (tc);
+    }
+  }
 
   ret = gst_pad_push (stream->pad, buf);
 
@@ -7060,6 +7181,8 @@ gst_qtdemux_do_fragmented_seek (GstQTDemux * qtdemux)
     gboolean is_audio_or_video;
 
     stream = QTDEMUX_NTH_STREAM (qtdemux, i);
+    if (!stream->pad)
+      continue;
 
     if (stream->ra_entries == NULL)
       continue;
@@ -7167,6 +7290,9 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
     GstClockTime position;
 
     stream = QTDEMUX_NTH_STREAM (qtdemux, i);
+    if (!stream->pad)
+      continue;
+
     position = stream->cur_global_pts;
     GST_TRACE_OBJECT (qtdemux, "track_ID=%d cur_global_pts=%" GST_TIME_FORMAT,
         stream->track_id, GST_TIME_ARGS (stream->cur_global_pts));
@@ -10158,6 +10284,8 @@ gst_qtdemux_add_stream (GstQTDemux * qtdemux,
     qtdemux->n_audio_streams++;
   } else if (stream->subtype == FOURCC_strm) {
     GST_DEBUG_OBJECT (qtdemux, "stream type, not creating pad");
+  } else if (stream->subtype == FOURCC_tmcd) {
+    GST_DEBUG_OBJECT (qtdemux, "timecode track, not creating pad");
   } else if (stream->subtype == FOURCC_subp || stream->subtype == FOURCC_text
       || stream->subtype == FOURCC_sbtl || stream->subtype == FOURCC_subt
       || stream->subtype == FOURCC_clcp || stream->subtype == FOURCC_wvtt) {
@@ -14716,6 +14844,19 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
             GST_READ_UINT32_BE ((gint8 *) chap->data + 8);
       }
     }
+
+    /* timecode track reference */
+    GNode *tmcd = qtdemux_tree_get_child_by_type (tref, FOURCC_tmcd);
+    if (tmcd) {
+      gsize length = GST_READ_UINT32_BE (tmcd->data);
+
+      if (length >= 12) {
+        stream->tc_track_id = GST_READ_UINT32_BE ((gint8 *) tmcd->data + 8);
+        GST_DEBUG_OBJECT (qtdemux,
+            "Track %u references timecode track %d",
+            stream->track_id, stream->tc_track_id);
+      }
+    }
   }
 
   /* fragmented files may have bogus duration in moov */
@@ -17182,6 +17323,26 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       GST_INFO_OBJECT (qtdemux,
           "type %" GST_FOURCC_FORMAT " caps %" GST_PTR_FORMAT,
           GST_FOURCC_ARGS (fourcc), entry->caps);
+    } else if (stream->subtype == FOURCC_tmcd) {
+      entry->sampled = TRUE;
+      entry->sparse = TRUE;
+      entry->caps = NULL;
+
+      if (len >= 16 + 4 * 4 + 1) {
+        /* 4 bytes reserved first, then... */
+        entry->tc_flags = QT_UINT32 (stsd_entry_data + 20);
+        entry->tc_fps_n = QT_UINT32 (stsd_entry_data + 24);
+        entry->tc_fps_d = QT_UINT32 (stsd_entry_data + 28);
+        entry->tc_nb_frames = QT_UINT8 (stsd_entry_data + 32);
+
+        GST_DEBUG_OBJECT (qtdemux,
+            "Timecode track: flags=0x%08x, fps=%u/%u nb_frames=%u",
+            entry->tc_flags, entry->tc_fps_n, entry->tc_fps_d,
+            entry->tc_nb_frames);
+      } else {
+        GST_DEBUG_OBJECT (qtdemux,
+            "tmcd sample description too short: %d bytes", len);
+      }
     } else {
       /* everything in 1 sample */
       entry->sampled = TRUE;

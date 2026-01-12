@@ -360,6 +360,11 @@ struct _QtDemuxStreamStsdEntry
   gboolean sampled;
   guint padding;
 
+  /* timecode (tmcd) */
+  guint32 tc_flags;
+  guint32 tc_fps_n;
+  guint32 tc_fps_d;
+  guint8 tc_nb_frames; /* unused for now */
 };
 
 struct _QtDemuxSample
@@ -576,6 +581,9 @@ struct _QtDemuxStream
 
   /* KEY_UNITS trickmode with an interval */
   GstClockTime last_keyframe_pts;
+
+  /* timecode track linkage */
+  guint32 tc_track_id;
 
   gint ref_count;               /* atomic */
 };
