@@ -128,7 +128,7 @@ typedef struct _QtDemuxAavdEncryptionInfo QtDemuxAavdEncryptionInfo;
 #define QTSAMPLE_DTS_STREAMTIME(sample) ((sample)->timestamp)
 /* timestamp + offset + cslg_shift is the outgoing PTS */
 #define QTSAMPLE_PTS(stream,sample) (QTSTREAMTIME_TO_GSTTIME((stream), (sample)->timestamp + (stream)->cslg_shift + (sample)->pts_offset))
-#define QTSAMPLE_PTS_STREAMTIME(sample) ((sample)->timestamp + (stream)->cslg_shift + (sample)->pts_offset)
+#define QTSAMPLE_PTS_STREAMTIME(stream,sample) ((sample)->timestamp + (stream)->cslg_shift + (sample)->pts_offset)
 /* timestamp + offset is the PTS used for internal seek calculations */
 #define QTSAMPLE_PTS_NO_CSLG(stream,sample) (QTSTREAMTIME_TO_GSTTIME((stream), (sample)->timestamp + (sample)->pts_offset))
 
@@ -5811,7 +5811,7 @@ gst_qtdemux_prepare_current_sample (GstQTDemux * qtdemux,
   sample = &stream->samples[stream->sample_index];
 
   *dts = QTSAMPLE_DTS_STREAMTIME (sample);
-  *pts = QTSAMPLE_PTS_STREAMTIME (sample);
+  *pts = QTSAMPLE_PTS_STREAMTIME (stream, sample);
   *offset = sample->offset;
   *size = sample->size;
   *duration = QTSAMPLE_DUR_STREAMTIME (sample, *dts);
@@ -8643,7 +8643,7 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
               GST_FOURCC_ARGS (CUR_STREAM (stream)->fourcc));
 
           dts = QTSAMPLE_DTS_STREAMTIME (sample);
-          pts = QTSAMPLE_PTS_STREAMTIME (sample);
+          pts = QTSAMPLE_PTS_STREAMTIME (stream, sample);
           stream_pts =
               gst_segment_to_stream_time_clamped (&stream->segment, pts);
           duration = QTSAMPLE_DUR_STREAMTIME (sample, dts);
