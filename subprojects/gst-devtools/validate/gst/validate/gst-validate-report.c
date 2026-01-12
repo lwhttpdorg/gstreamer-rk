@@ -403,7 +403,7 @@ gst_validate_report_load_issues (void)
       _("elements should set downstream caps restrictions on its caps when "
           "replying upstream's getcaps queries to avoid upstream sending data"
           " in an unsupported format"));
-  REGISTER_VALIDATE_ISSUE (CRITICAL, CAPS_FIELD_UNEXPECTED_VALUE,
+  REGISTER_VALIDATE_ISSUE (WARNING, CAPS_FIELD_UNEXPECTED_VALUE,
       "a field in caps has an unexpected value",
       _("fields set on a sink pad should be propagated downstream via "
           "set caps"));
