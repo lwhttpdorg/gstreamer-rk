@@ -94,6 +94,9 @@ gst_rtp_passthrough_pay_retimestamp_mode_get_type (void)
   return mode_type;
 }
 
+
+#define DEFAULT_CLEAR_MARKER FALSE
+
 enum
 {
   PROP_0,
@@ -105,6 +108,7 @@ enum
   PROP_TIMESTAMP,
   PROP_TIMESTAMP_OFFSET,
   PROP_RETIMESTAMP_MODE,
+  PROP_CLEAR_MARKER,
 };
 
 static void gst_rtp_passthrough_pay_get_property (GObject * object,
@@ -147,6 +151,8 @@ gst_rtp_passthrough_pay_init (GstRtpPassthroughPay * self)
   gst_element_add_pad (GST_ELEMENT (self), self->srcpad);
 
   self->pt = PAYLOAD_TYPE_INVALID;
+
+  self->clear_marker = DEFAULT_CLEAR_MARKER;
 }
 
 static void
@@ -245,6 +251,19 @@ gst_rtp_passthrough_pay_class_init (GstRtpPassthroughPayClass
           GST_RTPPASSTHROUGHPAY_RETIMESTAMP_MODE_TYPE,
           GST_RTPPASSTHROUGHPAY_RETIMESTAMP_MODE_DISABLED,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstRtpPassthroughPay:clear-marker:
+   *
+   * Clears the marker flag on all packets. This can be useful to work
+   * around problems with broken senders that set the marker flag when
+   * they shouldn't (e.g. to indicate end of NAL rather than end of AU
+   * for H.264/H.265).
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_CLEAR_MARKER,
+      g_param_spec_boolean ("clear-marker", "Clear Marker", "Clear marker flag",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   element_class->change_state = gst_rtp_passthrough_pay_change_state;
 
@@ -303,6 +322,9 @@ gst_rtp_passthrough_pay_get_property (GObject * object, guint prop_id,
     case PROP_RETIMESTAMP_MODE:
       g_value_set_enum (value, self->retimestamp_mode);
       break;
+    case PROP_CLEAR_MARKER:
+      g_value_set_boolean (value, self->clear_marker);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -332,6 +354,9 @@ gst_rtp_passthrough_pay_set_property (GObject * object, guint prop_id,
       break;
     case PROP_RETIMESTAMP_MODE:
       self->retimestamp_mode = g_value_get_enum (value);
+      break;
+    case PROP_CLEAR_MARKER:
+      self->clear_marker = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -469,6 +494,11 @@ gst_rtp_passthrough_pay_chain (GstPad * pad,
     self->timestamp_offset = timestamp;
     self->timestamp_offset_set = TRUE;
     g_object_notify (G_OBJECT (self), "timestamp-offset");
+  }
+
+  if (self->clear_marker && gst_rtp_buffer_get_marker (&rtp_buffer)) {
+    gst_rtp_buffer_set_marker (&rtp_buffer, FALSE);
+    GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_MARKER);
   }
 
   gst_rtp_buffer_unmap (&rtp_buffer);
