@@ -1059,6 +1059,7 @@ gst_h266_parse_handle_frame_packetized (GstBaseParse * parse,
   const guint nl = h266parse->nal_length_size;
   GstMapInfo map;
   gsize parsed, left;
+  gboolean unset_discont = FALSE;
 
   GST_TRACE_OBJECT (h266parse, "Handling packetized frame");
 
@@ -1102,6 +1103,16 @@ gst_h266_parse_handle_frame_packetized (GstBaseParse * parse,
       if (nl + nalu.size == left) {
         if (GST_BUFFER_FLAG_IS_SET (frame->buffer, GST_BUFFER_FLAG_MARKER))
           h266parse->marker = TRUE;
+      }
+
+      /* If the input has a DISCONT flag, when splitting it into multiple
+       * buffers we have to unset it for all parts except the first one,
+       * since they are actually continuous */
+      if (unset_discont) {
+        GST_BUFFER_FLAG_UNSET (tmp_frame.buffer, GST_BUFFER_FLAG_DISCONT);
+        tmp_frame.flags &= ~GST_BUFFER_FLAG_DISCONT;
+      } else {
+        unset_discont = TRUE;
       }
 
       /* note we don't need to come up with a sub-buffer, since
