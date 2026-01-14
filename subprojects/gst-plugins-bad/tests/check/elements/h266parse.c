@@ -1071,6 +1071,25 @@ GST_START_TEST (test_latency_au_au)
 GST_END_TEST;
 
 static void
+test_au_nal_one_discont (GstHarness * h)
+{
+  GstBuffer *b;
+
+  /* First buffer has discont, other shouldn't */
+  fail_unless (gst_harness_buffers_in_queue (h) >= 4);
+  b = gst_harness_pull (h);
+  fail_unless (b != 0);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (b, GST_BUFFER_FLAG_DISCONT));
+  gst_buffer_unref (b);
+
+  while (gst_harness_buffers_in_queue (h) > 0) {
+    b = gst_harness_pull (h);
+    fail_unless (!GST_BUFFER_FLAG_IS_SET (b, GST_BUFFER_FLAG_DISCONT));
+    gst_buffer_unref (b);
+  }
+}
+
+static void
 test_discont_outalign_nal (GstHarness * h)
 {
   GstBuffer *buf;
@@ -1107,6 +1126,21 @@ GST_START_TEST (test_discont_au_nal)
   bytestream_set_caps (h, "au", "nal");
   bytestream_push_all_nals_as_au (h);
   test_discont_outalign_nal (h);
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_discont_au_nal2)
+{
+  GstHarness *h = gst_harness_new_parse ("h266parse"
+      " ! video/x-h266, parsed=(boolean)true, stream-format=vvc1, alignment=au"
+      " ! h266parse");
+
+  bytestream_set_caps (h, "au", "nal");
+  bytestream_push_all_nals_as_au (h);
+  test_au_nal_one_discont (h);
 
   gst_harness_teardown (h);
 }
@@ -1360,6 +1394,7 @@ h266parse_harnessed_suite (void)
 
   tcase_add_test (tc_chain, test_discont_nal_nal);
   tcase_add_test (tc_chain, test_discont_au_nal);
+  tcase_add_test (tc_chain, test_discont_au_nal2);
   tcase_add_test (tc_chain, test_discont_au_au);
 
   tcase_add_test (tc_chain, test_parse_skip_to_4bytes_sc);
