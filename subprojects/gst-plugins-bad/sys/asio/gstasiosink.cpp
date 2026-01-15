@@ -49,11 +49,13 @@ enum
   PROP_0,
   PROP_DEVICE_CLSID,
   PROP_OUTPUT_CHANNELS,
+  PROP_SAMPLE_RATE,
   PROP_BUFFER_SIZE,
   PROP_OCCUPY_ALL_CHANNELS,
 };
 
 #define DEFAULT_BUFFER_SIZE 0
+#define DEFAULT_SAMPLE_RATE 48000
 #define DEFAULT_OCCUPY_ALL_CHANNELS TRUE
 
 struct _GstAsioSink
@@ -64,6 +66,7 @@ struct _GstAsioSink
   gchar *device_clsid;
   gchar *output_channels;
   guint buffer_size;
+  guint sample_rate;
   gboolean occupy_all_channels;
 };
 
@@ -104,6 +107,12 @@ gst_asio_sink_class_init (GstAsioSinkClass * klass)
           "Comma-separated list of ASIO channels to output", NULL,
           (GParamFlags) (GST_PARAM_MUTABLE_READY | G_PARAM_READWRITE |
               G_PARAM_STATIC_STRINGS)));
+  g_object_class_install_property (gobject_class, PROP_SAMPLE_RATE,
+      g_param_spec_uint ("sample-rate", "Sample Rate",
+          "Sample rate for output",
+          1, G_MAXINT32, DEFAULT_SAMPLE_RATE,
+          (GParamFlags) (GST_PARAM_MUTABLE_READY | G_PARAM_READWRITE |
+              G_PARAM_STATIC_STRINGS)));
   g_object_class_install_property (gobject_class, PROP_BUFFER_SIZE,
       g_param_spec_uint ("buffer-size", "Buffer Size",
           "Preferred buffer size (0 for default)",
@@ -137,6 +146,7 @@ static void
 gst_asio_sink_init (GstAsioSink * self)
 {
   self->buffer_size = DEFAULT_BUFFER_SIZE;
+  self->sample_rate = DEFAULT_SAMPLE_RATE;
   self->occupy_all_channels = DEFAULT_OCCUPY_ALL_CHANNELS;
 }
 
@@ -166,6 +176,9 @@ gst_asio_sink_set_property (GObject * object, guint prop_id,
       g_free (self->output_channels);
       self->output_channels = g_value_dup_string (value);
       break;
+    case PROP_SAMPLE_RATE:
+      self->sample_rate = g_value_get_uint (value);
+      break;
     case PROP_BUFFER_SIZE:
       self->buffer_size = g_value_get_uint (value);
       break;
@@ -190,6 +203,9 @@ gst_asio_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_OUTPUT_CHANNELS:
       g_value_set_string (value, self->output_channels);
+      break;
+    case PROP_SAMPLE_RATE:
+      g_value_set_uint (value, self->sample_rate);
       break;
     case PROP_BUFFER_SIZE:
       g_value_set_uint (value, self->buffer_size);
@@ -289,6 +305,18 @@ gst_asio_sink_create_ringbuffer (GstAudioBaseSink * sink)
   asio_object = gst_asio_object_new (info, self->occupy_all_channels);
   if (!asio_object) {
     GST_WARNING_OBJECT (self, "Failed to create ASIO object");
+    goto out;
+  }
+
+  /* Configure sample rate to use */
+  if (!gst_asio_object_can_sample_rate(asio_object, self->sample_rate)) {
+    GST_WARNING_OBJECT (self, "No available sample rate");
+    goto out;
+  }
+
+  if (!gst_asio_object_set_sample_rate(asio_object, self->sample_rate)) {
+    GST_WARNING_OBJECT (self, "Failed to set sample rate to %d Hz.",
+        self->sample_rate);
     goto out;
   }
 

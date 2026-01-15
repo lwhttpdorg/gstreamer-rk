@@ -605,9 +605,8 @@ gst_asio_object_thread_func (GstAsioObject * self)
   ASIOError asio_rst;
   IASIO *asio_handle = nullptr;
   GstAsioDeviceInfo *device_info = self->device_info;
-  /* FIXME: check more sample rate */
   static ASIOSampleRate sample_rate_to_check[] = {
-    48000.0, 44100.0, 192000.0, 96000.0, 88200.0,
+    48000.0, 44100.0, 96000.0, 88200.0, 192000.0, 176400.0, 384000.0, 352800.0,
   };
 
   g_assert (device_info);
@@ -693,7 +692,7 @@ gst_asio_object_thread_func (GstAsioObject * self)
     if (asio_rst != 0)
       continue;
 
-    GST_INFO_OBJECT (self, "SampleRate %.1lf is supported",
+    GST_INFO_OBJECT (self, "Sample rate %.1lf is supported",
         sample_rate_to_check[i]);
     g_array_append_val (self->supported_sample_rates, sample_rate_to_check[i]);
   }
@@ -706,14 +705,25 @@ gst_asio_object_thread_func (GstAsioObject * self)
   }
 
   /* Pick the first supported samplerate */
-  self->sample_rate =
-      g_array_index (self->supported_sample_rates, ASIOSampleRate, 0);
-  if (asio_handle->setSampleRate (self->sample_rate) != 0) {
-    GST_WARNING_OBJECT (self, "Failed to set samplerate %.1lf",
-        self->sample_rate);
-    asio_handle->Release ();
-    asio_handle = nullptr;
-    goto run_loop;
+  for (glong i = 0; i < self->supported_sample_rates->len; i++) {
+    self->sample_rate =
+        g_array_index (self->supported_sample_rates, ASIOSampleRate, i);
+    if (asio_handle->setSampleRate (self->sample_rate) != 0) {
+      GST_WARNING_OBJECT (self, "Failed to set sample rate %.1lf",
+          self->sample_rate);
+      self->sample_rate = 0;
+    }
+    else {
+      GST_INFO_OBJECT (self, "Sample rate was set to %.1lf",
+          self->sample_rate);
+      break;
+    }
+  }
+  if (self->sample_rate == 0) {
+      GST_WARNING_OBJECT (self, "Failed to set sample rate");
+      asio_handle->Release ();
+      asio_handle = nullptr;
+      goto run_loop;
   }
 
   if (self->max_num_input_channels > 0) {
