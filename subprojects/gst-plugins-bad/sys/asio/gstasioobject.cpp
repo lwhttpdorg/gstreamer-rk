@@ -28,6 +28,7 @@
 #include <functional>
 #include <vector>
 #include <mutex>
+#include "asio.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_asio_object_debug);
 #define GST_CAT_DEFAULT gst_asio_object_debug
@@ -745,8 +746,9 @@ gst_asio_object_thread_func (GstAsioObject * self)
 
       GST_INFO_OBJECT (self,
           "InputChannelInfo %ld: isActive %s, channelGroup %ld, "
-          "ASIOSampleType %ld, name %s", i, info->isActive ? "true" : "false",
-          info->channelGroup, info->type, GST_STR_NULL (info->name));
+          "ASIOSampleType %s, name %s", i, info->isActive ? "true" : "false",
+          info->channelGroup, gst_asio_sample_type_to_string (info->type),
+          GST_STR_NULL (info->name));
     }
 
     self->input_channel_requested =
@@ -772,8 +774,9 @@ gst_asio_object_thread_func (GstAsioObject * self)
 
       GST_INFO_OBJECT (self,
           "OutputChannelInfo %ld: isActive %s, channelGroup %ld, "
-          "ASIOSampleType %ld, name %s", i, info->isActive ? "true" : "false",
-          info->channelGroup, info->type, GST_STR_NULL (info->name));
+          "ASIOSampleType %s, name %s", i, info->isActive ? "true" : "false",
+          info->channelGroup, gst_asio_sample_type_to_string (info->type),
+          GST_STR_NULL (info->name));
     }
 
     self->output_channel_requested =
@@ -1264,6 +1267,9 @@ gst_asio_object_create_buffers_internal (GstAsioObject * self,
     err = data.err;
     *buffer_size = data.buffer_size;
   }
+
+  if (err != 0)
+      GST_ERROR_OBJECT(self, "Failed to create buffer. (error: %ld)", err);
 
   return !err;
 }

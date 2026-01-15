@@ -49,6 +49,8 @@ void                gst_asio_device_info_free (GstAsioDeviceInfo * info);
 
 GstAudioFormat      gst_asio_sample_type_to_gst (ASIOSampleType type);
 
+const gchar *       gst_asio_sample_type_to_string (ASIOSampleType type);
+
 G_END_DECLS
 
 #endif /* __GST_ASIO_DEVICE_ENUM_H__ */

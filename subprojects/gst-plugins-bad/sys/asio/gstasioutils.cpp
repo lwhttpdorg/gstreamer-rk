@@ -277,3 +277,57 @@ gst_asio_sample_type_to_gst (ASIOSampleType type)
 
   return fmt;
 }
+
+const gchar *
+gst_asio_sample_type_to_string (ASIOSampleType type)
+{
+  switch (type) {
+    case ASIOSTInt16MSB:
+      return "ASIOSTInt16MSB";
+    case ASIOSTInt24MSB:
+      return "ASIOSTInt24MSB";
+    case ASIOSTInt32MSB:
+      return "ASIOSTInt32MSB";
+    case ASIOSTFloat32MSB:
+      return "ASIOSTFloat32MSB";
+    case ASIOSTFloat64MSB:
+      return "ASIOSTFloat64MSB";
+    case ASIOSTInt32MSB16:
+      return "ASIOSTInt32MSB16";
+    case ASIOSTInt32MSB18:
+      return "ASIOSTInt32MSB18";
+    case ASIOSTInt32MSB20:
+      return "ASIOSTInt32MSB20";
+    case ASIOSTInt32MSB24:
+      return "ASIOSTInt32MSB24";
+    case ASIOSTInt16LSB:
+      return "ASIOSTInt16LSB";
+    case ASIOSTInt24LSB:
+      return "ASIOSTInt24LSB";
+    case ASIOSTInt32LSB:
+      return "ASIOSTInt32LSB";
+    case ASIOSTFloat32LSB:
+      return "ASIOSTFloat32LSB";
+    case ASIOSTFloat64LSB:
+      return "ASIOSTFloat64LSB";
+    case ASIOSTInt32LSB16:
+      return "ASIOSTInt32LSB16";
+    case ASIOSTInt32LSB18:
+      return "ASIOSTInt32LSB18";
+    case ASIOSTInt32LSB20:
+      return "ASIOSTInt32LSB20";
+    case ASIOSTInt32LSB24:
+      return "ASIOSTInt32LSB24";
+
+    case ASIOSTDSDInt8LSB1:
+      return "ASIOSTDSDInt8LSB1";
+    case ASIOSTDSDInt8MSB1:
+      return "ASIOSTDSDInt8MSB1";
+    case ASIOSTDSDInt8NER8:
+      return "ASIOSTDSDInt8NER8";
+
+    default:
+      GST_ERROR ("Unknown asio sample type %ld", type);
+      return "UnknwonSampleType";
+  }
+}
