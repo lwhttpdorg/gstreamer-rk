@@ -80,6 +80,8 @@ struct _GstHLSDemux2
 
   /* Initial bitrate to use before any bandwidth measurement */
   guint start_bitrate;
+  /* The current playback rate. */
+  gdouble rate;
 
   /* Decryption key cache: url => GstHLSKey */
   GHashTable *keys;
