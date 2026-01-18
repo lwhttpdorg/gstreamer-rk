@@ -525,7 +525,7 @@ if building_full
   endforeach
 
   # Build shared library
-  gstfull = build_target('gstreamer-full-1.0',
+  gstfull = build_target(get_option('gst-full-name'),
     init_static_plugins_c,
     c_args: ['-DBUILDING_GST'] + gst_c_args,
     target_type: get_option('gst-full-target-type'),
