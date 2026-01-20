@@ -75,6 +75,7 @@ struct _GstAacParse {
   gint           object_type;
   gint           bitrate;
   gint           sample_rate;
+  gint           inner_sample_rate; /* Sample rate before SBR */
   gint           channels;
   gint           mpegversion;
   gint           frame_samples;
