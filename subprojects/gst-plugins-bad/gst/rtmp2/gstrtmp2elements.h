@@ -30,7 +30,10 @@
 
 void rtmp2_element_init (GstPlugin * plugin);
 
-GST_ELEMENT_REGISTER_DECLARE (rtmp2sink);
 GST_ELEMENT_REGISTER_DECLARE (rtmp2src);
+GST_ELEMENT_REGISTER_DECLARE (rtmp2sink);
+
+GST_ELEMENT_REGISTER_DECLARE (rtmpsrc);
+GST_ELEMENT_REGISTER_DECLARE (rtmpsink);
 
 #endif /* __GST_RTMP2_ELEMENTS_H__ */
