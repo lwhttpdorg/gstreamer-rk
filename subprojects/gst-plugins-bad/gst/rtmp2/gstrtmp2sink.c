@@ -30,7 +30,9 @@
  * gst-launch -v videotestsrc ! x264enc ! flvmux ! rtmp2sink
  *     location=rtmp://server.example.com/live/myStream
  * ]|
- * FIXME Describe what the pipeline does.
+ *
+ * Encode a test video stream to FLV video format and stream it via RTMP. Note
+ * that stream keys are configured via the location URL itself.
  * </refsect2>
  */
 
