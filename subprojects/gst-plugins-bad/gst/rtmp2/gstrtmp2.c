@@ -34,6 +34,10 @@ plugin_init (GstPlugin * plugin)
   ret |= GST_ELEMENT_REGISTER (rtmp2src, plugin);
   ret |= GST_ELEMENT_REGISTER (rtmp2sink, plugin);
 
+  /* Backwards-compatible wrappers */
+  ret |= GST_ELEMENT_REGISTER (rtmpsrc, plugin);
+  ret |= GST_ELEMENT_REGISTER (rtmpsink, plugin);
+
   return ret;
 }
 

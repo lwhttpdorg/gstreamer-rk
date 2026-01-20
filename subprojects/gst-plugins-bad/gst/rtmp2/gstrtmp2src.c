@@ -26,9 +26,10 @@
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v rtmp2src ! decodebin ! fakesink
+ * gst-launch -v rtmp2src location=rtmp://somehost/someurl ! decodebin ! fakesink
  * ]|
- * FIXME Describe what the pipeline does.
+ * Open an RTMP location and pass its content to fakesink. Note that stream
+ * keys are configured via the the location URL.
  * </refsect2>
  */
 
@@ -165,6 +166,8 @@ G_DEFINE_TYPE_WITH_CODE (GstRtmp2Src, gst_rtmp2_src, GST_TYPE_PUSH_SRC,
     G_IMPLEMENT_INTERFACE (GST_TYPE_RTMP_LOCATION_HANDLER, NULL));
 GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (rtmp2src, "rtmp2src",
     GST_RANK_PRIMARY + 1, GST_TYPE_RTMP2_SRC, rtmp2_element_init (plugin));
+GST_ELEMENT_REGISTER_DEFINE (rtmpsrc, "rtmpsrc", GST_RANK_NONE,
+    gst_rtmp2_src_get_type ());
 
 static void
 gst_rtmp2_src_class_init (GstRtmp2SrcClass * klass)
