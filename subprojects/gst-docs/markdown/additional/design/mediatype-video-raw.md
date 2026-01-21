@@ -749,6 +749,97 @@
           default size:    size (component0)
 ```
 
+- **"GRAY10x6\_LE"** 16-bit grayscale, least significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           10 LE
+          offset:          6
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+- **"GRAY10x6\_BE"** 16-bit grayscale, most significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           10 BE
+          offset:          6
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+- **"GRAY12x4\_LE"** 16-bit grayscale, least significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           12 LE
+          offset:          4
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+- **"GRAY12x6\_BE"** 16-bit grayscale, most significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           12 BE
+          offset:          4
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+- **"GRAY14x4\_LE"** 16-bit grayscale, least significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           14 LE
+          offset:          2
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+- **"GRAY14x6\_BE"** 16-bit grayscale, most significant byte first
+- MSB-aligned
+
+```
+        Component 0: Y
+          depth:           14 BE
+          offset:          2
+          pstride:         2
+          default rstride: RU4 (width * 2)
+          default size:    rstride (component0) * height
+
+        Image
+          default size:    size (component0)
+```
+
+
 - **"GRAY16\_BE"** 16-bit grayscale, most significant byte first
 
 ```
