@@ -366,6 +366,7 @@ devenv_prefixdir = meson.current_source_dir() / 'prefix'
 devenv.prepend('GST_PLUGIN_PATH', devenv_prefixdir / 'lib' / 'gstreamer-1.0')
 devenv.prepend('GST_VALIDATE_SCENARIOS_PATH', devenv_prefixdir / 'share' / 'gstreamer-1.0' / 'validate' / 'scenarios')
 devenv.prepend('GI_TYPELIB_PATH', devenv_prefixdir / 'lib' / 'girepository-1.0')
+devenv.prepend('GI_GIR_PATH', meson.current_source_dir() / 'girs')
 devenv.prepend('PKG_CONFIG_PATH', devenv_prefixdir / 'lib' / 'pkgconfig')
 devenv.prepend('PATH', devenv_prefixdir / 'bin')
 library_path = 'LD_LIBRARY_PATH'
