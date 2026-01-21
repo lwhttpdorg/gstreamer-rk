@@ -423,18 +423,34 @@ gst_v4l2_transform_caps_remove_format_info (GstCaps * caps)
   return res;
 }
 
-/* The caps can be transformed into any other caps with format info removed.
+/* Determine based on a given pad direction and caps the caps for the other pad.
  * However, we should prefer passthrough, so if passthrough is possible,
  * put it first in the list. */
 static GstCaps *
 gst_v4l2_transform_transform_caps (GstBaseTransform * btrans,
     GstPadDirection direction, GstCaps * caps, GstCaps * filter)
 {
+  GstV4l2Transform *self = GST_V4L2_TRANSFORM (btrans);
   GstCaps *tmp, *tmp2;
   GstCaps *result;
 
   /* Get all possible caps that we can transform to */
   tmp = gst_v4l2_transform_caps_remove_format_info (caps);
+
+  /* Intersect with the probed caps to properly limit the resulting caps */
+  if (direction == GST_PAD_SRC && self->probed_sinkcaps) {
+    tmp2 =
+        gst_caps_intersect_full (self->probed_sinkcaps, tmp,
+        GST_CAPS_INTERSECT_FIRST);
+    gst_caps_unref (tmp);
+    tmp = tmp2;
+  } else if (direction == GST_PAD_SINK && self->probed_srccaps) {
+    tmp2 =
+        gst_caps_intersect_full (self->probed_srccaps, tmp,
+        GST_CAPS_INTERSECT_FIRST);
+    gst_caps_unref (tmp);
+    tmp = tmp2;
+  }
 
   if (filter) {
     tmp2 = gst_caps_intersect_full (filter, tmp, GST_CAPS_INTERSECT_FIRST);
