@@ -331,6 +331,96 @@ select0lw ay, ayuv
 select1wb y, ay
 
 
+.function video_orc_unpack_GRAY_16
+.dest 8 ayuv guint8
+.source 2 y guint16
+.param 2 y_mask
+.param 1 y_shift
+.const 2 a_val 0xFFFF
+.const 4 uv_val 0x80008000
+.temp 2 y_masked
+.temp 2 y_replicated
+.temp 4 ay
+
+# Apply mask to keep data bits
+andw y_masked, y, y_mask
+# Replicate MSBs to padding bits for proper scaling
+shruw y_replicated, y_masked, y_shift
+orw y_masked, y_masked, y_replicated
+# Merge alpha and Y
+mergewl ay, a_val, y_masked
+# Merge with UV to create AYUV64
+mergelq ayuv, ay, uv_val
+
+
+.function video_orc_unpack_GRAY_16_swap
+.dest 8 ayuv guint8
+.source 2 y guint16
+.param 2 y_mask
+.param 1 y_shift
+.const 2 a_val 0xFFFF
+.const 4 uv_val 0x80008000
+.temp 2 y_swapped
+.temp 2 y_masked
+.temp 2 y_replicated
+.temp 4 ay
+
+# Swap bytes since input endianness differs from system
+swapw y_swapped, y
+# Apply mask to keep data bits
+andw y_masked, y_swapped, y_mask
+# Replicate MSBs to padding bits for proper scaling
+shruw y_replicated, y_masked, y_shift
+orw y_masked, y_masked, y_replicated
+# Merge alpha and Y
+mergewl ay, a_val, y_masked
+# Merge with UV to create AYUV64
+mergelq ayuv, ay, uv_val
+
+
+.function video_orc_pack_GRAY_16
+.dest 2 y guint16
+.source 8 ayuv guint8
+.param 2 y_mask
+.temp 4 ay
+.temp 4 ay_shifted
+.temp 2 y_value
+.temp 2 y_masked
+
+# Extract lower 32 bits (A and Y)
+select0ql ay, ayuv
+# Shift right by 16 bits to move Y to lower 16 bits
+shrul ay_shifted, ay, 16
+# Take lower 16 bits (Y)
+select0lw y_value, ay_shifted
+# Apply mask to keep data bits
+andw y_masked, y_value, y_mask
+copyw y, y_masked
+
+
+.function video_orc_pack_GRAY_16_swap
+.dest 2 y guint16
+.source 8 ayuv guint8
+.param 2 y_mask
+.temp 4 ay
+.temp 4 ay_shifted
+.temp 2 y_value
+.temp 2 y_masked
+.temp 2 y_swapped
+
+# Extract lower 32 bits (A and Y)
+select0ql ay, ayuv
+# Shift right by 16 bits to move Y to lower 16 bits
+shrul ay_shifted, ay, 16
+# Take lower 16 bits (Y)
+select0lw y_value, ay_shifted
+# Apply mask to keep data bits
+andw y_masked, y_value, y_mask
+# Swap bytes for different endianness
+swapw y_swapped, y_masked
+copyw y, y_swapped
+
+
 .function video_orc_unpack_BGRA
 .dest 4 argb guint8
 .source 4 bgra guint8

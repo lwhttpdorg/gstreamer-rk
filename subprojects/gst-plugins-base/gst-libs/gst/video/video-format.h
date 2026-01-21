@@ -177,6 +177,12 @@ G_BEGIN_DECLS
  * @GST_VIDEO_FORMAT_NV16_10LE40: Fully packed variant of NV16_10LE32 (Since: 1.28)
  * @GST_VIDEO_FORMAT_BGR10x2_LE: packed 4:4:4 RGB (B-G-R-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
  * @GST_VIDEO_FORMAT_RGB10x2_LE: packed 4:4:4 RGB (R-G-B-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
+ * @GST_VIDEO_FORMAT_GRAY10x6_LE: 10-bit grayscale little-endian, packed into 16bit words (6 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY10x6_BE: 10-bit grayscale big-endian, packed into 16bit words (6 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY12x4_BE: 12-bit grayscale big-endian, packed into 16bit words (4 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY12x4_LE: 12-bit grayscale little-endian, packed into 16bit words (4 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY14x2_BE: 14-bit grayscale big-endian, packed into 16bit words (2 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY14x2_LE: 14-bit grayscale little-endian, packed into 16bit words (2 least-significant-bits padding) (Since: 1.30)
  *
  * Enum value describing the most common video formats.
  *
@@ -701,6 +707,60 @@ typedef enum {
    */
   GST_VIDEO_FORMAT_RGB10x2_LE,
 
+  /**
+   * GST_VIDEO_FORMAT_GRAY10x6_BE:
+   *
+   * 10-bit grayscale (Y-x) big-endian, packed into a 16bit word (6 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY10x6_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY10x6_LE:
+   *
+   * 10-bit grayscale (Y-x) little-endian, packed into a 16bit word (6 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY10x6_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY12x4_BE:
+   *
+   * 12-bit grayscale (Y-x) big-endian, packed into a 16bit word (4 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY12x4_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY12x4_LE:
+   *
+   * 12-bit grayscale (Y-x) little-endian, packed into a 16bit word (4 bits int least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY12x4_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY14x2_BE:
+   *
+   * 14-bit grayscale (Y-x) big-endian, packed into a 16bit word (2 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY14x2_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY14x2_LE:
+   *
+   * 14-bit grayscale (Y-x) little-endian, packed into a 16bit word (2 bits int least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY14x2_LE,
+
   /* Update GST_VIDEO_FORMAT_LAST below when adding more formats here */
 } GstVideoFormat;
 
@@ -711,7 +771,7 @@ typedef enum {
  *
  * Since: 1.26
  */
-#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_RGB10x2_LE + 1)
+#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_GRAY14x2_LE + 1)
 
 #define GST_VIDEO_MAX_PLANES 4
 #define GST_VIDEO_MAX_COMPONENTS 4
@@ -1197,7 +1257,8 @@ gconstpointer  gst_video_format_get_palette          (GstVideoFormat format, gsi
     "BGR, Y42B, NV16, NV61, YUY2, YVYU, UYVY, VYUY, I420, YV12, NV12, NV21, " \
     "NV12_16L32S, NV12_32L32, NV12_4L4, NV12_64Z32, NV12_8L128, Y41B, IYU1, " \
     "YUV9, YVU9, BGR16, RGB16, BGR15, RGB15, RGB8P, GRAY16_BE, GRAY16_LE, " \
-    "GRAY10_LE16, GRAY10_LE32, GRAY8"
+    "GRAY14x2_BE, GRAY14x2_LE, GRAY12x4_BE, GRAY12x4_LE, GRAY10x6_BE, " \
+    "GRAY10x6_LE, GRAY10_LE16, GRAY10_LE32, GRAY8"
 #elif G_BYTE_ORDER == G_LITTLE_ENDIAN
 #define GST_VIDEO_FORMATS_ALL_STR "A444_16LE, A444_16BE, Y416_LE, AYUV64, " \
     "RGBA64_LE, ARGB64, ARGB64_LE, BGRA64_LE, ABGR64_LE, Y416_BE, RGBA64_BE, " \
@@ -1217,7 +1278,8 @@ gconstpointer  gst_video_format_get_palette          (GstVideoFormat format, gsi
     "Y42B, NV16, NV61, YUY2, YVYU, UYVY, VYUY, I420, YV12, NV12, NV21, " \
     "NV12_16L32S, NV12_32L32, NV12_4L4, NV12_64Z32, NV12_8L128, Y41B, IYU1, " \
     "YUV9, YVU9, BGR16, RGB16, BGR15, RGB15, RGB8P, GRAY16_LE, GRAY16_BE, " \
-    "GRAY10_LE16, GRAY10_LE32, GRAY8"
+    "GRAY14x2_LE, GRAY14x2_BE, GRAY12x4_LE, GRAY12x4_BE, GRAY10x6_LE, " \
+    "GRAY10x6_BE, GRAY10_LE16, GRAY10_LE32, GRAY8"
 #endif
 
 /**
