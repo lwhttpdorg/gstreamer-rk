@@ -1114,6 +1114,26 @@ error:GST_WARNING ("Failed to write \"Registered user data\"");
 }
 
 static gboolean
+_h264_bit_writer_sei_user_data_unregistered (const GstH264UserDataUnregistered *
+    udu, GstBitWriter * bw, gboolean * space)
+{
+  gboolean have_space = TRUE;
+
+  GST_DEBUG ("Writing \"User data unregistered\"");
+
+  WRITE_BYTES(bw, udu->uuid, 16);
+  WRITE_BYTES(bw, udu->data, udu->size);
+
+  *space = TRUE;
+  return TRUE;
+
+error:GST_WARNING ("Failed to write \"User data unregistered\"");
+
+  *space = have_space;
+  return FALSE;
+}
+
+static gboolean
 _h264_bit_writer_sei_frame_packing (const GstH264FramePacking *
     frame_packing, GstBitWriter * bw, gboolean * space)
 {
@@ -1346,6 +1366,26 @@ error:
 }
 
 static gboolean
+_h264_bit_writer_sei_unhandled( const GstH264SEIUnhandledPayload * pay,
+    GstBitWriter *bw, gboolean * space)
+{
+  gboolean have_space = TRUE;
+
+  GST_DEBUG ("Writing \"Unhandled Payload\"");
+
+  WRITE_BYTES(bw, pay->data, pay->size);
+
+  *space = TRUE;
+  return TRUE;
+
+error:
+  GST_WARNING ("Failed to write \"Unhandled Payload\"");
+
+  *space = have_space;
+  return FALSE;
+}
+
+static gboolean
 _h264_bit_writer_sei_message (const GstH264SEIMessage * msg,
     GstBitWriter * bw, gboolean * space)
 {
@@ -1357,6 +1397,11 @@ _h264_bit_writer_sei_message (const GstH264SEIMessage * msg,
     case GST_H264_SEI_REGISTERED_USER_DATA:
       if (!_h264_bit_writer_sei_registered_user_data
           (&msg->payload.registered_user_data, bw, &have_space))
+        goto error;
+      break;
+    case GST_H264_SEI_USER_DATA_UNREGISTERED:
+      if (!_h264_bit_writer_sei_user_data_unregistered
+          (&msg->payload.user_data_unregistered, bw, &have_space))
         goto error;
       break;
     case GST_H264_SEI_FRAME_PACKING:
@@ -1384,14 +1429,22 @@ _h264_bit_writer_sei_message (const GstH264SEIMessage * msg,
           (&msg->payload.buffering_period, bw, &have_space))
         goto error;
       break;
-    default:
+    case GST_H264_SEI_UNHANDLED_PAYLOAD:
+      if (!_h264_bit_writer_sei_unhandled
+          (&msg->payload.unhandled_payload, bw, &have_space))
+        goto error;
       break;
+    default:
+      /* if stored as a known payload type but don't have a corresponding writer */
+      /* need to skip writing the trailing bits */
+      goto done;
   }
 
   /* Add trailings. */
   WRITE_BITS (bw, 1, 1);
   gst_bit_writer_align_bytes_unchecked (bw, 0);
 
+done:
   *space = TRUE;
 
   return TRUE;
@@ -1466,6 +1519,9 @@ gst_h264_bit_writer_sei (GArray * sei_messages, gboolean start_code,
     g_assert (gst_bit_writer_get_size (&bw_msg) % 8 == 0);
     payload_size_data = gst_bit_writer_get_size (&bw_msg) / 8;
     payload_type_data = sei->payloadType;
+    /* get the real payload type */
+    if (sei->payloadType == GST_H264_SEI_UNHANDLED_PAYLOAD)
+      payload_type_data = sei->payload.unhandled_payload.payloadType;
 
     /* write payload type bytes */
     while (payload_type_data >= 0xff) {
