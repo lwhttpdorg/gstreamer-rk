@@ -601,7 +601,8 @@ gst_play_set_suburi_internal (gpointer user_data)
 static void
 gst_play_set_rate_internal (GstPlay * self)
 {
-  self->seek_position = gst_play_get_position (self);
+  if (self->seek_position == GST_CLOCK_TIME_NONE)
+    self->seek_position = gst_play_get_position(self);
 
   /* If there is no seek being dispatch to the main context currently do that,
    * otherwise we just updated the rate so that it will be taken by
