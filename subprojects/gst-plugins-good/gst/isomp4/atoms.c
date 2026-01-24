@@ -4062,7 +4062,7 @@ atom_trak_add_timecode_entry (AtomTRAK * trak, AtomsContext * context,
 
   tmcd->se.kind = TIMECODE;
   tmcd->se.data_reference_index = 1;
-  tmcd->tc_flags = TC_24H_MAX;
+  tmcd->tc_flags = TC_24H_MAX | TC_COUNTER;
   if (tc->config.flags &= GST_VIDEO_TIME_CODE_FLAGS_DROP_FRAME)
     tmcd->tc_flags |= TC_DROP_FRAME;
   tmcd->name.language_code = 0;
