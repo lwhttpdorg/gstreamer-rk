@@ -8895,6 +8895,28 @@ qtdemux_parse_moov (GstQTDemux * qtdemux, const guint8 * buffer, guint length)
 {
   GNode *cmov;
 
+  /* Clean up any previous moov state before parsing a new one.
+   * This handles the case where qtdemux_parse_moov is called multiple times
+   * (e.g., when processing a new moov atom after a previous one).
+   *
+   * Memory ownership:
+   *   - moov_node_compressed->data: Points to the original buffer passed into
+   *     this function, which is NOT owned by us - do not free.
+   *   - moov_node->data (when compressed): Points to the decompressed buffer
+   *     allocated by qtdemux_inflate(), which IS owned by us - must free.
+   *
+   * This cleanup pattern matches gst_qtdemux_reset(). */
+  if (qtdemux->moov_node_compressed) {
+    g_node_destroy (qtdemux->moov_node_compressed);
+    if (qtdemux->moov_node)
+      g_free (qtdemux->moov_node->data);
+    qtdemux->moov_node_compressed = NULL;
+  }
+  if (qtdemux->moov_node) {
+    g_node_destroy (qtdemux->moov_node);
+    qtdemux->moov_node = NULL;
+  }
+
   qtdemux->moov_node = g_node_new ((guint8 *) buffer);
 
   /* counts as header data */
