@@ -782,10 +782,6 @@ gst_h265_parser_parse_short_term_ref_pic_sets (GstH265ShortTermRefPicSet *
   guint8 num_short_term_ref_pic_sets;
   guint8 RefRpsIdx = 0;
   gint16 deltaRps = 0;
-  guint8 use_delta_flag[16] = { 0 };
-  guint8 used_by_curr_pic_flag[16] = { 0 };
-  guint32 delta_poc_s0_minus1[16] = { 0 };
-  guint32 delta_poc_s1_minus1[16] = { 0 };
   gint j, i = 0;
   gint dPoc;
 
@@ -794,7 +790,7 @@ gst_h265_parser_parse_short_term_ref_pic_sets (GstH265ShortTermRefPicSet *
   /* set default values for fields that might not be present in the bitstream
      and have valid defaults */
   for (j = 0; j < 16; j++)
-    use_delta_flag[j] = 1;
+    stRPS->use_delta_flag[j] = 1;
 
   num_short_term_ref_pic_sets = sps->num_short_term_ref_pic_sets;
 
@@ -817,30 +813,31 @@ gst_h265_parser_parse_short_term_ref_pic_sets (GstH265ShortTermRefPicSet *
     stRPS->NumDeltaPocsOfRefRpsIdx = RefRPS->NumDeltaPocs;
 
     for (j = 0; j <= RefRPS->NumDeltaPocs; j++) {
-      READ_UINT8 (nr, used_by_curr_pic_flag[j], 1);
-      if (!used_by_curr_pic_flag[j])
-        READ_UINT8 (nr, use_delta_flag[j], 1);
+      READ_UINT8 (nr, stRPS->used_by_curr_pic_flag[j], 1);
+      if (!stRPS->used_by_curr_pic_flag[j])
+        READ_UINT8 (nr, stRPS->use_delta_flag[j], 1);
     }
 
     /* 7-47: calculate NumNegativePics, DeltaPocS0 and UsedByCurrPicS0 */
     i = 0;
     for (j = (RefRPS->NumPositivePics - 1); j >= 0; j--) {
       dPoc = RefRPS->DeltaPocS1[j] + deltaRps;
-      if (dPoc < 0 && use_delta_flag[RefRPS->NumNegativePics + j]) {
+      if (dPoc < 0 && stRPS->use_delta_flag[RefRPS->NumNegativePics + j]) {
         stRPS->DeltaPocS0[i] = dPoc;
         stRPS->UsedByCurrPicS0[i++] =
-            used_by_curr_pic_flag[RefRPS->NumNegativePics + j];
+            stRPS->used_by_curr_pic_flag[RefRPS->NumNegativePics + j];
       }
     }
-    if (deltaRps < 0 && use_delta_flag[RefRPS->NumDeltaPocs]) {
+    if (deltaRps < 0 && stRPS->use_delta_flag[RefRPS->NumDeltaPocs]) {
       stRPS->DeltaPocS0[i] = deltaRps;
-      stRPS->UsedByCurrPicS0[i++] = used_by_curr_pic_flag[RefRPS->NumDeltaPocs];
+      stRPS->UsedByCurrPicS0[i++] =
+          stRPS->used_by_curr_pic_flag[RefRPS->NumDeltaPocs];
     }
     for (j = 0; j < RefRPS->NumNegativePics; j++) {
       dPoc = RefRPS->DeltaPocS0[j] + deltaRps;
-      if (dPoc < 0 && use_delta_flag[j]) {
+      if (dPoc < 0 && stRPS->use_delta_flag[j]) {
         stRPS->DeltaPocS0[i] = dPoc;
-        stRPS->UsedByCurrPicS0[i++] = used_by_curr_pic_flag[j];
+        stRPS->UsedByCurrPicS0[i++] = stRPS->used_by_curr_pic_flag[j];
       }
     }
     stRPS->NumNegativePics = i;
@@ -849,21 +846,22 @@ gst_h265_parser_parse_short_term_ref_pic_sets (GstH265ShortTermRefPicSet *
     i = 0;
     for (j = (RefRPS->NumNegativePics - 1); j >= 0; j--) {
       dPoc = RefRPS->DeltaPocS0[j] + deltaRps;
-      if (dPoc > 0 && use_delta_flag[j]) {
+      if (dPoc > 0 && stRPS->use_delta_flag[j]) {
         stRPS->DeltaPocS1[i] = dPoc;
-        stRPS->UsedByCurrPicS1[i++] = used_by_curr_pic_flag[j];
+        stRPS->UsedByCurrPicS1[i++] = stRPS->used_by_curr_pic_flag[j];
       }
     }
-    if (deltaRps > 0 && use_delta_flag[RefRPS->NumDeltaPocs]) {
+    if (deltaRps > 0 && stRPS->use_delta_flag[RefRPS->NumDeltaPocs]) {
       stRPS->DeltaPocS1[i] = deltaRps;
-      stRPS->UsedByCurrPicS1[i++] = used_by_curr_pic_flag[RefRPS->NumDeltaPocs];
+      stRPS->UsedByCurrPicS1[i++] =
+          stRPS->used_by_curr_pic_flag[RefRPS->NumDeltaPocs];
     }
     for (j = 0; j < RefRPS->NumPositivePics; j++) {
       dPoc = RefRPS->DeltaPocS1[j] + deltaRps;
-      if (dPoc > 0 && use_delta_flag[RefRPS->NumNegativePics + j]) {
+      if (dPoc > 0 && stRPS->use_delta_flag[RefRPS->NumNegativePics + j]) {
         stRPS->DeltaPocS1[i] = dPoc;
         stRPS->UsedByCurrPicS1[i++] =
-            used_by_curr_pic_flag[RefRPS->NumNegativePics + j];
+            stRPS->used_by_curr_pic_flag[RefRPS->NumNegativePics + j];
       }
     }
     stRPS->NumPositivePics = i;
@@ -879,33 +877,35 @@ gst_h265_parser_parse_short_term_ref_pic_sets (GstH265ShortTermRefPicSet *
             stRPS->NumNegativePics));
 
     for (i = 0; i < stRPS->NumNegativePics; i++) {
-      READ_UE_MAX (nr, delta_poc_s0_minus1[i], 32767);
+      READ_UE_MAX (nr, stRPS->delta_poc_s0_minus1[i], 32767);
       /* 7-51 */
       READ_UINT8 (nr, stRPS->UsedByCurrPicS0[i], 1);
+      stRPS->used_by_curr_pic_flag[i] = stRPS->UsedByCurrPicS0[i];
 
       if (i == 0) {
         /* 7-53 */
-        stRPS->DeltaPocS0[i] = -(delta_poc_s0_minus1[i] + 1);
+        stRPS->DeltaPocS0[i] = -(stRPS->delta_poc_s0_minus1[i] + 1);
       } else {
         /* 7-55 */
         stRPS->DeltaPocS0[i] =
-            stRPS->DeltaPocS0[i - 1] - (delta_poc_s0_minus1[i] + 1);
+            stRPS->DeltaPocS0[i - 1] - (stRPS->delta_poc_s0_minus1[i] + 1);
       }
     }
 
     for (j = 0; j < stRPS->NumPositivePics; j++) {
-      READ_UE_MAX (nr, delta_poc_s1_minus1[j], 32767);
+      READ_UE_MAX (nr, stRPS->delta_poc_s1_minus1[j], 32767);
 
       /* 7-52 */
       READ_UINT8 (nr, stRPS->UsedByCurrPicS1[j], 1);
+      stRPS->used_by_curr_pic_flag[i + j] = stRPS->UsedByCurrPicS1[j];
 
       if (j == 0) {
         /* 7-54 */
-        stRPS->DeltaPocS1[j] = delta_poc_s1_minus1[j] + 1;
+        stRPS->DeltaPocS1[j] = stRPS->delta_poc_s1_minus1[j] + 1;
       } else {
         /* 7-56 */
         stRPS->DeltaPocS1[j] =
-            stRPS->DeltaPocS1[j - 1] + (delta_poc_s1_minus1[j] + 1);
+            stRPS->DeltaPocS1[j - 1] + (stRPS->delta_poc_s1_minus1[j] + 1);
       }
     }
 

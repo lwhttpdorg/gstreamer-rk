@@ -899,6 +899,16 @@ struct _GstH265VPS {
  *  the value of the variable deltaRps.
  * @abs_delta_rps_minus1: delta_rps_sign and abs_delta_rps_minus1 together specify
  *  the value of the variable deltaRps
+ * @use_delta_flag: Bit j equals to 1 specifies that the j-th entry in the source candidate
+ *  short-term RPS is included in this candidate short-term RPS (Since: 1.30)
+ * @used_by_curr_pic_flag: Bit j specifies if short-term RPS j is used by the current picture
+ *  (Since: 1.30)
+ * @delta_poc_s0_minus1: Specifies the negative picture order count delta for the i-th
+ *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
+ *  picture set semantics" of the specification (Since: 1.30)
+ * @delta_poc_s1_minus1: Specifies the positive picture order count delta for the i-th
+ *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
+ *  picture set semantics" of the specification (Since: 1.30)
  * @NumDeltaPocs: sum of @NumNegativePics and @NumPositivePics.
  * @NumNegativePics: Derived value depending on inter_ref_pic_set_prediction_flag.
  *  If inter_ref_pic_set_prediction_flag is equal to 0, this specifies
@@ -928,12 +938,54 @@ struct _GstH265VPS {
  *
  * Defines the #GstH265ShortTermRefPicSet params
  */
+
 struct _GstH265ShortTermRefPicSet
 {
   guint8 inter_ref_pic_set_prediction_flag;
   guint8 delta_idx_minus1;
   guint8 delta_rps_sign;
   guint16 abs_delta_rps_minus1;
+
+  /**
+   * GstH265ShortTermRefPicSet.use_delta_flag:
+   *
+   * Bit j equals to 1 specifies that the j-th entry in the source candidate
+   * short-term RPS is included in this candidate short-term RPS.
+   *
+   * Since: 1.30
+   */
+  guint8 use_delta_flag[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.used_by_curr_pic_flag:
+   *
+   * Bit j specifies if short-term RPS j is used by the current picture.
+   *
+   * Since: 1.30
+   */
+  guint8 used_by_curr_pic_flag[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.delta_poc_s0_minus1:
+   *
+   * Specifies the negative picture order count delta for the i-th entry in
+   * the short-term RPS. See details in section 7.4.8 "Short-term reference
+   * picture set semantics" of the specification.
+   *
+   * Since: 1.30
+   */
+  guint32 delta_poc_s0_minus1[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.delta_poc_s1_minus1:
+   *
+   * Specifies the positive picture order count delta for the i-th entry in
+   * the short-term RPS. See details in section 7.4.8 "Short-term reference
+   * picture set semantics" of the specification.
+   *
+   * Since: 1.30
+   */
+  guint32 delta_poc_s1_minus1[16];
 
   /* calculated values */
   guint8 NumDeltaPocs;
