@@ -26,7 +26,8 @@
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-h264, lcevc = (boolean) true")
+    GST_STATIC_CAPS
+    ("video/x-h264, alignment = (string) au, lcevc = (boolean) true")
     );
 
 struct _GstLcevcH264DecodeBin
@@ -46,7 +47,7 @@ GST_ELEMENT_REGISTER_DEFINE (lcevch264decodebin, "lcevch264decodebin",
 static GstCaps *
 gst_lcevc_h264_decode_bin_get_base_decoder_sink_caps (GstLcevcDecodeBin * base)
 {
-  return gst_caps_new_simple ("video/x-h264",
+  return gst_caps_new_simple ("video/x-h264", "alignment", G_TYPE_STRING, "au",
       "lcevc", G_TYPE_BOOLEAN, FALSE, NULL);
 }
 
