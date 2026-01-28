@@ -272,6 +272,26 @@ gst_core_audio_set_channel_layout (GstCoreAudio * core_audio,
 
 /* The AudioUnit must be uninitialized before calling this */
 gboolean
+gst_core_audio_set_channel_map (GstCoreAudio * core_audio, guint32 channels)
+{
+  gboolean ret;
+  SInt32 *channel_map = NULL;
+
+  g_return_val_if_fail (channels <= GST_OSX_AUDIO_MAX_CHANNEL, FALSE);
+
+  channel_map = g_malloc_n (sizeof (SInt32), channels);
+  for (SInt32 i = 0; i < channels; i++) {
+    channel_map[i] = i;
+  }
+
+  ret = _core_audio_set_property (core_audio,
+      kAudioOutputUnitProperty_ChannelMap, channel_map, channels);
+  g_free (channel_map);
+  return ret;
+}
+
+/* The AudioUnit must be uninitialized before calling this */
+gboolean
 gst_core_audio_set_format (GstCoreAudio * core_audio,
     AudioStreamBasicDescription format)
 {

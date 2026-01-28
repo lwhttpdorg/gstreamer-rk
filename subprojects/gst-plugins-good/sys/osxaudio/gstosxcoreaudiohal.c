@@ -1092,6 +1092,9 @@ gst_core_audio_initialize_impl (GstCoreAudio * core_audio,
             format.mChannelsPerFrame, caps))
       goto done;
 
+    if (!gst_core_audio_set_channel_map (core_audio, format.mChannelsPerFrame))
+      goto done;
+
     // Attempt to configure the requested frame size if smaller than the device's
     // This will apparently modify the size for all audio devices in the current process so should
     // be done conservatively

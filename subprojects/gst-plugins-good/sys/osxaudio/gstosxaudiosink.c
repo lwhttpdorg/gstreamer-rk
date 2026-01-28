@@ -246,7 +246,6 @@ gst_osx_audio_sink_init (GstOsxAudioSink * sink)
 
   sink->device_id = kAudioDeviceUnknown;
   sink->volume = DEFAULT_VOLUME;
-
 #ifdef HAVE_IOS
   sink->configure_session = DEFAULT_CONFIGURE_SESSION;
 #endif

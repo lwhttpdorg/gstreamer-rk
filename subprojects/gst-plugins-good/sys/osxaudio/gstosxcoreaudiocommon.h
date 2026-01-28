@@ -52,7 +52,11 @@ gboolean gst_core_audio_set_format                        (GstCoreAudio * core_a
                                                            AudioStreamBasicDescription format);
 
 gboolean gst_core_audio_set_channel_layout                (GstCoreAudio * core_audio,
-                                                           gint channels, GstCaps * caps);
+                                                           gint channels,
+                                                           GstCaps * caps);
+
+gboolean gst_core_audio_set_channel_map                   (GstCoreAudio * core_audio,
+                                                           guint32 channels);
 
 gboolean gst_core_audio_open_device                       (GstCoreAudio *core_audio,
                                                            OSType sub_type,
