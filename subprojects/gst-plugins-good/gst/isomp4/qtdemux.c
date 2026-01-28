@@ -15384,6 +15384,67 @@ qtdemux_find_iloc_item_id (GstQTDemux * qtdemux, GNode * meta,
 }
 
 static gboolean
+qtdemux_parse_infe (GstQTDemux * qtdemux, guint32 * infe_item_type,
+    const gchar ** item_uri_or_type, guint32 * infe_item_id,
+    GstByteReader * infe_data)
+{
+  guint8 infe_version;
+  guint16 infe_protection_index;
+
+  if (!gst_byte_reader_get_uint8 (infe_data, &infe_version))
+    return FALSE;
+
+  /* skip flags */
+  if (!gst_byte_reader_skip (infe_data, 3))
+    return FALSE;
+
+  if (infe_version == 2) {
+    guint16 infe_item_id_16;
+
+    if (!gst_byte_reader_get_uint16_be (infe_data, &infe_item_id_16))
+      return FALSE;
+    *infe_item_id = infe_item_id_16;
+  } else if (infe_version == 3) {
+    if (!gst_byte_reader_get_uint32_be (infe_data, infe_item_id))
+      return FALSE;
+  } else {
+    GST_FIXME_OBJECT (qtdemux, "infe version %u not understood,"
+        "only versions 2 and 3 are parsed", infe_version);
+    *infe_item_type = 0;
+    return TRUE;
+  }
+
+  if (!gst_byte_reader_get_uint16_be (infe_data, &infe_protection_index))
+    return FALSE;
+
+  if (infe_protection_index != 0) {
+    GST_FIXME_OBJECT (qtdemux, "protected infe not supported, ignoring");
+    *infe_item_type = 0;
+    return TRUE;
+  }
+
+  if (!gst_byte_reader_get_uint32_le (infe_data, infe_item_type))
+    return FALSE;
+  if (*infe_item_type != FOURCC_uri_) {
+    GST_FIXME_OBJECT (qtdemux, "Only 'uri ' infe supported, '%"
+        GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (*infe_item_type));
+    return TRUE;
+  }
+
+  /* Skip item_name */
+  if (!gst_byte_reader_skip_string_utf8 (infe_data))
+    return FALSE;
+
+  if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
+    GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+
+static gboolean
 qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
     GNode * meta)
 {
@@ -15406,85 +15467,43 @@ qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
 
     infe = qtdemux_tree_get_child_by_type_full (iinf, FOURCC_infe, &infe_data);
     while (infe) {
-      guint8 infe_version;
+      guint32 infe_item_type = 0;
+      const gchar *infe_uri_or_type = NULL;
       guint32 infe_item_id;
-      guint32 infe_item_type;
-      guint16 infe_protection_index;
-      const gchar *infe_uri_type = NULL;
 
-      if (!gst_byte_reader_get_uint8 (&infe_data, &infe_version))
+      if (!qtdemux_parse_infe (qtdemux, &infe_item_type, &infe_uri_or_type,
+              &infe_item_id, &infe_data))
         return FALSE;
 
-      /* skip flags */
-      if (!gst_byte_reader_skip (&infe_data, 3))
-        return FALSE;
+      if (infe_item_type == FOURCC_uri_) {
+        if (!strcmp (infe_uri_or_type,
+                "urn:uuid:15beb8e4-944d-5fc6-a3dd-cb5a7e655c73")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          /* GIMI ContentID */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            return FALSE;
 
-      if (infe_version == 2) {
-        guint16 infe_item_id_16;
+          if (item_size < 2) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI ContentID item size is too small");
+            goto skip_infe;
+          }
 
-        if (!gst_byte_reader_get_uint16_be (&infe_data, &infe_item_id_16))
-          return FALSE;
-        infe_item_id = infe_item_id_16;
-      } else if (infe_version == 3) {
-        if (!gst_byte_reader_get_uint32_be (&infe_data, &infe_item_id))
-          return FALSE;
-      } else {
-        GST_FIXME_OBJECT (qtdemux, "infe version %u not understood,"
-            "only versions 2 and 3 are parsed", infe_version);
-        goto skip_infe;
-      }
+          if (item_data[item_size - 1] != 0) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI ContentID is not nul-terminated, skipping");
+            goto skip_infe;
+          }
 
-      if (!gst_byte_reader_get_uint16_be (&infe_data, &infe_protection_index))
-        return FALSE;
-
-      if (infe_protection_index != 0) {
-        GST_FIXME_OBJECT (qtdemux, "protected infe not supported, ignoring");
-        goto skip_infe;
-      }
-
-      if (!gst_byte_reader_get_uint32_le (&infe_data, &infe_item_type))
-        return FALSE;
-      if (infe_item_type != FOURCC_uri_) {
-        GST_FIXME_OBJECT (qtdemux, "Only 'uri ' infe supported, '%"
-            GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (infe_item_type));
-        goto skip_infe;
-      }
-
-      /* Skip item_name */
-      if (!gst_byte_reader_skip_string_utf8 (&infe_data))
-        return FALSE;
-
-      if (!gst_byte_reader_get_string_utf8 (&infe_data, &infe_uri_type)) {
-        GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
-        return FALSE;
-      }
-
-      if (!strcmp (infe_uri_type,
-              "urn:uuid:15beb8e4-944d-5fc6-a3dd-cb5a7e655c73")) {
-        const guint8 *item_data = NULL;
-        guint item_size = 0;
-        /* GIMI ContentID */
-        if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data, infe_item_id,
-                &item_data, &item_size))
-          return FALSE;
-
-        if (item_size < 2) {
-          GST_WARNING_OBJECT (qtdemux, "GIMI ContentID item size is too small");
-          goto skip_infe;
+          gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID, item_data, NULL);
+        } else {
+          GST_DEBUG_OBJECT (qtdemux, "Unknown URI %s in infe",
+              infe_uri_or_type);
         }
-
-        if (item_data[item_size - 1] != 0) {
-          GST_WARNING_OBJECT (qtdemux,
-              "GIMI ContentID is not nul-terminated, skipping");
-          goto skip_infe;
-        }
-
-        gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
-            GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID, item_data, NULL);
-      } else {
-        GST_DEBUG_OBJECT (qtdemux, "Unknown URI %s in infe", infe_uri_type);
       }
-
 
     skip_infe:
       infe = qtdemux_tree_get_sibling_by_type_full (infe, FOURCC_infe,
