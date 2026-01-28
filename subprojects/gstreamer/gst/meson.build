@@ -155,6 +155,15 @@ gst_headers = files(
   'math-compat.h',
   'gstcpuid.h',
 )
+
+lttng_dep = dependency('lttng-ust', version : '>=2.4', required : get_option('lttng'))
+
+if lttng_dep.found()
+  gst_sources += files('gst-lttng.c')
+  gst_headers += files('gst-lttng.h')
+  add_project_arguments(['-DHAVE_LTTNG'], language : 'c')
+endif
+
 if host_system == 'darwin'
   gst_headers += files('gstmacos.h')
   gst_sources += files('gstmacos.m')
@@ -273,6 +282,10 @@ if get_option('gstreamer-static-full')
   libgst_static_c_args = ['-DGST_FULL_STATIC_COMPILATION']
 else
   libgst_static_c_args = []
+endif
+
+if lttng_dep.found()
+  extra_deps += lttng_dep
 endif
 
 # Make sure that subproject building gir files work

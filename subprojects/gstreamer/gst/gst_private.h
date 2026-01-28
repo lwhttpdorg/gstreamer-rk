@@ -137,6 +137,12 @@ G_GNUC_INTERNAL  void  _priv_gst_toc_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_date_time_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_plugin_feature_rank_initialize (void);
 
+#if defined(HAVE_LTTNG) && !defined(GST_REMOVE_DISABLED)
+G_GNUC_INTERNAL  void  _gst_lttng_init (void);
+#else
+#define _gst_lttng_init()
+#endif
+
 /* cleanup functions called from gst_deinit(). */
 G_GNUC_INTERNAL  void  _priv_gst_allocator_cleanup (void);
 G_GNUC_INTERNAL  void  _priv_gst_caps_features_cleanup (void);

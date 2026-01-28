@@ -60,3 +60,5 @@ option('glib-asserts', type : 'feature', value : 'enabled', yield : true,
 option('glib-checks', type : 'feature', value : 'enabled', yield : true,
        description: 'Enable GLib checks such as API guards (auto = enabled for development, disabled for stable releases)',
        deprecated: 'glib_checks')
+
+option('lttng', type: 'feature', value: 'auto', description: 'Enable LTTng tracing')
