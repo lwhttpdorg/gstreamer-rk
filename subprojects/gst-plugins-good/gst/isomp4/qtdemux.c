@@ -15479,19 +15479,28 @@ qtdemux_parse_infe (GstQTDemux * qtdemux, guint32 * infe_item_type,
 
   if (!gst_byte_reader_get_uint32_le (infe_data, infe_item_type))
     return FALSE;
-  if (*infe_item_type != FOURCC_uri_) {
-    GST_FIXME_OBJECT (qtdemux, "Only 'uri ' infe supported, '%"
-        GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (*infe_item_type));
-    return TRUE;
-  }
 
   /* Skip item_name */
   if (!gst_byte_reader_skip_string_utf8 (infe_data))
     return FALSE;
 
-  if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
-    GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
-    return FALSE;
+  if (*infe_item_type == FOURCC_uri_) {
+    if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
+      GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+      return FALSE;
+    }
+  } else if (*infe_item_type == FOURCC_mime) {
+    if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
+      GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+      return FALSE;
+    }
+
+    /* Skip content encoding */
+    if (!gst_byte_reader_skip_string_utf8 (infe_data))
+      return FALSE;
+  } else {
+    GST_FIXME_OBJECT (qtdemux, "Only 'uri ' and 'mime' infe supported, '%"
+        GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (*infe_item_type));
   }
 
   return TRUE;
@@ -21106,6 +21115,9 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
 {
   GNode *meta, *cstb;
   GstByteReader cstb_data;
+  GNode *idat;
+  GstByteReader idat_data;
+  GNode *iinf;
 
   meta = g_node_new ((gpointer) buffer);
   qtdemux_parse_node (qtdemux, meta, buffer, length);
@@ -21116,6 +21128,65 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
               &cstb_data))) {
     qtdemux_parse_cstb (qtdemux, &cstb_data);
   }
+
+    idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
+
+  if (!idat)
+    goto end;
+
+  iinf = qtdemux_tree_get_child_by_type (meta, FOURCC_iinf);
+
+  while (iinf) {
+    GNode *infe;
+    GstByteReader infe_data;
+
+    infe = qtdemux_tree_get_child_by_type_full (iinf, FOURCC_infe, &infe_data);
+    while (infe) {
+      guint32 infe_item_type = 0;
+      const gchar *infe_uri_or_type = NULL;
+      guint32 infe_item_id;
+
+      if (!qtdemux_parse_infe (qtdemux, &infe_item_type, &infe_uri_or_type,
+              &infe_item_id, infe, &infe_data))
+        goto end;
+
+      if (infe_item_type == FOURCC_mime) {
+        if (!strcmp (infe_uri_or_type, "application/nga-gimi-ism+xml")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          /* GIMI Security Markings XML */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            goto end;
+
+          if (item_size < 2) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Security Markings XML item size is too small");
+            goto skip_infe;
+          }
+
+          if (item_data[item_size - 1] != 0) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Security Markings XML is not nul-terminated, skipping");
+            goto skip_infe;
+          }
+
+          gst_tag_list_add (qtdemux->tag_list, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML, item_data, NULL);
+        } else {
+          GST_WARNING_OBJECT (qtdemux,
+              "Mime define meta %s handling not implemented", infe_uri_or_type);
+        }
+      }
+    skip_infe:
+      infe = qtdemux_tree_get_sibling_by_type_full (infe, FOURCC_infe,
+          &infe_data);
+    }
+
+    iinf = qtdemux_tree_get_sibling_by_type (iinf, FOURCC_iinf);
+  }
+
+end:
 
   g_node_destroy (meta);
 }

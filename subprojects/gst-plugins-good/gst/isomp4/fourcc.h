@@ -354,6 +354,7 @@ G_BEGIN_DECLS
 #define FOURCC_iloc     GST_MAKE_FOURCC('i','l','o','c')
 #define FOURCC_infe     GST_MAKE_FOURCC('i','n','f','e')
 #define FOURCC_uri_     GST_MAKE_FOURCC('u','r','i',' ')
+#define FOURCC_mime     GST_MAKE_FOURCC('m','i','m','e')
 
 #define FOURCC_3gg6     GST_MAKE_FOURCC('3','g','g','6')
 #define FOURCC_3gg7     GST_MAKE_FOURCC('3','g','g','7')
