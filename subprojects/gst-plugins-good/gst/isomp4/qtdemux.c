@@ -415,8 +415,13 @@ static void gst_qtdemux_reset (GstQTDemux * qtdemux, gboolean hard);
 static void qtdemux_clear_protection_events_on_all_streams (GstQTDemux *
     qtdemux);
 
+
 static GstFlowReturn gst_qtdemux_combine_flows (GstQTDemux * demux,
     QtDemuxStream * stream, GstFlowReturn ret);
+
+static void qtdemux_parse_file_meta (GstQTDemux * qtdemux,
+    const guint8 * buffer, gint length);
+
 
 static void
 gst_qtdemux_set_property (GObject * object, guint prop_id, const GValue * value,
@@ -5334,27 +5339,12 @@ gst_qtdemux_loop_state_header (GstQTDemux * qtdemux)
     case FOURCC_meta:
     {
       GstBuffer *meta = NULL;
-      GNode *node, *child;
-      GstByteReader child_data;
       ret = gst_qtdemux_pull_atom (qtdemux, cur_offset, length, &meta);
       if (ret != GST_FLOW_OK)
         goto beach;
       qtdemux->offset += length;
       gst_buffer_map (meta, &map, GST_MAP_READ);
-
-      node = g_node_new (map.data);
-
-      qtdemux_parse_node (qtdemux, node, map.data, map.size);
-
-      /* Parse ONVIF Export File Format CorrectStartTime box if available */
-      if ((child =
-              qtdemux_tree_get_child_by_type_full (node, FOURCC_cstb,
-                  &child_data))) {
-        qtdemux_parse_cstb (qtdemux, &child_data);
-      }
-
-      g_node_destroy (node);
-
+      qtdemux_parse_file_meta (qtdemux, map.data, map.size);
       gst_buffer_unmap (meta, &map);
       gst_buffer_unref (meta);
       break;
@@ -8697,20 +8687,8 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
           GST_DEBUG_OBJECT (demux, "Parsing [sidx]");
           qtdemux_parse_sidx (demux, data, demux->neededbytes);
         } else if (fourcc == FOURCC_meta) {
-          GNode *node, *child;
-          GstByteReader child_data;
-
-          node = g_node_new ((gpointer) data);
-          qtdemux_parse_node (demux, node, data, demux->neededbytes);
-
-          /* Parse ONVIF Export File Format CorrectStartTime box if available */
-          if ((child =
-                  qtdemux_tree_get_child_by_type_full (node, FOURCC_cstb,
-                      &child_data))) {
-            qtdemux_parse_cstb (demux, &child_data);
-          }
-
-          g_node_destroy (node);
+          GST_DEBUG_OBJECT (demux, "Parsing [meta]");
+          qtdemux_parse_file_meta (demux, data, demux->neededbytes);
         } else {
           switch (fourcc) {
             case FOURCC_styp:
@@ -15595,10 +15573,12 @@ qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
             goto skip_infe;
           }
 
-          GstByteReader item_reader = GST_BYTE_READER_INIT (item_data, item_size);
+          GstByteReader item_reader =
+              GST_BYTE_READER_INIT (item_data, item_size);
 
           if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
-            GST_WARNING_OBJECT (qtdemux, "Can't read number of samples entries");
+            GST_WARNING_OBJECT (qtdemux,
+                "Can't read number of samples entries");
             return FALSE;
           }
           if (val != 1) {
@@ -15609,7 +15589,8 @@ qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
 
           /* Skip sample entry index */
           if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
-            GST_WARNING_OBJECT (qtdemux, "Can't read number of samples entries");
+            GST_WARNING_OBJECT (qtdemux,
+                "Can't read number of samples entries");
             return FALSE;
           }
 
@@ -21117,4 +21098,24 @@ gst_qtdemux_append_protection_system_id (GstQTDemux * qtdemux,
   GST_DEBUG_OBJECT (qtdemux, "Adding cenc protection system ID %s", system_id);
   g_ptr_array_add (qtdemux->protection_system_ids, g_ascii_strdown (system_id,
           -1));
+}
+
+static void
+qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
+    gint length)
+{
+  GNode *meta, *cstb;
+  GstByteReader cstb_data;
+
+  meta = g_node_new ((gpointer) buffer);
+  qtdemux_parse_node (qtdemux, meta, buffer, length);
+
+  /* Parse ONVIF Export File Format CorrectStartTime box if available */
+  if ((cstb =
+          qtdemux_tree_get_child_by_type_full (meta, FOURCC_cstb,
+              &cstb_data))) {
+    qtdemux_parse_cstb (qtdemux, &cstb_data);
+  }
+
+  g_node_destroy (meta);
 }
