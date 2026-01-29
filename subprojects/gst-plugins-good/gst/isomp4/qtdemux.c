@@ -15499,6 +15499,71 @@ qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
 
           gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
               GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID, item_data, NULL);
+        } else if (!strcmp (infe_uri_or_type,
+                "urn:uuid:fef58f02-43a6-5aaf-a891-099b1953d1f6")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          GstStructure *s;
+          guint32 val;
+          guint32 num_components = 0;
+          guint32 i = 0;
+
+          /* GIMI ContentID */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            return FALSE;
+
+          if (item_size < 13) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Component ContentID List item size is too small");
+            goto skip_infe;
+          }
+
+          GstByteReader item_reader = GST_BYTE_READER_INIT (item_data, item_size);
+
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
+            GST_WARNING_OBJECT (qtdemux, "Can't read number of samples entries");
+            return FALSE;
+          }
+          if (val != 1) {
+            GST_WARNING_OBJECT (qtdemux, "Only a single Sample entry is"
+                " supported for GIMI ComponentContentID but have %u", val);
+            goto skip_infe;
+          }
+
+          /* Skip sample entry index */
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
+            GST_WARNING_OBJECT (qtdemux, "Can't read number of samples entries");
+            return FALSE;
+          }
+
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &num_components)) {
+            GST_WARNING_OBJECT (qtdemux, "Can't read number of components");
+            return FALSE;
+          }
+
+          s = gst_structure_new_empty ("ids");
+
+          for (i = 0; i < num_components; i++) {
+            const char *component_content_id = NULL;
+            char cid_str[11];
+            if (!gst_byte_reader_get_string_utf8 (&item_reader,
+                    &component_content_id)) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Component %u/%u ContentID can't be read, skipping box",
+                  i, num_components);
+              gst_structure_free (s);
+              goto skip_infe;
+            }
+
+            snprintf (cid_str, 11, "%u", i);
+            gst_structure_set (s, cid_str, G_TYPE_STRING, component_content_id,
+                NULL);
+          }
+
+          gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID, s, NULL);
+          gst_structure_free (s);
         } else {
           GST_DEBUG_OBJECT (qtdemux, "Unknown URI %s in infe",
               infe_uri_or_type);
