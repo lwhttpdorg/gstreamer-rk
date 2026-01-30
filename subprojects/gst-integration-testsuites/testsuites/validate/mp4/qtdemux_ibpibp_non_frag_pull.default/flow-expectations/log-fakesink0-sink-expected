@@ -1,7 +1,7 @@
 event segment: format=TIME, start=0:00:00.333333333, offset=0:00:00.000000000, stop=0:00:02.333333333, time=0:00:00.000000000, base=0:00:00.000000000, position=0:00:00.333333333
-buffer: dts=0:00:00.000000000, pts=0:00:00.333333333, dur=0:00:00.333333333, flags=discont
-buffer: dts=0:00:00.333333333, pts=0:00:01.000000000, dur=0:00:00.333333333, flags=delta-unit
-buffer: dts=0:00:00.666666666, pts=0:00:00.666666666, dur=0:00:00.333333334, flags=delta-unit
-buffer: dts=0:00:01.000000000, pts=0:00:01.333333333, dur=0:00:00.333333333
-buffer: dts=0:00:01.333333333, pts=0:00:02.000000000, dur=0:00:00.333333333, flags=delta-unit
-buffer: dts=0:00:01.666666666, pts=0:00:01.666666666, dur=0:00:00.333333334, flags=delta-unit
+buffer: dts=0:00:00.000000000, pts=0:00:00.333333333, dur=0:00:00.333333333, flags=discont, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=0, pts=100, duration=100, timescale_num=300, timescale_denom=1]
+buffer: dts=0:00:00.333333333, pts=0:00:01.000000000, dur=0:00:00.333333333, flags=delta-unit, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=100, pts=300, duration=100, timescale_num=300, timescale_denom=1]
+buffer: dts=0:00:00.666666666, pts=0:00:00.666666666, dur=0:00:00.333333334, flags=delta-unit, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=200, pts=200, duration=100, timescale_num=300, timescale_denom=1]
+buffer: dts=0:00:01.000000000, pts=0:00:01.333333333, dur=0:00:00.333333333, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=300, pts=400, duration=100, timescale_num=300, timescale_denom=1]
+buffer: dts=0:00:01.333333333, pts=0:00:02.000000000, dur=0:00:00.333333333, flags=delta-unit, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=400, pts=600, duration=100, timescale_num=300, timescale_denom=1]
+buffer: dts=0:00:01.666666666, pts=0:00:01.666666666, dur=0:00:00.333333334, flags=delta-unit, meta=GstOriginalTimestampMeta[reference=timestamp/x-isobmff, dts=500, pts=500, duration=100, timescale_num=300, timescale_denom=1]

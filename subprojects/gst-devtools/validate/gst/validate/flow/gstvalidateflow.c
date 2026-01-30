@@ -90,6 +90,9 @@ struct _ValidateFlowOverride
   gchar **logged_upstream_event_types;
   gchar **ignored_event_types;
 
+  gchar **logged_meta_types;
+  gchar **ignored_meta_types;
+
   gchar *expectations_file_path;
   gchar *actual_results_file_path;
   ValidateFlowMode mode;
@@ -213,7 +216,8 @@ validate_flow_override_buffer_handler (GstValidateOverride * override,
     return;
 
   buffer_str = validate_flow_format_buffer (buffer, flow->checksum_type,
-      flow->logged_fields, flow->ignored_fields);
+      flow->logged_fields, flow->ignored_fields, flow->logged_meta_types,
+      flow->ignored_meta_types);
   validate_flow_override_printf (flow, "buffer: %s\n", buffer_str);
   g_free (buffer_str);
 }
@@ -300,6 +304,16 @@ validate_flow_override_new (GstStructure * config)
       gst_validate_utils_get_strv (config, "logged-upstream-event-types");
   flow->ignored_event_types =
       gst_validate_utils_get_strv (config, "ignored-event-types");
+
+  flow->logged_meta_types =
+      gst_validate_utils_get_strv (config, "logged-meta-types");
+  flow->ignored_meta_types =
+      gst_validate_utils_get_strv (config, "ignored-meta-types");
+
+  if (!flow->ignored_meta_types) {
+    flow->ignored_meta_types = g_new0 (gchar *, 2);
+    flow->ignored_meta_types[0] = g_strdup ("GstOriginalTimestampMeta");
+  }
 
   tmpval = gst_structure_get_value (config, "ignored-fields");
   if (tmpval) {
@@ -631,6 +645,8 @@ validate_flow_override_finalize (GObject * object)
   g_strfreev (flow->logged_event_types);
   g_strfreev (flow->logged_upstream_event_types);
   g_strfreev (flow->ignored_event_types);
+  g_strfreev (flow->logged_meta_types);
+  g_strfreev (flow->ignored_meta_types);
   if (flow->ignored_fields)
     gst_structure_free (flow->ignored_fields);
 

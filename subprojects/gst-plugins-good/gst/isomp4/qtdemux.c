@@ -272,6 +272,9 @@ static GstFlowReturn qtdemux_add_fragmented_samples (GstQTDemux * qtdemux);
 
 static void gst_qtdemux_check_send_pending_segment (GstQTDemux * demux);
 
+static GstStaticCaps original_ts_reference_caps =
+GST_STATIC_CAPS ("timestamp/x-isobmff");
+
 static GstStaticPadTemplate gst_qtdemux_sink_template =
     GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
@@ -6575,7 +6578,7 @@ gst_qtdemux_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
     gboolean round_up_duration)
 {
   GstFlowReturn ret = GST_FLOW_OK;
-
+  GstCaps *reference_caps = gst_static_caps_get (&original_ts_reference_caps);
 
   if (stream->need_clip)
     buf = gst_qtdemux_clip_buffer (qtdemux, stream, buf, &dts, &pts, &duration);
@@ -6764,6 +6767,12 @@ gst_qtdemux_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
       QTSTREAMTIME_TO_GSTTIME (stream, pts);
   GST_BUFFER_DURATION (buf) = (duration == -1) ? GST_CLOCK_TIME_NONE :
       QTSTREAMTIME_TO_GSTTIME (stream, duration) + round_up_duration;
+
+  gst_buffer_add_original_timestamp_meta (buf, reference_caps,
+      (dts == -1) ? GST_ORIGINAL_TIMESTAMP_NONE : (gint64) dts,
+      (pts == -1) ? GST_ORIGINAL_TIMESTAMP_NONE : (gint64) pts,
+      (duration == -1) ? GST_ORIGINAL_TIMESTAMP_NONE : (gint64) duration,
+      stream->timescale, 1);
 
   ret = gst_pad_push (stream->pad, buf);
 

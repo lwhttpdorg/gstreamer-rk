@@ -271,7 +271,8 @@ validate_flow_get_flags_nicknames (GType flags_type, guint flags_value)
 
 /* Returns a newly-allocated string describing the metas on this buffer, or NULL */
 static gchar *
-buffer_get_meta_string (GstBuffer * buffer)
+buffer_get_meta_string (GstBuffer * buffer,
+    gchar ** logged_meta_types, gchar ** ignored_meta_types)
 {
   gpointer state = NULL;
   GstMeta *meta;
@@ -280,7 +281,8 @@ buffer_get_meta_string (GstBuffer * buffer)
   while ((meta = gst_buffer_iterate_meta (buffer, &state))) {
     const gchar *desc = g_type_name (meta->info->type);
 
-    if (meta->info->api == GST_PARENT_BUFFER_META_API_TYPE) {
+    if (meta->info->api == GST_PARENT_BUFFER_META_API_TYPE
+        || !use_field (desc, logged_meta_types, ignored_meta_types)) {
       /* The parent buffer meta is added automatically every time a buffer gets
        * copied, it is not useful to track them. */
       continue;
@@ -331,6 +333,25 @@ buffer_get_meta_string (GstBuffer * buffer)
       g_free (layout);
       g_free (flags);
 
+    } else if (meta->info->api == GST_ORIGINAL_TIMESTAMP_META_API_TYPE) {
+      GstOriginalTimestampMeta *ts_meta = (GstOriginalTimestampMeta *) meta;
+      gchar *reference = gst_caps_to_string (ts_meta->reference);
+
+      g_string_append_printf (s, "GstOriginalTimestampMeta[reference=%s",
+          reference);
+
+      if (ts_meta->dts != GST_ORIGINAL_TIMESTAMP_NONE)
+        g_string_append_printf (s, ", dts=%" G_GUINT64_FORMAT, ts_meta->dts);
+      if (ts_meta->pts != GST_ORIGINAL_TIMESTAMP_NONE)
+        g_string_append_printf (s, ", pts=%" G_GUINT64_FORMAT, ts_meta->pts);
+      if (ts_meta->duration != GST_ORIGINAL_TIMESTAMP_NONE)
+        g_string_append_printf (s, ", duration=%" G_GUINT64_FORMAT,
+            ts_meta->duration);
+
+      g_string_append_printf (s,
+          ", timescale_num=%" G_GUINT64_FORMAT ", timescale_denom=%"
+          G_GUINT64_FORMAT "]", ts_meta->timescale_num,
+          ts_meta->timescale_denom);
     } else {
       g_string_append (s, desc);
     }
@@ -341,7 +362,8 @@ buffer_get_meta_string (GstBuffer * buffer)
 
 gchar *
 validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
-    GstStructure * logged_fields_struct, GstStructure * ignored_fields_struct)
+    GstStructure * logged_fields_struct, GstStructure * ignored_fields_struct,
+    gchar ** logged_meta_types, gchar ** ignored_meta_types)
 {
   gchar *flags_str, *meta_str, *buffer_str;
   gchar *buffer_parts[7];
@@ -428,7 +450,8 @@ validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
         g_strdup_printf ("flags=%s", flags_str);
   }
 
-  meta_str = buffer_get_meta_string (buffer);
+  meta_str =
+      buffer_get_meta_string (buffer, logged_meta_types, ignored_meta_types);
   if (meta_str && use_field ("meta", logged_fields, ignored_fields))
     buffer_parts[buffer_parts_index++] = g_strdup_printf ("meta=%s", meta_str);
 

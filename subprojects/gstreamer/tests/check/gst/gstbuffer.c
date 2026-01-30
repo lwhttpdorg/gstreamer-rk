@@ -1040,6 +1040,48 @@ GST_START_TEST (test_reference_timestamp_meta_with_info_serialization)
 
 GST_END_TEST;
 
+GST_START_TEST (test_original_timestamp_meta_serialization)
+{
+  GstCaps *reference =
+      gst_caps_new_simple ("timestamp/x-test", NULL, NULL, NULL);
+  GstStructure *info =
+      gst_structure_new ("info", "field1", G_TYPE_INT, 123, "field2",
+      G_TYPE_STRING, "hello", NULL);
+
+  /* Serialize */
+  GstBuffer *buffer = gst_buffer_new ();
+  GstOriginalTimestampMeta *meta =
+      gst_buffer_add_original_timestamp_meta (buffer, reference, -1, 11, 20,
+      100, 1);
+  meta->info = gst_structure_copy (info);
+  GByteArray *data = g_byte_array_new ();
+  fail_unless (gst_meta_serialize_simple ((GstMeta *) meta, data));
+  gst_buffer_unref (buffer);
+
+  /* Deserialize */
+  buffer = gst_buffer_new ();
+  guint32 consumed;
+  meta = (GstOriginalTimestampMeta *) gst_meta_deserialize (buffer, data->data,
+      data->len, &consumed);
+  fail_unless (meta);
+  fail_unless (consumed == data->len);
+  fail_unless (GST_IS_CAPS (meta->reference));
+  fail_unless (gst_caps_is_equal (meta->reference, reference));
+  fail_unless_equals_uint64 (meta->dts, -1);
+  fail_unless_equals_uint64 (meta->pts, 11);
+  fail_unless_equals_uint64 (meta->duration, 20);
+  fail_unless_equals_uint64 (meta->timescale_num, 100);
+  fail_unless_equals_uint64 (meta->timescale_denom, 1);
+  fail_unless (GST_IS_STRUCTURE (meta->info));
+  fail_unless (gst_structure_is_equal (meta->info, info));
+
+  gst_buffer_unref (buffer);
+  gst_caps_unref (reference);
+  g_byte_array_unref (data);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_set_and_cmp)
 {
   static const gchar set_and_cmp_sha1[] =
@@ -1137,6 +1179,7 @@ gst_buffer_suite (void)
   tcase_add_test (tc_chain, test_reference_timestamp_meta_serialization);
   tcase_add_test (tc_chain,
       test_reference_timestamp_meta_with_info_serialization);
+  tcase_add_test (tc_chain, test_original_timestamp_meta_serialization);
   tcase_add_test (tc_chain, test_set_and_cmp);
 
   return s;

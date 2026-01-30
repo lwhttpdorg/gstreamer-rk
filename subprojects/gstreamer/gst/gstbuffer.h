@@ -815,6 +815,84 @@ GST_API
 GstReferenceTimestampMeta * gst_buffer_get_reference_timestamp_meta (GstBuffer * buffer,
                                                                      GstCaps   * reference);
 
+typedef struct _GstOriginalTimestampMeta GstOriginalTimestampMeta;
+
+/**
+ * GstOriginalTimestampMeta:
+ * @parent: the parent #GstMeta structure
+ * @reference: identifier for the timestamp reference.
+ * @dts: original DTS, or #GST_ORIGINAL_TIMESTAMP_NONE.
+ * @pts: original PTS, or #GST_ORIGINAL_TIMESTAMP_NONE.
+ * @duration: original duration, or #GST_ORIGINAL_TIMESTAMP_NONE.
+ * @timescale_num: timescale numerator.
+ * @timescale_denom: timescale denominator.
+ *
+ * #GstOriginalTimestampMeta can be used to attach precise timestamps with
+ * an arbitrary timescale, usually the one found in the original media.
+ * This allows applications to avoid issues that would arise from slight
+ * gaps or overlaps between buffers due to GStreamer rounding to #GstClockTime.
+ *
+ * The reference stored as a #GstCaps in @reference describes the source media.
+ * For example, for MP4, the reference would be `timestamp/x-isobmff`.
+ *
+ * The timestamps and duration are optional, but if present,
+ * must match the values already * on the #GstBuffer, just more precise.
+ * For attaching alternative timestamps, take a look at
+ * #GstReferenceTimestampMeta.
+ *
+ * Additional information about the timestamp can be provided via the
+ * optional @info structure. This should only be used for information about the
+ * timestamp and not for information about the clock source. The latter should
+ * be stored in the @reference instead.
+ *
+ * Interpretation of the fields of @info depends on the @reference.
+ *
+ * Since: 1.28
+ */
+struct _GstOriginalTimestampMeta
+{
+  GstMeta parent;
+
+  /*< public >*/
+  GstCaps *reference;
+  gint64 dts, pts, duration;
+  guint64 timescale_num, timescale_denom;
+
+  GstStructure *info;
+};
+
+/**
+ * GST_ORIGINAL_TIMESTAMP_NONE: (value -9223372036854775808) (type gint64)
+ *
+ * Constant to define an undefined timestamp or duration for a #GstOriginalTimestampMeta
+ *
+ * Since: 1.28
+ */
+#define GST_ORIGINAL_TIMESTAMP_NONE  (G_MININT64)
+
+GST_API
+GType gst_original_timestamp_meta_api_get_type (void);
+#define GST_ORIGINAL_TIMESTAMP_META_API_TYPE (gst_original_timestamp_meta_api_get_type())
+
+GST_API
+const GstMetaInfo *gst_original_timestamp_meta_get_info (void);
+#define GST_ORIGINAL_TIMESTAMP_META_INFO (gst_original_timestamp_meta_get_info())
+
+/* implementation */
+
+GST_API
+GstOriginalTimestampMeta * gst_buffer_add_original_timestamp_meta (GstBuffer * buffer,
+                                                                   GstCaps   * reference,
+                                                                   gint64      dts,
+                                                                   gint64      pts,
+                                                                   gint64      duration,
+                                                                   guint64     timescale_num,
+                                                                   guint64     timescale_denom);
+
+GST_API
+GstOriginalTimestampMeta * gst_buffer_get_original_timestamp_meta (GstBuffer * buffer,
+                                                                   GstCaps   * reference);
+
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstBuffer, gst_buffer_unref)
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstBufferPool, gst_object_unref)
