@@ -167,6 +167,7 @@ G_END_DECLS
 /* gstelement.h and gstelementfactory.h include each other */
 typedef struct _GstElement GstElement;
 typedef struct _GstElementClass GstElementClass;
+typedef struct _GstElementPrivate GstElementPrivate;
 
 /* gstmessage.h needs State */
 /**
@@ -1008,7 +1009,9 @@ struct _GstElement
   GList                *contexts;
 
   /*< private >*/
-  gpointer _gst_reserved[GST_PADDING-1];
+  GstElementPrivate    *priv;
+
+  gpointer _gst_reserved[GST_PADDING-2];
 };
 
 /**
@@ -1316,6 +1319,16 @@ GST_API
 gboolean                gst_element_foreach_pad         (GstElement * element,
                                                          GstElementForeachPadFunc func,
                                                          gpointer     user_data);
+
+GST_API
+void                    gst_element_sort_sink_pads      (GstElement * element,
+                                                         GCompareDataFunc compare_func,
+                                                         gpointer user_data);
+GST_API
+void                    gst_element_sort_src_pads       (GstElement * element,
+                                                         GCompareDataFunc compare_func,
+                                                         gpointer user_data);
+
 /* event/query/format stuff */
 
 GST_API

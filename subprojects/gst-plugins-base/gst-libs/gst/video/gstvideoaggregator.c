@@ -143,7 +143,7 @@ gst_video_aggregator_pad_get_property (GObject * object, guint prop_id,
 
 static int
 pad_zorder_compare (const GstVideoAggregatorPad * pad1,
-    const GstVideoAggregatorPad * pad2)
+    const GstVideoAggregatorPad * pad2, G_GNUC_UNUSED gpointer user_data)
 {
   return pad1->priv->zorder - pad2->priv->zorder;
 }
@@ -161,10 +161,9 @@ gst_video_aggregator_pad_set_property (GObject * object, guint prop_id,
       if (vagg) {
         GST_OBJECT_LOCK (vagg);
         pad->priv->zorder = g_value_get_uint (value);
-        GST_ELEMENT (vagg)->sinkpads =
-            g_list_sort (GST_ELEMENT (vagg)->sinkpads,
-            (GCompareFunc) pad_zorder_compare);
         GST_OBJECT_UNLOCK (vagg);
+        gst_element_sort_sink_pads (GST_ELEMENT (vagg),
+            (GCompareDataFunc) pad_zorder_compare, NULL);
         gst_object_unref (vagg);
       } else {
         pad->priv->zorder = g_value_get_uint (value);
@@ -2732,9 +2731,10 @@ gst_video_aggregator_request_new_pad (GstElement * element,
   vaggpad->priv->zorder = GST_ELEMENT (vagg)->numsinkpads;
   vaggpad->priv->start_time = -1;
   vaggpad->priv->end_time = -1;
-  element->sinkpads = g_list_sort (element->sinkpads,
-      (GCompareFunc) pad_zorder_compare);
   GST_OBJECT_UNLOCK (vagg);
+
+  gst_element_sort_sink_pads (GST_ELEMENT (vagg),
+      (GCompareDataFunc) pad_zorder_compare, NULL);
 
   return GST_PAD (vaggpad);
 }
