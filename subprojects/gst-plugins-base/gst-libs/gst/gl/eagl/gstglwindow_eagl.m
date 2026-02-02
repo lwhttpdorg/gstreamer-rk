@@ -115,6 +115,22 @@ gst_gl_window_eagl_finalize (GObject * object)
 {
   GstGLWindowEagl *window = GST_GL_WINDOW_EAGL (object);
 
+  if (window->priv->internal_view) {
+    GstGLUIView *view = (__bridge GstGLUIView *) window->priv->internal_view;
+    /* Must be done on main thread since it touches UIKit.
+     * Use dispatch_sync to ensure it completes before finalize returns. */
+    if ([NSThread isMainThread]) {
+      [view setGstWindow:NULL];
+      [view removeFromSuperview];
+    } else {
+      dispatch_sync (dispatch_get_main_queue (), ^{
+        [view setGstWindow:NULL];
+        [view removeFromSuperview];
+      });
+    }
+    CFRelease (window->priv->internal_view);
+    window->priv->internal_view = NULL;
+  }
   if (window->priv->layer)
     CFRelease (window->priv->layer);
   window->priv->layer = NULL;
