@@ -764,6 +764,9 @@ gst_videomixer2_pad_init (GstVideoMixer2Pad * mixerpad)
   mixerpad->alpha = DEFAULT_PAD_ALPHA;
   mixerpad->convert = NULL;
   mixerpad->need_conversion_update = FALSE;
+
+  g_warning_once
+      ("The `videomixer` element is deprecated. The `compositor` element should be used instead");
 }
 
 /* GstVideoMixer2 */
@@ -2298,6 +2301,9 @@ plugin_init (GstPlugin * plugin)
       "video mixer");
 
   gst_video_mixer_init_blend ();
+
+  gst_plugin_add_status_warning (plugin,
+      "The `videomixer` element is deprecated. The `compositor` element should be used instead");
 
   return gst_element_register (plugin, "videomixer", GST_RANK_PRIMARY,
       GST_TYPE_VIDEO_MIXER2);
