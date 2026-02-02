@@ -132,6 +132,7 @@ static const struct _GstApeDemuxTagTableEntry
       "copyright", GST_TAG_COPYRIGHT}, {
       "cover art (back)", GST_TAG_IMAGE}, {
       "cover art (front)", GST_TAG_IMAGE}, {
+      "encoder", GST_TAG_ENCODER}, {
       "genre", GST_TAG_GENRE}, {
       "isrc", GST_TAG_ISRC}, {
       "disc", GST_TAG_ALBUM_VOLUME_NUMBER}, {
