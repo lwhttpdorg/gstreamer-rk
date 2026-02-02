@@ -154,6 +154,9 @@ gst_adder_pad_init (GstAdderPad * pad)
 {
   pad->volume = DEFAULT_PAD_VOLUME;
   pad->mute = DEFAULT_PAD_MUTE;
+
+  g_warning_once
+      ("The `adder` element is deprecated. The `audiomixer` element should be used instead");
 }
 
 enum
@@ -1590,6 +1593,9 @@ gst_adder_child_proxy_init (gpointer g_iface, gpointer iface_data)
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
+  gst_plugin_add_status_warning (plugin,
+      "The `adder` element is deprecated. The `audiomixer` element should be used instead");
+
   return GST_ELEMENT_REGISTER (adder, plugin);
 }
 
