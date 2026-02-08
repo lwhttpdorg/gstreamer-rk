@@ -1068,6 +1068,7 @@ gst_rist_src_set_bonds (GstRistSrc * src, const gchar * bonds)
   }
 
   g_strfreev (tokens);
+  g_free (addrs);
   return;
 
 missing_address:
@@ -1291,7 +1292,7 @@ gst_rist_src_set_property (GObject * object, guint prop_id,
       if (new_caps_val != NULL)
         new_caps = gst_caps_copy (new_caps_val);
 
-      gst_caps_replace (&src->caps, new_caps);
+      gst_caps_take (&src->caps, new_caps);
 
       break;
     }
@@ -1302,8 +1303,10 @@ gst_rist_src_set_property (GObject * object, guint prop_id,
       src->encoding_name = g_value_dup_string (value);
       if (bond->rtp_src) {
         GstCaps *caps = gst_rist_src_request_pt_map (src, 0, 96, NULL);
-        g_object_set (G_OBJECT (bond->rtp_src), "caps", caps, NULL);
-        gst_caps_unref (caps);
+        if (caps) {
+          g_object_set (G_OBJECT (bond->rtp_src), "caps", caps, NULL);
+          gst_caps_unref (caps);
+        }
       }
       break;
     }
@@ -1440,8 +1443,7 @@ gst_rist_src_class_init (GstRistSrcClass * klass)
 
   g_object_class_install_property (object_class, PROP_BONDING_ADDRESSES,
       g_param_spec_string ("bonding-addresses", "Bonding Addresses",
-          "Comma (,) separated list of <address>:<port> to receive from. "
-          "Only used if 'enable-bonding' is set.", NULL,
+          "Comma (,) separated list of <address>:<port> to receive from.", NULL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 /**
