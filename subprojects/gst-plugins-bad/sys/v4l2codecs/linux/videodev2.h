@@ -815,6 +815,12 @@ struct v4l2_pix_format {
 #define V4L2_META_FMT_RK_ISP1_PARAMS	v4l2_fourcc('R', 'K', '1', 'P') /* Rockchip ISP1 3A Parameters */
 #define V4L2_META_FMT_RK_ISP1_STAT_3A	v4l2_fourcc('R', 'K', '1', 'S') /* Rockchip ISP1 3A Statistics */
 
+/* AFBC formats (TBC, Not in linux yet. V4L2 will say invalid) */
+#define V4L2_PIX_FMT_AFBC_YUV420_16x16_SPLIT    v4l2_fourcc('A', '1', '6', '8') /* AFBC containing 8-bit YUV420 in 16x16 blocks, sparse, split */
+#define V4L2_PIX_FMT_AFBC_YUV420_32x8     v4l2_fourcc('A', '3', '2', '8') /* AFBC containing 8-bit YUV420 in 32x8 blocks, sparse */
+#define V4L2_PIX_FMT_AFBC_YUV420_16x16_10_SPLIT v4l2_fourcc('A', '1', '6', 'a') /* AFBC containing 10-bit YUV420 in 16x16 blocks, sparse, split */
+#define V4L2_PIX_FMT_AFBC_YUV420_32x8_10  v4l2_fourcc('A', '3', '2', 'a') /* AFBC containing 10-bit YUV420 in 32x8 blocks, sparse */
+
 /* priv field value to indicates that subsequent fields are valid. */
 #define V4L2_PIX_FMT_PRIV_MAGIC		0xfeedcafe
 
