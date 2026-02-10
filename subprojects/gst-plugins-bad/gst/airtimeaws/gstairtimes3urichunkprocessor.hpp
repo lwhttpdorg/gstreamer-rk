@@ -303,6 +303,7 @@ private:
     void readCachedMetadataIfExists();
     void resetCacheDirectory(bool recreate_cache_content);
     S3URIFileChunkGaps calculateChunkGapsImpl() const;
+    void fillGaps();
 
     struct CacheFileChunk {
         /// @brief The file path of the locally stored chunk.

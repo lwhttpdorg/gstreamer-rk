@@ -305,6 +305,12 @@ CachingS3URIChunkProcessor::CachingS3URIChunkProcessor(std::shared_ptr<S3URICach
     createDirectoryInUseFile();
     loadChunksFromDirectory();
     readCachedMetadataIfExists();
+
+    if (trust_cached_data_ and metadata_.has_value())
+    {
+        fillGaps();
+    }
+
     saveFileChunkSizeToFileIfNotExists(directory_path_ / file_chunk_size_file_name, file_chunk_standard_size_);
 }
 
@@ -349,7 +355,12 @@ void CachingS3URIChunkProcessor::setObjectMetadata(S3URIObjectMetadata metadata)
 
     std::lock_guard lock{state_access_};
     metadata_ = std::move(metadata);
+    fillGaps();
+}
 
+void CachingS3URIChunkProcessor::fillGaps()
+{
+    assert(metadata_.has_value());
     // It may happen that loadChunksFromDirectory loaded non-contiguous chunks and we need to fill the gaps here.
     const std::uint64_t expected_file_chunks_count =
         calculateExpectedCacheFilesCount(metadata_->content_length, file_chunk_standard_size_);
