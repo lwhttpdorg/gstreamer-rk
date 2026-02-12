@@ -1285,9 +1285,15 @@ reacquire:
   err =
       priv->AcquireNextImageKHR (swapper->device->device,
       priv->swap_chain, -1, acquire_semaphore, VK_NULL_HANDLE, &swap_idx);
-  /* TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR */
-  if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-    GST_DEBUG_OBJECT (swapper, "out of date frame acquired");
+  if (err == VK_ERROR_OUT_OF_DATE_KHR
+#ifdef __APPLE__
+      /* With MoltenVK we need to treat VK_SUBOPTIMAL_KHR as an error,
+       * otherwise it can produce broken output (e.g. just a solid color) */
+      || err == VK_SUBOPTIMAL_KHR
+#endif
+      ) {
+    GST_DEBUG_OBJECT (swapper, "swapchain is %s, recreating",
+        err == VK_ERROR_OUT_OF_DATE_KHR ? "out of date" : "suboptimal");
 
     vkDestroySemaphore (swapper->device->device, acquire_semaphore, NULL);
     acquire_semaphore = VK_NULL_HANDLE;
