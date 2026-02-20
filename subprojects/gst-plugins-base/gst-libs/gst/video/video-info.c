@@ -1205,7 +1205,10 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
           n_tile_x * GST_ROUND_UP_2 (n_tile_y) / 2 * tile_size;
       break;
     }
+
     case GST_VIDEO_FORMAT_NV12_16L32S:
+    case GST_VIDEO_FORMAT_NV12_VSI_8L8:
+    case GST_VIDEO_FORMAT_NV15_VSI_8L8:
     {
       const gsize y_tile_size =
           GST_VIDEO_FORMAT_INFO_TILE_SIZE (info->finfo, 0);

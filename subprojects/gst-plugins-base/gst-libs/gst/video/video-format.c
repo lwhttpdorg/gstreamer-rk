@@ -7940,6 +7940,7 @@ typedef struct
 
 /* tile_mode, tile_ws (width shift), tile_hs (height shift), tile_info[] */
 #define TILE_4x4(mode) GST_VIDEO_TILE_MODE_ ##mode, 2, 2, { {4, 4, 4, 16}, {2, 4, 4, 16}, }
+#define TILE_8x8s(mode) GST_VIDEO_TILE_MODE_ ##mode, 3, 4, { {8, 8, 8, 64}, {2, 4, 4, 16}, }
 #define TILE_16x32s(mode) GST_VIDEO_TILE_MODE_ ##mode, 4, 5, { {16, 32, 16, 512}, {8, 16, 16, 256}, }
 #define TILE_32x32(mode) GST_VIDEO_TILE_MODE_ ##mode, 5, 5, { {32, 32, 32, 1024}, {16, 32, 32, 1024}, }
 #define TILE_64x32(mode) GST_VIDEO_TILE_MODE_ ##mode, 6, 5, { {64, 32, 64, 2048}, {32, 32, 64, 2048}, }
@@ -7947,6 +7948,7 @@ typedef struct
 #define TILE_10bit_16x32s(mode) GST_VIDEO_TILE_MODE_ ##mode, 4, 5, { {16, 32, 20, 640}, {8, 16, 20, 320}, }
 #define TILE_10bit_8x128(mode) GST_VIDEO_TILE_MODE_ ##mode, 3, 7, { {0, 128, 8, 1024}, {0, 128, 8, 1024}, }
 #define TILE_10bit_4x4(mode) GST_VIDEO_TILE_MODE_ ##mode, 2, 2, { {4, 4, 5, 20}, {2, 4, 5, 20}, }
+#define TILE_10bit_8x8s(mode) GST_VIDEO_TILE_MODE_ ##mode, 3, 3, { {8, 8, 10, 80}, {2, 4, 5, 20}, }
 
 #define MAKE_YUV_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub, pack ) \
  { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV, depth, pstride, plane, offs, sub, pack } }
@@ -8316,6 +8318,12 @@ static const VideoFormat formats[] = {
       PLANE0, OFFS0, SUB4444, PACK_BGR10A2_LE),
   MAKE_RGB_LE_FORMAT (RGB10x2_LE, "raw video", DPTH10_10_10, PSTR444,
       PLANE0, OFFS0, SUB4444, PACK_RGB10A2_LE),
+  MAKE_YUV_ST_FORMAT (NV12_VSI_8L8, "raw video",
+      GST_MAKE_FOURCC ('V', '8', '1', '2'), DPTH888, PSTR122, PLANE011,
+      OFFS001, SUB420, PACK_NV12_TILED, TILE_8x8s (LINEAR)),
+  MAKE_YUV_ST_FORMAT (NV15_VSI_8L8, "raw video",
+      GST_MAKE_FOURCC ('V', '8', '1', '5'), DPTH10_10_10, PSTR0, PLANE011,
+      OFFS001, SUB420, PACK_NV12_10LE40_TILED, TILE_10bit_8x8s (LINEAR)),
 };
 
 G_GNUC_END_IGNORE_DEPRECATIONS;
