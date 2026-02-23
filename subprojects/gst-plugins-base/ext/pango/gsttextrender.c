@@ -518,6 +518,22 @@ gst_text_render_chain (GstPad * pad, GstObject * parent, GstBuffer * inbuf)
 
   render = GST_TEXT_RENDER (parent);
 
+  if GST_PAD_IS_FLUSHING (render->srcpad) {
+    ret = GST_FLOW_FLUSHING;
+    goto done;
+  }
+
+  /* Negotiate caps before first caption so width/height are correct. */
+  if (gst_pad_check_reconfigure (render->srcpad)
+      || !gst_pad_has_current_caps (render->srcpad)) {
+    ret = gst_text_render_renegotiate (render);
+    if (ret != GST_FLOW_OK) {
+      gst_pad_mark_reconfigure (render->srcpad);
+      ret = GST_FLOW_NOT_NEGOTIATED;
+      goto done;
+    }
+  }
+
   gst_buffer_map (inbuf, &map, GST_MAP_READ);
   data = map.data;
   size = map.size;
