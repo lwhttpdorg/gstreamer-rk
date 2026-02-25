@@ -6856,7 +6856,7 @@ aa_type_find (GstTypeFind * tf, gpointer private)
 
 static GstStaticCaps av1_caps =
     GST_STATIC_CAPS
-    ("video/x-av1,stream-format={obu-stream, annexb},alignment=none");
+    ("video/x-av1,stream-format={obu-stream, annexb},alignment=byte");
 
 #define AV1_CAPS gst_static_caps_get(&av1_caps)
 
@@ -6967,7 +6967,7 @@ av1_type_find (GstTypeFind * tf, gpointer unused)
   if (av1_is_valid_obu (data, &obu_type, &read_bytes)) {
     gst_type_find_suggest_simple (tf, GST_TYPE_FIND_MINIMUM, "video/x-av1",
         "stream-format", G_TYPE_STRING, "obu-stream",
-        "alignment", G_TYPE_STRING, "none", NULL);
+        "alignment", G_TYPE_STRING, "byte", NULL);
     return;
   }
 
@@ -6997,7 +6997,7 @@ av1_type_find (GstTypeFind * tf, gpointer unused)
   if (obu_type == 2)
     gst_type_find_suggest_simple (tf, GST_TYPE_FIND_MINIMUM, "video/x-av1",
         "stream-format", G_TYPE_STRING, "annexb",
-        "alignment", G_TYPE_STRING, "none", NULL);
+        "alignment", G_TYPE_STRING, "byte", NULL);
 }
 
 /*Type find definition by functions */
