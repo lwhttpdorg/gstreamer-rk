@@ -361,7 +361,8 @@ G_GNUC_INTERNAL void mpegts_packetizer_clear_packet (MpegTSPacketizer2 *packetiz
 				     MpegTSPacketizerPacket *packet);
 G_GNUC_INTERNAL void mpegts_packetizer_remove_stream(MpegTSPacketizer2 *packetizer,
   gint16 pid);
-
+void mpegts_packetizer_apply_pcr(MpegTSPacketizer2 *packetizer,
+                                 MpegTSPacketizerPacket *packet);
 G_GNUC_INTERNAL GstMpegtsSection *mpegts_packetizer_push_section (MpegTSPacketizer2 *packetzer,
 								  MpegTSPacketizerPacket *packet, GList **remaining);
 

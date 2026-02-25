@@ -54,6 +54,15 @@ typedef struct _MpegTSBase MpegTSBase;
 typedef struct _MpegTSBaseClass MpegTSBaseClass;
 typedef struct _MpegTSBaseStream MpegTSBaseStream;
 typedef struct _MpegTSBaseProgram MpegTSBaseProgram;
+typedef struct _MpegTSPID MpegTSPID;
+
+#define CONTINUITY_UNSET 255
+#define MAX_CONTINUITY 15
+
+struct _MpegTSPID {
+  guint16 pid;
+  guint8  cc;
+};
 
 struct _MpegTSBaseStream
 {
@@ -176,6 +185,9 @@ struct _MpegTSBase {
 
   /* Used for delayed seek events */
   GstEvent *seek_event;
+
+  /* Track all seen MpegTSPID with continuity */
+  GArray *pids;
 };
 
 struct _MpegTSBaseClass {
