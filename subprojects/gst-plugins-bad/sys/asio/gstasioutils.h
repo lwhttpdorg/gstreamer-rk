@@ -17,8 +17,8 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ASIO_DEVICE_ENUM_H__
-#define __GST_ASIO_DEVICE_ENUM_H__
+#ifndef __GST_ASIO_UTILS_H__
+#define __GST_ASIO_UTILS_H__
 
 #include <gst/gst.h>
 #include <gst/audio/audio.h>
@@ -49,6 +49,8 @@ void                gst_asio_device_info_free (GstAsioDeviceInfo * info);
 
 GstAudioFormat      gst_asio_sample_type_to_gst (ASIOSampleType type);
 
+const gchar *       gst_asio_sample_type_to_string (ASIOSampleType type);
+
 G_END_DECLS
 
-#endif /* __GST_ASIO_DEVICE_ENUM_H__ */
+#endif /* __GST_ASIO_UTILS_H__ */
