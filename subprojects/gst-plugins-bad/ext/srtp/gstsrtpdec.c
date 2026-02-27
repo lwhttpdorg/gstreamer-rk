@@ -231,6 +231,15 @@ struct _GstSrtpDecSsrcStream
   GArray *keys;
   guint recv_count;
   guint recv_drop_count;
+
+  /* Detailed error statistics */
+  guint success_count;
+  guint replay_fail_count;
+  guint replay_old_count;
+  guint auth_fail_count;
+  guint cipher_fail_count;
+  guint key_expired_count;
+  guint unexpected_error_count;
 };
 
 struct GstSrtpDecKey
@@ -455,6 +464,24 @@ gst_srtp_dec_create_stats (GstSrtpDec * filter)
           G_TYPE_UINT, stream->recv_count, "recv-drop-count", G_TYPE_UINT,
           stream->recv_drop_count, NULL);
 
+      /* Add detailed packet statistics */
+      {
+        GstStructure *packet_stats;
+
+        packet_stats = gst_structure_new ("stats",
+            "success", G_TYPE_UINT, stream->success_count,
+            "auth-fail", G_TYPE_UINT, stream->auth_fail_count,
+            "cipher-fail", G_TYPE_UINT, stream->cipher_fail_count,
+            "replay-fail", G_TYPE_UINT, stream->replay_fail_count,
+            "replay-old", G_TYPE_UINT, stream->replay_old_count,
+            "key-expired", G_TYPE_UINT, stream->key_expired_count,
+            "unexpected", G_TYPE_UINT, stream->unexpected_error_count, NULL);
+
+        gst_structure_set (ss, "packet-stats", GST_TYPE_STRUCTURE,
+            packet_stats, NULL);
+        gst_structure_free (packet_stats);
+      }
+
       g_value_take_boxed (&v, ss);
       gst_value_array_append_value (&va, &v);
     }
@@ -534,6 +561,43 @@ static GstSrtpDecSsrcStream *
 find_stream_by_ssrc (GstSrtpDec * filter, guint32 ssrc)
 {
   return g_hash_table_lookup (filter->streams, GUINT_TO_POINTER (ssrc));
+}
+
+static void
+increment_packet_stats (GstSrtpDec * filter, guint32 ssrc,
+    srtp_err_status_t error)
+{
+  GstSrtpDecSsrcStream *stream = find_stream_by_ssrc (filter, ssrc);
+
+  if (!stream) {
+    GST_WARNING_OBJECT (filter,
+        "Could not find stream for SSRC %u to update stats", ssrc);
+    return;
+  }
+
+  switch (error) {
+    case srtp_err_status_ok:
+      stream->success_count++;
+      break;
+    case srtp_err_status_auth_fail:
+      stream->auth_fail_count++;
+      break;
+    case srtp_err_status_cipher_fail:
+      stream->cipher_fail_count++;
+      break;
+    case srtp_err_status_replay_fail:
+      stream->replay_fail_count++;
+      break;
+    case srtp_err_status_replay_old:
+      stream->replay_old_count++;
+      break;
+    case srtp_err_status_key_expired:
+      stream->key_expired_count++;
+      break;
+    default:
+      stream->unexpected_error_count++;
+      break;
+  }
 }
 
 static void
@@ -1358,16 +1422,19 @@ unprotect:
   switch (err) {
     case srtp_err_status_ok:
       /* success! */
+      increment_packet_stats (filter, ssrc, err);
       break;
     case srtp_err_status_replay_fail:
       GST_DEBUG_OBJECT (filter,
           "Dropping replayed packet, probably retransmission");
       stream->recv_drop_count++;
+      increment_packet_stats (filter, ssrc, err);
       goto err;
     case srtp_err_status_replay_old:
       GST_DEBUG_OBJECT (filter,
           "Dropping replayed old packet, probably retransmission");
       stream->recv_drop_count++;
+      increment_packet_stats (filter, ssrc, err);
       goto err;
     case srtp_err_status_key_expired:{
 
@@ -1378,6 +1445,7 @@ unprotect:
       /* Check the key request created a new stream */
       if (stream == NULL) {
         GST_WARNING_OBJECT (filter, "Hard limit reached, no new key, dropping");
+        increment_packet_stats (filter, ssrc, err);
         goto err;
       }
 
@@ -1386,15 +1454,18 @@ unprotect:
     case srtp_err_status_auth_fail:
       GST_WARNING_OBJECT (filter, "Error authentication packet, dropping");
       stream->recv_drop_count++;
+      increment_packet_stats (filter, ssrc, err);
       goto err;
     case srtp_err_status_cipher_fail:
       GST_WARNING_OBJECT (filter, "Error while decrypting packet, dropping");
       stream->recv_drop_count++;
+      increment_packet_stats (filter, ssrc, err);
       goto err;
     default:
       GST_WARNING_OBJECT (pad,
           "Unable to unprotect buffer (unprotect failed code %d)", err);
       stream->recv_drop_count++;
+      increment_packet_stats (filter, ssrc, err);
       goto err;
   }
   gst_buffer_unmap (*buf, &map);
