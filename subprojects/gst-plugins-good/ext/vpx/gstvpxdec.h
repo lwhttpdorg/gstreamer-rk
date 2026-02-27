@@ -80,7 +80,7 @@ struct _GstVPXDec
   GstVideoCodecState *output_state;
 
   /* allocation */
-  gboolean have_video_meta;
+  gboolean direct_rendering;
   GstBufferPool *pool;
   gsize buf_size;
   gboolean safe_remap;
