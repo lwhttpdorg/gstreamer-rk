@@ -125,7 +125,7 @@ gst_v4l2_normalise_control_name (gchar * name)
  *   fill/empty the lists of enumerations
  * return value: TRUE on success, FALSE on error
  ******************************************************/
-static gboolean
+gboolean
 gst_v4l2_fill_lists (GstV4l2Object * v4l2object)
 {
   gint n, next;

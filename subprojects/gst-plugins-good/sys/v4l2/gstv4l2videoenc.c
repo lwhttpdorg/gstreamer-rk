@@ -106,6 +106,53 @@ gst_v4l2_video_enc_get_property (GObject * object,
   }
 }
 
+static void
+gst_v4l2_video_enc_set_cap_fmt (GstVideoEncoder * encoder)
+{
+  GstV4l2VideoEnc *self = GST_V4L2_VIDEO_ENC (encoder);
+  GstV4l2Object *v4l2capture = GST_V4L2_OBJECT (self->v4l2capture);
+  GstCaps *caps;
+  GstVideoInfoDmaDrm info;
+  struct v4l2_format format;
+  struct v4l2_fmtdesc *fmtdesc;
+
+  gst_video_info_dma_drm_init (&info);
+  caps = gst_caps_copy (gst_pad_get_pad_template_caps (encoder->srcpad));
+  caps = gst_caps_fixate (caps);
+  if (!gst_v4l2_object_get_caps_info (v4l2capture, caps, &fmtdesc, &info))
+    goto done;
+
+  memset (&format, 0x00, sizeof (struct v4l2_format));
+  format.type = v4l2capture->type;
+  if (v4l2capture->ioctl (v4l2capture->video_fd, VIDIOC_G_FMT, &format) < 0) {
+    GST_DEBUG_OBJECT (self, "Call to VIDIOC_G_FMT failed with error %s",
+        g_strerror (errno));
+    goto done;
+  }
+
+  if (format.fmt.pix.pixelformat != fmtdesc->pixelformat) {
+    format.fmt.pix.pixelformat = fmtdesc->pixelformat;
+    if (v4l2capture->ioctl (v4l2capture->video_fd, VIDIOC_S_FMT, &format) < 0) {
+      GST_DEBUG_OBJECT (self, "Call to VIDIOC_S_FMT failed for format %"
+          GST_FOURCC_FORMAT " with error %s",
+          GST_FOURCC_ARGS (format.fmt.pix.pixelformat), g_strerror (errno));
+      goto done;
+    }
+    GST_DEBUG_OBJECT (self, "pixelformat set to %" GST_FOURCC_FORMAT,
+        GST_FOURCC_ARGS (format.fmt.pix.pixelformat));
+
+    /* If the pixformat changes, we might have to set extra-controls again */
+    gst_v4l2_fill_lists (self->v4l2output);
+    if (self->v4l2output->extra_controls) {
+      gst_v4l2_set_controls (self->v4l2output,
+          self->v4l2output->extra_controls);
+    }
+  }
+
+done:
+  gst_caps_unref (caps);
+}
+
 static gboolean
 gst_v4l2_video_enc_open (GstVideoEncoder * encoder)
 {
@@ -120,6 +167,8 @@ gst_v4l2_video_enc_open (GstVideoEncoder * encoder)
 
   if (!gst_v4l2_object_open_shared (self->v4l2capture, self->v4l2output))
     goto failure;
+
+  gst_v4l2_video_enc_set_cap_fmt (encoder);
 
   self->probed_sinkcaps = gst_v4l2_object_probe_caps (self->v4l2output,
       gst_v4l2_object_get_raw_caps ());
@@ -357,13 +406,13 @@ gst_v4l2_video_enc_set_format (GstVideoEncoder * encoder,
   output = gst_video_encoder_set_output_state (encoder, outcaps, state);
   gst_video_codec_state_unref (output);
 
-  if (!gst_video_encoder_negotiate (encoder))
-    return FALSE;
-
   if (!gst_v4l2_object_set_format (self->v4l2output, state->caps, &error)) {
     gst_v4l2_error (self, &error);
     return FALSE;
   }
+
+  if (!gst_video_encoder_negotiate (encoder))
+    return FALSE;
 
   /* best effort */
   gst_v4l2_object_setup_padding (self->v4l2output);
