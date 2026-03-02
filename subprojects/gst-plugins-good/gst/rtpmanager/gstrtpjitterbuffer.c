@@ -1482,7 +1482,9 @@ gst_rtp_jitter_buffer_set_clock (GstElement * element, GstClock * clock)
 {
   GstRtpJitterBuffer *jitterbuffer = GST_RTP_JITTER_BUFFER (element);
 
+  GST_OBJECT_LOCK (jitterbuffer);
   rtp_jitter_buffer_set_pipeline_clock (jitterbuffer->priv->jbuf, clock);
+  GST_OBJECT_UNLOCK (jitterbuffer);
 
   return GST_ELEMENT_CLASS (parent_class)->set_clock (element, clock);
 }
