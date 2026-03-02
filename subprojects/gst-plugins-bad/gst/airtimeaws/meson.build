@@ -18,15 +18,18 @@ airtimeaws_sources = [
   'gstairtimeawsenv.cpp',
   'gstairtimeawsplugin.c',
   'gstairtimes3error.cpp',
+  'gstairtimes3init.cpp',
   'gstairtimes3src.cpp',
   'gstairtimes3srccontext.cpp',
   'gstairtimes3urichunkdownloadqueue.cpp',
   'gstairtimes3urichunkprocessor.cpp',
   'gstairtimes3urichunksourceaws.cpp',
+  'gstairtimes3urichunksourcedirectory.cpp',
   'gstairtimes3uridownloadedchunknotifier.cpp',
   'gstairtimes3uriprovider.cpp',
   'gstairtimes3uriproviders.cpp',
-  'gstairtimes3uriprovidersfactory.cpp'
+  'gstairtimes3uriprovidersfactory.cpp',
+  'gstairtimes3utils.cpp',
 ]
 
 if boost_dep.found()
@@ -39,7 +42,7 @@ airtimeaws_headers = [
   'gstairtimeawsenv.hpp',
   'gstairtimes3bufferfillstatus.hpp',
   'gstairtimes3error.hpp',
-  'gstairtimes3init.cpp',
+  'gstairtimes3init.hpp',
   'gstairtimes3src.h',
   'gstairtimes3srccontext.h',
   'gstairtimes3srccontext.hpp',
@@ -47,6 +50,7 @@ airtimeaws_headers = [
   'gstairtimes3urichunkprocessor.hpp',
   'gstairtimes3urichunksource.hpp',
   'gstairtimes3urichunksourceaws.hpp',
+  'gstairtimes3urichunksourcedirectory.hpp',
   'gstairtimes3urichunkspec.hpp',
   'gstairtimes3uridownloadedchunknotifier.hpp',
   'gstairtimes3uriobjectmetadata.hpp',
@@ -54,6 +58,7 @@ airtimeaws_headers = [
   'gstairtimes3uriproviderconfig.hpp',
   'gstairtimes3uriproviders.hpp',
   'gstairtimes3uriprovidersfactory.hpp',
+  'gstairtimes3utils.hpp',
   'gstairtimescopedhelpers.hpp'
 ]
 

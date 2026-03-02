@@ -94,4 +94,17 @@ G_DECLARE_FINAL_TYPE(GstAirtimeS3Src, gst_airtime_s3_src, GST, AIRTIMES3SRC, Gst
 /* Element registration function declaration */
 GST_ELEMENT_REGISTER_DECLARE(airtime_s3_src)
 
+/**
+ * GstAirtimeS3SrcSourceHintType:
+ * @S3_SOURCE_HINT_TYPE_NONE: no specific hint
+ * @S3_SOURCE_HINT_TYPE_KEY: hint that the source is a specific S3 key
+ * @S3_SOURCE_HINT_TYPE_PREFIX: hint that the source is an S3 prefix (directory)
+ */
+typedef enum
+{
+    S3_SOURCE_HINT_TYPE_NONE,
+    S3_SOURCE_HINT_TYPE_KEY,
+    S3_SOURCE_HINT_TYPE_PREFIX,
+} GstAirtimeS3SrcSourceHintType;
+
 G_END_DECLS

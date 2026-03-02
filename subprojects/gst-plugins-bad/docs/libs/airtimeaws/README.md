@@ -25,24 +25,26 @@ Plugin Details:
 
 ## airtimes3src – AWS S3 Source Element for GStreamer
 
-**`airtimes3src`** is a GStreamer source element that provides **URI-based**, **seekable**, **random** and **cached** access to AWS S3 objects.  
+**`airtimes3src`** is a GStreamer source element that provides **URI-based**, **seekable**, **random** and **cached** access to AWS S3 objects.
 It acts like a file source, streaming data directly from an `s3://` location into your pipeline.
+It supports both **single S3 objects** and **S3 directories (prefixes)**, where all files under a prefix are concatenated into a single virtual byte stream.
 
 ---
 
 ## Features at a Glance
 
-| Feature                   | Description                                                                                                                   |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **URI Scheme**            | Handles `s3://` and registers as a GStreamer URI handler                                                                      |
-| **Asynchronous Fetching** | Downloads from S3 in parallel using a thread pool                                                                             |
-| **Early Start**           | Pipeline can process data before the file is fully downloaded                                                                 |
-| **Seeking**               | Prioritizes requested byte ranges for instant random access                                                                   |
-| **Local Caching**         | Stores chunks on disk for reuse between runs or pipelines                                                                     |
-| **Partial Caching**       | Useful for GStreamer discovery; resumes incomplete downloads                                                                  |
-| **Cache Policies**        | Supports eviction (e.g., LRU) to manage cache size                                                                            |
-| **Metrics**               | Posts `airtimes3src::metrics` to the bus with location, size, and progress                                                    |
-| **S3 Authentication**     | Uses standard AWS credential resolution, including environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.) |
+| Feature                        | Description                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **URI Scheme**                 | Handles `s3://` and registers as a GStreamer URI handler                                                                      |
+| **Single & Directory Sources** | Supports both single S3 objects and S3 directory prefixes (multiple files concatenated into one stream)                       |
+| **Asynchronous Fetching**      | Downloads from S3 in parallel using a thread pool                                                                             |
+| **Early Start**                | Pipeline can process data before the file is fully downloaded                                                                 |
+| **Seeking**                    | Prioritizes requested byte ranges for instant random access                                                                   |
+| **Local Caching**              | Stores chunks on disk for reuse between runs or pipelines                                                                     |
+| **Partial Caching**            | Useful for GStreamer discovery; resumes incomplete downloads                                                                  |
+| **Cache Policies**             | Supports eviction (e.g., LRU) to manage cache size                                                                            |
+| **Metrics**                    | Posts `airtimes3src::metrics` to the bus with location, size, and progress                                                    |
+| **S3 Authentication**          | Uses standard AWS credential resolution, including environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.) |
 
 For more details on the performance, please read [the performance section](#performance).
 
@@ -73,6 +75,45 @@ When you seek within the file:
 
 ---
 
+## S3 Directory (Prefix) Source
+
+When the S3 URI points to a **directory prefix** rather than a single object, `airtimes3src` lists all files under that prefix and presents them as a **single concatenated byte stream** to downstream elements. This enables use cases where content is stored as multiple files in an S3 "directory" (e.g., chunked recordings, segmented media) but needs to be consumed as one continuous source.
+
+### How it works
+
+1. **Listing** — `ListObjectsV2` is called with the prefix and a `/` delimiter (non-recursive, single level only). Files are sorted lexicographically by key.
+2. **Virtual byte stream** — Each file is assigned a cumulative virtual offset. A 5 MB + 3 MB + 4 MB directory becomes a single 12 MB stream.
+3. **Range mapping** — When a byte range is requested, `resolveVirtualRange()` maps virtual offsets to physical S3 object ranges using binary search. Most requests hit a single object; boundary-crossing ranges (spanning two files) are handled by concatenating synchronous downloads.
+4. **Cache consistency** — A composite entity tag is computed as a SHA-256 hash of all individual file ETags, enabling cache invalidation when any file in the directory changes.
+
+### Source detection
+
+The element determines whether a URI points to a single key or a directory using the `source-hint` property:
+
+| `source-hint`    | Behavior                                                                                                                                                         |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `none` (default) | Auto-detect: a trailing `/` in the URI triggers directory mode. Otherwise, `HeadObject` is tried first; if it fails, `ListObjectsV2` is attempted as a fallback. |
+| `key`            | Forces single-object mode.                                                                                                                                       |
+| `prefix`         | Forces directory/prefix mode.                                                                                                                                    |
+
+**Performance tip:** When you know in advance whether the URI points to a single object or a directory, setting `source-hint` to `key` or `prefix` avoids the extra S3 API calls that `none` mode performs for auto-detection (a `HeadObject` probe followed by a potential `ListObjectsV2` fallback). This can noticeably reduce startup latency, especially on high-latency connections.
+
+### File filtering
+
+The `file-pattern` property accepts a glob pattern (e.g., `*.ts`, `segment_*`) to filter files under the prefix. An empty string (the default) includes all files.
+
+### Example
+
+```bash
+# Stream all .ts files under an S3 prefix as a single source
+gst-launch-1.0 airtimes3src location="s3://my-bucket/recordings/session-1/" source-hint=prefix file-pattern="*.ts" ! decodebin ! autovideosink
+
+# Auto-detect directory mode via trailing slash
+gst-launch-1.0 airtimes3src location="s3://my-bucket/recordings/session-1/" ! decodebin ! autovideosink
+```
+
+---
+
 ## Integration
 
 - Works in **GStreamer pipelines**, **GES projects**, and **discovery tools**.
@@ -96,10 +137,18 @@ properties such as the AWS Region to use.
 
 ---
 
-## Example
+## Examples
+
+**Single S3 object:**
 
 ```bash
 gst-launch-1.0 airtimes3src location="s3://my-bucket/path/to/my/video.mp4" ! decodebin ! autovideosink
+```
+
+**S3 directory (prefix):**
+
+```bash
+gst-launch-1.0 airtimes3src location="s3://my-bucket/chunks/" source-hint=prefix file-pattern="*.part" ! decodebin ! autovideosink
 ```
 
 While running it for the second time instead of fetching the file again from S3, the locally cached chunks are read.
@@ -161,75 +210,86 @@ Element Properties:
   automatic-eos       : Automatically EOS when the segment is done
                         flags: readable, writable
                         Boolean. Default: true
-  
+
   blocksize           : Size in bytes to read per buffer (-1 = default)
                         flags: readable, writable
-                        Unsigned Integer. Range: 0 - 4294967295 Default: 4096 
-  
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 4096
+
   cache-directory     : The base directory to use for local S3 file caching. It points to a local directory where the S3 file is downloaded and stored in chunks. If not set, an OS-specific temporary directory is used as the base cache directory. Each S3 URI is stored in a dedicated bucket/key-specific subdirectory.
                         flags: readable, writable, changeable only in NULL or READY state
                         String. Default: "/var/folders/mk/r99zwhtj1lb6ylpbl3gnk80h0000gn/T/airtime_s3_cache"
-  
+
   cache-max-size-bytes: The maximum total cache size in bytes. When this limit is reached, the LRU eviction policy removes cache directory of the least recently used S3 file. Setting this value to 0 disables eviction making the cache unbounded.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 10737418240 
-  
+                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 10737418240
+
   do-timestamp        : Apply current stream time to buffers
                         flags: readable, writable
                         Boolean. Default: false
-  
+
   download-chunk-size-bytes: The size in bytes of the chunks of the S3 object to download is divided into. Must be multiple of the file-chunk-size property value.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer64. Range: 512 - 18446744073709551615 Default: 2097152 
-  
+                        Unsigned Integer64. Range: 512 - 18446744073709551615 Default: 2097152
+
   ensure-correct-region: Whether to ensure that the S3 bucket is accessed in the correct region. If enabled, the element will attempt to determine the correct region for the specified S3 bucket and configure the S3 client accordingly.
                         flags: readable, writable, changeable only in NULL or READY state
                         Boolean. Default: false
-  
+
   fetch-max-retry-count: The maximum number of retries for S3 fetch operations that fail due to transient errors (e.g., network issues).
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer. Range: 0 - 4294967295 Default: 2 
-  
+                        Unsigned Integer. Range: 0 - 4294967295 Default: 2
+
   file-chunk-size-bytes: The size in bytes of the cached file chunk. Each downloaded S3 chunk is split into these smaller chunks for storage. The download-chunk-size property value must be multiple of this value.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer64. Range: 512 - 18446744073709551615 Default: 1048576 
-  
+                        Unsigned Integer64. Range: 512 - 18446744073709551615 Default: 1048576
+
   http-request-timeout: Corresponds to the AWS client configuration httpRequestTimeoutMs property.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Long. Range: 0 - 9223372036854775807 Default: 0 
-  
-  location            : The location to use for the source. This should be a valid AWS S3 uri as follows: 's3://<s3_bucket>/<s3_key>'. AWS authentication is assumed to have been handled by the environment.
+                        Long. Range: 0 - 9223372036854775807 Default: 0
+
+  file-pattern        : Glob pattern to filter files when operating in directory/prefix mode (e.g. '*.ts', 'segment_*'). An empty string (default) means include all files under the prefix.
                         flags: readable, writable, changeable only in NULL or READY state
                         String. Default: ""
-  
+
+  location            : The location to use for the source. This should be a valid AWS S3 URI as follows: 's3://<s3_bucket>/<s3_key>' for a single object or 's3://<s3_bucket>/<s3_prefix>/' for a directory. AWS authentication is assumed to have been handled by the environment.
+                        flags: readable, writable, changeable only in NULL or READY state
+                        String. Default: ""
+
   max-concurrent-downloads: The maximum number of concurrent S3 chunk downloads to cache the S3 object locally. If set to 0, the default value will be used as defined in the AWS SDK.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 25 
-  
+                        Unsigned Integer64. Range: 0 - 18446744073709551615 Default: 25
+
   name                : The name of the object
                         flags: readable, writable
                         String. Default: "airtimes3src0"
-  
+
   num-buffers         : Number of buffers to output before sending EOS (-1 = unlimited)
                         flags: readable, writable
-                        Integer. Range: -1 - 2147483647 Default: -1 
-  
+                        Integer. Range: -1 - 2147483647 Default: -1
+
   parent              : The parent of the object
                         flags: readable, writable
                         Object of type "GstObject"
-  
+
   request-timeout     : Corresponds to the AWS client configuration requestTimeoutMs property.
                         flags: readable, writable, changeable only in NULL or READY state
-                        Long. Range: 0 - 9223372036854775807 Default: 0 
-  
+                        Long. Range: 0 - 9223372036854775807 Default: 0
+
+  source-hint         : Hint for whether the S3 URI points to a single object (key) or a directory (prefix). When set to 'none' (default), the element auto-detects by trying HeadObject first, then falling back to ListObjectsV2. Use 'key' to force single-object mode or 'prefix' to force directory mode.
+                        flags: readable, writable, changeable only in NULL or READY state
+                        Enum "GstAirtimeS3SrcSourceHintType" Default: 0, "none"
+                           (0): none             - Auto-detect (default)
+                           (1): key              - Single S3 object key
+                           (2): prefix           - S3 directory prefix
+
   trust-cached-data   : Whether to trust the integrity of cached data without revalidating it with S3 metadata object. It may avoid unnecessary S3 requests if the metadata is already cached and allows for working with the cached object without having an active internet connection.
                         flags: readable, writable, changeable only in NULL or READY state
                         Boolean. Default: false
-  
+
   typefind            : Run typefind before negotiating (deprecated, non-functional)
                         flags: readable, writable, deprecated
                         Boolean. Default: false
-  
+
   validate-credentials: Whether to validate AWS credentials before using them. If enabled, the element will attempt to validate the provided AWS credentials by making a simple request to AWS STS service. If the credentials are invalid, the element will fail to start.
                         flags: readable, writable, changeable only in NULL or READY state
                         Boolean. Default: false
@@ -239,10 +299,13 @@ It should be noted that this element inherits from `GstBaseSrc` and looks very s
 
 The most important **`airtimes3src`-specific** properties are:
 
-- **`location`** – The S3 URI pointing to the media file to stream.
+- **`location`** – The S3 URI pointing to the media file or directory to stream. Use `s3://bucket/key` for a single object or `s3://bucket/prefix/` (trailing slash) for a directory.
+
+- **`source-hint`** – Hint for whether the URI points to a single object (`key`) or a directory prefix (`prefix`). Default is `none` (auto-detect). See [S3 Directory (Prefix) Source](#s3-directory-prefix-source) for details.
+
+- **`file-pattern`** – Glob pattern to filter files when in directory/prefix mode (e.g., `*.ts`, `segment_*`). Empty string (default) includes all files.
 
 - **`cache-directory`** – Path to the base directory to use for local S3 file caching.
-
   - It points to a local directory where the S3 file is downloaded and stored in chunks.
   - If not set, an OS-specific temporary directory is used as the base cache directory.
   - Each S3 URI is stored in a dedicated bucket/key-specific subdirectory.
@@ -250,13 +313,11 @@ The most important **`airtimes3src`-specific** properties are:
 - **`cache-max-size-bytes`** – The maximum total cache size in bytes. When this limit is reached, the LRU eviction policy removes cache directory of the least recently used S3 file.
 
 - **`download-chunk-size-bytes`** – Size (in bytes) of each chunk requested from S3.
-
   - Must be a multiple of the `file-chunk-size-bytes` value.
 
 - **`fetch-max-retry-count`** – The maximum number of retries for S3 fetch operations that fail due to transient errors (e.g., network issues).
 
 - **`file-chunk-size-bytes`** – Size (in bytes) of each cached file chunk.
-
   - Each downloaded S3 chunk is split into these smaller chunks for storage.
 
 - **`max-concurrent-downloads`** – The maximum number of S3 chunks fetched in parallel.
@@ -386,11 +447,11 @@ gst-launch-1.0 airtimes3src location=s3://my-bucket/path/to/media.webm ! decodeb
 
 The tests were run multiple times, and the table below presents average durations for two files: a relatively small 189 MB file and a larger 1.6 GB file. Performance varies significantly depending on network speed. The smaller file was tested over a mobile LTE connection, while the larger file was tested on a fiber network. Both sets of tests were conducted on a MacBook M3 Pro with 36 GB of RAM.
 
-| Operation                      | 189MB file          | Speedup   | 1.6GB file                   | Speedup   |
-| ------------------------------ | ------------------- | --------- | ---------------------------- | --------- |
-| `aws s3 cp` + `filesrc`        | 21s + 12s = **33s** | 1×        | 54s + 2m 43s = **3min 37s**  | 1×        |
-| `airtimes3src` with cold cache | **15s**             | 2.2×      | **2min 46s**                 | 1.3×      |
-| `airtimes3src` with warm cache | **12s**             | 2.8×      | **2min 46s**                 | 1.3×      |
+| Operation                      | 189MB file          | Speedup | 1.6GB file                  | Speedup |
+| ------------------------------ | ------------------- | ------- | --------------------------- | ------- |
+| `aws s3 cp` + `filesrc`        | 21s + 12s = **33s** | 1×      | 54s + 2m 43s = **3min 37s** | 1×      |
+| `airtimes3src` with cold cache | **15s**             | 2.2×    | **2min 46s**                | 1.3×    |
+| `airtimes3src` with warm cache | **12s**             | 2.8×    | **2min 46s**                | 1.3×    |
 
 With a warm cache, the overhead of processing chunks directory, checking the cache consistency and potential gaps analysis is negligible compared to processing a regular file with `filesrc`. However, please note that the pipeline starts running immediately, processing the requested byte range as soon as those bytes are available — it does not wait for the entire file to be fetched. With that in mind, comparing aws s3 cp + filesrc to airtimes3src is not entirely fair. The above example pipelines perform very little work, so they run quickly. In more realistic scenarios, where pipeline processing takes longer, the time spent fetching data — even with a cold cache — may be completely masked by the processing time, especially for large files.
 
@@ -403,29 +464,24 @@ The airtimes3src element offers a range of advanced features and significant per
 Although at first glance `airtimes3src` may seem similar to the existing `awss3src` element implemented in Rust, it offers significantly more functionality. In particular:
 
 - **True seeking support — even during ongoing downloads**
-
   - `airtimes3src` can seek accurately while S3 downloads are still in progress.
   - `awss3src` does not support seeking ([source code](https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/blob/main/net/aws/src/s3src/imp.rs?ref_type=heads#L571)), where a `FIXME` remains.
   - This limitation causes errors in GES and other components.
 
 - **Parallel byte-range downloads with prioritization**
-
   - Downloads up to N byte ranges at once using AWS’s `ThreadPoolExecutor` (by default N-25).
   - Prioritizes byte ranges requested by `GstBaseSrc`, enabling pipelines to start processing early.
   - `awss3src` lacks this logic and downloads only one range at a time ([code reference](https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/blob/main/net/aws/src/s3src/imp.rs?ref_type=heads#L221)).
 
 - **Advanced local caching**
-
   - Reuses downloaded chunks to avoid redundant transfers.
   - Cache persists between pipeline runs and discovery attempts — no need to re-download objects unnecessarily.
   - `awss3src` has no caching mechanism and must re-download each time.
 
 - **On-demand downloading**
-
   - Only fetches the exact byte ranges required, rather than downloading the full object when not needed.
 
 - **Metrics and download feedback**
-
   - Provides real-time download metrics and status reporting.
   - `awss3src` has no equivalent functionality.
 
@@ -438,28 +494,29 @@ Although at first glance `airtimes3src` may seem similar to the existing `awss3s
 #### Performance
 
 The following pipelines were used to compare the processing times of the existing **awss3src** (baseline, gstreamer 1.26.7) and **airtimes3src**:
+
 ```bash
 gst-launch-1.0 awss3src uri=s3://REGION/BUCKET/KEY ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
 gst-launch-1.0 airtimes3src location=s3://BUCKET/KEY ! decodebin name=d d. ! videoconvert ! fakesink d. ! audioconvert ! fakesink
 ```
 
 Results:
-- *189MB file, Webm/VP9/Opus, length: 10min 18s*:
 
-| Element                   | Duration | Speedup |
-|-------------------------- |----------|---------|
-| awss3src                  | 53.3s    | 1×      |
-| airtimes3src (cold cache) | 17.7s    | 3.0×    |
-| airtimes3src (warm cache) | 12.5s    | 4.3×    |
+- _189MB file, Webm/VP9/Opus, length: 10min 18s_:
 
+| Element      | Duration           | Speedup |
+| ------------ | ------------------ | ------- |
+| awss3src     | 53.3s              | 1×      |
+| airtimes3src | 17.7s (cold cache) | 3.0×    |
+| airtimes3src | 12.5s (warm cache) | 4.3×    |
 
-- *2GB file, Webm/VP8/Opus, length: 7min 11s*:
+- _2GB file, Webm/VP8/Opus, length: 7min 11s_:
 
-| Element                   | Duration   | Speedup |
-|-------------------------- |------------|---------|
-| awss3src                  | 21m 58.62s | 1×      |
-| airtimes3src (cold cache) | 2m 51.75s  | 7.7×    |
-| airtimes3src (warm cache) | 2m 45.02s  | 8.0×    |
+| Element      | Duration               | Speedup |
+| ------------ | ---------------------- | ------- |
+| awss3src     | 21m 58.62s             | 1×      |
+| airtimes3src | 2m 51.75s (cold cache) | 7.7×    |
+| airtimes3src | 2m 45.02s (warm cache) | 8.0×    |
 
 The substantial performance improvement of **airtimes3src** is primarily due to its parallel byte-range downloading with prioritization and robust, true seeking capabilities.
 

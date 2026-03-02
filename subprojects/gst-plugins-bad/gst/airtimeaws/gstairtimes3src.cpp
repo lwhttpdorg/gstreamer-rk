@@ -1,7 +1,7 @@
 /*
  * airtime aws plugin
  * Copyright (C) 2025 mmhmm, Inc.
- *   @author: Teus Groenewoud <teus@mmhmm.app>,
+ *   @author: Teus Groenewoud <teus@mmhmm.app>
  *   @author: Tomasz Mikolajczyk <tomasz.mikolajczyk@mmhmm.app>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -102,7 +102,8 @@ GST_DEBUG_CATEGORY_STATIC(gst_airtime_s3_src_debug);
 static GstStaticPadTemplate caps_factory =
     GST_STATIC_PAD_TEMPLATE("src", GST_PAD_SRC, GST_PAD_ALWAYS, GST_STATIC_CAPS_ANY);
 
-enum {
+enum
+{
     PROP_0,
     PROP_LOCATION,
     PROP_CACHE_DOWNLOAD_CHUNK_SIZE,
@@ -115,15 +116,37 @@ enum {
     PROP_HTTP_REQUEST_TIMEOUT,
     PROP_REQUEST_TIMEOUT,
     PROP_VALIDATE_CREDENTIALS,
-    PROP_ENSURE_CORRECT_REGION
+    PROP_ENSURE_CORRECT_REGION,
+    PROP_SOURCE_HINT,
+    PROP_FILE_PATTERN
 };
+
+#define GST_TYPE_AIRTIME_S3_SRC_SOURCE_HINT (gst_airtime_s3_src_source_hint_get_type())
+static GType gst_airtime_s3_src_source_hint_get_type()
+{
+    static GType source_hint_type{0};
+
+    static const GEnumValue source_hint_values[] = {
+        {S3_SOURCE_HINT_TYPE_NONE, "Auto-detect (default)", "none"},
+        {S3_SOURCE_HINT_TYPE_KEY, "Single S3 object key", "key"},
+        {S3_SOURCE_HINT_TYPE_PREFIX, "S3 directory prefix", "prefix"},
+        {0, NULL, NULL},
+    };
+
+    if (!source_hint_type)
+    {
+        source_hint_type = g_enum_register_static("GstAirtimeS3SrcSourceHintType", source_hint_values);
+    }
+    return source_hint_type;
+}
 
 #define S3_URI "s3"
 #define S3_PROTOCOL S3_URI "://"
 
 #define AIRTIME_S3_SRC_METRICS_MESSAGE_NAME "airtimes3src::metrics"
 
-struct GstAirtimeS3SrcImpl {
+struct GstAirtimeS3SrcImpl
+{
 
     std::string location;
 
@@ -150,10 +173,11 @@ struct GstAirtimeS3SrcImpl {
  *
  * The airtimes3src object structure.
  */
-struct _GstAirtimeS3Src {
+struct _GstAirtimeS3Src
+{
     GstBaseSrc parent;
 
-    GstAirtimeS3SrcImpl* impl;
+    GstAirtimeS3SrcImpl *impl;
 };
 
 // Forward declarations
@@ -163,13 +187,57 @@ static void gst_airtime_s3_src_uri_handler_init(gpointer g_iface, gpointer iface
 G_DEFINE_TYPE_WITH_CODE(GstAirtimeS3Src, gst_airtime_s3_src, GST_TYPE_BASE_SRC,
                         G_IMPLEMENT_INTERFACE(GST_TYPE_URI_HANDLER, gst_airtime_s3_src_uri_handler_init));
 
+namespace
+{
+
+    /// @brief Maps the GstAirtimeS3SrcSourceHintType enum value to the corresponding gst::airtime::SourceHint enum value.
+    /// @param source_hint_enum_value The GstAirtimeS3SrcSourceHintType enum
+    /// @return The corresponding gst::airtime::SourceHint enum value.
+    /// @throws std::invalid_argument if the input enum value is invalid.
+    gst::airtime::SourceHint mapSourceHintEnum(GstAirtimeS3SrcSourceHintType source_hint_enum_value)
+    {
+        switch (source_hint_enum_value)
+        {
+        case S3_SOURCE_HINT_TYPE_NONE:
+            return gst::airtime::SourceHint::none;
+        case S3_SOURCE_HINT_TYPE_KEY:
+            return gst::airtime::SourceHint::key;
+        case S3_SOURCE_HINT_TYPE_PREFIX:
+            return gst::airtime::SourceHint::prefix;
+        default:
+            throw std::invalid_argument("Invalid source hint enum value: " +
+                                        std::to_string(static_cast<int>(source_hint_enum_value)));
+        }
+    }
+
+    /// @brief Maps the gst::airtime::SourceHint enum value to the corresponding GstAirtimeS3SrcSourceHintType enum value.
+    /// @param source_hint The gst::airtime::SourceHint enum value
+    /// @return The corresponding GstAirtimeS3SrcSourceHintType enum value.
+    /// @throws std::invalid_argument if the input enum value is invalid.
+    GstAirtimeS3SrcSourceHintType mapSourceHintToEnum(gst::airtime::SourceHint source_hint)
+    {
+        switch (source_hint)
+        {
+        case gst::airtime::SourceHint::none:
+            return S3_SOURCE_HINT_TYPE_NONE;
+        case gst::airtime::SourceHint::key:
+            return S3_SOURCE_HINT_TYPE_KEY;
+        case gst::airtime::SourceHint::prefix:
+            return S3_SOURCE_HINT_TYPE_PREFIX;
+        default:
+            throw std::invalid_argument("Invalid source hint value: " + std::to_string(static_cast<int>(source_hint)));
+        }
+    }
+
+} // namespace
+
 /// @brief Posts the metrics of the S3 URI provider to the bus. This includes the location, content length, download
 /// completion state and duration.
 /// @param self The GstAirtimeS3Src instance
-static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src* src)
+static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src *src)
 {
     assert(src);
-    GstAirtimeS3SrcImpl* impl = src->impl;
+    GstAirtimeS3SrcImpl *impl = src->impl;
     if (not impl)
     {
         // already destroyed - this can happen during discovery use of element.
@@ -196,7 +264,7 @@ static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src* src)
         gst_structure_set(metrics_structure.get(), "duration", G_TYPE_UINT64, impl->s3_uri_provider->getMetrics(),
                           nullptr);
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         GST_ERROR_OBJECT(src, "Failed to prepare metrics structure for bus: %s", e.what());
         return;
@@ -213,12 +281,12 @@ static void gst_airtime_s3_src_post_metrics_to_bus(GstAirtimeS3Src* src)
 /// @brief Validate the properties of the GstAirtimeS3Src element. Sets GST element errors where needed.
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_validate_properties(GstBaseSrc* src)
+static gboolean gst_airtime_s3_src_validate_properties(GstBaseSrc *src)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     if (impl->location.empty())
     {
@@ -253,10 +321,10 @@ static gboolean gst_airtime_s3_src_validate_properties(GstBaseSrc* src)
 /// @param value The GValue to set the result of the query
 /// @param user_data The user data, which is the GstQuery to run
 /// @return A boolean indicating whether the query was successful or not
-static gboolean pad_query(const GValue* item, GValue* value, gpointer user_data)
+static gboolean pad_query(const GValue *item, GValue *value, gpointer user_data)
 {
-    GstPad* pad = (GstPad*)g_value_get_object(item);
-    GstQuery* query = (GstQuery*)user_data;
+    GstPad *pad = (GstPad *)g_value_get_object(item);
+    GstQuery *query = (GstQuery *)user_data;
     gboolean res;
 
     res = gst_pad_peer_query(pad, query);
@@ -277,9 +345,9 @@ static gboolean pad_query(const GValue* item, GValue* value, gpointer user_data)
 /// @param query The GstQuery instance to run
 /// @param direction The direction of the pads to query (source or sink)
 /// @return A boolean indicating whether the context was found
-static gboolean run_query(GstElement* element, GstQuery* query, GstPadDirection direction)
+static gboolean run_query(GstElement *element, GstQuery *query, GstPadDirection direction)
 {
-    GstIterator* it;
+    GstIterator *it;
     GstIteratorFoldFunction func = pad_query;
     GValue res = G_VALUE_INIT;
 
@@ -309,11 +377,11 @@ static gboolean run_query(GstElement* element, GstQuery* query, GstPadDirection 
 /// context, and if not found, the upstream pads.
 /// @param src The GstAirtimeS3Src instance (context)
 /// @note Inspired by `gstcudautils.h`
-static void gst_airtime_s3_src_find_context(GstAirtimeS3Src* src)
+static void gst_airtime_s3_src_find_context(GstAirtimeS3Src *src)
 {
     assert(src);
 
-    GstContext* ctxt;
+    GstContext *ctxt;
 
     // first, use a query to find the context downstream
     gst::airtime::ScopedGstQuery query{gst_query_new_context(AIRTIME_S3_SRC_CONTEXT_TYPE)};
@@ -351,10 +419,10 @@ static void gst_airtime_s3_src_find_context(GstAirtimeS3Src* src)
 /// GstAirtimeS3SrcImpl instance of the new context.
 /// @param element The GstElement instance (context)
 /// @param context The GstContext instance to set
-static void gst_airtime_s3_src_set_context(GstElement* element, GstContext* context)
+static void gst_airtime_s3_src_set_context(GstElement *element, GstContext *context)
 {
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(element);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(element);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     {
         std::lock_guard lock{impl->lock};
@@ -365,7 +433,7 @@ static void gst_airtime_s3_src_set_context(GstElement* element, GstContext* cont
             GST_DEBUG_OBJECT(element, "Context '%s' not found in element.", AIRTIME_S3_SRC_CONTEXT_TYPE);
             return;
         }
-        const GstStructure* s = gst_context_get_structure(context);
+        const GstStructure *s = gst_context_get_structure(context);
         if (not s)
         {
             GST_ERROR_OBJECT(element, "Context '%s' is empty.", AIRTIME_S3_SRC_CONTEXT_TYPE);
@@ -373,7 +441,7 @@ static void gst_airtime_s3_src_set_context(GstElement* element, GstContext* cont
         }
 
         // get the airtime S3 src context from the structure
-        GstAirtimeS3SrcContext* other_airtime_context{nullptr};
+        GstAirtimeS3SrcContext *other_airtime_context{nullptr};
         gst_structure_get(s, AIRTIME_S3_SRC_CONTEXT_TYPE, GST_TYPE_AIRTIME_S3_SRC_CONTEXT, &other_airtime_context,
                           NULL);
         if (not other_airtime_context)
@@ -401,12 +469,12 @@ static void gst_airtime_s3_src_set_context(GstElement* element, GstContext* cont
 /// cache is inserted.
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_initialize_context(GstBaseSrc* src)
+static gboolean gst_airtime_s3_src_initialize_context(GstBaseSrc *src)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     // look for the GST airtime s3 src context
     if (impl->context)
@@ -423,7 +491,7 @@ static gboolean gst_airtime_s3_src_initialize_context(GstBaseSrc* src)
 
     GST_DEBUG_OBJECT(self, "Context '%s' not found, creating new context...", AIRTIME_S3_SRC_CONTEXT_TYPE);
 
-    GstContext* context = gst_context_new(AIRTIME_S3_SRC_CONTEXT_TYPE, TRUE);
+    GstContext *context = gst_context_new(AIRTIME_S3_SRC_CONTEXT_TYPE, TRUE);
     gst::airtime::ScopedGstAirtimeS3SrcContext airtime_context{
         gst_airtime_s3_src_context_new(impl->uri_provider_config)};
     if (!airtime_context)
@@ -431,7 +499,7 @@ static gboolean gst_airtime_s3_src_initialize_context(GstBaseSrc* src)
         return false;
     }
 
-    GstStructure* s = gst_context_writable_structure(context);
+    GstStructure *s = gst_context_writable_structure(context);
     gst_structure_set(s, AIRTIME_S3_SRC_CONTEXT_TYPE, GST_TYPE_AIRTIME_S3_SRC_CONTEXT, airtime_context.get(), nullptr);
 
     // because we have overridden the set_context method, we can safely set the context here and it will be handled in
@@ -447,12 +515,12 @@ static gboolean gst_airtime_s3_src_initialize_context(GstBaseSrc* src)
 /// @brief Start the S3 object fetching and caching. If object is already cached it will be reused.
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating success
-static bool gst_airtime_s3_src_make_s3_uri_provider_available(GstBaseSrc* src)
+static bool gst_airtime_s3_src_make_s3_uri_provider_available(GstBaseSrc *src)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     GST_DEBUG_OBJECT(src, "Start caching S3 object: '%s'", impl->location.c_str());
 
@@ -461,7 +529,7 @@ static bool gst_airtime_s3_src_make_s3_uri_provider_available(GstBaseSrc* src)
         impl->s3_uri_provider = impl->s3_uri_providers->getURIProvider(impl->location, impl->s3_bucket, impl->s3_key);
         assert(impl->s3_uri_provider);
     }
-    catch (std::exception& e)
+    catch (std::exception &e)
     {
         GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
                           ("Failed to start element for URI '%s': %s", impl->location.c_str(), e.what()), (NULL));
@@ -475,12 +543,12 @@ static bool gst_airtime_s3_src_make_s3_uri_provider_available(GstBaseSrc* src)
 /// @param location The location to set
 /// @param err An optional error pointer
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_set_location(GstAirtimeS3Src* src, const gchar* location, GError** err)
+static gboolean gst_airtime_s3_src_set_location(GstAirtimeS3Src *src, const gchar *location, GError **err)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     GST_DEBUG_OBJECT(self, "in gst_airtime_s3_src_set_location...");
 
@@ -525,12 +593,12 @@ static gboolean gst_airtime_s3_src_set_location(GstAirtimeS3Src* src, const gcha
 /// @brief The virtual method override for the GstBaseSrc start method
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_start(GstBaseSrc* src)
+static gboolean gst_airtime_s3_src_start(GstBaseSrc *src)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     GST_DEBUG_OBJECT(self, "Start");
 
@@ -559,6 +627,10 @@ static gboolean gst_airtime_s3_src_start(GstBaseSrc* src)
         gst::airtime::ScopedGstURI uri{gst_uri_from_string(impl->location.c_str())};
         std::string s3_bucket{gst_uri_get_host(uri.get())};
         std::string s3_key{gst_uri_get_path(uri.get())};
+        if (not s3_key.empty() and s3_key.front() == '/')
+        {
+            s3_key.erase(0, 1);
+        }
 
         if (impl->s3_bucket == s3_bucket && impl->s3_key == s3_key)
         {
@@ -582,7 +654,7 @@ static gboolean gst_airtime_s3_src_start(GstBaseSrc* src)
         impl->seekable = true;
         gst_base_src_set_dynamic_size(src, impl->seekable);
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         GST_ELEMENT_ERROR(src, RESOURCE, NOT_FOUND,
                           ("Failed to start caching S3 object '%s': %s", impl->location.c_str(), e.what()), (NULL));
@@ -594,11 +666,11 @@ static gboolean gst_airtime_s3_src_start(GstBaseSrc* src)
 /// @brief The virtual method override for the GstBaseSrc stop method
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_stop(GstBaseSrc* src)
+static gboolean gst_airtime_s3_src_stop(GstBaseSrc *src)
 {
     assert(src);
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
     assert(impl);
 
     std::lock_guard lock{impl->lock};
@@ -613,12 +685,12 @@ static gboolean gst_airtime_s3_src_stop(GstBaseSrc* src)
 /// @brief The virtual method override for the GstBaseSrc is_seekable method
 /// @param src The GstBaseSrc instance (context)
 /// @return A boolean indicating if the source is seekable
-static gboolean gst_airtime_s3_src_is_seekable(GstBaseSrc* src)
+static gboolean gst_airtime_s3_src_is_seekable(GstBaseSrc *src)
 {
     assert(src);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     std::lock_guard lock{impl->lock};
 
@@ -629,13 +701,13 @@ static gboolean gst_airtime_s3_src_is_seekable(GstBaseSrc* src)
 /// @param src The GstBaseSrc instance (context)
 /// @param size The size of the source
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_get_size(GstBaseSrc* src, guint64* size)
+static gboolean gst_airtime_s3_src_get_size(GstBaseSrc *src, guint64 *size)
 {
     assert(src);
     assert(size);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     std::lock_guard lock{impl->lock};
 
@@ -650,13 +722,13 @@ static gboolean gst_airtime_s3_src_get_size(GstBaseSrc* src, guint64* size)
 /// @param size The size to fill
 /// @param buf The buffer to fill
 /// @return A GstFlowReturn indicating the result of the operation
-static GstFlowReturn gst_airtime_s3_src_fill(GstBaseSrc* src, guint64 offset, guint size, GstBuffer* buf)
+static GstFlowReturn gst_airtime_s3_src_fill(GstBaseSrc *src, guint64 offset, guint size, GstBuffer *buf)
 {
     assert(src);
     assert(buf);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(src);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(src);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     std::lock_guard lock{impl->lock};
 
@@ -677,7 +749,7 @@ static GstFlowReturn gst_airtime_s3_src_fill(GstBaseSrc* src, guint64 offset, gu
     {
         status_and_bytes_read = self->impl->s3_uri_provider->fill(write_buf_map.data(), offset, size);
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         GST_ELEMENT_ERROR(src, RESOURCE, READ, ("Failed to read from cache: %s", e.what()), (NULL));
         return GST_FLOW_ERROR;
@@ -715,9 +787,9 @@ static GstURIType gst_airtime_s3_src_uri_get_type(GType)
 /// @brief The virtual method override for the GstURIHandler get_protocols method
 /// @param type The GType of the handler
 /// @return A list of supported protocols
-static const gchar* const* gst_airtime_s3_src_uri_get_protocols(GType)
+static const gchar *const *gst_airtime_s3_src_uri_get_protocols(GType)
 {
-    static const gchar* protocols[] = {S3_URI, NULL};
+    static const gchar *protocols[] = {S3_URI, NULL};
 
     return protocols;
 }
@@ -725,12 +797,12 @@ static const gchar* const* gst_airtime_s3_src_uri_get_protocols(GType)
 /// @brief The virtual method override for the GstURIHandler get_uri method
 /// @param handler The GstURIHandler instance (context)
 /// @return The URI of the handler
-static gchar* gst_airtime_s3_src_uri_get_uri(GstURIHandler* handler)
+static gchar *gst_airtime_s3_src_uri_get_uri(GstURIHandler *handler)
 {
     assert(handler);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(handler);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(handler);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     std::lock_guard lock{impl->lock};
 
@@ -742,12 +814,12 @@ static gchar* gst_airtime_s3_src_uri_get_uri(GstURIHandler* handler)
 /// @param uri The URI to set
 /// @param err The error to set if the URI is invalid
 /// @return A boolean indicating success
-static gboolean gst_airtime_s3_src_uri_set_uri(GstURIHandler* handler, const gchar* uri, GError** err)
+static gboolean gst_airtime_s3_src_uri_set_uri(GstURIHandler *handler, const gchar *uri, GError **err)
 {
     assert(handler);
 
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(handler);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(handler);
+    GstAirtimeS3SrcImpl *impl = self->impl;
 
     std::lock_guard lock{impl->lock};
 
@@ -772,7 +844,7 @@ static gboolean gst_airtime_s3_src_uri_set_uri(GstURIHandler* handler, const gch
 
 static void gst_airtime_s3_src_uri_handler_init(gpointer g_iface, gpointer)
 {
-    GstURIHandlerInterface* iface = (GstURIHandlerInterface*)g_iface;
+    GstURIHandlerInterface *iface = (GstURIHandlerInterface *)g_iface;
 
     iface->get_type = gst_airtime_s3_src_uri_get_type;
     iface->get_protocols = gst_airtime_s3_src_uri_get_protocols;
@@ -787,53 +859,59 @@ static void gst_airtime_s3_src_uri_handler_init(gpointer g_iface, gpointer)
 /// @param prop_id The property ID
 /// @param value The value to retrieve the property into
 /// @param pspec Additional property information
-static void gst_airtime_s3_src_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec)
+static void gst_airtime_s3_src_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(object);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(object);
+    GstAirtimeS3SrcImpl *impl = self->impl;
     std::lock_guard lock{impl->lock};
 
     switch (prop_id)
     {
-        case PROP_LOCATION:
-            g_value_set_string(value, impl->location.c_str());
-            break;
-        case PROP_CACHE_DOWNLOAD_CHUNK_SIZE:
-            g_value_set_uint64(value, impl->uri_provider_config.download_chunk_size);
-            break;
-        case PROP_CACHE_FILE_CHUNK_SIZE:
-            g_value_set_uint64(value, impl->uri_provider_config.file_chunk_size);
-            break;
-        case PROP_MAX_NUMBER_OF_DOWNLOADS:
-            g_value_set_uint64(value, impl->uri_provider_config.max_number_of_downloads);
-            break;
-        case PROP_CACHE_DIRECTORY:
-            g_value_set_string(value, impl->uri_provider_config.cache_base_directory.c_str());
-            break;
-        case PROP_CACHE_MAX_SIZE:
-            g_value_set_uint64(value, impl->uri_provider_config.max_cache_size_bytes);
-            break;
-        case PROP_FETCH_MAX_RETRY_COUNT:
-            g_value_set_uint(value, impl->uri_provider_config.fetch_max_retry_count);
-            break;
-        case PROP_TRUST_CACHED_DATA:
-            g_value_set_boolean(value, impl->uri_provider_config.trust_cached_data);
-            break;
-        case PROP_HTTP_REQUEST_TIMEOUT:
-            g_value_set_long(value, impl->uri_provider_config.http_request_timeout_ms);
-            break;
-        case PROP_REQUEST_TIMEOUT:
-            g_value_set_long(value, impl->uri_provider_config.request_timeout_ms);
-            break;
-        case PROP_VALIDATE_CREDENTIALS:
-            g_value_set_boolean(value, impl->uri_provider_config.validate_credentials);
-            break;
-        case PROP_ENSURE_CORRECT_REGION:
-            g_value_set_boolean(value, impl->uri_provider_config.ensure_correct_region);
-            break;
-        default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-            break;
+    case PROP_LOCATION:
+        g_value_set_string(value, impl->location.c_str());
+        break;
+    case PROP_CACHE_DOWNLOAD_CHUNK_SIZE:
+        g_value_set_uint64(value, impl->uri_provider_config.download_chunk_size);
+        break;
+    case PROP_CACHE_FILE_CHUNK_SIZE:
+        g_value_set_uint64(value, impl->uri_provider_config.file_chunk_size);
+        break;
+    case PROP_MAX_NUMBER_OF_DOWNLOADS:
+        g_value_set_uint64(value, impl->uri_provider_config.max_number_of_downloads);
+        break;
+    case PROP_CACHE_DIRECTORY:
+        g_value_set_string(value, impl->uri_provider_config.cache_base_directory.c_str());
+        break;
+    case PROP_CACHE_MAX_SIZE:
+        g_value_set_uint64(value, impl->uri_provider_config.max_cache_size_bytes);
+        break;
+    case PROP_FETCH_MAX_RETRY_COUNT:
+        g_value_set_uint(value, impl->uri_provider_config.fetch_max_retry_count);
+        break;
+    case PROP_TRUST_CACHED_DATA:
+        g_value_set_boolean(value, impl->uri_provider_config.trust_cached_data);
+        break;
+    case PROP_HTTP_REQUEST_TIMEOUT:
+        g_value_set_long(value, impl->uri_provider_config.http_request_timeout_ms);
+        break;
+    case PROP_REQUEST_TIMEOUT:
+        g_value_set_long(value, impl->uri_provider_config.request_timeout_ms);
+        break;
+    case PROP_VALIDATE_CREDENTIALS:
+        g_value_set_boolean(value, impl->uri_provider_config.validate_credentials);
+        break;
+    case PROP_ENSURE_CORRECT_REGION:
+        g_value_set_boolean(value, impl->uri_provider_config.ensure_correct_region);
+        break;
+    case PROP_SOURCE_HINT:
+        g_value_set_enum(value, mapSourceHintToEnum(impl->uri_provider_config.source_hint));
+        break;
+    case PROP_FILE_PATTERN:
+        g_value_set_string(value, impl->uri_provider_config.file_pattern.c_str());
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+        break;
     }
 }
 
@@ -842,83 +920,92 @@ static void gst_airtime_s3_src_get_property(GObject* object, guint prop_id, GVal
 /// @param prop_id The property ID
 /// @param value The value to set
 /// @param pspec Additional property information
-static void gst_airtime_s3_src_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec)
+static void gst_airtime_s3_src_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
 {
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(object);
-    GstAirtimeS3SrcImpl* impl = self->impl;
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(object);
+    GstAirtimeS3SrcImpl *impl = self->impl;
     std::lock_guard lock{impl->lock};
 
     switch (prop_id)
     {
-        case PROP_LOCATION:
-            gst_airtime_s3_src_set_location(self, g_value_get_string(value), NULL);
-            break;
-        case PROP_CACHE_DOWNLOAD_CHUNK_SIZE:
-            impl->uri_provider_config.download_chunk_size = g_value_get_uint64(value);
-            GST_DEBUG_OBJECT(self, "Download chunk size set to %" PRIu64,
-                             impl->uri_provider_config.download_chunk_size);
-            break;
-        case PROP_CACHE_FILE_CHUNK_SIZE:
-            impl->uri_provider_config.file_chunk_size = g_value_get_uint64(value);
-            GST_DEBUG_OBJECT(self, "File chunk size set to %" PRIu64, impl->uri_provider_config.file_chunk_size);
-            break;
-        case PROP_MAX_NUMBER_OF_DOWNLOADS:
-            impl->uri_provider_config.max_number_of_downloads = g_value_get_uint64(value);
-            if (impl->uri_provider_config.max_number_of_downloads == 0)
-            {
-                impl->uri_provider_config.max_number_of_downloads =
-                    gst::airtime::default_number_of_concurrent_downloads;
-            }
-            GST_DEBUG_OBJECT(self, "Max number of downloads set to %" PRIu64,
-                             impl->uri_provider_config.max_number_of_downloads);
-            break;
-        case PROP_CACHE_DIRECTORY:
-            impl->uri_provider_config.cache_base_directory = g_value_get_string(value);
-            GST_DEBUG_OBJECT(self, "Cache directory set to %s", impl->uri_provider_config.cache_base_directory.c_str());
-            break;
-        case PROP_CACHE_MAX_SIZE:
-            impl->uri_provider_config.max_cache_size_bytes = g_value_get_uint64(value);
-            GST_DEBUG_OBJECT(self, "Max cache size set to %" PRIu64, impl->uri_provider_config.max_cache_size_bytes);
-            break;
-        case PROP_FETCH_MAX_RETRY_COUNT:
-            impl->uri_provider_config.fetch_max_retry_count = g_value_get_uint(value);
-            GST_DEBUG_OBJECT(self, "Fetch max retry count set to %u", impl->uri_provider_config.fetch_max_retry_count);
-            break;
-        case PROP_TRUST_CACHED_DATA:
-            impl->uri_provider_config.trust_cached_data = g_value_get_boolean(value);
-            GST_DEBUG_OBJECT(self, "Trust cached data set to %s",
-                             impl->uri_provider_config.trust_cached_data ? "true" : "false");
-            break;
-        case PROP_HTTP_REQUEST_TIMEOUT:
-            impl->uri_provider_config.http_request_timeout_ms = g_value_get_long(value);
-            GST_DEBUG_OBJECT(self, "HTTP request timeout set to %ld ms.",
-                             impl->uri_provider_config.http_request_timeout_ms);
-            break;
-        case PROP_REQUEST_TIMEOUT:
-            impl->uri_provider_config.request_timeout_ms = g_value_get_long(value);
-            GST_DEBUG_OBJECT(self, "Request timeout set to %ld ms.", impl->uri_provider_config.request_timeout_ms);
-            break;
-        case PROP_VALIDATE_CREDENTIALS:
-            impl->uri_provider_config.validate_credentials = g_value_get_boolean(value);
-            GST_DEBUG_OBJECT(self, "Validate credentials set to %s",
-                             impl->uri_provider_config.validate_credentials ? "true" : "false");
-            break;
-        case PROP_ENSURE_CORRECT_REGION:
-            impl->uri_provider_config.ensure_correct_region = g_value_get_boolean(value);
-            GST_DEBUG_OBJECT(self, "Ensure correct region set to %s",
-                             impl->uri_provider_config.ensure_correct_region ? "true" : "false");
-            break;
-        default:
-            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-            break;
+    case PROP_LOCATION:
+        gst_airtime_s3_src_set_location(self, g_value_get_string(value), NULL);
+        break;
+    case PROP_CACHE_DOWNLOAD_CHUNK_SIZE:
+        impl->uri_provider_config.download_chunk_size = g_value_get_uint64(value);
+        GST_DEBUG_OBJECT(self, "Download chunk size set to %" PRIu64,
+                         impl->uri_provider_config.download_chunk_size);
+        break;
+    case PROP_CACHE_FILE_CHUNK_SIZE:
+        impl->uri_provider_config.file_chunk_size = g_value_get_uint64(value);
+        GST_DEBUG_OBJECT(self, "File chunk size set to %" PRIu64, impl->uri_provider_config.file_chunk_size);
+        break;
+    case PROP_MAX_NUMBER_OF_DOWNLOADS:
+        impl->uri_provider_config.max_number_of_downloads = g_value_get_uint64(value);
+        if (impl->uri_provider_config.max_number_of_downloads == 0)
+        {
+            impl->uri_provider_config.max_number_of_downloads =
+                gst::airtime::default_number_of_concurrent_downloads;
+        }
+        GST_DEBUG_OBJECT(self, "Max number of downloads set to %" PRIu64,
+                         impl->uri_provider_config.max_number_of_downloads);
+        break;
+    case PROP_CACHE_DIRECTORY:
+        impl->uri_provider_config.cache_base_directory = g_value_get_string(value);
+        GST_DEBUG_OBJECT(self, "Cache directory set to %s", impl->uri_provider_config.cache_base_directory.c_str());
+        break;
+    case PROP_CACHE_MAX_SIZE:
+        impl->uri_provider_config.max_cache_size_bytes = g_value_get_uint64(value);
+        GST_DEBUG_OBJECT(self, "Max cache size set to %" PRIu64, impl->uri_provider_config.max_cache_size_bytes);
+        break;
+    case PROP_FETCH_MAX_RETRY_COUNT:
+        impl->uri_provider_config.fetch_max_retry_count = g_value_get_uint(value);
+        GST_DEBUG_OBJECT(self, "Fetch max retry count set to %u", impl->uri_provider_config.fetch_max_retry_count);
+        break;
+    case PROP_TRUST_CACHED_DATA:
+        impl->uri_provider_config.trust_cached_data = g_value_get_boolean(value);
+        GST_DEBUG_OBJECT(self, "Trust cached data set to %s",
+                         impl->uri_provider_config.trust_cached_data ? "true" : "false");
+        break;
+    case PROP_HTTP_REQUEST_TIMEOUT:
+        impl->uri_provider_config.http_request_timeout_ms = g_value_get_long(value);
+        GST_DEBUG_OBJECT(self, "HTTP request timeout set to %ld ms.",
+                         impl->uri_provider_config.http_request_timeout_ms);
+        break;
+    case PROP_REQUEST_TIMEOUT:
+        impl->uri_provider_config.request_timeout_ms = g_value_get_long(value);
+        GST_DEBUG_OBJECT(self, "Request timeout set to %ld ms.", impl->uri_provider_config.request_timeout_ms);
+        break;
+    case PROP_VALIDATE_CREDENTIALS:
+        impl->uri_provider_config.validate_credentials = g_value_get_boolean(value);
+        GST_DEBUG_OBJECT(self, "Validate credentials set to %s",
+                         impl->uri_provider_config.validate_credentials ? "true" : "false");
+        break;
+    case PROP_ENSURE_CORRECT_REGION:
+        impl->uri_provider_config.ensure_correct_region = g_value_get_boolean(value);
+        GST_DEBUG_OBJECT(self, "Ensure correct region set to %s",
+                         impl->uri_provider_config.ensure_correct_region ? "true" : "false");
+        break;
+    case PROP_SOURCE_HINT:
+        impl->uri_provider_config.source_hint =
+            mapSourceHintEnum(static_cast<GstAirtimeS3SrcSourceHintType>(g_value_get_enum(value)));
+        GST_DEBUG_OBJECT(self, "Source hint set to %d", static_cast<int>(impl->uri_provider_config.source_hint));
+        break;
+    case PROP_FILE_PATTERN:
+        impl->uri_provider_config.file_pattern = g_value_get_string(value);
+        GST_DEBUG_OBJECT(self, "File pattern set to '%s'", impl->uri_provider_config.file_pattern.c_str());
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+        break;
     }
 }
 
 /// @brief The method called by GStreamer to finalize or destroy the element
 /// @param object The GObject instance (context)
-static void gst_airtime_s3_src_finalize(GObject* object)
+static void gst_airtime_s3_src_finalize(GObject *object)
 {
-    GstAirtimeS3Src* self = GST_AIRTIMES3SRC(object);
+    GstAirtimeS3Src *self = GST_AIRTIMES3SRC(object);
     assert(self->impl);
 
     delete self->impl;
@@ -929,7 +1016,7 @@ static void gst_airtime_s3_src_finalize(GObject* object)
 
 /// @brief The method called by GStreamer to initialize the element
 /// @param self The GstAirtimeS3Src instance (context)
-static void gst_airtime_s3_src_init(GstAirtimeS3Src* self)
+static void gst_airtime_s3_src_init(GstAirtimeS3Src *self)
 {
     GST_DEBUG_OBJECT(self, "Initializing GstAirtimeS3Src...");
 
@@ -938,7 +1025,7 @@ static void gst_airtime_s3_src_init(GstAirtimeS3Src* self)
     {
         self->impl = new GstAirtimeS3SrcImpl();
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         GST_ERROR_OBJECT(self, "Failed to initialize GstAirtimeS3Src: %s", e.what());
     }
@@ -946,11 +1033,11 @@ static void gst_airtime_s3_src_init(GstAirtimeS3Src* self)
 
 /// @brief The method called by GStreamer to initialize the class
 /// @param klass The GstAirtimeS3SrcClass instance
-static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
+static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass *klass)
 {
-    GObjectClass* object_class = G_OBJECT_CLASS(klass);
-    GstElementClass* element_class = GST_ELEMENT_CLASS(klass);
-    GstBaseSrcClass* src_class = GST_BASE_SRC_CLASS(klass);
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
+    GstElementClass *element_class = GST_ELEMENT_CLASS(klass);
+    GstBaseSrcClass *src_class = GST_BASE_SRC_CLASS(klass);
 
     object_class->finalize = gst_airtime_s3_src_finalize;
     object_class->set_property = gst_airtime_s3_src_set_property;
@@ -1155,6 +1242,43 @@ static void gst_airtime_s3_src_class_init(GstAirtimeS3SrcClass* klass)
                              "configure the S3 client accordingly.",
                              default_config.ensure_correct_region,
                              (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:source-hint:
+     *
+     * Hint for whether the S3 URI points to a single object (key) or a directory (prefix).
+     * When set to 'none' (default), the element auto-detects by trying HeadObject first, then
+     * falling back to ListObjectsV2. Use 'key' to force single-object mode or 'prefix' to force
+     * directory mode.
+     *
+     * Since: 1.30
+     */
+    g_object_class_install_property(
+        object_class, PROP_SOURCE_HINT,
+        g_param_spec_enum("source-hint", "Source hint",
+                          "Hint for whether the S3 URI points to a single object (key) or a directory (prefix). "
+                          "When set to 'none' (default), the element auto-detects by trying HeadObject first, then "
+                          "falling back to ListObjectsV2. Use 'key' to force single-object mode or 'prefix' to force "
+                          "directory mode.",
+                          GST_TYPE_AIRTIME_S3_SRC_SOURCE_HINT, mapSourceHintToEnum(default_config.source_hint),
+                          (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
+
+    /**
+     * airtimes3src:file-pattern:
+     *
+     * Glob pattern to filter files when operating in directory/prefix mode (e.g. "*.ts", "segment_*").
+     * An empty string (default) means include all files under the prefix.
+     *
+     * Since: 1.30
+     */
+    g_object_class_install_property(
+        object_class, PROP_FILE_PATTERN,
+        g_param_spec_string(
+            "file-pattern", "File pattern",
+            "Glob pattern to filter files when operating in directory/prefix mode (e.g. '*.ts', 'segment_*'). "
+            "An empty string (default) means include all files under the prefix.",
+            default_config.file_pattern.c_str(),
+            (GParamFlags)(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_MUTABLE_READY)));
 
     gst_element_class_set_details_simple(
         element_class, "airtime S3 (file) src element", "Source", "Serves as an S3 (file) source element",
