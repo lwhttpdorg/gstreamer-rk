@@ -1763,6 +1763,8 @@ gst_aggregator_flush_start (GstAggregator * self, GstAggregatorPad * aggpad,
     /* Make sure we don't forward more than one FLUSH_START */
     priv->flushing = TRUE;
     priv->next_seqnum = seqnum;
+    // Make sure we select a new position in case of a non-seek flush start
+    priv->first_buffer = TRUE;
     GST_OBJECT_UNLOCK (self);
 
     GST_INFO_OBJECT (self, "Flushing, pausing srcpad task");
