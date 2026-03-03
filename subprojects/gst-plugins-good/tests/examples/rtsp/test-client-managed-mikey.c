@@ -339,6 +339,50 @@ on_hard_limit (GstElement * rtspsrc, guint stream_id, gpointer user_data)
   g_idle_add (rekey_next_stream, data);
 }
 
+static void
+on_get_parameter_reply (GstPromise * promise, gpointer user_data)
+{
+  const GstStructure *reply;
+  const gchar *body;
+
+  if (gst_promise_wait (promise) != GST_PROMISE_RESULT_REPLIED)
+    return;                     // interrupted or expired value
+
+  reply = gst_promise_get_reply (promise);
+  if (!reply)
+    return;
+
+  body = gst_structure_get_string (reply, "body");
+  if (!body)
+    return;
+
+  /* Prints crypto context in this format:
+   * pt=96;ssrc=3760103009;destination=192.168.0.1;port=50000;key=xyz;
+   *     mki=000004b2;roc=0
+   **/
+  g_print ("Current cryptographic context: %s\n", body);
+}
+
+static gboolean
+get_srtp_stats (gpointer user_data)
+{
+  GstPromise *promise;
+  gboolean res;
+
+  promise = gst_promise_new_with_change_func (on_get_parameter_reply, NULL,
+      NULL);
+
+  g_signal_emit_by_name (rtspsrc, "get-parameter", "srtp-sessions",
+      "text/parameters", promise, &res);
+
+  if (!res) {
+    GST_ERROR ("Failed to emit get-parameter");
+    gst_promise_unref (promise);
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
 static gboolean
 setup_h264_pipeline (GstElement * element, GstPad * pad, GstPad ** decode_pad)
 {
@@ -748,6 +792,7 @@ main (gint argc, gchar ** argv)
   guint32 key_len = 30;
   guint32 mki = 1200;
   guint32 rekey_int = 0;
+  guint32 get_stats_int = 0;
   GError *error = NULL;
   GOptionContext *context = NULL;
   GOptionEntry entries[] = {
@@ -767,6 +812,11 @@ main (gint argc, gchar ** argv)
     {"rekey-interval", 'r', 0, G_OPTION_ARG_INT, &rekey_int,
           "Re-keying interval in seconds (e.g. 10). 0 to disable re-keying. Default: 0",
         "REKEY_INT"},
+    {"get-stats-interval", 's', 0, G_OPTION_ARG_INT, &get_stats_int,
+          "Interval for printing session stats in seconds (e.g. 10). 0 to "
+          "disable. Default: 0. Note: The server must support "
+          "'GET_PARAMETER srtp-sessions'",
+        "STATS_INT"},
     {"location", 'l', 0, G_OPTION_ARG_STRING, &location,
           "RTSP location (e.g. rtsps://user:pass@host:port/resource)",
         "LOCATION"},
@@ -833,6 +883,10 @@ main (gint argc, gchar ** argv)
     g_timeout_add_seconds (rekey_int, rekey_all, key_param);
   } else {
     GST_INFO ("Not using re-keying interval. Will wait for hard-limit");
+  }
+
+  if (get_stats_int) {
+    g_timeout_add_seconds (get_stats_int, get_srtp_stats, NULL);
   }
 
   g_main_loop_run (loop);
