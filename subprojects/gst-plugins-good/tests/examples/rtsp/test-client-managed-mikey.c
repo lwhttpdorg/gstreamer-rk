@@ -35,28 +35,39 @@ typedef struct
   GstCaps *rekey_caps;
 } KeyParam;
 
-static KeyParam *
-key_param_new (guint key_size, guint32 mki, const gchar * cipher,
-    const gchar * auth)
+static GstBuffer *
+generate_key (guint key_size)
 {
-  KeyParam *key_param = NULL;
-  guint8 *data, *mki_data;
+  GstBuffer *srtp_key;
+  guint8 *data;
   guint data_size = GST_ROUND_UP_4 (key_size);
-  GstBuffer *srtp_key, *mki_buf;
   guint i;
-
-  key_param = g_malloc0 (sizeof (KeyParam));
-
-  g_mutex_init (&key_param->lock);
-
-  key_param->key_size = data_size;
-  key_param->mki = mki;
 
   data = g_malloc (data_size);
   for (i = 0; i < data_size; i += 4) {
     GST_WRITE_UINT32_BE (data + i, g_random_int ());
   }
   srtp_key = gst_buffer_new_wrapped (data, key_size);
+
+  return srtp_key;
+}
+
+static KeyParam *
+key_param_new (guint key_size, guint32 mki, const gchar * cipher,
+    const gchar * auth)
+{
+  KeyParam *key_param = NULL;
+  guint8 *mki_data;
+  GstBuffer *srtp_key, *mki_buf;
+
+  key_param = g_malloc0 (sizeof (KeyParam));
+
+  g_mutex_init (&key_param->lock);
+
+  key_param->key_size = key_size;
+  key_param->mki = mki;
+
+  srtp_key = generate_key (key_size);
 
   mki_data = g_malloc (sizeof (guint32));
   GST_WRITE_UINT32_BE (mki_data, mki);
@@ -117,12 +128,15 @@ key_param_get_rekey_mikey (KeyParam * key_param)
 }
 
 static void
-key_param_inc_mki (KeyParam * key_param)
+key_param_gen_key_and_inc_mki (KeyParam * key_param)
 {
+  GstBuffer *srtp_key;
   GstBuffer *mki_buf;
   guint8 *mki_data = g_malloc (sizeof (guint32));
 
   g_mutex_lock (&key_param->lock);
+
+  srtp_key = generate_key (key_param->key_size);
 
   key_param->mki += 1;
   GST_INFO ("Incrementing mki to: %u", key_param->mki);
@@ -131,15 +145,20 @@ key_param_inc_mki (KeyParam * key_param)
   mki_buf = gst_buffer_new_wrapped (mki_data, sizeof (guint32));
 
   key_param->key_caps = gst_caps_make_writable (key_param->key_caps);
+  gst_caps_set_simple_static_str (key_param->key_caps, "srtp-key",
+      GST_TYPE_BUFFER, srtp_key, NULL);
   gst_caps_set_simple_static_str (key_param->key_caps, "mki", GST_TYPE_BUFFER,
       mki_buf, NULL);
 
   key_param->rekey_caps = gst_caps_make_writable (key_param->rekey_caps);
+  gst_caps_set_simple_static_str (key_param->rekey_caps, "srtp-key",
+      GST_TYPE_BUFFER, srtp_key, NULL);
   gst_caps_set_simple_static_str (key_param->rekey_caps, "mki", GST_TYPE_BUFFER,
       mki_buf, NULL);
 
   g_mutex_unlock (&key_param->lock);
 
+  gst_buffer_unref (srtp_key);
   gst_buffer_unref (mki_buf);
 }
 
@@ -300,7 +319,7 @@ rekey_all (gpointer user_data)
     goto out;
   }
 
-  key_param_inc_mki (key_param);
+  key_param_gen_key_and_inc_mki (key_param);
 
   /* rtspsrc can only process one SET_PARAMETER at once.
    * We will chain SET_PARAMETER then remove-key for each stream.
@@ -331,7 +350,7 @@ on_hard_limit (GstElement * rtspsrc, guint stream_id, gpointer user_data)
 
   GST_INFO ("Reached hard-limit for stream with id %u", stream_id);
 
-  key_param_inc_mki (key_param);
+  key_param_gen_key_and_inc_mki (key_param);
 
   list = g_list_append (list, GUINT_TO_POINTER (stream_id));
   data = rekey_data_new (key_param, list);
