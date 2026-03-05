@@ -136,6 +136,8 @@
 #include <gst/sdp/gstmikey.h>
 #include <gst/rtp/rtp.h>
 
+#include <gio/gnetworking.h>
+
 #include <glib/gi18n-lib.h>
 
 #include "gstrtspelements.h"
@@ -346,6 +348,7 @@ gst_rtsp_backchannel_get_type (void)
 #define DEFAULT_TCP_TIMESTAMP FALSE
 #define DEFAULT_FORCE_NON_COMPLIANT_URL FALSE
 #define DEFAULT_CLIENT_MANAGED_MIKEY FALSE
+#define DEFAULT_MTU_PROBING FALSE
 
 enum
 {
@@ -400,6 +403,7 @@ enum
   PROP_TCP_TIMESTAMP,
   PROP_FORCE_NON_COMPLIANT_URL,
   PROP_CLIENT_MANAGED_MIKEY,
+  PROP_MTU_PROBING,
 };
 
 #define GST_TYPE_RTSP_NAT_METHOD (gst_rtsp_nat_method_get_type())
@@ -1242,6 +1246,25 @@ gst_rtspsrc_class_init (GstRTSPSrcClass * klass)
           DEFAULT_CLIENT_MANAGED_MIKEY,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+   /**
+   * GstRTSPSrc:mtu-probing
+   *
+   * When set to true, rtspsrc uses the Max Segment Size (MSS)
+   * of the RTSP TCP connection to determine the MTU of the
+   * payload.
+   *
+   * This allows to dynamically adjust the the MTU size based
+   * on the network setup. For instance, VPNs include additional
+   * headers per packet and hence, the effective payload size is
+   * limited.
+   *
+   * Note that rtp-blocksize > 0 always disables MTU probing.
+   */
+  g_object_class_install_property (gobject_class, PROP_MTU_PROBING,
+      g_param_spec_boolean ("mtu-probing", "MTU Probing",
+          "Suggest RTP package size to server based on TCP MSS",
+          DEFAULT_MTU_PROBING,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   /**
    * GstRTSPSrc::handle-request:
    * @rtspsrc: a #GstRTSPSrc
@@ -1784,6 +1807,7 @@ gst_rtspsrc_init (GstRTSPSrc * src)
       gst_structure_new_empty ("extra-http-request-headers");
   src->tcp_timestamp = DEFAULT_TCP_TIMESTAMP;
   src->force_non_compliant_url = DEFAULT_FORCE_NON_COMPLIANT_URL;
+  src->mtu_probing = DEFAULT_MTU_PROBING;
 
   /* get a list of all extensions */
   src->extensions = gst_rtsp_ext_list_get ();
@@ -2165,6 +2189,9 @@ gst_rtspsrc_set_property (GObject * object, guint prop_id, const GValue * value,
     case PROP_CLIENT_MANAGED_MIKEY:
       rtspsrc->client_managed_mikey = g_value_get_boolean (value);
       break;
+    case PROP_MTU_PROBING:
+      rtspsrc->mtu_probing = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2349,6 +2376,9 @@ gst_rtspsrc_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_CLIENT_MANAGED_MIKEY:
       g_value_set_boolean (value, rtspsrc->client_managed_mikey);
+      break;
+    case PROP_MTU_PROBING:
+      g_value_set_boolean (value, rtspsrc->mtu_probing);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -8225,6 +8255,27 @@ gst_rtspsrc_setup_streams_start (GstRTSPSrc * src, gboolean async)
         stream->profile == GST_RTSP_PROFILE_SAVPF) {
       hval = gst_rtspsrc_stream_make_keymgmt (src, stream);
       gst_rtsp_message_take_header (&request, GST_RTSP_HDR_KEYMGMT, hval);
+    }
+
+    /* if the user has not set a manual rtp size and we requested
+     * dynamic mtu probing, set parameter accordingly
+     */
+    if (src->mtu_probing && src->rtp_blocksize == 0) {
+      GSocket *socket;
+      gint mss;
+      GError *error = NULL;
+
+      socket = gst_rtsp_connection_get_write_socket(conninfo->connection);
+      if (!socket) {
+        GST_ERROR_OBJECT(src, "Connection has no socket");
+      } else if (!g_socket_get_option(socket, IPPROTO_TCP, TCP_MAXSEG, &mss, &error)) {
+        GST_ERROR_OBJECT(src, "Could not retrieve TCP MSS: %s", error->message);
+        g_error_free(error);
+      } else {
+        GST_LOG_OBJECT(src, "TCP MSS of write socket is %d bytes", mss);
+        hval = g_strdup_printf ("%d", mss);
+        gst_rtsp_message_take_header(&request, GST_RTSP_HDR_BLOCKSIZE, hval);
+      }
     }
 
     /* if the user wants a non default RTP packet size we add the blocksize
