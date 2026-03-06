@@ -42,6 +42,7 @@
 #endif
 #include "gstcudamemorycopy.h"
 #include "gstcudaconvertscale.h"
+#include "gstcudazoom.h"
 #include <gst/cuda/gstcudanvmm-private.h>
 
 #ifdef G_OS_WIN32
@@ -950,6 +951,8 @@ plugin_init (GstPlugin * plugin)
         GST_TYPE_CUDA_CONVERT_SCALE);
     gst_element_register (plugin, "cudacompositor", GST_RANK_NONE,
         GST_TYPE_CUDA_COMPOSITOR);
+    gst_element_register (plugin, "cudazoom", GST_RANK_NONE,
+        GST_TYPE_CUDA_ZOOM);
   }
   gst_element_register (plugin,
       "cudaipcsink", GST_RANK_NONE, GST_TYPE_CUDA_IPC_SINK);

@@ -9,6 +9,7 @@ nvcodec_sources = [
   'gstcudaipcsink.cpp',
   'gstcudaipcsrc.cpp',
   'gstcudamemorycopy.c',
+  'gstcudazoom.cpp',
   'gstnvcodecutils.cpp',
   'plugin.c'
 ]
