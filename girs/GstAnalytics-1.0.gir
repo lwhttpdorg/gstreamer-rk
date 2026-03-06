@@ -280,6 +280,25 @@ Those fields are applied to input tensors for normalization:
    `-1.0,1.0` - Normalized to [-1,1] range (scale&#8776;0.00784, offset=-1.0)
    `16.0,235.0` - TV/limited range (scale&#8776;0.859, offset=16.0)
 
+ `means`: Optional comma-separated list of float values for mean subtraction (since v1.1).
+  Number of values must match the number of ranges.
+  Example: `means=123.68,116.78,103.94` (ImageNet RGB means)
+  Default: 0.0 for all channels (no mean subtraction)
+
+ `stddevs`: Optional comma-separated list of float values for standard deviation division (since v1.1).
+  Number of values must match the number of ranges.
+  Example: `stddevs=58.393,57.12,57.375` (ImageNet RGB standard deviations)
+  Default: 1.0 for all channels (no division)
+  Warning: Values of 0.0 will be replaced with 1.0 to avoid division by zero
+
+ Complete normalization formula (when means and stddevs are provided):
+   output[i] = (input[i] * range_scale[i] + range_offset[i] - mean[i]) / stddev[i]
+ Optimized as:
+   output[i] = input[i] * combined_scale[i] + combined_offset[i]
+ where:
+   combined_scale[i] = range_scale[i] / stddev[i]
+   combined_offset[i] = (range_offset[i] - mean[i]) / stddev[i]
+
 Other fields are ignored for now.
 
 The API is meant to be used by inference elements</doc>
@@ -300,12 +319,12 @@ infinite.</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
       <type name="gint" c:type="gint"/>
     </constant>
-    <constant name="MODELINFO_VERSION_MINOR" value="0" c:type="GST_MODELINFO_VERSION_MINOR" version="1.28">
+    <constant name="MODELINFO_VERSION_MINOR" value="1" c:type="GST_MODELINFO_VERSION_MINOR" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h">The current minor version of the modelinfo format</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
       <type name="gint" c:type="gint"/>
     </constant>
-    <constant name="MODELINFO_VERSION_STR" value="1.0" c:type="GST_MODELINFO_VERSION_STR" version="1.28">
+    <constant name="MODELINFO_VERSION_STR" value="1.1" c:type="GST_MODELINFO_VERSION_STR" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h">The current version string for the modelinfo format.
 This MUST be updated whenever the format changes.</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
@@ -521,6 +540,72 @@ The caller must free @output_scales and @output_offsets with g_free() when done.
           </parameter>
           <parameter name="output_offsets" direction="out" caller-allocates="0" transfer-ownership="full">
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The offset values for normalization</doc>
+            <array length="4" zero-terminated="0" c:type="gdouble**">
+              <type name="gdouble" c:type="gdouble*"/>
+            </array>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_input_scales_offsets_with_normalization" c:identifier="gst_analytics_modelinfo_get_input_scales_offsets_with_normalization" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Calculate normalization scales and offsets with mean subtraction and standard deviation division.
+
+This function extends gst_analytics_modelinfo_get_input_scales_offsets() by additionally
+applying mean and standard deviation normalization from the modelinfo file. The transformation is:
+
+  normalized_value[i] = (input[i] * scale[i] + offset[i] - mean[i]) / stddev[i]
+
+Which is optimized to:
+  normalized_value[i] = input[i] * output_scale[i] + output_offset[i]
+  where:
+    output_scale[i] = (range_scale[i]) / stddev[i]
+    output_offset[i] = (range_offset[i] - mean[i]) / stddev[i]
+
+The means and stddevs are read from the `means` and `stddevs` fields in the modelinfo.
+If these fields are not present, they default to mean=0.0 and stddev=1.0 (no additional normalization).
+
+The caller must free @output_scales and @output_offsets with g_free() when done.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">%TRUE on success, %FALSE on error or if ranges field is not found</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="modelinfo" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Instance of #GstAnalyticsModelInfo</doc>
+            <type name="ModelInfo" c:type="GstAnalyticsModelInfo*"/>
+          </instance-parameter>
+          <parameter name="tensor_name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The name of the tensor</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="num_input_ranges" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The number of input ranges (channels/dimensions)</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+          <parameter name="input_mins" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The minimum values of the actual input data for each channel</doc>
+            <array length="1" zero-terminated="0" c:type="const gdouble*">
+              <type name="gdouble" c:type="gdouble"/>
+            </array>
+          </parameter>
+          <parameter name="input_maxs" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The maximum values of the actual input data for each channel</doc>
+            <array length="1" zero-terminated="0" c:type="const gdouble*">
+              <type name="gdouble" c:type="gdouble"/>
+            </array>
+          </parameter>
+          <parameter name="num_output_ranges" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The number of output ranges/scale-offset pairs</doc>
+            <type name="gsize" c:type="gsize*"/>
+          </parameter>
+          <parameter name="output_scales" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The combined scale values (incorporating stddev)</doc>
+            <array length="4" zero-terminated="0" c:type="gdouble**">
+              <type name="gdouble" c:type="gdouble*"/>
+            </array>
+          </parameter>
+          <parameter name="output_offsets" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The combined offset values (incorporating mean and stddev)</doc>
             <array length="4" zero-terminated="0" c:type="gdouble**">
               <type name="gdouble" c:type="gdouble*"/>
             </array>

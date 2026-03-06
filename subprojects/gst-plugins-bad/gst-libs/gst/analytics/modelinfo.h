@@ -44,7 +44,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_MINOR (0)
+#define GST_MODELINFO_VERSION_MINOR (1)
 
 /**
  * GST_MODELINFO_VERSION_STR:
@@ -54,7 +54,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_STR "1.0"
+#define GST_MODELINFO_VERSION_STR "1.1"
 
 /**
  * GST_MODELINFO_SECTION_NAME:
@@ -141,6 +141,13 @@ gst_analytics_modelinfo_get_input_scales_offsets (GstAnalyticsModelInfo * modeli
     const gchar *tensor_name, gsize num_input_ranges, const gdouble *input_mins,
     const gdouble *input_maxs, gsize *num_output_ranges, gdouble **output_scales,
     gdouble **output_offsets);
+
+GST_ANALYTICS_META_API
+gboolean
+gst_analytics_modelinfo_get_input_scales_offsets_with_normalization (
+    GstAnalyticsModelInfo * modelinfo, const gchar * tensor_name,
+    gsize num_input_ranges, const gdouble * input_mins, const gdouble * input_maxs,
+    gsize *num_output_ranges, gdouble **output_scales, gdouble **output_offsets);
 
 GST_ANALYTICS_META_API
 GstTensorDimOrder

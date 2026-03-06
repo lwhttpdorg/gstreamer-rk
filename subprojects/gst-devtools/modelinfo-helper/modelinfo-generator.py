@@ -33,7 +33,7 @@ if not ONNX_AVAILABLE and not TFLITE_AVAILABLE:
 
 
 # Current modelinfo format version
-MODELINFO_VERSION = "1.0"
+MODELINFO_VERSION = "1.1"
 
 # ONNX type mapping (only define if ONNX is available)
 if ONNX_AVAILABLE:
@@ -236,6 +236,24 @@ def get_tensor_info(tensor, direction, group_id=None, prompt_mode=False, model=N
                 print("    0.0,255.0;-1.0,1.0;0.0,1.0  - Different range per channel (R,G,B)")
                 ranges = prompt_for_value("  Enter ranges (min,max)", default="0.0,255.0")
                 info['ranges'] = ranges
+
+            # Add means prompt
+            if prompt_yes_no("  Specify per-channel means for normalization?", default=False):
+                print("  Examples:")
+                print("    ImageNet RGB: 123.68,116.78,103.94")
+                print("    Zeros (no mean subtraction): 0.0,0.0,0.0")
+                means = prompt_for_value("  Enter means (comma-separated)", default=None, allow_empty=True)
+                if means:
+                    info['means'] = means
+
+            # Add stddevs prompt
+            if prompt_yes_no("  Specify per-channel standard deviations for normalization?", default=False):
+                print("  Examples:")
+                print("    ImageNet RGB: 58.393,57.12,57.375")
+                print("    Ones (no stddev division): 1.0,1.0,1.0")
+                stddevs = prompt_for_value("  Enter stddevs (comma-separated)", default=None, allow_empty=True)
+                if stddevs:
+                    info['stddevs'] = stddevs
     else:
         # No-prompt mode: use auto-generated values with PLACEHOLDER-*-REQUIRED format
         info['id'] = "PLACEHOLDER-ID-REQUIRED"
@@ -573,6 +591,10 @@ def write_modelinfo(tensors, output_path, version=None, group_id=None, prompt_mo
             # Normalization parameters (for inputs)
             if 'ranges' in tensor:
                 f.write(f"ranges={tensor['ranges']}\n")
+            if 'means' in tensor:
+                f.write(f"means={tensor['means']}\n")
+            if 'stddevs' in tensor:
+                f.write(f"stddevs={tensor['stddevs']}\n")
 
 
 def parse_modelinfo(input_path):
@@ -618,12 +640,13 @@ def parse_modelinfo(input_path):
     return version, tensors
 
 
-def upgrade_modelinfo(input_path, output_path=None):
+def upgrade_modelinfo(input_path, output_path=None, prompt_mode=False):
     """Upgrade a modelinfo file to the current version.
 
     Args:
         input_path: Path to existing modelinfo file
         output_path: Path to output (default: overwrite input)
+        prompt_mode: If True, prompt user for new fields added in target version
     """
     if output_path is None:
         output_path = input_path
@@ -663,7 +686,44 @@ def upgrade_modelinfo(input_path, output_path=None):
     global_group_id = None
     if old_minor < new_minor:
         print(f"\nMinor version upgrade: {old_version} -> {MODELINFO_VERSION}")
-        # No format changes within same major version
+
+        # When upgrading from 1.0 to 1.1, prompt for new fields if in prompt mode
+        if old_version == "1.0" and MODELINFO_VERSION == "1.1" and prompt_mode:
+            print("\nVersion 1.1 adds optional 'means' and 'stddevs' fields for input tensors.")
+            print("These fields enable per-channel mean subtraction and standard deviation normalization.")
+
+            # Process each input tensor
+            for tensor in tensors:
+                if tensor.get('dir') == 'input':
+                    print(f"\n{'=' * 70}")
+                    print(f"Input Tensor: {tensor['name']}")
+                    print(f"Type: {tensor.get('type', 'unknown')}")
+                    print(f"Dims: {tensor.get('dims', 'unknown')}")
+                    if 'ranges' in tensor:
+                        print(f"Ranges: {tensor['ranges']}")
+                    print(f"{'=' * 70}")
+
+                    # Check if means/stddevs already exist (shouldn't in 1.0, but check anyway)
+                    has_means = 'means' in tensor
+                    has_stddevs = 'stddevs' in tensor
+
+                    # Prompt for means
+                    if not has_means and prompt_yes_no("  Add per-channel means for normalization?", default=False):
+                        print("  Examples:")
+                        print("    ImageNet RGB: 123.68,116.78,103.94")
+                        print("    Zeros (no mean subtraction): 0.0,0.0,0.0")
+                        means = prompt_for_value("  Enter means (comma-separated)", default=None, allow_empty=True)
+                        if means:
+                            tensor['means'] = means
+
+                    # Prompt for stddevs
+                    if not has_stddevs and prompt_yes_no("  Add per-channel standard deviations for normalization?", default=False):
+                        print("  Examples:")
+                        print("    ImageNet RGB: 58.393,57.12,57.375")
+                        print("    Ones (no stddev division): 1.0,1.0,1.0")
+                        stddevs = prompt_for_value("  Enter stddevs (comma-separated)", default=None, allow_empty=True)
+                        if stddevs:
+                            tensor['stddevs'] = stddevs
 
     # Write upgraded file
     print(f"\nWriting upgraded file to: {output_path}")
@@ -694,6 +754,9 @@ Examples:
   %(prog)s --upgrade model.onnx.modelinfo
   %(prog)s --upgrade old.modelinfo -o new.modelinfo
 
+  # Upgrade with prompts for new fields (e.g., v1.0 -> v1.1 adds means/stddevs)
+  %(prog)s --upgrade --prompt model.onnx.modelinfo
+
 The generated .modelinfo file can be used with GStreamer's onnxinference
 and tfliteinference elements for ML inference pipelines.
 
@@ -702,6 +765,7 @@ Modes:
     PLACEHOLDER- prefix, skips optional fields. Edit the file to replace
     placeholder values with actual metadata.
   - Prompt mode (--prompt): Interactively asks for tensor metadata
+  - Upgrade with prompt mode: Prompts for new fields added in target version
         """
     )
 
@@ -739,7 +803,7 @@ Modes:
 
     # Handle upgrade mode
     if args.upgrade:
-        upgrade_modelinfo(args.input_path, args.output)
+        upgrade_modelinfo(args.input_path, args.output, prompt_mode=args.prompt)
     else:
         # Generate modelinfo from ONNX model
         generate_modelinfo(args.input_path, args.output, prompt_mode=args.prompt)

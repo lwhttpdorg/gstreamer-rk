@@ -1033,8 +1033,8 @@ gst_onnx_inference_start (GstBaseTransform * trans)
       input_maxs[j] = 255.0;
     }
 
-    if (!gst_analytics_modelinfo_get_input_scales_offsets (modelinfo,
-            tensor_name, num_target_ranges, input_mins, input_maxs,
+    if (!gst_analytics_modelinfo_get_input_scales_offsets_with_normalization
+        (modelinfo, tensor_name, num_target_ranges, input_mins, input_maxs,
             &self->num_channels, &self->scales, &self->offsets)) {
       GST_ERROR_OBJECT (self, "Failed to get scales/offsets for tensor %s",
           tensor_name);
