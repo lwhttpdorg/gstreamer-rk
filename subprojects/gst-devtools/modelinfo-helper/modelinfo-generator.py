@@ -33,7 +33,7 @@ if not ONNX_AVAILABLE and not TFLITE_AVAILABLE:
 
 
 # Current modelinfo format version
-MODELINFO_VERSION = "1.0"
+MODELINFO_VERSION = "1.1"
 
 # ONNX type mapping (only define if ONNX is available)
 if ONNX_AVAILABLE:
@@ -236,6 +236,23 @@ def get_tensor_info(tensor, direction, group_id=None, prompt_mode=False, model=N
                 print("    0.0,255.0;-1.0,1.0;0.0,1.0  - Different range per channel (R,G,B)")
                 ranges = prompt_for_value("  Enter ranges (min,max)", default="0.0,255.0")
                 info['ranges'] = ranges
+
+            print("  Note: pixel-aspect-ratio rarely needs to change from 1:1 (square pixels).")
+            if prompt_yes_no("  Set pixel-aspect-ratio?", default=False):
+                while True:
+                    par_str = input("    Enter pixel-aspect-ratio as numerator:denominator [1:1]: ").strip()
+                    if not par_str:
+                        par_str = "1:1"
+                    parts = par_str.split(':')
+                    if len(parts) == 2:
+                        try:
+                            n, d = int(parts[0]), int(parts[1])
+                            if n > 0 and d > 0:
+                                info['par'] = par_str
+                                break
+                        except ValueError:
+                            pass
+                    print("    Please enter in format 'numerator:denominator' (e.g., '16:15' for PAL DV)")
     else:
         # No-prompt mode: use auto-generated values with PLACEHOLDER-*-REQUIRED format
         info['id'] = "PLACEHOLDER-ID-REQUIRED"
@@ -574,6 +591,9 @@ def write_modelinfo(tensors, output_path, version=None, group_id=None, prompt_mo
             # Normalization parameters (for inputs)
             if 'ranges' in tensor:
                 f.write(f"ranges={tensor['ranges']}\n")
+
+            if 'par' in tensor:
+                f.write(f"par={tensor['par']}\n")
 
 
 def parse_modelinfo(input_path):
