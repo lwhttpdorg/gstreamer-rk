@@ -662,8 +662,17 @@ gst_tflite_inference_start (GstBaseTransform * trans)
       g_assert_not_reached ();
     }
 
+    guint par_n = 1, par_d = 1;
+    if (tensor_name && !gst_analytics_modelinfo_get_par (modelinfo,
+            tensor_name, &par_n, &par_d))
+      GST_WARNING_OBJECT (self,
+          "Failed to read pixel-aspect-ratio from modelinfo for tensor %s,"
+          " defaulting to 1/1", tensor_name);
+
     gst_caps_set_simple (priv->model_incaps, "pixel-aspect-ratio",
-        GST_TYPE_FRACTION, 1, 1, NULL);
+        GST_TYPE_FRACTION, par_n, par_d, NULL);
+    GST_DEBUG_OBJECT (self, "Input tensor pixel-aspect-ratio: %u/%u",
+        par_n, par_d);
 
     g_free (tensor_name);
   }
