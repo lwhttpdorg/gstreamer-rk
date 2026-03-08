@@ -44,7 +44,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_MINOR (0)
+#define GST_MODELINFO_VERSION_MINOR (1)
 
 /**
  * GST_MODELINFO_VERSION_STR:
@@ -54,7 +54,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_STR "1.0"
+#define GST_MODELINFO_VERSION_STR "1.1"
 
 /**
  * GST_MODELINFO_SECTION_NAME:
