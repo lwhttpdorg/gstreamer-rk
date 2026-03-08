@@ -148,6 +148,11 @@ gst_analytics_modelinfo_get_dims_order (GstAnalyticsModelInfo * modelinfo,
     const gchar * tensor_name);
 
 GST_ANALYTICS_META_API
+gboolean
+gst_analytics_modelinfo_get_par (GstAnalyticsModelInfo * modelinfo,
+    const gchar * tensor_name, guint * par_n, guint * par_d);
+
+GST_ANALYTICS_META_API
 gchar *
 gst_analytics_modelinfo_get_version (GstAnalyticsModelInfo * modelinfo);
 
