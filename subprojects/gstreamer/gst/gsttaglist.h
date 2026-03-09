@@ -1036,6 +1036,17 @@ gboolean     gst_tag_list_is_writable   (const GstTagList * taglist);
  */
 #define GST_TAG_DEVICE_MODEL                      "device-model"
 /**
+ * GST_TAG_DEVICE_SERIAL_NUMBER:
+ *
+ * Serial number of the device that was used for producing the media. (string)
+ *
+ * This serial number is given as a string, and can have any content,
+ * since there is no standard for such serial numbers.
+ *
+ * Since: 1.30
+ */
+#define GST_TAG_DEVICE_SERIAL_NUMBER         "device-serial-number"
+/**
  * GST_TAG_APPLICATION_NAME:
  *
  * Name of the application used to create the media (string)
@@ -1101,6 +1112,20 @@ gboolean     gst_tag_list_is_writable   (const GstTagList * taglist);
  * Since: 1.4
  */
 #define GST_TAG_MIDI_BASE_NOTE                    "midi-base-note"
+/**
+ * GST_TAG_MEDIA_UUID:
+ *
+ * Universally Unique Identifier (UUID) of the media. (string)
+ *
+ * The UUID is expressed in the common "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ * format, where each "x" is a hexadecimal digit.
+ * Both upper and lowercase A-F hexadecimal digits are supported,
+ * though further serialization of the UUID will set the A-F
+ * hexadecimal digits as lowercase (as required by RFC 4122 section 3).
+ *
+ * Since: 1.30
+ */
+#define GST_TAG_MEDIA_UUID                   "media-uuid"
 /**
  * GST_TAG_PRIVATE_DATA:
  *
