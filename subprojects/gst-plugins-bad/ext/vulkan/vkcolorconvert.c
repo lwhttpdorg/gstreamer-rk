@@ -559,22 +559,20 @@ finfo_get_plane_n_components (const GstVideoFormatInfo * finfo, guint plane)
 static void
 get_vulkan_format_swizzle_order (GstVideoFormat v_format,
     VkFormat vk_format[GST_VIDEO_MAX_PLANES],
-    gint swizzle[GST_VIDEO_MAX_COMPONENTS])
+    gint swizzle[GST_VIDEO_MAX_COMPONENTS],
+    gboolean native_yuv)
 {
   const GstVideoFormatInfo *finfo;
-  const gchar *format_name = NULL;
   int i, prev_in_i = 0;
 
-  /* TODO: support other native YUV formats */
-  if (vk_format[0] == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM) {
-    format_name = "NV12";
+  finfo = gst_video_format_get_info (v_format);
+
+  if (native_yuv) {
     swizzle[0] = 0;
     swizzle[1] = 1;
     swizzle[2] = 2;
     swizzle[3] = 3;
   } else {
-    finfo = gst_video_format_get_info (v_format);
-    format_name = finfo->name;
     for (i = 0; i < finfo->n_planes; i++) {
       guint plane_components = finfo_get_plane_n_components (finfo, i);
       get_vulkan_rgb_format_swizzle_order (vk_format[i],
@@ -592,7 +590,7 @@ get_vulkan_format_swizzle_order (GstVideoFormat v_format,
     }
   }
 
-  GST_TRACE ("%s: %i, %i, %i, %i", format_name, swizzle[0], swizzle[1],
+  GST_TRACE ("%s: %i, %i, %i, %i", finfo->name, swizzle[0], swizzle[1],
       swizzle[2], swizzle[3]);
 }
 
@@ -601,7 +599,8 @@ calculate_reorder_indexes (GstVideoFormat in_format,
     GstVulkanImageView * in_views[GST_VIDEO_MAX_COMPONENTS],
     GstVideoFormat out_format,
     GstVulkanImageView * out_views[GST_VIDEO_MAX_COMPONENTS],
-    int ret_in[GST_VIDEO_MAX_COMPONENTS], int ret_out[GST_VIDEO_MAX_COMPONENTS])
+    int ret_in[GST_VIDEO_MAX_COMPONENTS], int ret_out[GST_VIDEO_MAX_COMPONENTS],
+    gboolean native_yuv)
 {
   const GstVideoFormatInfo *in_finfo, *out_finfo;
   VkFormat in_vk_formats[GST_VIDEO_MAX_COMPONENTS];
@@ -616,8 +615,8 @@ calculate_reorder_indexes (GstVideoFormat in_format,
   in_finfo = gst_video_format_get_info (in_format);
   out_finfo = gst_video_format_get_info (out_format);
 
-  /* Special handling for native NV12 */
-  if (in_views[0]->image->create_info.format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM)
+  /* Special handling for native YUV formats */
+  if (native_yuv)
     in_vk_formats[0] = in_views[0]->image->create_info.format;
   else
     for (i = 0; i < in_finfo->n_planes; i++)
@@ -625,11 +624,11 @@ calculate_reorder_indexes (GstVideoFormat in_format,
   for (i = 0; i < out_finfo->n_planes; i++)
     out_vk_formats[i] = out_views[i]->image->create_info.format;
 
-  get_vulkan_format_swizzle_order (in_format, in_vk_formats, in_vk_order);
+  get_vulkan_format_swizzle_order (in_format, in_vk_formats, in_vk_order, native_yuv);
   video_format_to_reorder (in_format, in_reorder, TRUE);
 
   video_format_to_reorder (out_format, out_reorder, FALSE);
-  get_vulkan_format_swizzle_order (out_format, out_vk_formats, out_vk_order);
+  get_vulkan_format_swizzle_order (out_format, out_vk_formats, out_vk_order, FALSE);
 
   for (i = 0; i < GST_VIDEO_MAX_COMPONENTS; i++)
     tmp[i] = out_vk_order[out_reorder[i]];
@@ -680,7 +679,7 @@ swizzle_rgb_create_uniform_memory (GstVulkanColorConvert * conv,
 
     calculate_reorder_indexes (GST_VIDEO_INFO_FORMAT (&conv->quad->in_info),
         in_views, GST_VIDEO_INFO_FORMAT (&conv->quad->out_info),
-        out_views, data.in_reorder, data.out_reorder);
+        out_views, data.in_reorder, data.out_reorder, sinfo->native_yuv);
 
     if (!gst_memory_map (uniforms, &map_info, GST_MAP_WRITE)) {
       gst_memory_unref (uniforms);
@@ -735,7 +734,7 @@ yuv_to_rgb_create_uniform_memory (GstVulkanColorConvert * conv,
 
     calculate_reorder_indexes (GST_VIDEO_INFO_FORMAT (&conv->quad->in_info),
         in_views, GST_VIDEO_INFO_FORMAT (&conv->quad->out_info),
-        out_views, data.in_reorder, data.out_reorder);
+        out_views, data.in_reorder, data.out_reorder, sinfo->native_yuv);
 
     conv_info = convert_info_new (&conv->quad->in_info, &conv->quad->out_info);
     matrix_to_float (&conv_info->to_RGB_matrix, data.matrices.to_RGB);
