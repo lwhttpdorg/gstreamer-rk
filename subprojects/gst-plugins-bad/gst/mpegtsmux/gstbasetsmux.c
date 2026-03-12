@@ -381,8 +381,6 @@ gst_base_ts_mux_reset (GstBaseTsMux * mux, gboolean alloc)
   mux->first = TRUE;
   mux->last_flow_ret = GST_FLOW_OK;
   mux->last_ts = GST_CLOCK_TIME_NONE;
-  mux->is_delta = TRUE;
-  mux->is_header = FALSE;
 
   mux->streamheader_sent = FALSE;
   mux->pending_key_unit_ts = GST_CLOCK_TIME_NONE;
@@ -1291,20 +1289,6 @@ new_packet_common_init (GstBaseTsMux * mux, GstBuffer * buf, guint8 * data,
       mux->streamheader_sent = TRUE;
     }
   }
-
-  if (buf) {
-    if (mux->is_header) {
-      GST_LOG_OBJECT (mux, "marking as header buffer");
-      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_HEADER);
-    }
-    if (mux->is_delta) {
-      GST_LOG_OBJECT (mux, "marking as delta unit");
-      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT);
-    } else {
-      GST_DEBUG_OBJECT (mux, "marking as non-delta unit");
-      mux->is_delta = TRUE;
-    }
-  }
 }
 
 static GstFlowReturn
@@ -1562,7 +1546,7 @@ gst_base_ts_mux_aggregate_buffer (GstBaseTsMux * mux,
   TsMuxProgram *prog;
   gint64 pts = GST_CLOCK_STIME_NONE;
   gint64 dts = GST_CLOCK_STIME_NONE;
-  gboolean delta = TRUE, header = FALSE;
+  gboolean delta = TRUE;
   StreamData *stream_data;
   GstMpegtsSection *scte_section = NULL;
 
@@ -1706,7 +1690,6 @@ gst_base_ts_mux_aggregate_buffer (GstBaseTsMux * mux,
 
   if (best->stream->gst_stream_type == GST_STREAM_TYPE_VIDEO) {
     delta = GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT);
-    header = GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_HEADER);
   }
 
   GST_DEBUG_OBJECT (mux, "delta: %d", delta);
@@ -1725,8 +1708,6 @@ gst_base_ts_mux_aggregate_buffer (GstBaseTsMux * mux,
         GST_BUFFER_DTS (buf) : GST_BUFFER_PTS (buf);
   }
 
-  mux->is_delta = delta;
-  mux->is_header = header;
   while (tsmux_stream_bytes_in_buffer (best->stream) > 0) {
     if (!tsmux_write_stream_packet (mux->tsmux, best->stream)) {
       /* Failed writing data for some reason. Set appropriate error */
