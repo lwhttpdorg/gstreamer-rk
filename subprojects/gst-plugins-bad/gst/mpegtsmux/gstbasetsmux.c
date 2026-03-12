@@ -76,12 +76,14 @@
 #include <gst/video/video.h>
 #include <gst/mpegts/mpegts.h>
 #include <gst/pbutils/pbutils.h>
+#include <gst/codecparsers/gstav1parser.h>
 #include <gst/videoparsers/gstjpeg2000parse.h>
 #include <gst/video/video-color.h>
 #include <gst/base/base.h>
 
 #include "gstbasetsmux.h"
 #include "gstbasetsmuxaac.h"
+#include "gstbasetsmuxav1.h"
 #include "gstbasetsmuxttxt.h"
 #include "gstbasetsmuxopus.h"
 #include "gstbasetsmuxjpeg2000.h"
@@ -608,7 +610,8 @@ gst_base_ts_mux_create_or_update_stream (GstBaseTsMux * mux,
     }
   } else if (strcmp (mt, "video/x-av1") == 0) {
     if (mux->enable_custom_mappings) {
-      st = TSMUX_ST_PS_VIDEO_AV1;
+      /* Legacy custom mapping for backwards compatibility */
+      st = TSMUX_ST_PS_VIDEO_GST_AV1;
       if (!codec_data)
         codec_data = gst_codec_utils_av1_create_av1c_from_caps (caps);
       if (codec_data) {
@@ -620,8 +623,17 @@ gst_base_ts_mux_create_or_update_stream (GstBaseTsMux * mux,
         }
       }
     } else {
-      GST_ERROR_OBJECT (mux,
-          "AV1 requires enabling custom mapping which does not have a public specification yet");
+      /* Official AV1 in MPEG-TS spec (AOMedia) */
+      st = TSMUX_ST_PS_VIDEO_AV1;
+      ts_pad->prepare_func = gst_base_ts_mux_av1_prepare;
+      ts_pad->prepare_data = gst_av1_parser_new ();
+      ts_pad->free_func =
+          (GstBaseTsMuxPadFreePrepareDataFunction) gst_av1_parser_free;
+      pmt_descriptor = gst_av1_create_video_descriptor (caps);
+      if (pmt_descriptor == NULL) {
+        GST_ERROR_OBJECT (ts_pad, "AV1 caps not complete/valid");
+        goto not_negotiated;
+      }
     }
   } else if (strcmp (mt, "audio/mpeg") == 0) {
     gint mpegversion;
