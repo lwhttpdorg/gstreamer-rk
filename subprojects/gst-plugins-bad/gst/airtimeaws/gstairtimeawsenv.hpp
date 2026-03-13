@@ -52,44 +52,45 @@
 namespace gst::airtime
 {
 
-/// @brief Simple RAII wrapper on AWS SDK initialization and shutdown.
-class AwsEnv
-{
-public:
-    AwsEnv()
+    /// @brief Simple RAII wrapper on AWS SDK initialization and shutdown.
+    class AwsEnv
     {
-        Aws::InitAPI(options_);
-    }
-    AwsEnv(const AwsEnv&) = delete;
-    AwsEnv(AwsEnv&&) = delete;
-    AwsEnv& operator=(const AwsEnv&) = delete;
-    AwsEnv& operator=(AwsEnv&&) = delete;
-    ~AwsEnv()
+    public:
+        AwsEnv()
+        {
+            options_.httpOptions.installSigPipeHandler = true;
+            Aws::InitAPI(options_);
+        }
+        AwsEnv(const AwsEnv &) = delete;
+        AwsEnv(AwsEnv &&) = delete;
+        AwsEnv &operator=(const AwsEnv &) = delete;
+        AwsEnv &operator=(AwsEnv &&) = delete;
+        ~AwsEnv()
+        {
+            Aws::ShutdownAPI(options_);
+        }
+
+    private:
+        Aws::SDKOptions options_;
+    };
+
+    /// @brief Factory class for accessing AWS environment. It guarantees that at a single point in time
+    /// only one instance of AwsEnv is active, so that AWS environment is initialized just once.
+    class AwsEnvFactory
     {
-        Aws::ShutdownAPI(options_);
-    }
+    private:
+        AwsEnvFactory() = default;
+        ~AwsEnvFactory() = default;
 
-private:
-    Aws::SDKOptions options_;
-};
+    public:
+        /// @brief Create a new instance of AwsEnv, or return the cached instance if it exists.
+        /// @return A shared pointer to an AwsEnv instance.
+        static std::shared_ptr<AwsEnv> create();
 
-/// @brief Factory class for accessing AWS environment. It guarantees that at a single point in time
-/// only one instance of AwsEnv is active, so that AWS environment is initialized just once.
-class AwsEnvFactory
-{
-private:
-    AwsEnvFactory() = default;
-    ~AwsEnvFactory() = default;
+    private:
+        static std::weak_ptr<AwsEnv> cached_instance_;
 
-public:
-    /// @brief Create a new instance of AwsEnv, or return the cached instance if it exists.
-    /// @return A shared pointer to an AwsEnv instance.
-    static std::shared_ptr<AwsEnv> create();
-
-private:
-    static std::weak_ptr<AwsEnv> cached_instance_;
-
-    static std::mutex instance_access_;
-};
+        static std::mutex instance_access_;
+    };
 
 } // namespace gst::airtime
