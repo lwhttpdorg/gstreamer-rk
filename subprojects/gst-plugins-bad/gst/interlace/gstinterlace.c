@@ -186,9 +186,10 @@ gst_interlace_pattern_get_type (void)
   "Y444_12BE, Y444_12LE, "                                                 /* 12-bit 4:4:4 */ \
   "Y410, Y444_10BE, Y444_10LE, "                                           /* 10-bit 4:4:4 */ \
   "v308, IYU2, Y444, NV24, "                                               /*  8-bit 4:4:4 */ \
-  "v216, I422_12BE, I422_12LE, "                                           /* 16-bit 4:2:2 */ \
-  "Y212_BE, Y212_LE, "                                                     /* 12-bit 4:2:2 */ \
+  "v216, I422_12BE, I422_12LE, P216_BE, P216_LE, "                         /* 16-bit 4:2:2 */ \
+  "Y212_BE, Y212_LE, P212_BE, P212_LE, "                                   /* 12-bit 4:2:2 */ \
   "UYVP, Y210, NV16_10LE40, NV16_10LE32, v210, I422_10BE, I422_10LE, "     /* 10-bit 4:2:2 */ \
+  "P210_BE, P210_LE, "                                                     /* 10-bit 4:2:2 */ \
   "YUY2, UYVY, VYUY, YVYU, Y42B, NV16, NV61, "                             /*  8-bit 4:2:2 */ \
   "P016_BE, P016_LE, "                                                     /* 16-bit 4:2:0 */ \
   "I420_12BE, I420_12LE, P012_BE, P012_LE, "                               /* 12-bit 4:2:0 */ \

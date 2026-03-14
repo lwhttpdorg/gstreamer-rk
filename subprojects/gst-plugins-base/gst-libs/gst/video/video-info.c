@@ -1293,6 +1293,18 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
       cr_h = GST_ROUND_UP_2 (height) / 2;
       info->size = info->offset[1] + info->stride[0] * cr_h;
       break;
+    case GST_VIDEO_FORMAT_P210_10LE:
+    case GST_VIDEO_FORMAT_P210_10BE:
+    case GST_VIDEO_FORMAT_P212_LE:
+    case GST_VIDEO_FORMAT_P212_BE:
+    case GST_VIDEO_FORMAT_P216_LE:
+    case GST_VIDEO_FORMAT_P216_BE:
+      info->stride[0] = GST_ROUND_UP_4 (width * 2);
+      info->stride[1] = info->stride[0];
+      info->offset[0] = 0;
+      info->offset[1] = info->stride[0] * GST_ROUND_UP_2 (height);
+      info->size = info->offset[1] + info->stride[0] * GST_ROUND_UP_2 (height);
+      break;
     case GST_VIDEO_FORMAT_GRAY10_LE16:
       info->stride[0] = GST_ROUND_UP_4 (width * 2);
       info->offset[0] = 0;
