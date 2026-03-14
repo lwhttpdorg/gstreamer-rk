@@ -169,6 +169,186 @@ GST_START_TEST (test_shm_alloc)
 
 GST_END_TEST;
 
+GST_START_TEST (test_shm_streamheader_caps)
+{
+  GstBuffer *buf;
+  GstState state, pending;
+  GstSegment segment;
+  GstCaps *caps;
+  guint8 tmp[15];
+
+  gst_pad_push_event (srcpad, gst_event_new_stream_start ("test"));
+
+  buf = gst_buffer_new_allocate (NULL, 10, NULL);
+  gst_buffer_memset (buf, 0, 0xAA, 10);
+
+  caps = gst_caps_new_simple ("application/test",
+      "streamheader", GST_TYPE_BUFFER, buf, NULL);
+  gst_buffer_unref (buf);
+  gst_pad_set_caps (srcpad, caps);
+  gst_caps_unref (caps);
+
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  gst_pad_push_event (srcpad, gst_event_new_segment (&segment));
+
+  buf = gst_buffer_new_allocate (NULL, 15, NULL);
+  gst_buffer_memset (buf, 0, 0xBB, 15);
+
+  fail_unless (gst_pad_push (srcpad, buf) == GST_FLOW_OK);
+
+  fail_unless (gst_element_get_state (sink, &state, &pending,
+          GST_CLOCK_TIME_NONE) == GST_STATE_CHANGE_SUCCESS);
+  fail_unless (state == GST_STATE_PLAYING);
+  fail_unless (pending == GST_STATE_VOID_PENDING);
+
+  g_mutex_lock (&check_mutex);
+  while (g_list_length (buffers) < 2)
+    g_cond_wait (&check_cond, &check_mutex);
+  g_mutex_unlock (&check_mutex);
+  fail_unless_equals_int (g_list_length (buffers), 2);
+
+  buf = buffers->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 10);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xAA);
+
+  buf = buffers->next->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 15);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xBB);
+
+  gst_check_drop_buffers ();
+  teardown_shm ();
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_shm_streamheader_caps_array)
+{
+  GstBuffer *buf;
+  GstState state, pending;
+  GstSegment segment;
+  GstCaps *caps;
+  guint8 tmp[15];
+  GValue val = { 0 };
+  GValue buf_val = { 0 };
+
+  gst_pad_push_event (srcpad, gst_event_new_stream_start ("test"));
+
+  g_value_init (&val, GST_TYPE_ARRAY);
+  g_value_init (&buf_val, GST_TYPE_BUFFER);
+
+  buf = gst_buffer_new_allocate (NULL, 10, NULL);
+  gst_buffer_memset (buf, 0, 0xAA, 10);
+  gst_value_take_buffer (&buf_val, buf);
+  gst_value_array_append_value (&val, &buf_val);
+  g_value_reset (&buf_val);
+
+  buf = gst_buffer_new_allocate (NULL, 12, NULL);
+  gst_buffer_memset (buf, 0, 0xCC, 12);
+  gst_value_take_buffer (&buf_val, buf);
+  gst_value_array_append_value (&val, &buf_val);
+  g_value_reset (&buf_val);
+
+  caps = gst_caps_new_empty_simple ("application/test");
+  gst_caps_set_value (caps, "streamheader", &val);
+  g_value_unset (&val);
+
+
+  gst_pad_set_caps (srcpad, caps);
+  gst_caps_unref (caps);
+
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  gst_pad_push_event (srcpad, gst_event_new_segment (&segment));
+
+  buf = gst_buffer_new_allocate (NULL, 15, NULL);
+  gst_buffer_memset (buf, 0, 0xBB, 15);
+
+  fail_unless (gst_pad_push (srcpad, buf) == GST_FLOW_OK);
+
+  fail_unless (gst_element_get_state (sink, &state, &pending,
+          GST_CLOCK_TIME_NONE) == GST_STATE_CHANGE_SUCCESS);
+  fail_unless (state == GST_STATE_PLAYING);
+  fail_unless (pending == GST_STATE_VOID_PENDING);
+
+  g_mutex_lock (&check_mutex);
+  while (g_list_length (buffers) < 3)
+    g_cond_wait (&check_cond, &check_mutex);
+  g_mutex_unlock (&check_mutex);
+  fail_unless_equals_int (g_list_length (buffers), 3);
+
+  buf = buffers->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 10);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xAA);
+
+  buf = buffers->next->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 12);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xCC);
+
+  buf = buffers->next->next->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 15);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xBB);
+
+  gst_check_drop_buffers ();
+  teardown_shm ();
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_shm_streamheader_before_caps)
+{
+  GstBuffer *buf;
+  GstState state, pending;
+  GstSegment segment;
+  GstCaps *caps;
+  guint8 tmp[15];
+
+  gst_pad_push_event (srcpad, gst_event_new_stream_start ("test"));
+  caps = gst_caps_new_empty_simple ("application/test");
+  gst_pad_set_caps (srcpad, caps);
+  gst_caps_unref (caps);
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  gst_pad_push_event (srcpad, gst_event_new_segment (&segment));
+
+  buf = gst_buffer_new_allocate (NULL, 15, NULL);
+  gst_buffer_memset (buf, 0, 0xBB, 15);
+  GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_HEADER);
+
+  fail_unless (gst_pad_push (srcpad, buf) == GST_FLOW_OK);
+
+  buf = gst_buffer_new_allocate (NULL, 10, NULL);
+  gst_buffer_memset (buf, 0, 0xAA, 10);
+  caps = gst_caps_new_simple ("application/test",
+      "streamheader", GST_TYPE_BUFFER, buf, NULL);
+  gst_buffer_unref (buf);
+  gst_pad_set_caps (srcpad, caps);
+  gst_caps_unref (caps);
+
+  fail_unless (gst_element_get_state (sink, &state, &pending,
+          GST_CLOCK_TIME_NONE) == GST_STATE_CHANGE_SUCCESS);
+  fail_unless (state == GST_STATE_PLAYING);
+  fail_unless (pending == GST_STATE_VOID_PENDING);
+
+  g_mutex_lock (&check_mutex);
+  while (g_list_length (buffers) < 1)
+    g_cond_wait (&check_cond, &check_mutex);
+  g_mutex_unlock (&check_mutex);
+  fail_unless_equals_int (g_list_length (buffers), 1);
+
+  buf = buffers->data;
+  fail_unless_equals_int (gst_buffer_get_size (buf), 15);
+  gst_buffer_extract (buf, 0, tmp, 10);
+  fail_unless (tmp[0] == 0xBB);
+
+  gst_check_drop_buffers ();
+  teardown_shm ();
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_shm_live)
 {
   GstElement *producer, *consumer;
@@ -239,6 +419,9 @@ shm_suite (void)
   tcase_add_checked_fixture (tc, setup_shm, NULL);
   tcase_add_test (tc, test_shm_sysmem_alloc);
   tcase_add_test (tc, test_shm_alloc);
+  tcase_add_test (tc, test_shm_streamheader_caps);
+  tcase_add_test (tc, test_shm_streamheader_caps_array);
+  tcase_add_test (tc, test_shm_streamheader_before_caps);
   suite_add_tcase (s, tc);
 
   tc = tcase_create ("shm2");
