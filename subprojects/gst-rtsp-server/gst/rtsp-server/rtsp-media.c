@@ -168,6 +168,9 @@ struct _GstRTSPMediaPrivate
   guint nb_dynamic_elements;
   guint no_more_pads_pending;
   gboolean expected_async_done;
+
+  /* client proposes encryption keys for SRTP */
+  gboolean client_managed_mikey;
 };
 
 #define DEFAULT_SHARED          FALSE
@@ -191,6 +194,8 @@ struct _GstRTSPMediaPrivate
 #define DEFAULT_ENABLE_RTCP     TRUE
 
 #define DEFAULT_DO_RETRANSMISSION FALSE
+
+#define DEFAULT_CLIENT_MANAGED_MIKEY FALSE
 
 /* define to dump received RTCP packets */
 #undef DUMP_STATS
@@ -216,6 +221,7 @@ enum
   PROP_MAX_MCAST_TTL,
   PROP_BIND_MCAST_ADDRESS,
   PROP_DSCP_QOS,
+  PROP_CLIENT_MANAGED_MIKEY,
   PROP_LAST
 };
 
@@ -380,6 +386,22 @@ gst_rtsp_media_class_init (GstRTSPMediaClass * klass)
       g_param_spec_uint ("buffer-size", "Buffer Size",
           "The kernel UDP buffer size to use", 0, G_MAXUINT,
           DEFAULT_BUFFER_SIZE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+   /**
+   * GstRTSPMedia:client-managed-mikey
+   *
+   * When this mode is enabled, the client is expected to provide the
+   * key for both the client (SRTCP RR) and the server (SRTP/SRTCP SR).
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_CLIENT_MANAGED_MIKEY,
+      g_param_spec_boolean ("client-managed-mikey",
+          "Client-managed MIKEY",
+          "Enable client-managed MIKEY mode",
+          DEFAULT_CLIENT_MANAGED_MIKEY,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 /**
  * GstRTSPMedia:ensure-keyunit-on-start:
@@ -569,6 +591,7 @@ gst_rtsp_media_init (GstRTSPMedia * media)
   priv->dscp_qos = DEFAULT_DSCP_QOS;
   priv->expected_async_done = FALSE;
   priv->blocking_msg_received = 0;
+  priv->client_managed_mikey = DEFAULT_CLIENT_MANAGED_MIKEY;
 }
 
 static void
@@ -679,6 +702,10 @@ gst_rtsp_media_get_property (GObject * object, guint propid,
     case PROP_DSCP_QOS:
       g_value_set_int (value, gst_rtsp_media_get_dscp_qos (media));
       break;
+    case PROP_CLIENT_MANAGED_MIKEY:
+      g_value_set_boolean (value,
+          gst_rtsp_media_is_client_managed_mikey (media));
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, propid, pspec);
   }
@@ -749,6 +776,10 @@ gst_rtsp_media_set_property (GObject * object, guint propid,
       break;
     case PROP_DSCP_QOS:
       gst_rtsp_media_set_dscp_qos (media, g_value_get_int (value));
+      break;
+    case PROP_CLIENT_MANAGED_MIKEY:
+      gst_rtsp_media_set_client_managed_mikey (media,
+          g_value_get_boolean (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, propid, pspec);
@@ -2713,6 +2744,7 @@ gst_rtsp_media_create_stream (GstRTSPMedia * media, GstElement * payloader,
   gst_rtsp_stream_set_drop_delta_units (stream, priv->ensure_keyunit_on_start);
   gst_rtsp_stream_set_publish_clock_mode (stream, priv->publish_clock_mode);
   gst_rtsp_stream_set_rate_control (stream, priv->do_rate_control);
+  gst_rtsp_stream_set_client_managed_mikey (stream, priv->client_managed_mikey);
 
   g_ptr_array_add (priv->streams, stream);
 
@@ -5628,4 +5660,57 @@ gst_rtsp_media_get_rate_control (GstRTSPMedia * media)
   g_mutex_unlock (&priv->lock);
 
   return res;
+}
+
+/**
+ * gst_rtsp_media_is_client_managed_mikey:
+ * @media: a #GstRTSPMedia
+ *
+ * Check if client-managed-mikey mode is enabled.
+ *
+ * Returns: %TRUE if this mode is enabled.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_rtsp_media_is_client_managed_mikey (GstRTSPMedia * media)
+{
+  GstRTSPMediaPrivate *priv;
+  gboolean result;
+
+  g_return_val_if_fail (GST_IS_RTSP_MEDIA (media), FALSE);
+
+  priv = media->priv;
+
+  g_mutex_lock (&priv->lock);
+  result = priv->client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
+
+  return result;
+}
+
+/**
+ * gst_rtsp_media_set_client_managed_mikey:
+ * @media: a #GstRTSPMedia
+ * @client_managed_mikey: the new value
+ *
+ * Set client-managed-mikey mode for @media.
+ * In this mode the client is expected to provide the keys both for encrypting
+ * and decrypting SRTP data.
+ *
+ * Since: 1.30
+ */
+void
+gst_rtsp_media_set_client_managed_mikey (GstRTSPMedia * media,
+    gboolean client_managed_mikey)
+{
+  GstRTSPMediaPrivate *priv;
+
+  g_return_if_fail (GST_IS_RTSP_MEDIA (media));
+
+  priv = media->priv;
+
+  g_mutex_lock (&priv->lock);
+  priv->client_managed_mikey = client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
 }

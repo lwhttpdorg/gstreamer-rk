@@ -368,6 +368,12 @@ gboolean           gst_rtsp_stream_get_rate_control (GstRTSPStream * stream);
 GST_RTSP_SERVER_API
 void               gst_rtsp_stream_unblock_rtcp (GstRTSPStream * stream);
 
+GST_RTSP_SERVER_API
+gboolean           gst_rtsp_stream_is_client_managed_mikey (GstRTSPStream * stream);
+
+GST_RTSP_SERVER_API
+void               gst_rtsp_stream_set_client_managed_mikey (GstRTSPStream * stream, gboolean client_managed_mikey);
+
 /**
  * GstRTSPStreamTransportFilterFunc:
  * @stream: a #GstRTSPStream object

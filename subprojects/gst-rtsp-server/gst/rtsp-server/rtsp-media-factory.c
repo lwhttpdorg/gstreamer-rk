@@ -82,6 +82,9 @@ struct _GstRTSPMediaFactoryPrivate
   GstClock *clock;
 
   GstRTSPPublishClockMode publish_clock_mode;
+
+  /* client proposes encryption keys for SRTP */
+  gboolean client_managed_mikey;
 };
 
 #define DEFAULT_LAUNCH          NULL
@@ -102,6 +105,7 @@ struct _GstRTSPMediaFactoryPrivate
 #define DEFAULT_DO_RETRANSMISSION FALSE
 #define DEFAULT_DSCP_QOS        (-1)
 #define DEFAULT_ENABLE_RTCP     TRUE
+#define DEFAULT_CLIENT_MANAGED_MIKEY TRUE
 
 enum
 {
@@ -364,6 +368,7 @@ gst_rtsp_media_factory_init (GstRTSPMediaFactory * factory)
   priv->bind_mcast_address = DEFAULT_BIND_MCAST_ADDRESS;
   priv->enable_rtcp = DEFAULT_ENABLE_RTCP;
   priv->dscp_qos = DEFAULT_DSCP_QOS;
+  priv->client_managed_mikey = DEFAULT_CLIENT_MANAGED_MIKEY;
 
   g_mutex_init (&priv->lock);
   g_mutex_init (&priv->medias_lock);
@@ -2052,6 +2057,8 @@ default_construct (GstRTSPMediaFactory * factory, const GstRTSPUrl * url)
   gst_rtsp_media_set_enable_rtcp (media, enable_rtcp);
   gst_rtsp_media_set_ensure_keyunit_on_start (media,
       gst_rtsp_media_factory_get_ensure_keyunit_on_start (factory));
+  gst_rtsp_media_set_client_managed_mikey (media,
+      gst_rtsp_media_factory_is_client_managed_mikey (factory));
 
   gst_rtsp_media_collect_streams (media);
 
@@ -2258,4 +2265,57 @@ gst_rtsp_media_factory_get_transport_mode (GstRTSPMediaFactory * factory)
   GST_RTSP_MEDIA_FACTORY_UNLOCK (factory);
 
   return result;
+}
+
+/**
+ * gst_rtsp_media_factory_is_client_managed_mikey:
+ * @factory: a #GstRTSPMediaFactory
+ *
+ * Check if client-managed-mikey mode is enabled.
+ *
+ * Returns: %TRUE if this mode is enabled.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_rtsp_media_factory_is_client_managed_mikey (GstRTSPMediaFactory * factory)
+{
+  GstRTSPMediaFactoryPrivate *priv;
+  gboolean result;
+
+  g_return_val_if_fail (GST_IS_RTSP_MEDIA_FACTORY (factory), FALSE);
+
+  priv = factory->priv;
+
+  g_mutex_lock (&priv->lock);
+  result = priv->client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
+
+  return result;
+}
+
+/**
+ * gst_rtsp_media_factory_set_client_managed_mikey:
+ * @factory: a #GstRTSPMediaFactory
+ * @client_managed_mikey: the new value
+ *
+ * Set client-managed-mikey mode for @factory.
+ * In this mode the client is expected to provide the keys both for encrypting
+ * and decrypting SRTP data.
+ *
+ * Since: 1.30
+ */
+void
+gst_rtsp_media_factory_set_client_managed_mikey (GstRTSPMediaFactory * factory,
+    gboolean client_managed_mikey)
+{
+  GstRTSPMediaFactoryPrivate *priv;
+
+  g_return_if_fail (GST_IS_RTSP_MEDIA_FACTORY (factory));
+
+  priv = factory->priv;
+
+  g_mutex_lock (&priv->lock);
+  priv->client_managed_mikey = client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
 }

@@ -4302,6 +4302,8 @@ request_key (GstElement * srtpdec, guint ssrc, GstRTSPStream * stream)
       return NULL;
     }
 
+    GST_DEBUG_OBJECT (rtspsrc, "caps are %" GST_PTR_FORMAT, key_caps);
+
     stream->mikey = gst_mikey_message_new_from_caps (key_caps);
     if (stream->mikey == NULL) {
       GST_ERROR_OBJECT (rtspsrc, "failed to create MIKEY for stream with id %u",

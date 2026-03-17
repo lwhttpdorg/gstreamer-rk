@@ -29,6 +29,11 @@
  * to be defined) */
 #undef WITH_TLS
 
+/* FIXME: add proper option parsing */
+#define WITH_TLS 1
+#define WITH_AUTH 1
+#define WITH_CLIENT_MANAGED_MIKEY 1
+
 /* this timeout is periodically run to clean up the expired sessions from the
  * pool. This needs to be run explicitly currently but might be done
  * automatically as part of the mainloop. */
@@ -75,28 +80,20 @@ main (int argc, char *argv[])
   auth = gst_rtsp_auth_new ();
 #ifdef WITH_TLS
   cert = g_tls_certificate_new_from_pem ("-----BEGIN CERTIFICATE-----"
-      "MIICJjCCAY+gAwIBAgIBBzANBgkqhkiG9w0BAQUFADCBhjETMBEGCgmSJomT8ixk"
-      "ARkWA0NPTTEXMBUGCgmSJomT8ixkARkWB0VYQU1QTEUxHjAcBgNVBAsTFUNlcnRp"
-      "ZmljYXRlIEF1dGhvcml0eTEXMBUGA1UEAxMOY2EuZXhhbXBsZS5jb20xHTAbBgkq"
-      "hkiG9w0BCQEWDmNhQGV4YW1wbGUuY29tMB4XDTExMDExNzE5NDcxN1oXDTIxMDEx"
-      "NDE5NDcxN1owSzETMBEGCgmSJomT8ixkARkWA0NPTTEXMBUGCgmSJomT8ixkARkW"
-      "B0VYQU1QTEUxGzAZBgNVBAMTEnNlcnZlci5leGFtcGxlLmNvbTBcMA0GCSqGSIb3"
-      "DQEBAQUAA0sAMEgCQQDYScTxk55XBmbDM9zzwO+grVySE4rudWuzH2PpObIonqbf"
-      "hRoAalKVluG9jvbHI81eXxCdSObv1KBP1sbN5RzpAgMBAAGjIjAgMAkGA1UdEwQC"
-      "MAAwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDQYJKoZIhvcNAQEFBQADgYEAYx6fMqT1"
-      "Gvo0jq88E8mc+bmp4LfXD4wJ7KxYeadQxt75HFRpj4FhFO3DOpVRFgzHlOEo3Fwk"
-      "PZOKjvkT0cbcoEq5whLH25dHoQxGoVQgFyAP5s+7Vp5AlHh8Y/vAoXeEVyy/RCIH"
-      "QkhUlAflfDMcrrYjsmwoOPSjhx6Mm/AopX4="
+      "MIIBbzCCASGgAwIBAgIUQKExnJltxKsXSpo1XDqRjGkejPswBQYDK2VwMBYxFDAS"
+      "BgNVBAMMC2V4YW1wbGUuY29tMB4XDTI2MDMxMjE0MzEzMFoXDTM2MDMwOTE0MzEz"
+      "MFowFjEUMBIGA1UEAwwLZXhhbXBsZS5jb20wKjAFBgMrZXADIQDV324wge15YUtR"
+      "qwkjS6Dblo+rbOTZGlaRi2vLGjN5EKOBgDB+MB0GA1UdDgQWBBQwYP5kDU3I0g7I"
+      "Z/3NnD8fNJUZ8zAfBgNVHSMEGDAWgBQwYP5kDU3I0g7IZ/3NnD8fNJUZ8zAPBgNV"
+      "HRMBAf8EBTADAQH/MCsGA1UdEQQkMCKCC2V4YW1wbGUuY29tgg0qLmV4YW1wbGUu"
+      "Y29thwQKAAABMAUGAytlcANBADFPAr9WHCughWbXZ+Yaaw/9flRr++kTplLkctGQ"
+      "HpanszkILyrxXrY/HrMbr0h+t0kxav+GoPja/KTXPPyoCwU="
       "-----END CERTIFICATE-----"
       "-----BEGIN PRIVATE KEY-----"
-      "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEA2EnE8ZOeVwZmwzPc"
-      "88DvoK1ckhOK7nVrsx9j6TmyKJ6m34UaAGpSlZbhvY72xyPNXl8QnUjm79SgT9bG"
-      "zeUc6QIDAQABAkBRFJZ32VbqWMP9OVwDJLiwC01AlYLnka0mIQZbT/2xq9dUc9GW"
-      "U3kiVw4lL8v/+sPjtTPCYYdzHHOyDen6znVhAiEA9qJT7BtQvRxCvGrAhr9MS022"
-      "tTdPbW829BoUtIeH64cCIQDggG5i48v7HPacPBIH1RaSVhXl8qHCpQD3qrIw3FMw"
-      "DwIga8PqH5Sf5sHedy2+CiK0V4MRfoU4c3zQ6kArI+bEgSkCIQCLA1vXBiE31B5s"
-      "bdHoYa1BXebfZVd+1Hd95IfEM5mbRwIgSkDuQwV55BBlvWph3U8wVIMIb4GStaH8"
-      "W535W8UBbEg=" "-----END PRIVATE KEY-----", -1, &error);
+      "MC4CAQAwBQYDK2VwBCIEIEOpP2bNeVlZUprZ+Ig1A81CXSi/Qum676jRV2m4+9sK"
+      "-----END PRIVATE KEY-----", -1, &error);
+
+
   if (cert == NULL) {
     g_printerr ("failed to parse PEM: %s\n", error->message);
     return -1;
@@ -127,9 +124,12 @@ main (int argc, char *argv[])
    * any launch line works as long as it contains elements named pay%d. Each
    * element with pay%d names will be a stream */
   factory = gst_rtsp_media_factory_new ();
+#ifdef WITH_CLIENT_MANAGED_MIKEY
+  gst_rtsp_media_factory_set_client_managed_mikey (factory, TRUE);
+#endif
   gst_rtsp_media_factory_set_launch (factory, "( "
       "videotestsrc ! video/x-raw,width=352,height=288,framerate=15/1 ! "
-      "x264enc ! rtph264pay name=pay0 pt=96 "
+      "openh264enc ! rtph264pay name=pay0 pt=96 "
       "audiotestsrc ! audio/x-raw,rate=8000 ! "
       "alawenc ! rtppcmapay name=pay1 pt=97 " ")");
 #ifdef WITH_AUTH

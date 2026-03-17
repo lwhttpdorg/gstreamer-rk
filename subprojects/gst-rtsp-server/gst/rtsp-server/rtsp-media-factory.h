@@ -290,6 +290,12 @@ GST_RTSP_SERVER_API
 GstElement *          gst_rtsp_media_factory_create_element   (GstRTSPMediaFactory *factory,
                                                                const GstRTSPUrl *url);
 
+GST_RTSP_SERVER_API
+gboolean              gst_rtsp_media_factory_is_client_managed_mikey (GstRTSPMediaFactory * factory);
+
+GST_RTSP_SERVER_API
+void                  gst_rtsp_media_factory_set_client_managed_mikey (GstRTSPMediaFactory * factory, gboolean client_managed_mikey);
+
 #ifdef G_DEFINE_AUTOPTR_CLEANUP_FUNC
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstRTSPMediaFactory, gst_object_unref)
 #endif

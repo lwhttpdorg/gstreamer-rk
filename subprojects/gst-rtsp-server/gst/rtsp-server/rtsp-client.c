@@ -1601,10 +1601,44 @@ static GstRTSPResult
 default_params_set (GstRTSPClient * client, GstRTSPContext * ctx)
 {
   GstRTSPResult res;
+  GstRTSPSessionMedia *sessmedia = NULL;
+
+  if (!ctx->uri)
+    goto no_uri;
+
+  /* check if we have session */
+  if (ctx->session) {
+    GstRTSPClientClass *klass;
+    gint matched;
+    gchar *path;
+    GstRTSPMedia *media;
+
+    klass = GST_RTSP_CLIENT_GET_CLASS (client);
+
+    path = klass->make_path_from_uri (client, ctx->uri);
+
+    sessmedia = gst_rtsp_session_dup_media (ctx->session, path, &matched);
+    if (sessmedia) {
+      media = gst_rtsp_session_media_get_media (sessmedia);
+      ctx->media = media;
+    }
+
+    g_free (path);
+  }
 
   res = gst_rtsp_params_set (client, ctx);
 
+  if (sessmedia)
+    g_object_unref (sessmedia);
+
   return res;
+
+no_uri:
+  {
+    GST_ERROR ("client %p: no uri supplied", client);
+    send_generic_error_response (client, GST_RTSP_STS_BAD_REQUEST, ctx);
+    return FALSE;
+  }
 }
 
 static GstRTSPResult
