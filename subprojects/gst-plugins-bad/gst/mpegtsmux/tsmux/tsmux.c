@@ -98,7 +98,7 @@
 
 /* Base for all written PCR and DTS/PTS,
  * so we have some slack to go backwards */
-#define CLOCK_BASE (TSMUX_CLOCK_FREQ * 10 * 360)
+#define CLOCK_OFFSET (TSMUX_CLOCK_FREQ * 10 * 360)
 
 static gboolean tsmux_write_pat (TsMux * mux);
 static gboolean tsmux_write_pmt (TsMux * mux, TsMuxProgram * program);
@@ -164,6 +164,8 @@ tsmux_new (void)
 
   mux->first_pcr_ts = G_MININT64;
 
+  mux->clock_offset = CLOCK_OFFSET;
+
   return mux;
 }
 
@@ -222,6 +224,22 @@ tsmux_set_new_stream_func (TsMux * mux, TsMuxNewStreamFunc func,
 
   mux->new_stream_func = func;
   mux->new_stream_data = user_data;
+}
+
+void
+tsmux_set_clock_offset (TsMux * mux, gint64 clock_offset)
+{
+  g_return_if_fail (mux != NULL);
+
+  mux->clock_offset = clock_offset;
+}
+
+gint64
+tsmux_get_clock_offset (TsMux * mux)
+{
+  g_return_val_if_fail (mux, CLOCK_OFFSET);
+
+  return mux->clock_offset;
 }
 
 /**
@@ -1621,7 +1639,7 @@ tsmux_write_stream_packet (TsMux * mux, TsMuxStream * stream)
   g_return_val_if_fail (stream != NULL, FALSE);
 
   if (tsmux_stream_is_pcr (stream) || stream->program->pcr_pid) {
-    gint64 cur_ts = CLOCK_BASE;
+    gint64 cur_ts = mux->clock_offset;
     if (tsmux_stream_get_dts (stream) != G_MININT64)
       cur_ts += tsmux_stream_get_dts (stream);
     else
@@ -1665,9 +1683,9 @@ tsmux_write_stream_packet (TsMux * mux, TsMuxStream * stream)
   if (pi->packet_start_unit_indicator) {
     tsmux_stream_initialize_pes_packet (stream);
     if (stream->dts != G_MININT64)
-      stream->dts += CLOCK_BASE;
+      stream->dts += mux->clock_offset;
     if (stream->pts != G_MININT64)
-      stream->pts += CLOCK_BASE;
+      stream->pts += mux->clock_offset;
   }
   pi->stream_avail = tsmux_stream_bytes_avail (stream);
 
