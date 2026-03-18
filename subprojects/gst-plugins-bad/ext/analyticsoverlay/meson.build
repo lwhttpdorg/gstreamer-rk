@@ -1,11 +1,15 @@
 analyticsoverlay_sources = [
+  'plugin.c',
   'gstanalyticsoverlay.c',
   'gstobjectdetectionoverlay.c',
-  'gstsegmentationoverlay.c'
+  'gstsegmentationoverlay.c',
+  'gstkeypointoverlay.c',
 ]
 
 analyticsoverlay_headers = [
+  'gstanalyticsoverlay.h',
   'gstobjectdetectionoverlay.h',
+  'gstkeypointoverlay.h',
 ]
 
 doc_sources = []

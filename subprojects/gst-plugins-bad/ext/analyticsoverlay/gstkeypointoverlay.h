@@ -1,9 +1,8 @@
-/* GStreamer object detection overlay
- * Copyright (C) <2023> Collabora Ltd.
- *  @author: Aaron Boxer <aaron.boxer@collabora.com>
+/* GStreamer keypoint overlay
+ * Copyright (C) <2026> Collabora Ltd.
  *  @author: Daniel Morin <daniel.morin@collabora.com>
  *
- * gstobjectdetectionoverlay.h
+ * gstkeypointoverlay.h
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,20 +20,20 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_OBJECT_DETECTION_OVERLAY_H__
-#define __GST_OBJECT_DETECTION_OVERLAY_H__
+#ifndef __GST_KEYPOINT_OVERLAY_H__
+#define __GST_KEYPOINT_OVERLAY_H__
 
 #include "gstanalyticsoverlay.h"
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_OBJECT_DETECTION_OVERLAY \
-  (gst_object_detection_overlay_get_type())
+#define GST_TYPE_KEYPOINT_OVERLAY \
+  (gst_keypoint_overlay_get_type())
 
-G_DECLARE_FINAL_TYPE (GstObjectDetectionOverlay, gst_object_detection_overlay,
-    GST, OBJECT_DETECTION_OVERLAY, GstAnalyticsOverlay)
+G_DECLARE_FINAL_TYPE (GstKeypointOverlay, gst_keypoint_overlay,
+    GST, KEYPOINT_OVERLAY, GstAnalyticsOverlay)
 
-GST_ELEMENT_REGISTER_DECLARE (objectdetectionoverlay);
+GST_ELEMENT_REGISTER_DECLARE (keypointoverlay);
 
 G_END_DECLS
-#endif /* __GST_OBJECT_DETECTION_OVERLAY_H__ */
+#endif /* __GST_KEYPOINT_OVERLAY_H__ */
