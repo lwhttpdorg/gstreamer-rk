@@ -31,6 +31,24 @@
 #include "video-tile.h"
 #include "gstvideometa.h"
 
+/* For GST_VIDEO_FORMAT_GENERIC the actual plane count is computed by
+ * gst_video_info_init_from_caps_extended() and stored implicitly: planes with
+ * stride > 0 are valid.  Use this helper everywhere frame map/unmap needs to
+ * iterate over planes. */
+static inline gint
+video_info_n_planes (const GstVideoInfo * info)
+{
+  if (G_UNLIKELY (info->finfo->format == GST_VIDEO_FORMAT_GENERIC)) {
+    gint n = 0, i;
+    for (i = 0; i < GST_VIDEO_MAX_PLANES; i++) {
+      if (info->stride[i] > 0)
+        n++;
+    }
+    return n;
+  }
+  return info->finfo->n_planes;
+}
+
 #define CAT_PERFORMANCE video_frame_get_perf_category()
 
 static inline GstDebugCategory *
@@ -83,15 +101,24 @@ gst_video_frame_map_id (GstVideoFrame * frame, const GstVideoInfo * info,
   else
     meta = gst_buffer_get_video_meta_id (buffer, id);
 
-  /* copy the info */
+  /* For GENERIC the parametric layout is fully described by info->stride[] /
+   * info->offset[], so bypass the meta and use the direct buffer-mapping path.
+   * */
+  if (meta && info->finfo->format == GST_VIDEO_FORMAT_GENERIC)
+    meta = NULL;
+
+  /* copy the info and ref extensions if present since frame->info may be
+   * uninitialized stack memory,  copy_into is unsafe here. */
   frame->info = *info;
+  if (frame->info.ABI.abi.extensions != NULL)
+    gst_mini_object_ref (GST_MINI_OBJECT_CAST (frame->info.ABI.abi.extensions));
 
   if (meta) {
     /* All these values must be consistent */
     g_return_val_if_fail (info->finfo->format == meta->format, FALSE);
     g_return_val_if_fail (info->width <= meta->width, FALSE);
     g_return_val_if_fail (info->height <= meta->height, FALSE);
-    g_return_val_if_fail (info->finfo->n_planes == meta->n_planes, FALSE);
+    g_return_val_if_fail (video_info_n_planes (info) == meta->n_planes, FALSE);
 
     frame->info.finfo = gst_video_format_get_info (meta->format);
     frame->info.width = meta->width;
@@ -122,7 +149,7 @@ gst_video_frame_map_id (GstVideoFrame * frame, const GstVideoInfo * info,
       goto invalid_size;
 
     /* set up pointers */
-    for (i = 0; i < info->finfo->n_planes; i++) {
+    for (i = 0; i < video_info_n_planes (info); i++) {
       frame->data[i] = frame->map[0].data + info->offset[i];
     }
   }
@@ -273,7 +300,7 @@ gst_video_frame_unmap (GstVideoFrame * frame)
     return;
 
   if (meta) {
-    for (i = 0; i < frame->info.finfo->n_planes; i++) {
+    for (i = 0; i < video_info_n_planes (&frame->info); i++) {
       gst_video_meta_unmap (meta, i, &frame->map[i]);
     }
   } else {
@@ -285,6 +312,7 @@ gst_video_frame_unmap (GstVideoFrame * frame)
 
   /* Reset various fields to avoid use-after-frees.
    * This also makes it possible to call unmap() twice. */
+  gst_video_info_clear (&frame->info);
   frame->buffer = NULL;
   memset (&frame->data, 0, sizeof (frame->data));
 }
@@ -326,10 +354,29 @@ gst_video_frame_copy_plane (GstVideoFrame * dest, const GstVideoFrame * src,
 
   g_return_val_if_fail (dinfo->width <= sinfo->width
       && dinfo->height <= sinfo->height, FALSE);
-  g_return_val_if_fail (finfo->n_planes > plane, FALSE);
+  /* For GENERIC, plane validity is checked via strides. */
+  g_return_val_if_fail (finfo->format == GST_VIDEO_FORMAT_GENERIC
+      || finfo->n_planes > plane, FALSE);
 
   sp = src->data[plane];
   dp = dest->data[plane];
+
+  if (G_UNLIKELY (finfo->format == GST_VIDEO_FORMAT_GENERIC)) {
+    /* GENERIC is a parametric format: finfo carries no component layout.
+     * Copy raw plane bytes using the stride set by gst_video_info_init_from_caps_extended(). */
+    gint plane_h = dinfo->height;
+    gint dstride = GST_VIDEO_INFO_PLANE_STRIDE (dinfo, plane);
+    gint sstride = GST_VIDEO_INFO_PLANE_STRIDE (sinfo, plane);
+    gint copy_w = MIN (dstride, sstride);
+    guint j;
+
+    for (j = 0; j < (guint) plane_h; j++) {
+      memcpy (dp, sp, copy_w);
+      dp += dstride;
+      sp += sstride;
+    }
+    return TRUE;
+  }
 
   if (GST_VIDEO_FORMAT_INFO_HAS_PALETTE (finfo) && plane == 1) {
     /* copy the palette and we're done */
@@ -432,7 +479,7 @@ gst_video_frame_copy (GstVideoFrame * dest, const GstVideoFrame * src)
   g_return_val_if_fail (dinfo->width <= sinfo->width
       && dinfo->height <= sinfo->height, FALSE);
 
-  n_planes = dinfo->finfo->n_planes;
+  n_planes = video_info_n_planes (dinfo);
 
   for (i = 0; i < n_planes; i++)
     gst_video_frame_copy_plane (dest, src, i);

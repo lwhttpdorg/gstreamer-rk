@@ -348,7 +348,7 @@ gst_video_info_dma_drm_from_video_info (GstVideoInfoDmaDrm * drm_info,
   if (fourcc == DRM_FORMAT_INVALID)
     return FALSE;
 
-  drm_info->vinfo = *info;
+  gst_video_info_copy_into (&drm_info->vinfo, info);
   drm_info->drm_fourcc = fourcc;
   drm_info->drm_modifier = modifier;
 

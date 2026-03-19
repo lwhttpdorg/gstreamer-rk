@@ -23,12 +23,14 @@
 #include <gst/gst.h>
 #include <gst/video/video-format.h>
 #include <gst/video/video-color.h>
+#include <gst/video/video-info-generic.h>
 
 G_BEGIN_DECLS
 
 #include <gst/video/video-enumtypes.h>
 
 typedef struct _GstVideoInfo GstVideoInfo;
+typedef struct _GstVideoInfoExtensions GstVideoInfoExtensions;
 
 /**
  * GST_CAPS_FEATURE_FORMAT_INTERLACED:
@@ -308,6 +310,14 @@ GstVideoFieldOrder gst_video_field_order_from_string  (const gchar * order);
  * to store the specific video info when mapping a video frame with
  * gst_video_frame_map().
  *
+ * For %GST_VIDEO_FORMAT_GENERIC formats, the structure carries an opaque
+ * #GstVideoInfoExtensions object (reference-counted) in the last reserved
+ * slot.  Always use gst_video_info_copy_into() (not a plain struct copy) when
+ * duplicating a #GstVideoInfo so that the extension reference count is kept
+ * correct.  Call gst_video_info_clear() when the structure goes out of scope.
+ * Use gst_video_info_get_generic_params() to retrieve the parametric
+ * description for %GST_VIDEO_FORMAT_GENERIC formats.
+ *
  * Use the provided macros to access the info in this structure.
  */
 struct _GstVideoInfo {
@@ -331,13 +341,16 @@ struct _GstVideoInfo {
   gsize                     offset[GST_VIDEO_MAX_PLANES];
   gint                      stride[GST_VIDEO_MAX_PLANES];
 
-  /* Union preserves padded struct size for backwards compat
-   * Consumer code should use the accessor macros for fields */
+  /* Padding is exhausted. Use extensions field for additional extensions.
+   * Union preserves padded struct size for backwards compat
+   * Consumer code should use the accessor macros for fields. */
   union {
     struct { /* < skip > */
       GstVideoMultiviewMode     multiview_mode;
       GstVideoMultiviewFlags    multiview_flags;
       GstVideoFieldOrder        field_order;
+      /*< private >*/
+      GstVideoInfoExtensions   *extensions;
     } abi;
     /*< private >*/
     gpointer _gst_reserved[GST_PADDING];
@@ -431,7 +444,13 @@ GST_VIDEO_API
 void           gst_video_info_init        (GstVideoInfo *info);
 
 GST_VIDEO_API
+void           gst_video_info_clear       (GstVideoInfo *info);
+
+GST_VIDEO_API
 GstVideoInfo * gst_video_info_copy        (const GstVideoInfo *info) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_VIDEO_API
+void           gst_video_info_copy_into   (GstVideoInfo *dest, const GstVideoInfo *src);
 
 GST_VIDEO_API
 void           gst_video_info_free        (GstVideoInfo *info);
@@ -455,7 +474,17 @@ GST_VIDEO_API
 gboolean       gst_video_info_from_caps   (GstVideoInfo *info, const GstCaps  * caps);
 
 GST_VIDEO_API
+gboolean       gst_video_info_init_from_caps_extended (GstVideoInfo      *info,
+                                                       const GstCaps     *caps);
+
+GST_VIDEO_API
+GstVideoInfo * gst_video_info_new_from_caps_extended (const GstCaps *caps) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_VIDEO_API
 GstCaps *      gst_video_info_to_caps     (const GstVideoInfo *info) G_GNUC_WARN_UNUSED_RESULT;
+
+GST_VIDEO_API
+const GstGenericVideoParams * gst_video_info_get_generic_params (const GstVideoInfo *info);
 
 GST_VIDEO_API
 gboolean       gst_video_info_convert     (const GstVideoInfo *info,
