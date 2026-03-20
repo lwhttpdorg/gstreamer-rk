@@ -602,12 +602,12 @@ See #gst_analytics_relation_meta_add_keypoint_mtd for more details</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
       <type name="gint" c:type="gint"/>
     </constant>
-    <constant name="MODELINFO_VERSION_MINOR" value="0" c:type="GST_MODELINFO_VERSION_MINOR" version="1.28">
+    <constant name="MODELINFO_VERSION_MINOR" value="1" c:type="GST_MODELINFO_VERSION_MINOR" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h">The current minor version of the modelinfo format</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
       <type name="gint" c:type="gint"/>
     </constant>
-    <constant name="MODELINFO_VERSION_STR" value="1.0" c:type="GST_MODELINFO_VERSION_STR" version="1.28">
+    <constant name="MODELINFO_VERSION_STR" value="1.1" c:type="GST_MODELINFO_VERSION_STR" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h">The current version string for the modelinfo format.
 This MUST be updated whenever the format changes.</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
@@ -826,6 +826,34 @@ The caller must free @output_scales and @output_offsets with g_free() when done.
             <array length="4" zero-terminated="0" c:type="gdouble**">
               <type name="gdouble" c:type="gdouble*"/>
             </array>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_par" c:identifier="gst_analytics_modelinfo_get_par" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Retrieve the pixel aspect ratio expected for a given tensor.
+
+If not specified in the modelinfo, defaults to 1:1.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">TRUE on success, otherwise FALSE</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="modelinfo" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Instance of #GstAnalyticsModelInfo</doc>
+            <type name="ModelInfo" c:type="GstAnalyticsModelInfo*"/>
+          </instance-parameter>
+          <parameter name="tensor_name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">The name of the tensor</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="par_n" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Pixel aspect ratio numerator</doc>
+            <type name="guint" c:type="guint*"/>
+          </parameter>
+          <parameter name="par_d" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.c">Pixel aspect ratio denominator</doc>
+            <type name="guint" c:type="guint*"/>
           </parameter>
         </parameters>
       </method>
