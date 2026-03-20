@@ -4219,11 +4219,12 @@ qtdemux_parse_saiz (GstQTDemux * qtdemux, QtDemuxStream * stream,
 }
 
 /* Parses the offset of sample auxiliary information contained within a stream,
- * as given in a saio box. Returns TRUE if successful; FALSE otherwise. */
+ * as given in a saio box. Returns TRUE if successful; FALSE otherwise.
+ * Fills @offsets (pre-allocated by the caller with @n_offsets elements). */
 static gboolean
 qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
     GstByteReader * br, guint32 * info_type, guint32 * info_type_parameter,
-    guint64 * offset)
+    guint64 * offsets, guint32 n_offsets)
 {
   guint8 version = 0;
   guint32 flags = 0;
@@ -4232,12 +4233,14 @@ qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
   guint32 entry_count;
   guint32 off_32;
   guint64 off_64;
+  guint32 i;
   const guint8 *aux_info_type_data = NULL;
 
   g_return_val_if_fail (qtdemux != NULL, FALSE);
   g_return_val_if_fail (stream != NULL, FALSE);
   g_return_val_if_fail (br != NULL, FALSE);
-  g_return_val_if_fail (offset != NULL, FALSE);
+  g_return_val_if_fail (offsets != NULL, FALSE);
+  g_return_val_if_fail (n_offsets > 0, FALSE);
 
   if (!gst_byte_reader_get_uint8 (br, &version))
     return FALSE;
@@ -4271,22 +4274,31 @@ qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
   if (!gst_byte_reader_get_uint32_be (br, &entry_count))
     return FALSE;
 
-  if (entry_count != 1) {
-    GST_ERROR_OBJECT (qtdemux, "multiple offsets are not supported");
+  if (entry_count == 0) {
+    GST_ERROR_OBJECT (qtdemux, "saio box has no entries");
     return FALSE;
   }
 
-  if (version == 0) {
-    if (!gst_byte_reader_get_uint32_be (br, &off_32))
-      return FALSE;
-    *offset = (guint64) off_32;
-  } else {
-    if (!gst_byte_reader_get_uint64_be (br, &off_64))
-      return FALSE;
-    *offset = off_64;
+  if (entry_count > n_offsets) {
+    GST_ERROR_OBJECT (qtdemux,
+        "saio entry count %u exceeds allocated buffer size %u", entry_count,
+        n_offsets);
+    return FALSE;
   }
 
-  GST_DEBUG_OBJECT (qtdemux, "offset: %" G_GUINT64_FORMAT, *offset);
+  for (i = 0; i < entry_count; i++) {
+    if (version == 0) {
+      if (!gst_byte_reader_get_uint32_be (br, &off_32))
+        return FALSE;
+      offsets[i] = (guint64) off_32;
+    } else {
+      if (!gst_byte_reader_get_uint64_be (br, &off_64))
+        return FALSE;
+      offsets[i] = off_64;
+    }
+    GST_DEBUG_OBJECT (qtdemux, "offset[%u]: %" G_GUINT64_FORMAT, i, offsets[i]);
+  }
+
   return TRUE;
 }
 
@@ -4699,12 +4711,13 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
       }
 
       if (G_UNLIKELY (!qtdemux_parse_saio (qtdemux, stream, &saio_data,
-                  &info_type, &info_type_parameter, &offset))) {
+                  &info_type, &info_type_parameter, &offset, 1))) {
         GST_ERROR_OBJECT (qtdemux, "failed to parse saio box");
         g_free (qtdemux->cenc_aux_info_sizes);
         qtdemux->cenc_aux_info_sizes = NULL;
         goto fail;
       }
+
       if (base_offset > -1 && base_offset > qtdemux->moof_offset)
         offset += (guint64) (base_offset - qtdemux->moof_offset);
       if ((info_type == FOURCC_cenc || info_type == FOURCC_cbcs)
@@ -21129,7 +21142,7 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
     qtdemux_parse_cstb (qtdemux, &cstb_data);
   }
 
-    idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
+  idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
 
   if (!idat)
     goto end;
