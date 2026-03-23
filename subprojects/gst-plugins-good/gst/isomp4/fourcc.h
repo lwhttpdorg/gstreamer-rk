@@ -500,6 +500,7 @@ G_BEGIN_DECLS
 
 /* TAI Precision Timestamps */
 #define FOURCC_taic     GST_MAKE_FOURCC ('t','a','i','c')
+#define FOURCC_stai     GST_MAKE_FOURCC ('s','t','a','i')
 
 
 G_END_DECLS

@@ -63,6 +63,18 @@ typedef struct _QtDemuxRandomAccessEntry QtDemuxRandomAccessEntry;
 typedef struct _QtDemuxStreamStsdEntry QtDemuxStreamStsdEntry;
 typedef struct _QtDemuxGaplessAudioInfo QtDemuxGaplessAudioInfo;
 
+/* Per-sample auxiliary information parsed from saiz/saio boxes.
+ * Used for STAI (TAI timestamps), SUID (GIMI Content ID) etc. */
+typedef struct
+{
+  gboolean present;
+  guint8 *sample_sizes;         /* per-sample data sizes from saiz */
+  guint32 sample_count;         /* number of samples */
+  guint64 *chunk_offsets;       /* per-chunk file offsets from saio */
+  guint32 n_chunk_offsets;      /* number of chunk offsets */
+  guint32 *first_sample_in_chunk;       /* first sample index per chunk */
+} QtDemuxAuxInfo;
+
 typedef GstBuffer * (*QtDemuxProcessFunc)(GstQTDemux * qtdemux, QtDemuxStream * stream, GstBuffer * buf, guint64 dts, guint64 pts, guint64 duration, gboolean round_up_duration);
 
 enum QtDemuxState
@@ -588,6 +600,12 @@ struct _QtDemuxStream
 
   /* KEY_UNITS trickmode with an interval */
   GstClockTime last_keyframe_pts;
+
+  /* TAI precision timestamps (STAI aux info) */
+  QtDemuxAuxInfo aux_stai;
+  gboolean stai_pending_valid;         /* pending TAI data for decorate */
+  guint64 stai_pending_tai_ts;         /* TAI nanoseconds since 1958-01-01 */
+  guint8 stai_pending_flags;           /* STAI flags byte */
 
   gint ref_count;               /* atomic */
 };

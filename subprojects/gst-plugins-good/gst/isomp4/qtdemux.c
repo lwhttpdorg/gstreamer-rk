@@ -2637,11 +2637,22 @@ gst_qtdemux_stream_flush_segments_data (QtDemuxStream * stream)
 }
 
 static void
+qtdemux_aux_info_clear (QtDemuxAuxInfo * aux)
+{
+  g_free (aux->sample_sizes);
+  g_free (aux->chunk_offsets);
+  g_free (aux->first_sample_in_chunk);
+  memset (aux, 0, sizeof (*aux));
+}
+
+static void
 gst_qtdemux_stream_flush_samples_data (QtDemuxStream * stream)
 {
   g_free (stream->samples);
   stream->samples = NULL;
   gst_qtdemux_stbl_free (stream);
+
+  qtdemux_aux_info_clear (&stream->aux_stai);
 
   /* fragments */
   g_free (stream->ra_entries);
@@ -7141,6 +7152,115 @@ gst_qtdemux_split_and_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
   return ret;
 }
 
+/* Compute the file offset of auxiliary data for the given sample_index
+ * using the non-fragmented (stbl) saiz/saio information.
+ * Returns 0 if no data is available for that sample. */
+static guint64
+qtdemux_aux_info_offset_for_sample (const QtDemuxAuxInfo * aux,
+    guint32 sample_index)
+{
+  guint32 lo, hi, chunk_idx, first_sample;
+  guint64 within_offset = 0;
+
+  if (!aux->present || sample_index >= aux->sample_count)
+    return 0;
+
+  /* Binary search first_sample_in_chunk to find the chunk containing
+   * sample_index.  We want the last chunk whose first sample <= sample_index. */
+  lo = 0;
+  hi = aux->n_chunk_offsets;
+  while (lo < hi) {
+    guint32 mid = (lo + hi) / 2;
+    if (aux->first_sample_in_chunk[mid] <= sample_index)
+      lo = mid + 1;
+    else
+      hi = mid;
+  }
+  chunk_idx = lo - 1;
+  first_sample = aux->first_sample_in_chunk[chunk_idx];
+
+  /* Accumulate per-sample sizes within the chunk up to sample_index */
+  for (guint32 s = first_sample; s < sample_index; s++)
+    within_offset += aux->sample_sizes[s];
+
+  return aux->chunk_offsets[chunk_idx] + within_offset;
+}
+
+/* Parse saiz/saio with the given aux_info_type fourcc from a stbl node
+ * and populate a QtDemuxAuxInfo for non-fragmented tracks.
+ * Returns TRUE if aux info was found and parsed. */
+static gboolean
+qtdemux_aux_info_parse_stbl (GstQTDemux * qtdemux, QtDemuxStream * stream,
+    GNode * stbl, guint32 fourcc, QtDemuxAuxInfo * aux)
+{
+  GNode *saiz_node = NULL, *saio_node = NULL;
+  GstByteReader saiz_data, saio_data;
+  guint8 *sample_sizes;
+  guint32 sample_count = 0;
+  guint32 n_chunk_offsets = 0;
+  guint32 info_type = 0;
+  guint64 *chunk_offsets;
+  GstByteReader stsc;
+  guint32 first_sample = 0;
+
+  if (!qtdemux_find_saiz_saio (qtdemux, stbl, fourcc, &saiz_node,
+          &saiz_data, &saio_node, &saio_data))
+    return FALSE;
+
+  /* It's valid to not have them */
+  if (!saiz_node || !saio_node)
+    return TRUE;
+
+  sample_sizes =
+      qtdemux_parse_saiz (qtdemux, stream, &saiz_data, &sample_count);
+  if (!sample_sizes)
+    return FALSE;
+
+  /* The number of saio offsets matches the number of chunks in stco */
+  n_chunk_offsets = GST_READ_UINT32_BE (stream->stco.data + 4);
+
+  chunk_offsets = g_new (guint64, n_chunk_offsets);
+
+  if (!qtdemux_parse_saio (qtdemux, stream, &saio_data, &info_type,
+          NULL, chunk_offsets, n_chunk_offsets)) {
+    g_free (chunk_offsets);
+    g_free (sample_sizes);
+    return FALSE;
+  }
+
+  aux->present = TRUE;
+  aux->sample_sizes = sample_sizes;
+  aux->sample_count = sample_count;
+  aux->chunk_offsets = chunk_offsets;
+  aux->n_chunk_offsets = n_chunk_offsets;
+
+  /* Pre-compute first sample index per chunk by walking stsc */
+  aux->first_sample_in_chunk = g_new0 (guint32, n_chunk_offsets);
+  stsc = stream->stsc;
+  for (guint32 i = 0; i < stream->n_samples_per_chunk; i++) {
+    guint32 cur_first_chunk, cur_samples_per_chunk, next_first_chunk;
+    cur_first_chunk = gst_byte_reader_get_uint32_be_unchecked (&stsc) - 1;
+    cur_samples_per_chunk = gst_byte_reader_get_uint32_be_unchecked (&stsc);
+    /* skip sample_description_index */
+    gst_byte_reader_skip_unchecked (&stsc, 4);
+    if (i + 1 < stream->n_samples_per_chunk)
+      next_first_chunk = gst_byte_reader_peek_uint32_be_unchecked (&stsc) - 1;
+    else
+      next_first_chunk = n_chunk_offsets;
+    for (guint32 c = cur_first_chunk;
+        c < next_first_chunk && c < n_chunk_offsets; c++) {
+      aux->first_sample_in_chunk[c] = first_sample;
+      first_sample += cur_samples_per_chunk;
+    }
+  }
+
+  GST_DEBUG_OBJECT (qtdemux,
+      "Found '%" GST_FOURCC_FORMAT "' aux info: %u samples, %u chunks",
+      GST_FOURCC_ARGS (fourcc), sample_count, n_chunk_offsets);
+
+  return TRUE;
+}
+
 /* Sets a buffer's attributes properly and pushes it downstream.
  * Also checks for additional actions and custom processing that may
  * need to be done first.
@@ -7233,6 +7353,37 @@ gst_qtdemux_decorate_and_push_buffer (GstQTDemux * qtdemux,
             pts) + qtdemux->start_utc_time - stream->cslg_shift,
         GST_CLOCK_TIME_NONE);
     gst_caps_unref (caps);
+  }
+
+  if (stream->stai_pending_valid) {
+    static GstStaticCaps tai_caps = GST_STATIC_CAPS ("timestamp/x-tai1958");
+    GstCaps *caps = gst_static_caps_get (&tai_caps);
+    GstReferenceTimestampMeta *tai_meta;
+
+    tai_meta = gst_buffer_add_reference_timestamp_meta (buf, caps,
+        stream->stai_pending_tai_ts, GST_CLOCK_TIME_NONE);
+    if (tai_meta) {
+      guint8 flags = stream->stai_pending_flags;
+      gboolean synchronization_state = !!(flags & 0x80);
+      gboolean timestamp_generation_failure = !!(flags & 0x40);
+      gboolean timestamp_is_modified = !!(flags & 0x20);
+
+      GST_LOG_OBJECT (stream->pad,
+          "Adding TAI timestamp meta with timestamp %" GST_TIME_FORMAT
+          ", synchronization_state=%d, timestamp_generation_failure=%d, "
+          "timestamp_is_modified=%d",
+          GST_TIME_ARGS (stream->stai_pending_tai_ts), synchronization_state,
+          timestamp_generation_failure, timestamp_is_modified);
+
+      tai_meta->info =
+          gst_structure_new ("iso23001-17-timestamp",
+          "synchronization-state", G_TYPE_BOOLEAN, synchronization_state,
+          "timestamp-generation-failure", G_TYPE_BOOLEAN,
+          timestamp_generation_failure, "timestamp-is-modified", G_TYPE_BOOLEAN,
+          timestamp_is_modified, NULL);
+    }
+    gst_caps_unref (caps);
+    stream->stai_pending_valid = FALSE;
   }
 
   GST_BUFFER_OFFSET (buf) = -1;
@@ -7710,6 +7861,51 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
     pts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
     dts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
     duration = size / CUR_STREAM (stream)->bytes_per_frame;
+  }
+
+  /* Read STAI (TAI timestamp) data for this sample in pull mode */
+  stream->stai_pending_valid = FALSE;
+  if (stream->aux_stai.present) {
+    guint64 stai_offset = qtdemux_aux_info_offset_for_sample (&stream->aux_stai,
+        stream->sample_index);
+
+    if (stai_offset > 0) {
+      guint8 stai_size = stream->aux_stai.sample_sizes[stream->sample_index];
+      GstBuffer *stai_buf = NULL;
+      GstMapInfo stai_map;
+
+      GST_DEBUG_OBJECT (qtdemux,
+          "STAI pulling sample %u: offset=%" G_GUINT64_FORMAT " size=%u",
+          stream->sample_index, stai_offset, stai_size);
+
+      ret = gst_qtdemux_pull_atom (qtdemux, stai_offset, stai_size, &stai_buf);
+      if (G_UNLIKELY (ret != GST_FLOW_OK)) {
+        GST_WARNING_OBJECT (qtdemux, "STAI sample %u: pull failed ret=%s",
+            stream->sample_index, gst_flow_get_name (ret));
+        goto beach;
+      }
+
+      gst_buffer_map (stai_buf, &stai_map, GST_MAP_READ);
+      if (stai_map.size >= 9) {
+        stream->stai_pending_tai_ts = GST_READ_UINT64_BE (stai_map.data);
+        stream->stai_pending_flags = stai_map.data[8];
+        stream->stai_pending_valid = TRUE;
+        GST_TRACE_OBJECT (qtdemux,
+            "STAI sample %u: TAI ts=%" G_GUINT64_FORMAT " flags=0x%02x",
+            stream->sample_index, stream->stai_pending_tai_ts,
+            stream->stai_pending_flags);
+      } else {
+        GST_WARNING_OBJECT (qtdemux,
+            "STAI sample %u: map size %" G_GSIZE_FORMAT " < 9",
+            stream->sample_index, stai_map.size);
+      }
+      gst_buffer_unmap (stai_buf, &stai_map);
+      gst_buffer_unref (stai_buf);
+    } else {
+      GST_WARNING_OBJECT (qtdemux,
+          "STAI sample %u: offset is 0 (stai_sample_count=%u)",
+          stream->sample_index, stream->aux_stai.sample_count);
+    }
   }
 
   ret = gst_qtdemux_decorate_and_push_buffer (qtdemux, stream, buf,
@@ -11139,6 +11335,11 @@ qtdemux_stbl_init (GstQTDemux * qtdemux, QtDemuxStream * stream, GNode * stbl)
     qtdemux_merge_sample_table (qtdemux, stream);
   }
 
+  /* TAI precision timestamps: look for saiz/saio with aux_info_type "stai" */
+  if (!qtdemux_aux_info_parse_stbl (qtdemux, stream, stbl, FOURCC_stai,
+          &stream->aux_stai))
+    goto corrupt_file;
+
 done:
   GST_DEBUG_OBJECT (qtdemux, "allocating n_samples %u * %u (%.2f MB)",
       stream->n_samples, (guint) sizeof (QtDemuxSample),
@@ -11171,6 +11372,7 @@ corrupt_file:
 no_samples:
   {
     gst_qtdemux_stbl_free (stream);
+    qtdemux_aux_info_clear (&stream->aux_stai);
     if (!qtdemux->fragmented) {
       /* not quite good */
       GST_WARNING_OBJECT (qtdemux, "stream has no samples");
