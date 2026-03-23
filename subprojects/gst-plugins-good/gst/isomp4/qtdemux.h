@@ -621,6 +621,11 @@ struct _QtDemuxStream
   guint64 stai_pending_tai_ts;         /* TAI nanoseconds since 1958-01-01 */
   guint8 stai_pending_flags;           /* STAI flags byte */
 
+  /* GIMI per-sample Content ID (SUID aux info) */
+  QtDemuxAuxInfo aux_suid;
+  gboolean suid_pending_valid;  /* pending suid data for decorate */
+  gchar *suid_pending_content_id;       /* content-id string (owned) */
+
   /* Push mode: queued buffers awaiting auxiliary data at end of chunk */
   GQueue aux_pending_buffers;  /* of QtDemuxAuxPendingBuffer* */
 

@@ -2653,6 +2653,7 @@ gst_qtdemux_stream_flush_samples_data (QtDemuxStream * stream)
   gst_qtdemux_stbl_free (stream);
 
   qtdemux_aux_info_clear (&stream->aux_stai);
+  qtdemux_aux_info_clear (&stream->aux_suid);
 
   /* fragments */
   g_free (stream->ra_entries);
@@ -2687,6 +2688,8 @@ gst_qtdemux_stream_clear (QtDemuxStream * stream)
     gst_buffer_unref (pending->buf);
     g_free (pending);
   }
+  g_free (stream->suid_pending_content_id);
+  stream->suid_pending_content_id = NULL;
   for (i = 0; i < stream->stsd_entries_length; i++) {
     QtDemuxStreamStsdEntry *entry = &stream->stsd_entries[i];
     if (entry->rgb8_palette) {
@@ -7392,6 +7395,23 @@ gst_qtdemux_decorate_and_push_buffer (GstQTDemux * qtdemux,
     stream->stai_pending_valid = FALSE;
   }
 
+  if (stream->suid_pending_valid && stream->suid_pending_content_id) {
+    GstCustomMeta *suid_meta =
+        gst_buffer_add_custom_meta (buf, "GimiContentID");
+    if (suid_meta) {
+      GstStructure *s = gst_custom_meta_get_structure (suid_meta);
+
+      gst_structure_set (s, "content-id", G_TYPE_STRING,
+          stream->suid_pending_content_id, NULL);
+      GST_LOG_OBJECT (stream->pad,
+          "Adding GimiContentID meta with content-id=%s",
+          stream->suid_pending_content_id);
+    }
+    g_free (stream->suid_pending_content_id);
+    stream->suid_pending_content_id = NULL;
+    stream->suid_pending_valid = FALSE;
+  }
+
   GST_BUFFER_OFFSET (buf) = -1;
   GST_BUFFER_OFFSET_END (buf) = -1;
 
@@ -7911,6 +7931,40 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
       GST_WARNING_OBJECT (qtdemux,
           "STAI sample %u: offset is 0 (stai_sample_count=%u)",
           stream->sample_index, stream->aux_stai.sample_count);
+    }
+  }
+
+  /* Read SUID (GIMI Content ID) data for this sample in pull mode */
+  g_free (stream->suid_pending_content_id);
+  stream->suid_pending_content_id = NULL;
+  stream->suid_pending_valid = FALSE;
+  if (stream->aux_suid.present) {
+    guint64 suid_offset = qtdemux_aux_info_offset_for_sample (&stream->aux_suid,
+        stream->sample_index);
+
+    if (suid_offset > 0) {
+      guint8 suid_size = stream->aux_suid.sample_sizes[stream->sample_index];
+      GstBuffer *suid_buf = NULL;
+      GstFlowReturn suid_ret;
+
+      suid_ret =
+          gst_qtdemux_pull_atom (qtdemux, suid_offset, suid_size, &suid_buf);
+      if (G_LIKELY (suid_ret == GST_FLOW_OK)) {
+        GstMapInfo suid_map;
+
+        gst_buffer_map (suid_buf, &suid_map, GST_MAP_READ);
+        if (suid_map.size > 0) {
+          /* suid is a null-terminated UTF-8 string */
+          stream->suid_pending_content_id =
+              g_strndup ((const gchar *) suid_map.data, suid_map.size);
+          stream->suid_pending_valid = TRUE;
+          GST_LOG_OBJECT (qtdemux,
+              "SUID sample %u: GIMI ContentID=%s",
+              stream->sample_index, stream->suid_pending_content_id);
+        }
+        gst_buffer_unmap (suid_buf, &suid_map);
+        gst_buffer_unref (suid_buf);
+      }
     }
   }
 
@@ -8592,18 +8646,20 @@ gst_qtdemux_chain (GstPad * sinkpad, GstObject * parent, GstBuffer * inbuf)
   return gst_qtdemux_process_adapter (demux, FALSE);
 }
 
-/* Flush the STAI pending buffer queue for a stream, optionally attaching
- * TAI timestamps from the provided STAI data.  If @stai_data is NULL, the
- * queued buffers are pushed without TAI meta (e.g. at EOS or when STAI data
- * was not found in the expected todrop range). */
+/* Flush the auxiliary pending buffer queue for a stream, optionally attaching
+ * TAI timestamps from the provided STAI data and/or GIMI Content IDs from
+ * SUID data.  If data pointers are NULL, the corresponding metas are not
+ * attached (e.g. at EOS or when aux data was not found in todrop). */
 static GstFlowReturn
 gst_qtdemux_aux_flush_pending (GstQTDemux * demux, QtDemuxStream * stream,
-    const guint8 * stai_data, gsize stai_data_size)
+    const guint8 * stai_data, gsize stai_data_size,
+    const guint8 * suid_data, gsize suid_data_size)
 {
   GstFlowReturn ret = GST_FLOW_OK;
   QtDemuxAuxPendingBuffer *pending;
   guint idx = 0;
   guint64 stai_pos = 0;
+  guint64 suid_pos = 0;
 
   while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
     if (stai_data && stream->aux_stai.present) {
@@ -8623,6 +8679,25 @@ gst_qtdemux_aux_flush_pending (GstQTDemux * demux, QtDemuxStream * stream,
             idx, stream->stai_pending_tai_ts, stream->stai_pending_flags);
       }
       stai_pos += stai_sample_size;
+    }
+
+    if (suid_data) {
+      guint8 suid_sample_size = 0;
+
+      if (stream->aux_suid.present && idx < stream->aux_suid.sample_count)
+        suid_sample_size = stream->aux_suid.sample_sizes[idx];
+
+      if (suid_sample_size > 0 && suid_pos + suid_sample_size <= suid_data_size) {
+        g_free (stream->suid_pending_content_id);
+        stream->suid_pending_content_id =
+            g_strndup ((const gchar *) (suid_data + suid_pos),
+            suid_sample_size);
+        stream->suid_pending_valid = TRUE;
+        GST_LOG_OBJECT (demux,
+            "SUID push pending %u: content-id=%s",
+            idx, stream->suid_pending_content_id);
+      }
+      suid_pos += suid_sample_size;
     }
 
     ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, pending->buf,
@@ -9134,11 +9209,15 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             gst_adapter_unmap (demux->adapter);
           }
 
-          /* Check if any stream has STAI data in this todrop range */
+          /* Check if any stream has auxiliary data in this todrop range */
           for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
             QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
             guint64 stai_abs_offset = 0;
             guint32 stai_total_size = 0;
+            guint64 suid_abs_offset = 0;
+            guint32 suid_total_size = 0;
+            const guint8 *stai_ptr = NULL;
+            const guint8 *suid_ptr = NULL;
             guint n_pending;
 
             n_pending = g_queue_get_length (&s->aux_pending_buffers);
@@ -9155,16 +9234,21 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
                 stai_abs_offset = soff;
             }
 
-            if (stai_abs_offset == 0)
+            /* Determine the absolute SUID offset for this stream's chunk */
+            if (s->aux_suid.present) {
+              QtDemuxAuxPendingBuffer *first =
+                  g_queue_peek_head (&s->aux_pending_buffers);
+              guint64 soff = qtdemux_aux_info_offset_for_sample (&s->aux_suid,
+                  first->byte_position == 0 ? 0 : s->sample_index - n_pending);
+              if (soff > 0)
+                suid_abs_offset = soff;
+            }
+
+            if (stai_abs_offset == 0 && suid_abs_offset == 0)
               continue;
 
-            /* Check overlap with todrop range [demux->offset, +todrop) */
-            if (stai_abs_offset >= demux->offset
-                && stai_abs_offset < demux->offset + demux->todrop) {
-              const guint8 *drop_data;
-              guint64 rel_offset = stai_abs_offset - demux->offset;
-
-              /* Compute how much STAI data to read */
+            /* Compute total STAI data size for pending samples */
+            if (stai_abs_offset > 0) {
               for (guint j = 0; j < n_pending; j++) {
                 if (s->aux_stai.present
                     && (s->sample_index - n_pending + j) <
@@ -9174,23 +9258,52 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
                 else
                   stai_total_size += 9;
               }
+            }
 
-              if (rel_offset + stai_total_size <= demux->todrop) {
-                drop_data = gst_adapter_map (demux->adapter, demux->todrop);
-                ret =
-                    gst_qtdemux_aux_flush_pending (demux, s,
-                    drop_data + rel_offset, stai_total_size);
-                gst_adapter_unmap (demux->adapter);
-
-                if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
-                  goto done;
-              } else {
-                GST_WARNING_OBJECT (demux,
-                    "STAI data extends beyond todrop, flushing without TAI");
-                ret = gst_qtdemux_aux_flush_pending (demux, s, NULL, 0);
-                if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
-                  goto done;
+            /* Compute total SUID data size for pending samples */
+            if (suid_abs_offset > 0) {
+              for (guint j = 0; j < n_pending; j++) {
+                if (s->aux_suid.present
+                    && (s->sample_index - n_pending + j) <
+                    s->aux_suid.sample_count)
+                  suid_total_size +=
+                      s->aux_suid.sample_sizes[s->sample_index - n_pending + j];
               }
+            }
+
+            {
+              const guint8 *drop_data =
+                  gst_adapter_map (demux->adapter, demux->todrop);
+
+              /* Resolve STAI pointer within todrop range */
+              if (stai_abs_offset >= demux->offset
+                  && stai_abs_offset < demux->offset + demux->todrop) {
+                guint64 rel = stai_abs_offset - demux->offset;
+
+                if (rel + stai_total_size <= demux->todrop)
+                  stai_ptr = drop_data + rel;
+                else
+                  GST_WARNING_OBJECT (demux, "STAI data extends beyond todrop");
+              }
+
+              /* Resolve SUID pointer within todrop range */
+              if (suid_abs_offset >= demux->offset
+                  && suid_abs_offset < demux->offset + demux->todrop) {
+                guint64 rel = suid_abs_offset - demux->offset;
+
+                if (rel + suid_total_size <= demux->todrop)
+                  suid_ptr = drop_data + rel;
+                else
+                  GST_WARNING_OBJECT (demux, "SUID data extends beyond todrop");
+              }
+
+              ret =
+                  gst_qtdemux_aux_flush_pending (demux, s,
+                  stai_ptr, stai_total_size, suid_ptr, suid_total_size);
+              gst_adapter_unmap (demux->adapter);
+
+              if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+                goto done;
             }
           }
 
@@ -9291,8 +9404,8 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             /* FIXME: should either be an assert or a plain check */
             g_return_val_if_fail (outbuf != NULL, GST_FLOW_ERROR);
 
-            if (stream->aux_stai.present) {
-              /* Queue buffer for later push when STAI data arrives in todrop */
+            if (stream->aux_stai.present || stream->aux_suid.present) {
+              /* Queue buffer for later push when aux data arrives in todrop */
               QtDemuxAuxPendingBuffer *pending =
                   g_new0 (QtDemuxAuxPendingBuffer, 1);
               pending->buf = outbuf;
@@ -9334,11 +9447,11 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
 
 
         if (ret == GST_FLOW_EOS) {
-          /* Flush any remaining STAI pending buffers without TAI meta */
+          /* Flush any remaining pending buffers without aux meta */
           for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
             QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
             if (!g_queue_is_empty (&s->aux_pending_buffers))
-              gst_qtdemux_aux_flush_pending (demux, s, NULL, 0);
+              gst_qtdemux_aux_flush_pending (demux, s, NULL, 0, NULL, 0);
           }
           GST_DEBUG_OBJECT (demux, "All streams are EOS, signal upstream");
           demux->neededbytes = -1;
@@ -11487,6 +11600,10 @@ qtdemux_stbl_init (GstQTDemux * qtdemux, QtDemuxStream * stream, GNode * stbl)
           &stream->aux_stai))
     goto corrupt_file;
 
+  /* GIMI Content ID: look for saiz/saio with aux_info_type "suid" */
+  qtdemux_aux_info_parse_stbl (qtdemux, stream, stbl, FOURCC_suid,
+      &stream->aux_suid);
+
 done:
   GST_DEBUG_OBJECT (qtdemux, "allocating n_samples %u * %u (%.2f MB)",
       stream->n_samples, (guint) sizeof (QtDemuxSample),
@@ -11520,6 +11637,7 @@ no_samples:
   {
     gst_qtdemux_stbl_free (stream);
     qtdemux_aux_info_clear (&stream->aux_stai);
+    qtdemux_aux_info_clear (&stream->aux_suid);
     if (!qtdemux->fragmented) {
       /* not quite good */
       GST_WARNING_OBJECT (qtdemux, "stream has no samples");

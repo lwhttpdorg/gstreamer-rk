@@ -502,6 +502,8 @@ G_BEGIN_DECLS
 #define FOURCC_taic     GST_MAKE_FOURCC ('t','a','i','c')
 #define FOURCC_stai     GST_MAKE_FOURCC ('s','t','a','i')
 
+/* GIMI Content ID */
+#define FOURCC_suid     GST_MAKE_FOURCC ('s','u','i','d')
 
 G_END_DECLS
 

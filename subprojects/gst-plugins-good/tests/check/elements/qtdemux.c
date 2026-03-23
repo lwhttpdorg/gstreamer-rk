@@ -1986,6 +1986,13 @@ static const guint8 tai_test_mp4[] = {
 static const guint64 tai_expected_timestamps[] = { 1, 2, 3 };
 static const guint8 tai_expected_flags[] = { 0x40, 0x40, 0x40 };
 
+/* Expected GIMI Content IDs for the 3 samples in tai_test_mp4 */
+static const gchar *suid_expected_content_ids[] = {
+  "urn:uuid:019d0e27-4ce8-7c50-abdd-bae2eb687b93",
+  "urn:uuid:019d0e27-4ce8-7c50-abdd-baf3ba49a785",
+  "urn:uuid:019d0e27-4ce8-7c50-abdd-bb0636a84a88",
+};
+
 /* Helper: create a data: URI from an inline MP4 byte array for use
  * with dataurisrc.  Caller must g_free() the result. */
 static gchar *
@@ -2771,6 +2778,125 @@ GST_START_TEST (test_qtdemux_tai_push)
 
 GST_END_TEST;
 
+GST_START_TEST (test_qtdemux_gimi)
+{
+  GstHarness *h;
+  GstElement *qtdemux;
+  gchar *uri;
+  guint i;
+
+  h = gst_harness_new_parse ("dataurisrc name=src ! qtdemux name=d");
+
+  {
+    GstElement *src = gst_bin_get_by_name (GST_BIN (h->element), "src");
+    uri = tai_make_data_uri (tai_test_mp4, sizeof (tai_test_mp4));
+    g_object_set (src, "uri", uri, NULL);
+    g_free (uri);
+    gst_object_unref (src);
+  }
+
+  qtdemux = gst_bin_get_by_name (GST_BIN (h->element), "d");
+  g_signal_connect (qtdemux, "pad-added", G_CALLBACK (tai_pad_added_cb), h);
+  gst_object_unref (qtdemux);
+
+  gst_element_set_state (h->element, GST_STATE_PLAYING);
+
+  for (i = 0; i < 3; i++) {
+    GstBuffer *outbuf;
+    GstCustomMeta *suid_meta;
+    const gchar *content_id;
+
+    outbuf = gst_harness_pull (h);
+    fail_unless (outbuf != NULL, "expected buffer %u", i);
+
+    suid_meta = gst_buffer_get_custom_meta (outbuf, "GimiContentID");
+    fail_unless (suid_meta != NULL, "buffer %u missing GimiContentID meta", i);
+    content_id =
+        gst_structure_get_string (gst_custom_meta_get_structure (suid_meta),
+        "content-id");
+    fail_unless (content_id != NULL,
+        "buffer %u GimiContentID meta missing content-id field", i);
+    fail_unless_equals_string (content_id, suid_expected_content_ids[i]);
+
+    gst_buffer_unref (outbuf);
+  }
+
+  gst_element_set_state (h->element, GST_STATE_NULL);
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_qtdemux_gimi_push)
+{
+  GstElement *pipe, *src, *sink, *qtdemux;
+  GstPad *qtdemux_sinkpad;
+  GstSample *sample;
+  GstBuffer *buf;
+  GstMessage *msg;
+  gulong scheduling_probe_id;
+  gchar *uri;
+  guint i;
+
+  pipe = gst_parse_launch ("dataurisrc name=src ! qtdemux name=d "
+      "d. ! appsink name=sink", NULL);
+  fail_unless (pipe != NULL);
+
+  src = gst_bin_get_by_name (GST_BIN (pipe), "src");
+  sink = gst_bin_get_by_name (GST_BIN (pipe), "sink");
+  qtdemux = gst_bin_get_by_name (GST_BIN (pipe), "d");
+  fail_unless (src != NULL && sink != NULL && qtdemux != NULL);
+
+  qtdemux_sinkpad = gst_element_get_static_pad (qtdemux, "sink");
+  fail_unless (qtdemux_sinkpad != NULL);
+  scheduling_probe_id = gst_pad_add_probe (qtdemux_sinkpad,
+      GST_PAD_PROBE_TYPE_QUERY_UPSTREAM,
+      qtdemux_force_push_scheduling_probe, NULL, NULL);
+  fail_unless (scheduling_probe_id != 0);
+
+  uri = tai_make_data_uri (tai_test_mp4, sizeof (tai_test_mp4));
+  g_object_set (src, "uri", uri, NULL);
+  g_free (uri);
+  g_object_set (sink, "sync", FALSE, NULL);
+
+  gst_element_set_state (pipe, GST_STATE_PLAYING);
+
+  msg = gst_bus_timed_pop_filtered (GST_ELEMENT_BUS (pipe), -1,
+      GST_MESSAGE_ASYNC_DONE);
+  gst_message_unref (msg);
+
+  for (i = 0; i < 3; i++) {
+    GstCustomMeta *suid_meta;
+    const gchar *content_id;
+
+    sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+    fail_unless (sample != NULL, "expected sample %u in push mode", i);
+    buf = gst_sample_get_buffer (sample);
+
+    suid_meta = gst_buffer_get_custom_meta (buf, "GimiContentID");
+    fail_unless (suid_meta != NULL,
+        "push-mode buffer %u missing GimiContentID meta", i);
+    content_id =
+        gst_structure_get_string (gst_custom_meta_get_structure (suid_meta),
+        "content-id");
+    fail_unless (content_id != NULL,
+        "push-mode buffer %u GimiContentID missing content-id", i);
+    fail_unless_equals_string (content_id, suid_expected_content_ids[i]);
+
+    gst_sample_unref (sample);
+  }
+
+  gst_element_set_state (pipe, GST_STATE_NULL);
+  gst_pad_remove_probe (qtdemux_sinkpad, scheduling_probe_id);
+  gst_object_unref (qtdemux_sinkpad);
+  gst_object_unref (src);
+  gst_object_unref (sink);
+  gst_object_unref (qtdemux);
+  gst_object_unref (pipe);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_qtdemux_tai_push_seek)
 {
   GstElement *pipe, *src, *sink, *qtdemux;
@@ -2975,6 +3101,8 @@ qtdemux_suite (void)
   tcase_add_test (tc_chain, test_qtdemux_tai_seek);
   tcase_add_test (tc_chain, test_qtdemux_tai_reverse);
   tcase_add_test (tc_chain, test_qtdemux_tai_push);
+  tcase_add_test (tc_chain, test_qtdemux_gimi);
+  tcase_add_test (tc_chain, test_qtdemux_gimi_push);
   tcase_add_test (tc_chain, test_qtdemux_tai_push_seek);
   tcase_add_test (tc_chain, test_qtdemux_tai_push_reverse);
 

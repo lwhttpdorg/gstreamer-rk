@@ -69,7 +69,7 @@ isomp4_element_init (GstPlugin * plugin)
           "ISO/IEC 23001-17 TAI Clock type information", NULL);
 
     if (!gst_tag_exists (GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY))
-      gst_tag_register_static (GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY,
+      gst_tag_register_static (GST_QT_xDEMUX_PRECISION_TIME_UNCERTAINTY,
           GST_TAG_FLAG_META, G_TYPE_UINT64,
           GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY,
           "ISO/IEC 23001-17 TAI Clock time uncertainty (in nanoseconds) information",
@@ -81,6 +81,8 @@ isomp4_element_init (GstPlugin * plugin)
           GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML,
           "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
           " and Reconnaissance (ISR) (GIMI) Security Markings XML", NULL);
+
+    gst_meta_register_custom_simple ("GimiContentID");
 
     g_once_init_leave (&res, TRUE);
   }
