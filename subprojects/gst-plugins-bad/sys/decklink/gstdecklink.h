@@ -513,6 +513,8 @@ GstVideoColorRange gst_decklink_pixel_format_to_range (BMDPixelFormat pf);
 const gint gst_decklink_bpp_from_type (GstDecklinkVideoFormat t);
 const GstDecklinkVideoFormat gst_decklink_type_from_video_format (GstVideoFormat f);
 GstVideoFormat gst_decklink_video_format_from_type (BMDPixelFormat pf);
+gboolean gst_decklink_pixel_format_is_yuv (BMDPixelFormat f);
+gboolean gst_decklink_pixel_formats_same_colorspace (BMDPixelFormat a, BMDPixelFormat b);
 const BMDTimecodeFormat gst_decklink_timecode_format_from_enum (GstDecklinkTimecodeFormat f);
 const GstDecklinkTimecodeFormat gst_decklink_timecode_format_to_enum (BMDTimecodeFormat f);
 const BMDProfileID gst_decklink_profile_id_from_enum (GstDecklinkProfileId p);
@@ -588,6 +590,10 @@ struct _GstDecklinkInput {
   const GstDecklinkMode *mode;
   BMDPixelFormat format;
   gboolean auto_format;
+  /* Preferred pixel format from downstream caps negotiation,
+   * or bmdFormatUnspecified if no preference.
+   * Must be same colorspace as the detected signal format. */
+  BMDPixelFormat preferred_format;
 
   /* Set by the audio source */
   void (*got_audio_packet) (GstElement *videosrc, IDeckLinkAudioInputPacket * packet, GstClockTime capture_time, GstClockTime stream_time, GstClockTime stream_duration, GstClockTime hardware_time, GstClockTime hardware_duration, gboolean no_signal);

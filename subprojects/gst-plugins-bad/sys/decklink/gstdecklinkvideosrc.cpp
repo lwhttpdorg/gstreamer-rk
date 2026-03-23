@@ -251,6 +251,15 @@ static gboolean gst_decklink_video_src_stop (GstDecklinkVideoSrc * self);
 
 static gboolean gst_decklink_video_src_start_streams (GstElement * element);
 
+static GstCaps *gst_decklink_video_src_fixate (GstBaseSrc * bsrc,
+    GstCaps * caps);
+static gboolean gst_decklink_video_src_negotiate (GstBaseSrc * bsrc);
+static BMDPixelFormat gst_decklink_video_src_get_peer_preferred_format (
+    GstDecklinkVideoSrc * self);
+static gboolean gst_decklink_video_src_reconfigure_format (
+    GstDecklinkVideoSrc * self, BMDPixelFormat preferred,
+    BMDPixelFormat current_format);
+
 #define parent_class gst_decklink_video_src_parent_class
 G_DEFINE_TYPE (GstDecklinkVideoSrc, gst_decklink_video_src, GST_TYPE_PUSH_SRC);
 GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (decklinkvideosrc, "decklinkvideosrc", GST_RANK_NONE,
@@ -273,7 +282,8 @@ gst_decklink_video_src_class_init (GstDecklinkVideoSrcClass * klass)
       GST_DEBUG_FUNCPTR (gst_decklink_video_src_change_state);
 
   basesrc_class->query = GST_DEBUG_FUNCPTR (gst_decklink_video_src_query);
-  basesrc_class->negotiate = NULL;
+  basesrc_class->negotiate = GST_DEBUG_FUNCPTR (gst_decklink_video_src_negotiate);
+  basesrc_class->fixate = GST_DEBUG_FUNCPTR (gst_decklink_video_src_fixate);
   basesrc_class->get_caps = GST_DEBUG_FUNCPTR (gst_decklink_video_src_get_caps);
   basesrc_class->unlock = GST_DEBUG_FUNCPTR (gst_decklink_video_src_unlock);
   basesrc_class->unlock_stop =
@@ -464,8 +474,6 @@ gst_decklink_video_src_init (GstDecklinkVideoSrc * self)
 
   gst_base_src_set_live (GST_BASE_SRC (self), TRUE);
   gst_base_src_set_format (GST_BASE_SRC (self), GST_FORMAT_TIME);
-
-  gst_pad_use_fixed_caps (GST_BASE_SRC_PAD (self));
 
   g_mutex_init (&self->lock);
   g_cond_init (&self->cond);
@@ -1791,6 +1799,46 @@ retry:
   self->expected_stream_time = f.stream_timestamp + f.stream_duration;
 
   g_mutex_unlock (&self->lock);
+
+  /* Check if downstream prefers a different pixel format.
+   * Do this AFTER releasing self->lock to avoid deadlock with
+   * VideoInputFormatChanged which holds input->lock then takes self->lock.
+   *
+   * In AUTO mode, negotiate() couldn't run before the signal was detected.
+   * Now that we know the actual format, query downstream and pick the
+   * best match (colorspace-aware via our fixate vfunc).
+   *
+   * Only same-colorspace conversions are attempted (e.g. ARGB→BGRA,
+   * v210→UYVY).  If the preferred format is cross-colorspace, let the
+   * frame pass through — the real signal will reveal the true
+   * colorspace and trigger renegotiation. */
+  if (caps_changed && self->video_format == GST_DECKLINK_VIDEO_FORMAT_AUTO
+      && self->input) {
+    BMDPixelFormat preferred =
+        gst_decklink_video_src_get_peer_preferred_format (self);
+
+    if (preferred != bmdFormatUnspecified && preferred != f.format) {
+      gboolean reconfigured =
+          gst_decklink_video_src_reconfigure_format (self, preferred,
+              f.format);
+
+      if (reconfigured) {
+        /* Same-colorspace reconfigure succeeded, retry to get a frame
+         * in the new pixel format. */
+        capture_frame_clear (&f);
+        gst_clear_buffer (buffer);
+        g_mutex_lock (&self->lock);
+        self->expected_stream_time = GST_CLOCK_TIME_NONE;
+        goto retry;
+      }
+
+      if (f.no_signal)
+        GST_DEBUG_OBJECT (self,
+            "No signal yet, deferring format decision (preferred 0x%x, "
+            "current 0x%x)", preferred, f.format);
+    }
+  }
+
   if (caps_changed) {
     char *colorimetry;
     const GstDecklinkMode *gst_mode = gst_decklink_get_mode (f.mode);
@@ -1852,6 +1900,217 @@ retry:
   return flow_ret;
 }
 
+/* Convert a GstCaps structure's format field to BMDPixelFormat.
+ * Returns bmdFormatUnspecified if the format cannot be mapped. */
+static BMDPixelFormat
+gst_decklink_bmd_pixel_format_from_structure (const GstStructure * s)
+{
+  const gchar *fmt_str = gst_structure_get_string (s, "format");
+  if (!fmt_str)
+    return bmdFormatUnspecified;
+
+  GstVideoFormat vfmt = gst_video_format_from_string (fmt_str);
+  GstDecklinkVideoFormat dtype = gst_decklink_type_from_video_format (vfmt);
+  if (dtype == GST_DECKLINK_VIDEO_FORMAT_AUTO)
+    return bmdFormatUnspecified;
+  return gst_decklink_pixel_format_from_type (dtype);
+}
+
+/* fixate() vfunc: reorder caps so same-colorspace formats come first.
+ *
+ * When video-format=auto, the Decklink card can do hardware pixel format
+ * conversion.  Same-colorspace conversions (e.g. ARGB→BGRA) are reliable
+ * on all cards, while cross-colorspace (e.g. RGB→YUV) may cause signal
+ * loss on some models.  By placing same-colorspace structures first in
+ * the caps, gst_caps_fixate() will naturally prefer them. */
+static GstCaps *
+gst_decklink_video_src_fixate (GstBaseSrc * bsrc, GstCaps * caps)
+{
+  GstDecklinkVideoSrc *self = GST_DECKLINK_VIDEO_SRC_CAST (bsrc);
+  BMDPixelFormat hw_format;
+
+  if (self->video_format != GST_DECKLINK_VIDEO_FORMAT_AUTO || !self->input)
+    return gst_caps_fixate (caps);
+
+  g_mutex_lock (&self->input->lock);
+  hw_format = self->input->format;
+  g_mutex_unlock (&self->input->lock);
+
+  /* Partition structures: same-colorspace first, cross-colorspace after */
+  GstCaps *preferred = gst_caps_new_empty ();
+  GstCaps *other = gst_caps_new_empty ();
+
+  for (guint i = 0; i < gst_caps_get_size (caps); i++) {
+    GstStructure *s = gst_structure_copy (gst_caps_get_structure (caps, i));
+    GstCapsFeatures *f =
+        gst_caps_features_copy (gst_caps_get_features (caps, i));
+    BMDPixelFormat bmd_fmt = gst_decklink_bmd_pixel_format_from_structure (s);
+
+    if (bmd_fmt != bmdFormatUnspecified
+        && gst_decklink_pixel_formats_same_colorspace (bmd_fmt, hw_format)) {
+      gst_caps_append_structure_full (preferred, s, f);
+    } else {
+      gst_caps_append_structure_full (other, s, f);
+    }
+  }
+
+  gst_caps_append (preferred, other);
+  gst_caps_unref (caps);
+
+  return gst_caps_fixate (preferred);
+}
+
+/* Reconfigure hardware pixel format.  Caller must NOT hold self->lock.
+ * Only same-colorspace conversions are allowed (e.g. ARGB→BGRA,
+ * v210→UYVY).  Cross-colorspace overrides cause the SDK to fire
+ * VideoInputFormatChanged in a loop and are rejected here.
+ * Returns TRUE if format was changed, FALSE otherwise. */
+static gboolean
+gst_decklink_video_src_reconfigure_format (GstDecklinkVideoSrc * self,
+    BMDPixelFormat preferred, BMDPixelFormat current_format)
+{
+  if (preferred == current_format)
+    return FALSE;
+
+  /* Reject cross-colorspace conversion */
+  if (!gst_decklink_pixel_formats_same_colorspace (preferred, current_format)) {
+    GST_DEBUG_OBJECT (self,
+        "Ignoring cross-colorspace format 0x%x (current 0x%x) — "
+        "use videoconvert for colorspace conversion",
+        preferred, current_format);
+    return FALSE;
+  }
+
+  g_mutex_lock (&self->input->lock);
+  self->input->preferred_format = preferred;
+
+  if (!self->input->input) {
+    g_mutex_unlock (&self->input->lock);
+    return FALSE;
+  }
+
+  GST_INFO_OBJECT (self,
+      "Downstream prefers pixel format 0x%x, current 0x%x — reconfiguring",
+      preferred, current_format);
+  self->input->input->PauseStreams ();
+  HRESULT hr = self->input->input->EnableVideoInput (
+      self->input->mode->mode, preferred,
+      bmdVideoInputEnableFormatDetection);
+  if (hr == S_OK) {
+    self->input->format = preferred;
+    self->input->input->FlushStreams ();
+    self->input->input->StartStreams ();
+    g_mutex_unlock (&self->input->lock);
+    return TRUE;
+  }
+
+  /* Card rejected the preferred format — restore the original */
+  GST_WARNING_OBJECT (self,
+      "Card rejected pixel format 0x%x, keeping 0x%x",
+      preferred, current_format);
+  self->input->preferred_format = current_format;
+  hr = self->input->input->EnableVideoInput (
+      self->input->mode->mode, current_format,
+      bmdVideoInputEnableFormatDetection);
+  self->input->input->FlushStreams ();
+  self->input->input->StartStreams ();
+  g_mutex_unlock (&self->input->lock);
+  return FALSE;
+}
+
+/* Query downstream for its preferred pixel format.
+ *
+ * Returns bmdFormatUnspecified if downstream has no preference (accepts
+ * ANY) or if the preferred format cannot be determined.  The result is
+ * colorspace-aware: same-colorspace formats are preferred thanks to our
+ * fixate() vfunc which reorders caps before fixation. */
+static BMDPixelFormat
+gst_decklink_video_src_get_peer_preferred_format (GstDecklinkVideoSrc * self)
+{
+  GstBaseSrc *basesrc = GST_BASE_SRC_CAST (self);
+  GstCaps *raw_peer, *thiscaps, *peercaps, *fixated;
+  BMDPixelFormat result = bmdFormatUnspecified;
+
+  /* Check if downstream actually constrains the format.
+   * Query without filter — if peer accepts ANY, there is no preference. */
+  raw_peer = gst_pad_peer_query_caps (GST_BASE_SRC_PAD (self), NULL);
+  if (!raw_peer || gst_caps_is_any (raw_peer) || gst_caps_is_empty (raw_peer)) {
+    if (raw_peer)
+      gst_caps_unref (raw_peer);
+    return bmdFormatUnspecified;
+  }
+  gst_caps_unref (raw_peer);
+
+  /* Standard flow: our caps → intersect with peer → fixate */
+  thiscaps = gst_pad_query_caps (GST_BASE_SRC_PAD (self), NULL);
+  if (!thiscaps || gst_caps_is_any (thiscaps)) {
+    if (thiscaps)
+      gst_caps_unref (thiscaps);
+    return bmdFormatUnspecified;
+  }
+
+  peercaps = gst_pad_peer_query_caps (GST_BASE_SRC_PAD (self), thiscaps);
+  gst_caps_unref (thiscaps);
+
+  if (!peercaps || gst_caps_is_any (peercaps) || gst_caps_is_empty (peercaps)) {
+    if (peercaps)
+      gst_caps_unref (peercaps);
+    return bmdFormatUnspecified;
+  }
+
+  /* fixate() reorders caps for same-colorspace preference */
+  fixated = GST_BASE_SRC_GET_CLASS (basesrc)->fixate (basesrc, peercaps);
+
+  if (gst_caps_is_fixed (fixated)) {
+    GstVideoInfo vinfo;
+    if (gst_video_info_from_caps (&vinfo, fixated)) {
+      GstDecklinkVideoFormat dtype =
+          gst_decklink_type_from_video_format (GST_VIDEO_INFO_FORMAT (&vinfo));
+      result = gst_decklink_pixel_format_from_type (dtype);
+    }
+  }
+  gst_caps_unref (fixated);
+
+  return result;
+}
+
+/* negotiate() vfunc: query downstream format preference.
+ *
+ * When mode is already detected (e.g. mode property set, or after a
+ * signal change), run the full colorspace-aware fixation and reconfigure
+ * the hardware immediately.
+ *
+ * When mode is still AUTO (signal not yet detected), we cannot make a
+ * colorspace-aware decision because we don't know the signal's native
+ * format yet.  In that case, do nothing — create() will handle it once
+ * the first frame reveals the actual format. */
+static gboolean
+gst_decklink_video_src_negotiate (GstBaseSrc * bsrc)
+{
+  GstDecklinkVideoSrc *self = GST_DECKLINK_VIDEO_SRC_CAST (bsrc);
+  BMDPixelFormat preferred;
+
+  if (self->video_format != GST_DECKLINK_VIDEO_FORMAT_AUTO)
+    return TRUE;
+  if (!self->input)
+    return TRUE;
+  if (self->caps_mode == GST_DECKLINK_MODE_AUTO)
+    return TRUE;
+
+  preferred = gst_decklink_video_src_get_peer_preferred_format (self);
+  if (preferred == bmdFormatUnspecified)
+    return TRUE;
+
+  GST_DEBUG_OBJECT (self, "Downstream prefers pixel format 0x%x", preferred);
+
+  g_mutex_lock (&self->input->lock);
+  BMDPixelFormat current = self->input->format;
+  g_mutex_unlock (&self->input->lock);
+
+  gst_decklink_video_src_reconfigure_format (self, preferred, current);
+  return TRUE;
+}
+
 static BMDDynamicRange
 device_dynamic_range (GstDecklinkVideoSrc * self)
 {
@@ -1883,10 +2142,16 @@ gst_decklink_video_src_get_caps (GstBaseSrc * bsrc, GstCaps * filter)
   } else if (self->caps_mode != GST_DECKLINK_MODE_AUTO) {
     const GstDecklinkMode *gst_mode = gst_decklink_get_mode (self->caps_mode);
     BMDDynamicRange dynamic_range = device_dynamic_range (self);
-    caps =
-        gst_decklink_mode_get_caps (self->caps_mode,
-        display_mode_flags (self, gst_mode, FALSE), self->caps_format,
-        dynamic_range, TRUE);
+    if (self->video_format == GST_DECKLINK_VIDEO_FORMAT_AUTO) {
+      caps =
+          gst_decklink_mode_get_caps_all_formats (self->caps_mode,
+          display_mode_flags (self, gst_mode, FALSE), dynamic_range, TRUE);
+    } else {
+      caps =
+          gst_decklink_mode_get_caps (self->caps_mode,
+          display_mode_flags (self, gst_mode, FALSE), self->caps_format,
+          dynamic_range, TRUE);
+    }
   } else {
     caps = gst_pad_get_pad_template_caps (GST_BASE_SRC_PAD (bsrc));
   }
@@ -1989,6 +2254,7 @@ gst_decklink_video_src_open (GstDecklinkVideoSrc * self)
   self->input->mode = mode;
   self->input->format = self->caps_format;
   self->input->auto_format = self->video_format == GST_DECKLINK_VIDEO_FORMAT_AUTO;
+  self->input->preferred_format = bmdFormatUnspecified;
   self->input->got_video_frame = gst_decklink_video_src_got_frame;
   self->input->start_streams = gst_decklink_video_src_start_streams;
   g_mutex_unlock (&self->input->lock);
