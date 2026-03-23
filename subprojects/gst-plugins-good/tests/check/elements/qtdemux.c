@@ -2684,6 +2684,272 @@ GST_START_TEST (test_qtdemux_tai_reverse)
 
 GST_END_TEST;
 
+static GstPadProbeReturn
+qtdemux_force_push_scheduling_probe (GstPad * pad, GstPadProbeInfo * info,
+    gpointer user_data)
+{
+  /* Keep this probe hook for diagnostics without changing scheduling,
+   * because this test asset requires random access (moov after mdat). */
+  if ((GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_QUERY_UPSTREAM)
+      && GST_PAD_PROBE_INFO_QUERY (info)
+      && GST_QUERY_TYPE (GST_PAD_PROBE_INFO_QUERY (info)) ==
+      GST_QUERY_SCHEDULING)
+    return GST_PAD_PROBE_OK;
+
+  return GST_PAD_PROBE_OK;
+}
+
+GST_START_TEST (test_qtdemux_tai_push)
+{
+  GstElement *pipe, *src, *sink, *qtdemux;
+  GstPad *qtdemux_sinkpad;
+  GstCaps *tai_caps;
+  GstSample *sample;
+  GstBuffer *buf;
+  GstReferenceTimestampMeta *meta;
+  GstMessage *msg;
+  gulong scheduling_probe_id;
+  gchar *uri;
+  guint i;
+
+  pipe = gst_parse_launch ("dataurisrc name=src ! qtdemux name=d "
+      "d. ! appsink name=sink", NULL);
+  fail_unless (pipe != NULL);
+
+  src = gst_bin_get_by_name (GST_BIN (pipe), "src");
+  sink = gst_bin_get_by_name (GST_BIN (pipe), "sink");
+  qtdemux = gst_bin_get_by_name (GST_BIN (pipe), "d");
+  fail_unless (src != NULL && sink != NULL && qtdemux != NULL);
+
+  qtdemux_sinkpad = gst_element_get_static_pad (qtdemux, "sink");
+  fail_unless (qtdemux_sinkpad != NULL);
+  scheduling_probe_id = gst_pad_add_probe (qtdemux_sinkpad,
+      GST_PAD_PROBE_TYPE_QUERY_UPSTREAM,
+      qtdemux_force_push_scheduling_probe, NULL, NULL);
+  fail_unless (scheduling_probe_id != 0);
+
+  uri = tai_make_data_uri (tai_test_mp4, sizeof (tai_test_mp4));
+  g_object_set (src, "uri", uri, NULL);
+  g_free (uri);
+  g_object_set (sink, "sync", FALSE, NULL);
+
+  gst_element_set_state (pipe, GST_STATE_PLAYING);
+
+  msg = gst_bus_timed_pop_filtered (GST_ELEMENT_BUS (pipe), -1,
+      GST_MESSAGE_ASYNC_DONE);
+  gst_message_unref (msg);
+
+  tai_caps = gst_caps_from_string ("timestamp/x-tai1958");
+
+  for (i = 0; i < 3; i++) {
+    sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+    fail_unless (sample != NULL, "expected sample %u in push mode", i);
+    buf = gst_sample_get_buffer (sample);
+    meta = gst_buffer_get_reference_timestamp_meta (buf, tai_caps);
+    fail_unless (meta != NULL,
+        "push-mode buffer %u missing TAI ReferenceTimestampMeta", i);
+    fail_unless_equals_uint64 (meta->timestamp, tai_expected_timestamps[i]);
+    fail_unless_equals_uint64 (meta->duration, GST_CLOCK_TIME_NONE);
+
+    fail_unless (meta->info != NULL, "push-mode buffer %u missing meta->info",
+        i);
+    fail_unless_equals_string (gst_structure_get_name (meta->info),
+        "iso23001-17-timestamp");
+    verify_tai_clock_tags_at_sink (sink, "unknown");
+    gst_sample_unref (sample);
+  }
+
+  gst_caps_unref (tai_caps);
+  gst_element_set_state (pipe, GST_STATE_NULL);
+  gst_pad_remove_probe (qtdemux_sinkpad, scheduling_probe_id);
+  gst_object_unref (qtdemux_sinkpad);
+  gst_object_unref (src);
+  gst_object_unref (sink);
+  gst_object_unref (qtdemux);
+  gst_object_unref (pipe);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_qtdemux_tai_push_seek)
+{
+  GstElement *pipe, *src, *sink, *qtdemux;
+  GstPad *qtdemux_sinkpad;
+  GstCaps *tai_caps;
+  GstSample *sample;
+  GstBuffer *buf;
+  GstReferenceTimestampMeta *meta;
+  GstMessage *msg;
+  gulong scheduling_probe_id;
+  gchar *uri;
+  guint i;
+
+  pipe = gst_parse_launch ("dataurisrc name=src ! qtdemux name=d "
+      "d. ! appsink name=sink", NULL);
+  fail_unless (pipe != NULL);
+
+  src = gst_bin_get_by_name (GST_BIN (pipe), "src");
+  sink = gst_bin_get_by_name (GST_BIN (pipe), "sink");
+  qtdemux = gst_bin_get_by_name (GST_BIN (pipe), "d");
+  fail_unless (src != NULL && sink != NULL && qtdemux != NULL);
+
+  qtdemux_sinkpad = gst_element_get_static_pad (qtdemux, "sink");
+  fail_unless (qtdemux_sinkpad != NULL);
+  scheduling_probe_id = gst_pad_add_probe (qtdemux_sinkpad,
+      GST_PAD_PROBE_TYPE_QUERY_UPSTREAM,
+      qtdemux_force_push_scheduling_probe, NULL, NULL);
+  fail_unless (scheduling_probe_id != 0);
+
+  uri = tai_make_data_uri (tai_test_mp4, sizeof (tai_test_mp4));
+  g_object_set (src, "uri", uri, NULL);
+  g_free (uri);
+  g_object_set (sink, "sync", FALSE, NULL);
+
+  tai_caps = gst_caps_from_string ("timestamp/x-tai1958");
+
+  switch_state_with_async_wait (pipe, GST_STATE_PLAYING);
+
+  /* Pull all 3 buffers */
+  for (i = 0; i < 3; i++) {
+    sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+    fail_unless (sample != NULL);
+    buf = gst_sample_get_buffer (sample);
+    meta = gst_buffer_get_reference_timestamp_meta (buf, tai_caps);
+    fail_unless (meta != NULL);
+    fail_unless_equals_uint64 (meta->timestamp, tai_expected_timestamps[i]);
+    verify_tai_clock_tags_at_sink (sink, "unknown");
+    gst_sample_unref (sample);
+  }
+
+  /* Seek back to start */
+  fail_unless (gst_element_seek_simple (pipe, GST_FORMAT_TIME,
+          GST_SEEK_FLAG_FLUSH, 0));
+
+  /* Wait for the seek to complete */
+  msg = gst_bus_timed_pop_filtered (GST_ELEMENT_BUS (pipe), -1,
+      GST_MESSAGE_ASYNC_DONE);
+  gst_message_unref (msg);
+
+  sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+  fail_unless (sample != NULL, "no sample after push-mode seek to start");
+  buf = gst_sample_get_buffer (sample);
+  meta = gst_buffer_get_reference_timestamp_meta (buf, tai_caps);
+  fail_unless (meta != NULL, "missing TAI meta after push-mode seek to start");
+  fail_unless_equals_uint64 (meta->timestamp, 1);
+  verify_tai_clock_tags_at_sink (sink, "unknown");
+  gst_sample_unref (sample);
+
+  /* Seek to last frame */
+  {
+    GstClockTime pos = gst_util_uint64_scale_int (2, GST_SECOND, 30);
+
+    fail_unless (gst_element_seek_simple (pipe, GST_FORMAT_TIME,
+            GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT, pos));
+
+    msg = gst_bus_timed_pop_filtered (GST_ELEMENT_BUS (pipe), -1,
+        GST_MESSAGE_ASYNC_DONE);
+    gst_message_unref (msg);
+
+    sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+    fail_unless (sample != NULL);
+    buf = gst_sample_get_buffer (sample);
+    meta = gst_buffer_get_reference_timestamp_meta (buf, tai_caps);
+    fail_unless (meta != NULL);
+    fail_unless_equals_uint64 (meta->timestamp, 3);
+    verify_tai_clock_tags_at_sink (sink, "unknown");
+    gst_sample_unref (sample);
+  }
+
+  gst_caps_unref (tai_caps);
+  gst_element_set_state (pipe, GST_STATE_NULL);
+  gst_pad_remove_probe (qtdemux_sinkpad, scheduling_probe_id);
+  gst_object_unref (qtdemux_sinkpad);
+  gst_object_unref (src);
+  gst_object_unref (sink);
+  gst_object_unref (qtdemux);
+  gst_object_unref (pipe);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_qtdemux_tai_push_reverse)
+{
+  GstElement *pipe, *src, *sink, *qtdemux;
+  GstPad *qtdemux_sinkpad;
+  GstCaps *tai_caps;
+  GstSample *sample;
+  GstBuffer *buf;
+  GstReferenceTimestampMeta *meta;
+  GstMessage *msg;
+  gulong scheduling_probe_id;
+  gchar *uri;
+  gint64 duration;
+  guint i;
+
+  static const guint64 reverse_expected[] = { 3, 2, 1 };
+
+  pipe = gst_parse_launch ("dataurisrc name=src ! qtdemux name=d "
+      "d. ! appsink name=sink", NULL);
+  fail_unless (pipe != NULL);
+
+  src = gst_bin_get_by_name (GST_BIN (pipe), "src");
+  sink = gst_bin_get_by_name (GST_BIN (pipe), "sink");
+  qtdemux = gst_bin_get_by_name (GST_BIN (pipe), "d");
+  fail_unless (src != NULL && sink != NULL && qtdemux != NULL);
+
+  qtdemux_sinkpad = gst_element_get_static_pad (qtdemux, "sink");
+  fail_unless (qtdemux_sinkpad != NULL);
+  scheduling_probe_id = gst_pad_add_probe (qtdemux_sinkpad,
+      GST_PAD_PROBE_TYPE_QUERY_UPSTREAM,
+      qtdemux_force_push_scheduling_probe, NULL, NULL);
+  fail_unless (scheduling_probe_id != 0);
+
+  uri = tai_make_data_uri (tai_test_mp4, sizeof (tai_test_mp4));
+  g_object_set (src, "uri", uri, NULL);
+  g_free (uri);
+  g_object_set (sink, "sync", FALSE, NULL);
+
+  tai_caps = gst_caps_from_string ("timestamp/x-tai1958");
+
+  switch_state_with_async_wait (pipe, GST_STATE_PLAYING);
+
+  fail_unless (gst_element_query_duration (pipe, GST_FORMAT_TIME, &duration));
+  fail_unless (duration > 0);
+
+  /* Reverse seek */
+  fail_unless (gst_element_seek (pipe, -1.0, GST_FORMAT_TIME,
+          GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, 0,
+          GST_SEEK_TYPE_SET, duration));
+
+  msg = gst_bus_timed_pop_filtered (GST_ELEMENT_BUS (pipe), -1,
+      GST_MESSAGE_ASYNC_DONE);
+  gst_message_unref (msg);
+
+  for (i = 0; i < 3; i++) {
+    sample = gst_app_sink_pull_sample (GST_APP_SINK (sink));
+    fail_unless (sample != NULL,
+        "expected sample %u in push-mode reverse playback", i);
+    buf = gst_sample_get_buffer (sample);
+    meta = gst_buffer_get_reference_timestamp_meta (buf, tai_caps);
+    fail_unless (meta != NULL,
+        "push-mode reverse buffer %u missing TAI meta", i);
+    fail_unless_equals_uint64 (meta->timestamp, reverse_expected[i]);
+    verify_tai_clock_tags_at_sink (sink, "unknown");
+    gst_sample_unref (sample);
+  }
+
+  gst_caps_unref (tai_caps);
+  gst_element_set_state (pipe, GST_STATE_NULL);
+  gst_pad_remove_probe (qtdemux_sinkpad, scheduling_probe_id);
+  gst_object_unref (qtdemux_sinkpad);
+  gst_object_unref (src);
+  gst_object_unref (sink);
+  gst_object_unref (qtdemux);
+  gst_object_unref (pipe);
+}
+
+GST_END_TEST;
+
 static Suite *
 qtdemux_suite (void)
 {
@@ -2708,6 +2974,9 @@ qtdemux_suite (void)
   tcase_add_test (tc_chain, test_qtdemux_tai_interleaved);
   tcase_add_test (tc_chain, test_qtdemux_tai_seek);
   tcase_add_test (tc_chain, test_qtdemux_tai_reverse);
+  tcase_add_test (tc_chain, test_qtdemux_tai_push);
+  tcase_add_test (tc_chain, test_qtdemux_tai_push_seek);
+  tcase_add_test (tc_chain, test_qtdemux_tai_push_reverse);
 
   return s;
 }

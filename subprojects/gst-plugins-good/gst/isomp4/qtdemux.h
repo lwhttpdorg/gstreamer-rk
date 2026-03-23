@@ -75,6 +75,20 @@ typedef struct
   guint32 *first_sample_in_chunk;       /* first sample index per chunk */
 } QtDemuxAuxInfo;
 
+/* Holds a buffer and its decoration parameters for deferred push
+ * (used when auxiliary data arrives after the sample in push mode) */
+typedef struct
+{
+  GstBuffer *buf;
+  guint64 dts;
+  guint64 pts;
+  guint64 duration;
+  gboolean round_up_duration;
+  gboolean keyframe;
+  guint64 position;
+  guint64 byte_position;
+} QtDemuxAuxPendingBuffer;
+
 typedef GstBuffer * (*QtDemuxProcessFunc)(GstQTDemux * qtdemux, QtDemuxStream * stream, GstBuffer * buf, guint64 dts, guint64 pts, guint64 duration, gboolean round_up_duration);
 
 enum QtDemuxState
@@ -606,6 +620,9 @@ struct _QtDemuxStream
   gboolean stai_pending_valid;         /* pending TAI data for decorate */
   guint64 stai_pending_tai_ts;         /* TAI nanoseconds since 1958-01-01 */
   guint8 stai_pending_flags;           /* STAI flags byte */
+
+  /* Push mode: queued buffers awaiting auxiliary data at end of chunk */
+  GQueue aux_pending_buffers;  /* of QtDemuxAuxPendingBuffer* */
 
   gint ref_count;               /* atomic */
 };

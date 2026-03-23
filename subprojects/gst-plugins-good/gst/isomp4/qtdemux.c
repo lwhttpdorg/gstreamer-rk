@@ -2673,6 +2673,8 @@ static void
 gst_qtdemux_stream_clear (QtDemuxStream * stream)
 {
   gint i;
+  QtDemuxAuxPendingBuffer *pending;
+
   if (stream->allocator)
     gst_object_unref (stream->allocator);
   while (stream->buffers) {
@@ -2681,6 +2683,10 @@ gst_qtdemux_stream_clear (QtDemuxStream * stream)
   }
   g_queue_clear_full (&stream->reorder_queue,
       (GDestroyNotify) gst_mini_object_unref);
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    gst_buffer_unref (pending->buf);
+    g_free (pending);
+  }
   for (i = 0; i < stream->stsd_entries_length; i++) {
     QtDemuxStreamStsdEntry *entry = &stream->stsd_entries[i];
     if (entry->rgb8_palette) {
@@ -8586,6 +8592,64 @@ gst_qtdemux_chain (GstPad * sinkpad, GstObject * parent, GstBuffer * inbuf)
   return gst_qtdemux_process_adapter (demux, FALSE);
 }
 
+/* Flush the STAI pending buffer queue for a stream, optionally attaching
+ * TAI timestamps from the provided STAI data.  If @stai_data is NULL, the
+ * queued buffers are pushed without TAI meta (e.g. at EOS or when STAI data
+ * was not found in the expected todrop range). */
+static GstFlowReturn
+gst_qtdemux_aux_flush_pending (GstQTDemux * demux, QtDemuxStream * stream,
+    const guint8 * stai_data, gsize stai_data_size)
+{
+  GstFlowReturn ret = GST_FLOW_OK;
+  QtDemuxAuxPendingBuffer *pending;
+  guint idx = 0;
+  guint64 stai_pos = 0;
+
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    if (stai_data && stream->aux_stai.present) {
+      guint8 stai_sample_size = 9;
+
+      /* Use per-sample size if available */
+      if (idx < stream->aux_stai.sample_count) {
+        stai_sample_size = stream->aux_stai.sample_sizes[idx];
+      }
+
+      if (stai_pos + 9 <= stai_data_size) {
+        stream->stai_pending_tai_ts = GST_READ_UINT64_BE (stai_data + stai_pos);
+        stream->stai_pending_flags = stai_data[stai_pos + 8];
+        stream->stai_pending_valid = TRUE;
+        GST_LOG_OBJECT (demux,
+            "STAI push pending %u: TAI ts=%" G_GUINT64_FORMAT " flags=0x%02x",
+            idx, stream->stai_pending_tai_ts, stream->stai_pending_flags);
+      }
+      stai_pos += stai_sample_size;
+    }
+
+    ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, pending->buf,
+        pending->dts, pending->pts, pending->duration,
+        pending->round_up_duration, pending->keyframe, pending->position,
+        pending->byte_position);
+
+    g_free (pending);
+    idx++;
+
+    GST_OBJECT_LOCK (demux);
+    ret = gst_qtdemux_combine_flows (demux, stream, ret);
+    GST_OBJECT_UNLOCK (demux);
+
+    if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+      break;
+  }
+
+  /* Free any remaining queued buffers on error */
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    gst_buffer_unref (pending->buf);
+    g_free (pending);
+  }
+
+  return ret;
+}
+
 static GstFlowReturn
 gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
 {
@@ -9069,6 +9133,67 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             demux->cenc_aux_info_sizes = NULL;
             gst_adapter_unmap (demux->adapter);
           }
+
+          /* Check if any stream has STAI data in this todrop range */
+          for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
+            QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
+            guint64 stai_abs_offset = 0;
+            guint32 stai_total_size = 0;
+            guint n_pending;
+
+            n_pending = g_queue_get_length (&s->aux_pending_buffers);
+            if (n_pending == 0)
+              continue;
+
+            /* Determine the absolute STAI offset for this stream's chunk */
+            if (s->aux_stai.present) {
+              QtDemuxAuxPendingBuffer *first =
+                  g_queue_peek_head (&s->aux_pending_buffers);
+              guint64 soff = qtdemux_aux_info_offset_for_sample (&s->aux_stai,
+                  first->byte_position == 0 ? 0 : s->sample_index - n_pending);
+              if (soff > 0)
+                stai_abs_offset = soff;
+            }
+
+            if (stai_abs_offset == 0)
+              continue;
+
+            /* Check overlap with todrop range [demux->offset, +todrop) */
+            if (stai_abs_offset >= demux->offset
+                && stai_abs_offset < demux->offset + demux->todrop) {
+              const guint8 *drop_data;
+              guint64 rel_offset = stai_abs_offset - demux->offset;
+
+              /* Compute how much STAI data to read */
+              for (guint j = 0; j < n_pending; j++) {
+                if (s->aux_stai.present
+                    && (s->sample_index - n_pending + j) <
+                    s->aux_stai.sample_count)
+                  stai_total_size +=
+                      s->aux_stai.sample_sizes[s->sample_index - n_pending + j];
+                else
+                  stai_total_size += 9;
+              }
+
+              if (rel_offset + stai_total_size <= demux->todrop) {
+                drop_data = gst_adapter_map (demux->adapter, demux->todrop);
+                ret =
+                    gst_qtdemux_aux_flush_pending (demux, s,
+                    drop_data + rel_offset, stai_total_size);
+                gst_adapter_unmap (demux->adapter);
+
+                if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+                  goto done;
+              } else {
+                GST_WARNING_OBJECT (demux,
+                    "STAI data extends beyond todrop, flushing without TAI");
+                ret = gst_qtdemux_aux_flush_pending (demux, s, NULL, 0);
+                if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+                  goto done;
+              }
+            }
+          }
+
           gst_qtdemux_drop_data (demux, demux->todrop);
         }
 
@@ -9166,9 +9291,25 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             /* FIXME: should either be an assert or a plain check */
             g_return_val_if_fail (outbuf != NULL, GST_FLOW_ERROR);
 
-            ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
-                dts, pts, duration, round_up_duration, keyframe, dts,
-                demux->offset);
+            if (stream->aux_stai.present) {
+              /* Queue buffer for later push when STAI data arrives in todrop */
+              QtDemuxAuxPendingBuffer *pending =
+                  g_new0 (QtDemuxAuxPendingBuffer, 1);
+              pending->buf = outbuf;
+              pending->dts = dts;
+              pending->pts = pts;
+              pending->duration = duration;
+              pending->round_up_duration = round_up_duration;
+              pending->keyframe = keyframe;
+              pending->position = dts;
+              pending->byte_position = demux->offset;
+              g_queue_push_tail (&stream->aux_pending_buffers, pending);
+              ret = GST_FLOW_OK;
+            } else {
+              ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
+                  dts, pts, duration, round_up_duration, keyframe, dts,
+                  demux->offset);
+            }
           }
 
           /* combine flows */
@@ -9193,6 +9334,12 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
 
 
         if (ret == GST_FLOW_EOS) {
+          /* Flush any remaining STAI pending buffers without TAI meta */
+          for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
+            QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
+            if (!g_queue_is_empty (&s->aux_pending_buffers))
+              gst_qtdemux_aux_flush_pending (demux, s, NULL, 0);
+          }
           GST_DEBUG_OBJECT (demux, "All streams are EOS, signal upstream");
           demux->neededbytes = -1;
           goto eos;
