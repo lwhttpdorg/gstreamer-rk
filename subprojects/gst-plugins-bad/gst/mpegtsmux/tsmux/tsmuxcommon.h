@@ -107,6 +107,8 @@ G_BEGIN_DECLS
 #define TSMUX_DEFAULT_SI_INTERVAL  (TSMUX_CLOCK_FREQ / 10)
 /* PCR interval (1/25th sec) */
 #define TSMUX_DEFAULT_PCR_INTERVAL  (TSMUX_CLOCK_FREQ / 25)
+/* PCR offset (1/8th sec) */
+#define TSMUX_DEFAULT_PCR_OFFSET  (TSMUX_CLOCK_FREQ / 8)
 /* SCTE-35 NULL Interval (5mins) */
 #define TSMUX_DEFAULT_SCTE_35_NULL_INTERVAL (TSMUX_CLOCK_FREQ * 300)
 /* Bitrate (bits per second) */
