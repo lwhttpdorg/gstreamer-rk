@@ -8,7 +8,7 @@ We have a website at
 
   https://gstreamer.freedesktop.org
 
-Our documentation, including tutorials, API reference and FAQ can be found at
+Our documentation, including tutorials, API reference, and FAQ, can be found at
 
   https://gstreamer.freedesktop.org/documentation/
 
@@ -132,7 +132,7 @@ meson -Dauto_features=disabled -Dgstreamer:tools=enabled -Dbad=enabled -Dgst-plu
 This will disable all optional features and then enable the `openh264` plugin
 and the tools that ship with the core gstreamer repository: `gst-inspect-1.0`,
 `gst-launch-1.0`, etc. As usual, you can change these values on a builddir that
-has already been setup with `meson configure -Doption=value`.
+has already been set up with `meson configure -Doption=value`.
 
 ### Building the Qt5 QML plugin
 
@@ -218,7 +218,7 @@ When a feature has been listed in one of those options, the other features from
 its plugin will no longer be automatically included, even if the plugin
 is listed in `gst-full-plugins`.
 
-The user must insure that all selected plugins and features (element,
+The user must ensure that all selected plugins and features (element,
 typefind, etc.) have been enabled during the build configuration.
 
 To register features, the syntax is the following:
@@ -250,9 +250,9 @@ in the final gstreamer-full library.
 
 This is an experimental feature, backward incompatible changes could still be
 made in the future.
-Only linux-like platforms are currently well supported when Windows, MSVC
-and MinGW, should be considered as *experimental* as the symbols export
-is still under discussion.
+Only linux-like platforms are currently well supported, whereas Windows, MSVC,
+and MinGW should be considered *experimental*, as symbol export is still under
+discussion.
 
 Since 1.24.7, it is possible to disable the `gstreamer-full` library by passing
 `-Dgst-full=disabled`. This can be useful in cases where you want a static
@@ -275,7 +275,7 @@ is by default set to `shared_library`. The buildsystem will produce a set of
 archives depending on your `gstreamer-full` configuration as explained above.
 Your application can now check the `gstreamer-full` dependency within meson or
 with the package config file.
-In both case, the application can rely on the `gstreamer-full-1.0.pc` file
+In both cases, the application can rely on the `gstreamer-full-1.0.pc` file
 generated during the build process to retrieve all its dependencies.
 In that configuration, the *features* selected during the build configuration
 will be automatically registered during the call of `gst_init()`.
@@ -478,7 +478,7 @@ fi
 
 In your powerline theme configuration file (by default in
 `{POWERLINE INSTALLATION DIR}/config_files/themes/shell/default.json`)
-you should add a new environment segment as follow:
+you should add a new environment segment as follows:
 
 ```
 {
