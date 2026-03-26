@@ -305,8 +305,24 @@ gst_v4l2_codec_allocator_alloc (GstV4l2CodecAllocator * self)
 gboolean
 gst_v4l2_codec_allocator_create_buffer (GstV4l2CodecAllocator * self)
 {
-  /* TODO implement */
-  return FALSE;
+  GstV4l2Decoder *decoder = self->decoder;
+  GstPadDirection direction = self->direction;
+  GstV4l2CodecBuffer *buf;
+  gint index;
+
+  index = gst_v4l2_decoder_create_buffers (decoder, direction, 1);
+  if (index < 0)
+    return FALSE;
+
+  buf =
+      gst_v4l2_codec_buffer_new (GST_ALLOCATOR (self), decoder, direction,
+      index);
+  GST_OBJECT_LOCK (self);
+  ++self->pool_size;
+  g_queue_push_tail (&self->pool, buf);
+  GST_OBJECT_UNLOCK (self);
+
+  return TRUE;
 }
 
 gboolean
