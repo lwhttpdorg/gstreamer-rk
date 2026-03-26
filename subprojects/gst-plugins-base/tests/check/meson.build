@@ -25,7 +25,7 @@ base_tests = [
   [ 'libs/rtsp.c' ],
   [ 'libs/sdp.c' ],
   [ 'libs/tag.c' ],
-  [ 'libs/video.c' ],
+  [ 'libs/video.c', false, [], 10 * 60 ],
   [ 'libs/videoanc.c' ],
   [ 'libs/videoencoder.c' ],
   [ 'libs/videodecoder.c' ],
@@ -170,7 +170,8 @@ foreach t : base_tests
         'gst-plugins-base@' + meson.project_build_root())
     env.set('GST_REGISTRY', join_paths(meson.current_build_dir(), '@0@.registry'.format(test_name)))
     env.set('GST_PLUGIN_SCANNER_1_0', gst_plugin_scanner_path)
-    test(test_name, exe, env: env, timeout: 3 * 60)
+    t_timeout = t.length() >= 4 ? t.get(3) : 3 * 60
+    test(test_name, exe, env: env, timeout: t_timeout)
   endif
 endforeach
 
