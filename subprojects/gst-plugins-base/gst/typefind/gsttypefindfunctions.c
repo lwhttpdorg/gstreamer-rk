@@ -3656,7 +3656,6 @@ qt_type_find (GstTypeFind * tf, gpointer unused)
     "avc3"
   };
   static const gchar *ccff_brands[] = { "ccff" };
-  static const gchar *heif_brands[] = { "mif1" };
 
   while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
     guint64 new_offset;
@@ -3689,12 +3688,6 @@ qt_type_find (GstTypeFind * tf, gpointer unused)
       if (ftyp_brand_is (&data[8], ccff_brands, G_N_ELEMENTS (ccff_brands))) {
         tip = GST_TYPE_FIND_MAXIMUM;
         variant = "ccff";
-        break;
-      }
-
-      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
-        tip = GST_TYPE_FIND_MAXIMUM;
-        variant = "heif";
         break;
       }
     }
@@ -3779,13 +3772,6 @@ qt_type_find (GstTypeFind * tf, gpointer unused)
           goto done;
         }
 
-        if (ftyp_brand_is (&data[new_offset], heif_brands,
-                G_N_ELEMENTS (heif_brands))) {
-          tip = GST_TYPE_FIND_MAXIMUM;
-          variant = "heif";
-          goto done;
-        }
-
         new_offset += 4;
       }
     }
@@ -3823,6 +3809,423 @@ done:
   }
 };
 
+/*** image/heic ***/
+
+static GstStaticCaps heic_caps = GST_STATIC_CAPS ("image/heic");
+#define HEIC_CAPS gst_static_caps_get(&heic_caps)
+
+static void
+bmff_heic_type_find (GstTypeFind * tf, gpointer unused)
+{
+  const guint8 *data;
+  guint tip = 0;
+  guint64 offset = 0;
+  guint64 size;
+  static const gchar *heif_brands[] = { "mif1" };
+  static const gchar *heic_brands[] = { "heic", "heix", "heim", "heis" };
+
+  while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
+    guint64 new_offset;
+
+    if (memcmp (&data[4], "ftyp", 4) == 0) {
+      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
+        tip = GST_TYPE_FIND_POSSIBLE;
+        // Test compatible brands
+      } else if (ftyp_brand_is (&data[8], heic_brands,
+              G_N_ELEMENTS (heic_brands))) {
+        tip = GST_TYPE_FIND_MAXIMUM;
+        break;
+      }
+    }
+
+    size = GST_READ_UINT32_BE (data);
+    if (size + offset >= G_MAXINT64)
+      break;
+    /* check compatible brands rather than ever expanding major brands above */
+    if ((memcmp (&data[4], "ftyp", 4) == 0) && (size >= 16)) {
+      data = gst_type_find_peek (tf, offset, size);
+      if (data == NULL)
+        goto done;
+      new_offset = 12;
+      while (new_offset + 4 <= size) {
+        if (ftyp_brand_is (&data[new_offset], heic_brands,
+                G_N_ELEMENTS (heic_brands))) {
+          tip = GST_TYPE_FIND_MAXIMUM;
+          goto done;
+        }
+
+        new_offset += 4;
+      }
+    }
+    if (size == 1) {
+      const guint8 *sizedata;
+
+      sizedata = gst_type_find_peek (tf, offset + 8, 8);
+      if (sizedata == NULL)
+        break;
+
+      size = GST_READ_UINT64_BE (sizedata);
+    } else {
+      if (size < 8)
+        break;
+    }
+    new_offset = offset + size;
+    if (new_offset <= offset)
+      break;
+    if (new_offset + 16 >= G_MAXINT64)
+      break;
+    offset = new_offset;
+  }
+
+done:
+  if (tip > 0) {
+    gst_type_find_suggest (tf, tip, HEIC_CAPS);
+  }
+}
+
+static GstStaticCaps heic_sequence_caps =
+GST_STATIC_CAPS ("image/heic-sequence");
+#define HEIC_SEQ_CAPS gst_static_caps_get(&heic_sequence_caps)
+
+static void
+bmff_heic_sequence_type_find (GstTypeFind * tf, gpointer unused)
+{
+  const guint8 *data;
+  guint tip = 0;
+  guint64 offset = 0;
+  guint64 size;
+  static const gchar *heif_brands[] = { "msf1" };
+  static const gchar *heic_brands[] = { "hevc", "hevx", "hevm", "hevs" };
+
+  while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
+    guint64 new_offset;
+
+    if (memcmp (&data[4], "ftyp", 4) == 0) {
+      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
+        tip = GST_TYPE_FIND_POSSIBLE;
+        // Test compatible brands
+      } else if (ftyp_brand_is (&data[8], heic_brands,
+              G_N_ELEMENTS (heic_brands))) {
+        tip = GST_TYPE_FIND_MAXIMUM;
+        break;
+      }
+    }
+
+    size = GST_READ_UINT32_BE (data);
+    if (size + offset >= G_MAXINT64)
+      break;
+    /* check compatible brands rather than ever expanding major brands above */
+    if ((memcmp (&data[4], "ftyp", 4) == 0) && (size >= 16)) {
+      data = gst_type_find_peek (tf, offset, size);
+      if (data == NULL)
+        goto done;
+      new_offset = 12;
+      while (new_offset + 4 <= size) {
+        if (ftyp_brand_is (&data[new_offset], heic_brands,
+                G_N_ELEMENTS (heic_brands))) {
+          tip = GST_TYPE_FIND_MAXIMUM;
+          goto done;
+        }
+
+        new_offset += 4;
+      }
+    }
+    if (size == 1) {
+      const guint8 *sizedata;
+
+      sizedata = gst_type_find_peek (tf, offset + 8, 8);
+      if (sizedata == NULL)
+        break;
+
+      size = GST_READ_UINT64_BE (sizedata);
+    } else {
+      if (size < 8)
+        break;
+    }
+    new_offset = offset + size;
+    if (new_offset <= offset)
+      break;
+    if (new_offset + 16 >= G_MAXINT64)
+      break;
+    offset = new_offset;
+  }
+
+done:
+  if (tip > 0) {
+    gst_type_find_suggest (tf, tip, HEIC_SEQ_CAPS);
+  }
+}
+
+/*** image/heif (with non-HEVC codecs) ***/
+
+static GstStaticCaps heif_caps = GST_STATIC_CAPS ("image/heif");
+#define HEIF_CAPS gst_static_caps_get(&heif_caps)
+
+static void
+bmff_heif_type_find (GstTypeFind * tf, gpointer unused)
+{
+  const guint8 *data;
+  const char *codec = "unknown";
+  guint tip = 0;
+  guint64 offset = 0;
+  guint64 size;
+  static const gchar *heif_brands[] = { "mif1" };
+
+  while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
+    guint64 new_offset;
+
+    if (memcmp (&data[4], "ftyp", 4) == 0) {
+      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
+        tip = GST_TYPE_FIND_POSSIBLE;
+        break;
+      }
+    }
+
+    size = GST_READ_UINT32_BE (data);
+    if (size + offset >= G_MAXINT64)
+      break;
+    /* check compatible brands rather than ever expanding major brands above */
+    if ((memcmp (&data[4], "ftyp", 4) == 0) && (size >= 16)) {
+      data = gst_type_find_peek (tf, offset, size);
+      if (data == NULL)
+        goto done;
+      new_offset = 12;
+      while (new_offset + 4 <= size) {
+        if (memcmp (&data[new_offset], "avci", 4) == 0
+            || memcmp (&data[new_offset], "avcs", 4) == 0) {
+          tip = GST_TYPE_FIND_MAXIMUM;
+          codec = "avc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "jpeg", 4) == 0
+            || memcmp (&data[new_offset], "jpgs", 4) == 0) {
+          codec = "jpeg";
+          goto done;
+        } else if (memcmp (&data[new_offset], "vvic", 4) == 0
+            || memcmp (&data[new_offset], "vvis", 4) == 0) {
+          codec = "vvc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "evbs", 4) == 0
+            || memcmp (&data[new_offset], "evms", 4) == 0) {
+          codec = "evc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "j2ki", 4) == 0
+            || memcmp (&data[new_offset], "j2is", 4) == 0) {
+          codec = "jp2";
+          goto done;
+        } else if (memcmp (&data[new_offset], "uncv", 4) == 0
+            || memcmp (&data[new_offset], "unci", 4) == 0) {
+          codec = "uncompressed";
+          goto done;
+        }
+
+        new_offset += 4;
+      }
+    }
+    if (size == 1) {
+      const guint8 *sizedata;
+
+      sizedata = gst_type_find_peek (tf, offset + 8, 8);
+      if (sizedata == NULL)
+        break;
+
+      size = GST_READ_UINT64_BE (sizedata);
+    } else {
+      if (size < 8)
+        break;
+    }
+    new_offset = offset + size;
+    if (new_offset <= offset)
+      break;
+    if (new_offset + 16 >= G_MAXINT64)
+      break;
+    offset = new_offset;
+  }
+
+done:
+  if (tip > 0) {
+    GstCaps *caps = gst_caps_make_writable (HEIF_CAPS);
+    gst_caps_set_simple (caps, "image-codec", G_TYPE_STRING, codec, NULL);
+    gst_type_find_suggest (tf, tip, caps);
+    gst_caps_unref (caps);
+  }
+}
+
+/*** image/heif-sequence (with non-HEVC codecs) ***/
+
+static GstStaticCaps heif_sequence_caps =
+GST_STATIC_CAPS ("image/heif-sequence");
+#define HEIF_SEQ_CAPS gst_static_caps_get(&heif_sequence_caps)
+
+static void
+bmff_heif_sequence_type_find (GstTypeFind * tf, gpointer unused)
+{
+  const guint8 *data;
+  const char *codec = "uncompressed";
+  guint tip = 0;
+  guint64 offset = 0;
+  guint64 size;
+  static const gchar *heif_brands[] = { "msf1" };
+
+  while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
+    guint64 new_offset;
+
+    if (memcmp (&data[4], "ftyp", 4) == 0) {
+      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
+        tip = GST_TYPE_FIND_POSSIBLE;
+        // Needs checking compatible brands now
+      }
+    }
+
+    size = GST_READ_UINT32_BE (data);
+    if (size + offset >= G_MAXINT64)
+      break;
+    /* check compatible brands rather than ever expanding major brands above */
+    if ((memcmp (&data[4], "ftyp", 4) == 0) && (size >= 16)) {
+      data = gst_type_find_peek (tf, offset, size);
+      if (data == NULL)
+        goto done;
+      new_offset = 12;
+      while (new_offset + 4 <= size) {
+        if (memcmp (&data[new_offset], "avci", 4) == 0
+            || memcmp (&data[new_offset], "avcs", 4) == 0) {
+          tip = GST_TYPE_FIND_MAXIMUM;
+          codec = "avc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "jpeg", 4) == 0
+            || memcmp (&data[new_offset], "jpgs", 4) == 0) {
+          codec = "jpeg";
+          goto done;
+        } else if (memcmp (&data[new_offset], "vvic", 4) == 0
+            || memcmp (&data[new_offset], "vvis", 4) == 0) {
+          codec = "vvc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "evbs", 4) == 0
+            || memcmp (&data[new_offset], "evms", 4) == 0) {
+          codec = "evc";
+          goto done;
+        } else if (memcmp (&data[new_offset], "j2ki", 4) == 0
+            || memcmp (&data[new_offset], "j2is", 4) == 0) {
+          codec = "jp2";
+          goto done;
+        }
+
+        new_offset += 4;
+      }
+    }
+    if (size == 1) {
+      const guint8 *sizedata;
+
+      sizedata = gst_type_find_peek (tf, offset + 8, 8);
+      if (sizedata == NULL)
+        break;
+
+      size = GST_READ_UINT64_BE (sizedata);
+    } else {
+      if (size < 8)
+        break;
+    }
+    new_offset = offset + size;
+    if (new_offset <= offset)
+      break;
+    if (new_offset + 16 >= G_MAXINT64)
+      break;
+    offset = new_offset;
+  }
+
+done:
+  if (tip > 0) {
+    GstCaps *caps = gst_caps_make_writable (HEIF_SEQ_CAPS);
+    gst_caps_set_simple (caps, "stream-format", G_TYPE_STRING, codec, NULL);
+    gst_type_find_suggest (tf, tip, caps);
+    gst_caps_unref (caps);
+  }
+}
+
+/*** image/avif ***/
+static GstStaticCaps avif_caps = GST_STATIC_CAPS ("image/avif");
+#define AVIF_CAPS gst_static_caps_get(&avif_caps)
+
+static void
+bmff_avif_type_find (GstTypeFind * tf, gpointer unused)
+{
+  const guint8 *data;
+  guint tip = 0;
+  gboolean animated = FALSE;
+  guint64 offset = 0;
+  guint64 size;
+  static const gchar *heif_brands[] = { "mif1", "msf1" };
+  static const gchar *avif_brands[] = { "avif", "avis" };
+
+  while ((data = gst_type_find_peek (tf, offset, 12)) != NULL) {
+    guint64 new_offset;
+
+    if (memcmp (&data[4], "ftyp", 4) == 0) {
+      if (ftyp_brand_is (&data[8], heif_brands, G_N_ELEMENTS (heif_brands))) {
+        tip = GST_TYPE_FIND_POSSIBLE;
+        if (memcmp (&data[8], "msf1", 4) == 0) {
+          animated = TRUE;
+        }
+        // Needs checking compatible brands now
+      } else if (ftyp_brand_is (&data[8], avif_brands,
+              G_N_ELEMENTS (avif_brands))) {
+        tip = GST_TYPE_FIND_MAXIMUM;
+        if (memcmp (&data[8], "avis", 4) == 0) {
+          animated = TRUE;
+        }
+        break;
+      }
+    }
+
+    size = GST_READ_UINT32_BE (data);
+    if (size + offset >= G_MAXINT64)
+      break;
+    /* check compatible brands rather than ever expanding major brands above */
+    if ((memcmp (&data[4], "ftyp", 4) == 0) && (size >= 16)) {
+      data = gst_type_find_peek (tf, offset, size);
+      if (data == NULL)
+        goto done;
+      new_offset = 12;
+      while (new_offset + 4 <= size) {
+        if (ftyp_brand_is (&data[new_offset], avif_brands,
+                G_N_ELEMENTS (avif_brands))) {
+          tip = GST_TYPE_FIND_MAXIMUM;
+          if (memcmp (&data[8], "avis", 4) == 0) {
+            animated = TRUE;
+          }
+          goto done;
+        }
+
+        new_offset += 4;
+      }
+    }
+    if (size == 1) {
+      const guint8 *sizedata;
+
+      sizedata = gst_type_find_peek (tf, offset + 8, 8);
+      if (sizedata == NULL)
+        break;
+
+      size = GST_READ_UINT64_BE (sizedata);
+    } else {
+      if (size < 8)
+        break;
+    }
+    new_offset = offset + size;
+    if (new_offset <= offset)
+      break;
+    if (new_offset + 16 >= G_MAXINT64)
+      break;
+    offset = new_offset;
+  }
+
+done:
+  if (tip > 0) {
+    GstCaps *caps = gst_caps_make_writable (AVIF_CAPS);
+    gst_caps_set_simple (caps, "animated", G_TYPE_BOOLEAN, animated, NULL);
+    gst_type_find_suggest (tf, tip, caps);
+    gst_caps_unref (caps);
+  }
+}
 
 /*** image/x-quicktime ***/
 
@@ -7130,6 +7533,18 @@ GST_TYPE_FIND_REGISTER_DEFINE (q3gp, "application/x-3gp", GST_RANK_PRIMARY,
     q3gp_type_find, "3gp", Q3GP_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (qt, "video/quicktime", GST_RANK_PRIMARY,
     qt_type_find, "mov,mp4", QT_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (heif, "image/heif", GST_RANK_PRIMARY + 15,
+    bmff_heif_type_find, "heif", HEIF_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (heif_seq, "image/heif-sequence",
+    GST_RANK_PRIMARY + 15, bmff_heif_sequence_type_find, "heif,heifs",
+    HEIF_SEQ_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (heic, "image/heic", GST_RANK_PRIMARY + 15,
+    bmff_heic_type_find, "heic", HEIC_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (heic_seq, "image/heic-sequence",
+    GST_RANK_PRIMARY + 15, bmff_heic_sequence_type_find, "heic,heics",
+    HEIC_SEQ_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (avif, "image/avif", GST_RANK_PRIMARY + 15,
+    bmff_avif_type_find, "avif", HEIC_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (qtif, "image/x-quicktime", GST_RANK_SECONDARY,
     qtif_type_find, "qif,qtif,qti", QTIF_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (jp2, "image/jp2", GST_RANK_PRIMARY,
@@ -7142,8 +7557,8 @@ GST_TYPE_FIND_REGISTER_DEFINE (html, "text/html", GST_RANK_SECONDARY,
     html_type_find, "htm,html", HTML_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (swf, "application/x-shockwave-flash",
     GST_RANK_SECONDARY, swf_type_find, "swf,swfl", SWF_CAPS, NULL, NULL);
-GST_TYPE_FIND_REGISTER_DEFINE (xges, "application/xges",
-    GST_RANK_PRIMARY, xges_type_find, "xges", XGES_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (xges, "application/xges", GST_RANK_PRIMARY,
+    xges_type_find, "xges", XGES_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (xmeml, "application/vnd.apple-xmeml+xml",
     GST_RANK_SECONDARY, xmeml_type_find, "xmeml", XMEML_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (fcpxml, "application/vnd.apple-fcp+xml",
@@ -7266,8 +7681,8 @@ GST_TYPE_FIND_REGISTER_DEFINE (vivo, "video/vivo", GST_RANK_SECONDARY,
     vivo_type_find, "viv", VIVO_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (wbmp, "image/vnd.wap.wbmp", GST_RANK_MARGINAL,
     wbmp_typefind, NULL, NULL, NULL, NULL);
-GST_TYPE_FIND_REGISTER_DEFINE (y4m, "application/x-yuv4mpeg",
-    GST_RANK_PRIMARY, y4m_typefind, "y4m", NULL, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (y4m, "application/x-yuv4mpeg", GST_RANK_PRIMARY,
+    y4m_typefind, "y4m", NULL, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (windows_icon, "image/x-icon", GST_RANK_MARGINAL,
     windows_icon_typefind, NULL, NULL, NULL, NULL);
 #ifdef USE_GIO

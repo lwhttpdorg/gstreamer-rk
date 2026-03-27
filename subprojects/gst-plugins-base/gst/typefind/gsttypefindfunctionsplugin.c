@@ -133,6 +133,11 @@ plugin_init (GstPlugin * plugin)
   GST_TYPE_FIND_REGISTER (m4a, plugin);
   GST_TYPE_FIND_REGISTER (q3gp, plugin);
   GST_TYPE_FIND_REGISTER (qt, plugin);
+  GST_TYPE_FIND_REGISTER (heif, plugin);
+  GST_TYPE_FIND_REGISTER (heif_seq, plugin);
+  GST_TYPE_FIND_REGISTER (heic, plugin);
+  GST_TYPE_FIND_REGISTER (heic_seq, plugin);
+  GST_TYPE_FIND_REGISTER (avif, plugin);
   GST_TYPE_FIND_REGISTER (qtif, plugin);
   GST_TYPE_FIND_REGISTER (jp2, plugin);
   GST_TYPE_FIND_REGISTER (jpc, plugin);
