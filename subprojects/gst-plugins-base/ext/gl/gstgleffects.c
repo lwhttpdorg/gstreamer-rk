@@ -93,6 +93,7 @@ typedef enum
   GST_GL_EFFECT_STRETCH,
   GST_GL_EFFECT_TUNNEL,
   GST_GL_EFFECT_FISHEYE,
+  GST_GL_EFFECT_DEWARP,
   GST_GL_EFFECT_TWIRL,
   GST_GL_EFFECT_BULGE,
   GST_GL_EFFECT_SQUARE,
@@ -119,6 +120,7 @@ gst_gl_effects_get_effects (void)
     {GST_GL_EFFECT_STRETCH, "Stretch Effect", "stretch"},
     {GST_GL_EFFECT_TUNNEL, "Light Tunnel Effect", "tunnel"},
     {GST_GL_EFFECT_FISHEYE, "FishEye Effect", "fisheye"},
+    {GST_GL_EFFECT_DEWARP, "Dewarp FishEye Effect", "dewarp"},
     {GST_GL_EFFECT_TWIRL, "Twirl Effect", "twirl"},
     {GST_GL_EFFECT_BULGE, "Bulge Effect", "bulge"},
     {GST_GL_EFFECT_SQUARE, "Square Effect", "square"},
@@ -188,6 +190,12 @@ gst_gl_effects_set_effect (GstGLEffects * effects, gint effect_type)
       break;
     case GST_GL_EFFECT_FISHEYE:
       effects->effect = (GstGLEffectProcessFunc) gst_gl_effects_fisheye;
+      filter_class->supported_gl_api =
+          GST_GL_API_GLES2 | GST_GL_API_OPENGL | GST_GL_API_OPENGL3;
+      effects->current_effect = effect_type;
+      break;
+    case GST_GL_EFFECT_DEWARP:
+      effects->effect = (GstGLEffectProcessFunc) gst_gl_effects_dewarp;
       filter_class->supported_gl_api =
           GST_GL_API_GLES2 | GST_GL_API_OPENGL | GST_GL_API_OPENGL3;
       effects->current_effect = effect_type;

@@ -25,6 +25,7 @@ extern const gchar *mirror_fragment_source_gles2;
 extern const gchar *squeeze_fragment_source_gles2;
 extern const gchar *stretch_fragment_source_gles2;
 extern const gchar *fisheye_fragment_source_gles2;
+extern const gchar *dewarp_fragment_source_gles2;
 extern const gchar *twirl_fragment_source_gles2;
 extern const gchar *bulge_fragment_source_gles2;
 extern const gchar *tunnel_fragment_source_gles2;
