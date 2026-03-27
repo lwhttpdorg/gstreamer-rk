@@ -126,6 +126,8 @@ gst_hls_demux_finalize (GObject * obj)
     demux->keys = NULL;
   }
 
+  demux->rate = 1.0;
+
   G_OBJECT_CLASS (parent_class)->finalize (obj);
 }
 
@@ -222,6 +224,7 @@ gst_hls_demux2_init (GstHLSDemux * demux)
   demux->keys = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
   demux->start_bitrate = DEFAULT_START_BITRATE;
   g_mutex_init (&demux->keys_lock);
+  demux->rate = 1.0;
 }
 
 static GstStateChangeReturn
@@ -345,7 +348,7 @@ gst_hls_demux_seek (GstAdaptiveDemux * demux, GstEvent * seek)
     return TRUE;
   }
 
-  old_rate = demux->segment.rate;
+  old_rate = hlsdemux->rate;
 
   bitrate = gst_hls_demux_get_bitrate (hlsdemux);
 
@@ -363,6 +366,7 @@ gst_hls_demux_seek (GstAdaptiveDemux * demux, GstEvent * seek)
     if (!gst_hls_demux_change_variant_playlist (hlsdemux, FALSE, bitrate, NULL))
       return FALSE;
   }
+  hlsdemux->rate = rate;
 
   /* Of course the playlist isn't loaded as soon as we ask - we need to wait */
   GstFlowReturn flow_ret = gst_hls_demux_wait_for_variant_playlist (hlsdemux);
