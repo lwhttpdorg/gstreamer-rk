@@ -251,17 +251,21 @@ GST_START_TEST (test_shm_live)
   state_res = gst_element_set_state (consumer, GST_STATE_PLAYING);
   fail_unless (state_res != GST_STATE_CHANGE_FAILURE);
 
-  /* wait for preroll */
-  state_res = gst_element_get_state (consumer, NULL, NULL, GST_CLOCK_TIME_NONE);
+  /* wait for preroll with a bounded timeout to avoid deadlock if the
+   * producer fills shm before the consumer connects */
+  state_res = gst_element_get_state (consumer, NULL, NULL, 5 * GST_SECOND);
   fail_unless (state_res == GST_STATE_CHANGE_SUCCESS);
 
   g_signal_emit_by_name (sink, "pull-sample", &sample);
   gst_sample_unref (sample);
 
-  state_res = gst_element_set_state (producer, GST_STATE_NULL);
+  /* Stop consumer first so it releases shm buffers. Stopping the producer
+   * first can hang if shm is full and the poll thread is blocked waiting
+   * for free buffers (see #4346). */
+  state_res = gst_element_set_state (consumer, GST_STATE_NULL);
   fail_unless (state_res != GST_STATE_CHANGE_FAILURE);
 
-  state_res = gst_element_set_state (consumer, GST_STATE_NULL);
+  state_res = gst_element_set_state (producer, GST_STATE_NULL);
   fail_unless (state_res != GST_STATE_CHANGE_FAILURE);
 
   gst_object_unref (consumer);
