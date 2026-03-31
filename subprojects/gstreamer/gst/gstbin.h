@@ -278,6 +278,29 @@ gboolean	gst_bin_add			(GstBin *bin, GstElement *element);
 GST_API
 gboolean	gst_bin_remove			(GstBin *bin, GstElement *element);
 
+/**
+ * GstBinRemoveAsyncCallback:
+ * @success: %TRUE if the operation succeeded
+ * @error: (nullable): error detail when @success is %FALSE, %NULL otherwise.
+ *   Valid only for the duration of the callback; copy if needed.
+ * @user_data: user data passed to gst_bin_remove_async()
+ *
+ * Invoked when a gst_bin_remove_async() operation completes.
+ * The callback runs on a GStreamer streaming thread.
+ *
+ * Since: 1.30
+ */
+typedef void (*GstBinRemoveAsyncCallback) (gboolean success, GError * error,
+    gpointer user_data);
+
+GST_API
+void		gst_bin_remove_async		(GstBin * bin,
+						 GstPad * blocking_pad,
+						 GstElement * element,
+						 gboolean drain,
+						 GstBinRemoveAsyncCallback callback,
+						 gpointer user_data);
+
 /* retrieve a single child */
 
 GST_API

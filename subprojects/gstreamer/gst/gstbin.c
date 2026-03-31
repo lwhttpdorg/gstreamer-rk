@@ -141,6 +141,8 @@
 
 #include "gstutils.h"
 #include "gstchildproxy.h"
+#include "gstghostpad.h"
+#include "gstpadtemplate.h"
 
 GST_DEBUG_CATEGORY_STATIC (bin_debug);
 #define GST_CAT_DEFAULT bin_debug
@@ -4582,4 +4584,322 @@ gst_bin_iterate_all_by_element_factory_name (GstBin * bin,
   g_value_unset (&factory_name_val);
 
   return result;
+}
+
+/*
+ * gst_bin_remove_async() implementation
+ */
+
+/* Returns TRUE if @pad was obtained from a request pad template.
+ * Follows ghost pads to their target so that a ghost pad wrapping a
+ * request pad (e.g. on a tee) is correctly identified. */
+static gboolean
+pad_is_request (GstPad * pad)
+{
+  GstPad *target = NULL;
+  GstPadTemplate *tmpl;
+  gboolean is_req = FALSE;
+
+  if (GST_IS_GHOST_PAD (pad)) {
+    target = gst_ghost_pad_get_target (GST_GHOST_PAD (pad));
+    if (target)
+      pad = target;
+  }
+
+  tmpl = gst_pad_get_pad_template (pad);
+  if (tmpl) {
+    is_req = (GST_PAD_TEMPLATE_PRESENCE (tmpl) == GST_PAD_REQUEST);
+    gst_object_unref (tmpl);
+  }
+
+  gst_clear_object (&target);
+  return is_req;
+}
+
+/* Unlinks @pad from its peer. No-op if already unlinked. */
+static void
+bin_unlink_pad (GstPad * pad)
+{
+  GstPad *peer;
+
+  peer = gst_pad_get_peer (pad);
+  if (peer) {
+    if (GST_PAD_IS_SRC (pad))
+      gst_pad_unlink (pad, peer);
+    else
+      gst_pad_unlink (peer, pad);
+    gst_object_unref (peer);
+  }
+}
+
+/* Returns the first linked src pad of @element, or NULL. Caller must unref. */
+static GstPad *
+bin_element_get_first_linked_src_pad (GstElement * element)
+{
+  GstIterator *it;
+  GValue item = G_VALUE_INIT;
+  GstPad *result = NULL;
+
+  it = gst_element_iterate_src_pads (element);
+  while (gst_iterator_next (it, &item) == GST_ITERATOR_OK) {
+    GstPad *pad = g_value_get_object (&item);
+    if (gst_pad_is_linked (pad)) {
+      result = gst_object_ref (pad);
+      g_value_reset (&item);
+      break;
+    }
+    g_value_reset (&item);
+  }
+  g_value_unset (&item);
+  gst_iterator_free (it);
+  return result;
+}
+
+/* Returns the first sink pad of @element (static "sink" or first iterated).
+ * Caller must unref. */
+static GstPad *
+bin_element_get_sink_pad (GstElement * element)
+{
+  GstPad *pad;
+  GstIterator *it;
+  GValue item = G_VALUE_INIT;
+
+  pad = gst_element_get_static_pad (element, "sink");
+  if (pad)
+    return pad;
+
+  it = gst_element_iterate_sink_pads (element);
+  if (gst_iterator_next (it, &item) == GST_ITERATOR_OK)
+    pad = gst_object_ref (g_value_get_object (&item));
+  g_value_unset (&item);
+  gst_iterator_free (it);
+  return pad;
+}
+
+/* Unlinks @element's src from any downstream peer, sets it to NULL state,
+ * and removes it from @bin. */
+static void
+bin_element_teardown (GstBin * bin, GstElement * element)
+{
+  GstPad *src, *peer;
+
+  src = bin_element_get_first_linked_src_pad (element);
+  if (src) {
+    peer = gst_pad_get_peer (src);
+    if (peer) {
+      gst_pad_unlink (src, peer);
+      gst_object_unref (peer);
+    }
+    gst_object_unref (src);
+  }
+
+  gst_element_set_state (element, GST_STATE_NULL);
+  gst_bin_remove (bin, element);
+}
+
+typedef struct
+{
+  GstElement *parent;
+  GstPad *pad;
+} ReleaseRequestData;
+
+/* Schedules release of a request pad via gst_call_async() to avoid calling
+ * gst_element_release_request_pad() from inside a probe callback, which
+ * could deadlock on the pad lock. */
+static void
+release_request_pad_async (gpointer user_data)
+{
+  ReleaseRequestData *d = user_data;
+  gst_element_release_request_pad (d->parent, d->pad);
+  gst_object_unref (d->parent);
+  gst_object_unref (d->pad);
+  g_free (d);
+}
+
+static void
+schedule_request_pad_release (GstPad * pad)
+{
+  GstPad *target = NULL;
+  GstPad *actual = pad;
+  GstElement *parent;
+
+  /* Follow ghost pads to the underlying request pad so we release the right
+   * pad from the right element (e.g. the tee, not the enclosing bin). */
+  if (GST_IS_GHOST_PAD (pad)) {
+    target = gst_ghost_pad_get_target (GST_GHOST_PAD (pad));
+    if (target)
+      actual = target;
+  }
+
+  parent = GST_ELEMENT_CAST (gst_object_get_parent (GST_OBJECT (actual)));
+  if (parent) {
+    ReleaseRequestData *d = g_new (ReleaseRequestData, 1);
+    d->parent = parent;         /* already ref'd by get_parent */
+    d->pad = gst_object_ref (actual);
+    gst_call_async (release_request_pad_async, d);
+  }
+
+  gst_clear_object (&target);
+}
+
+typedef struct
+{
+  GstBin *bin;
+  GstPad *blocking_pad;
+  GstElement *element;
+  gboolean drain;
+  gboolean is_request_pad;
+  GstBinRemoveAsyncCallback callback;
+  gpointer user_data;
+  gulong eos_probe_id;
+  GstPad *eos_probe_pad;        /* ref'd; the element's src pad */
+} RemoveData;
+
+static void
+remove_data_free (RemoveData * data)
+{
+  gst_object_unref (data->bin);
+  gst_object_unref (data->blocking_pad);
+  gst_object_unref (data->element);
+  if (data->eos_probe_pad)
+    gst_object_unref (data->eos_probe_pad);
+  g_free (data);
+}
+
+static void
+remove_complete (RemoveData * data, gboolean success, GError * error)
+{
+  gboolean is_req = data->is_request_pad;
+  GstPad *blocking_pad = gst_object_ref (data->blocking_pad);
+  GstBinRemoveAsyncCallback callback = data->callback;
+  gpointer user_data = data->user_data;
+
+  remove_data_free (data);
+
+  callback (success, error, user_data);
+  g_clear_error (&error);
+
+  /* Request pad release must happen outside the probe context. */
+  if (is_req)
+    schedule_request_pad_release (blocking_pad);
+  gst_object_unref (blocking_pad);
+}
+
+static GstPadProbeReturn
+remove_eos_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RemoveData *data = user_data;
+  GstEvent *event;
+
+  if (!(GST_PAD_PROBE_INFO_TYPE (info) & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM))
+    return GST_PAD_PROBE_OK;
+
+  event = GST_PAD_PROBE_INFO_EVENT (info);
+  if (GST_EVENT_TYPE (event) != GST_EVENT_EOS)
+    return GST_PAD_PROBE_OK;
+
+  bin_element_teardown (data->bin, data->element);
+  remove_complete (data, TRUE, NULL);
+
+  return GST_PAD_PROBE_DROP;
+}
+
+static GstPadProbeReturn
+remove_block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RemoveData *data = user_data;
+
+  bin_unlink_pad (pad);
+
+  if (data->drain) {
+    GstPad *src = bin_element_get_first_linked_src_pad (data->element);
+
+    if (src) {
+      GstPad *sink;
+
+      data->eos_probe_pad = src;        /* takes ownership of ref */
+      data->eos_probe_id = gst_pad_add_probe (src,
+          GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, remove_eos_probe_cb, data, NULL);
+
+      sink = bin_element_get_sink_pad (data->element);
+      if (sink) {
+        gst_pad_send_event (sink, gst_event_new_eos ());
+        gst_object_unref (sink);
+        return GST_PAD_PROBE_REMOVE;
+      }
+
+      GST_WARNING_OBJECT (data->element,
+          "drain requested but element has no sink pad; falling back to "
+          "hard cut");
+      gst_pad_remove_probe (src, data->eos_probe_id);
+      data->eos_probe_pad = NULL;
+      gst_object_unref (src);
+    } else {
+      GST_WARNING_OBJECT (data->element,
+          "drain requested but element has no linked src pad; falling back "
+          "to hard cut");
+    }
+  }
+
+  bin_element_teardown (data->bin, data->element);
+  remove_complete (data, TRUE, NULL);
+  return GST_PAD_PROBE_REMOVE;
+}
+
+/**
+ * gst_bin_remove_async:
+ * @bin: the #GstBin that owns @element
+ * @blocking_pad: src pad immediately upstream of @element's sink; a blocking
+ *   probe is installed here and if this pad is a request pad it is released
+ *   automatically after teardown
+ * @element: element to remove from @bin; must be directly downstream of
+ *   @blocking_pad
+ * @drain: if %TRUE, send EOS into @element and wait for it to propagate out
+ *   before tearing down; falls back to a hard cut if @element has no linked
+ *   src pad
+ * @callback: (scope async): #GstBinRemoveAsyncCallback invoked on completion
+ * @user_data: (closure callback): data passed to @callback
+ *
+ * Removes @element from a running pipeline without stopping it.
+ *
+ * A blocking probe is installed on @blocking_pad.  Once the streaming thread
+ * is paused, the pad is unlinked from @element.  If @drain is %TRUE, an EOS
+ * event is injected into @element's sink and the function waits for it to
+ * exit @element's src pad before proceeding.  Then @element is set to
+ * %GST_STATE_NULL and removed from @bin.  If @blocking_pad is a request pad
+ * it is released.  @callback is then invoked on a GStreamer streaming thread.
+ *
+ * Only @element is removed.  Any downstream elements must be torn down by
+ * the caller inside @callback, setting each to %GST_STATE_NULL and calling
+ * gst_bin_remove(), working tail-to-head.
+ *
+ * MT safe.
+ *
+ * Since: 1.30
+ */
+void
+gst_bin_remove_async (GstBin * bin, GstPad * blocking_pad,
+    GstElement * element, gboolean drain, GstBinRemoveAsyncCallback callback,
+    gpointer user_data)
+{
+  RemoveData *data;
+
+  g_return_if_fail (GST_IS_BIN (bin));
+  g_return_if_fail (GST_IS_PAD (blocking_pad));
+  g_return_if_fail (GST_PAD_IS_SRC (blocking_pad));
+  g_return_if_fail (GST_IS_ELEMENT (element));
+  g_return_if_fail (callback != NULL);
+
+  data = g_new0 (RemoveData, 1);
+  data->bin = gst_object_ref (bin);
+  data->blocking_pad = gst_object_ref (blocking_pad);
+  data->element = gst_object_ref (element);
+  data->drain = drain;
+  data->is_request_pad = pad_is_request (blocking_pad);
+  data->callback = callback;
+  data->user_data = user_data;
+
+  gst_pad_add_probe (blocking_pad,
+      GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM | GST_PAD_PROBE_TYPE_IDLE,
+      remove_block_probe_cb, data, NULL);
 }
