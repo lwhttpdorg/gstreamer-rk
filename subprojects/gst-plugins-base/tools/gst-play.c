@@ -69,7 +69,7 @@ typedef enum
 
   /* The instant-rate setting is a flag,
    * applied on top of the trick-mode enum value.
-   * It needs to have a 2^n value bigger than 
+   * It needs to have a 2^n value bigger than
    * any of the enum values so setting it
    * won't affect the trickmode value */
   GST_PLAY_TRICK_MODE_INSTANT_RATE = (1 << 3)
@@ -126,7 +126,7 @@ typedef struct
   /* keyboard state tracking */
   gboolean shift_pressed;
 
-  GList *chapters;
+  GArray *chapters;
 } GstPlay;
 
 static gboolean quiet = FALSE;
@@ -284,7 +284,7 @@ play_new (gchar ** uris, const gchar * audio_sink, const gchar * video_sink,
   play->trick_mode = GST_PLAY_TRICK_MODE_NONE;
   play->start_position = start_position;
   play->accurate_seeks = accurate_seeks;
-  play->chapters = NULL;
+  play->chapters = g_array_new (FALSE, FALSE, sizeof (gint64));
   return play;
 }
 
@@ -312,7 +312,8 @@ play_free (GstPlay * play)
   g_free (play->cur_audio_sid);
   g_free (play->cur_video_sid);
   g_free (play->cur_text_sid);
-  g_list_free_full (play->chapters, free);
+  if (play->chapters)
+    g_array_free (play->chapters, TRUE);
 
   g_mutex_clear (&play->selection_lock);
 
@@ -325,7 +326,8 @@ play_reset (GstPlay * play)
 {
   g_list_foreach (play->missing, (GFunc) gst_message_unref, NULL);
   play->missing = NULL;
-  play->chapters = NULL;
+  if (play->chapters)
+    g_array_set_size (play->chapters, 0);
 
   play->buffering = FALSE;
   play->is_live = FALSE;
@@ -787,8 +789,9 @@ play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data)
       gboolean updated;
       gst_message_parse_toc (msg, &toc, &updated);
       gst_print ("Table of contents parsed.\n");
-      if (!play->chapters || updated) {
-        g_list_free_full (play->chapters, free);
+      if (!play->chapters || updated || play->chapters->len == 0) {
+        if (play->chapters)
+          g_array_set_size (play->chapters, 0);
         entries = gst_toc_get_entries (toc);
         g_list_foreach (entries, parse_toc, play);
       }
@@ -921,12 +924,12 @@ parse_toc (gpointer data, gpointer user_data)
   GstPlay *play = (GstPlay *) user_data;
   GstTocEntry *entry = (GstTocEntry *) data;
   GList *subentries;
-  gint64 *start = (gint64 *) malloc (sizeof (gint64));
+  gint64 start;
   gint64 stop;
 
-  gst_toc_entry_get_start_stop_times (entry, start, &stop);
+  gst_toc_entry_get_start_stop_times (entry, &start, &stop);
   if (gst_toc_entry_get_entry_type (entry) == GST_TOC_ENTRY_TYPE_CHAPTER)
-    play->chapters = g_list_append (play->chapters, start);
+    g_array_append_val (play->chapters, start);
 
   /* loop over sub-toc entries */
   subentries = gst_toc_entry_get_sub_entries (entry);
@@ -940,10 +943,12 @@ jump_chapter (GstPlay * play, gint direction)
   GstQuery *query;
   gboolean seekable = FALSE;
   gint64 dur = -1, pos = -1;
-  GList *l = play->chapters;
-  gint i = 0;
+  guint chap_idx;
 
   g_return_val_if_fail ((direction != -1 || direction != 1), FALSE);
+
+  if (!play->chapters || play->chapters->len == 0)
+    goto seek_failed;
 
   if (!gst_element_query_position (play->playbin, GST_FORMAT_TIME, &pos))
     goto seek_failed;
@@ -960,23 +965,21 @@ jump_chapter (GstPlay * play, gint direction)
   if (!seekable || dur <= 0)
     goto seek_failed;
 
-  while (l != NULL) {
-    GList *next = l->next;
-    gint64 chapter_start = *((gint64 *) (l->data));
+  for (chap_idx = 0; chap_idx < play->chapters->len; chap_idx++) {
+    gint64 chapter_start = g_array_index (play->chapters, gint64, chap_idx);
 
     if (direction == 1 && chapter_start > pos) {
       play_do_seek (play, chapter_start, play->rate, play->trick_mode);
       return TRUE;
-    } else if (direction == -1 && (chapter_start > pos || next == NULL)) {
+    } else if (direction == -1 && (chapter_start > pos
+            || chap_idx == play->chapters->len - 1)) {
       gint64 prev_chapter_begin = 0;
-      if (i > 2)
+      if (chap_idx > 1)
         prev_chapter_begin =
-            *((gint64 *) g_list_nth_data (play->chapters, i - 2));
+            g_array_index (play->chapters, gint64, chap_idx - 2);
       play_do_seek (play, prev_chapter_begin, play->rate, play->trick_mode);
       return TRUE;
     }
-    i++;
-    l = next;
   }
   goto seek_failed;
 
