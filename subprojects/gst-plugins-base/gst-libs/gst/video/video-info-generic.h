@@ -191,20 +191,25 @@ typedef struct {
   guint                  num_tile_rows;
 } GstGenericVideoParams;
 
-/**
- * gst_video_format_generic_get_unpack_format:
- * @info: a #GstVideoInfo with format %GST_VIDEO_FORMAT_GENERIC
- *
- * Returns the canonical format that gst_video_format_generic_unpack() will
- * produce for @info: %GST_VIDEO_FORMAT_ARGB64 for RGB colour models,
- * %GST_VIDEO_FORMAT_AYUV64 for YCbCr and grayscale, or
- * %GST_VIDEO_FORMAT_UNKNOWN if the colour model cannot be determined.
- *
- * Returns: the unpack format, or %GST_VIDEO_FORMAT_UNKNOWN on error.
- * Since: 1.30
- */
 GST_VIDEO_API
 GstVideoFormat gst_video_format_generic_get_unpack_format (const GstVideoInfo * info);
+
+GST_VIDEO_API
+gboolean gst_video_format_generic_unpack (const GstVideoInfo       * info,
+                                          GstVideoPackFlags          flags,
+                                          gpointer                   dest,
+                                          const gpointer             data[GST_VIDEO_MAX_PLANES],
+                                          const gint                 stride[GST_VIDEO_MAX_PLANES],
+                                          gint x, gint y, gint width);
+
+GST_VIDEO_API
+gboolean gst_video_format_generic_pack   (const GstVideoInfo       * info,
+                                          GstVideoPackFlags          flags,
+                                          const gpointer             src,
+                                          gint                       sstride,
+                                          gpointer                   data[GST_VIDEO_MAX_PLANES],
+                                          const gint                 stride[GST_VIDEO_MAX_PLANES],
+                                          gint y, gint width);
 
 G_END_DECLS
 
