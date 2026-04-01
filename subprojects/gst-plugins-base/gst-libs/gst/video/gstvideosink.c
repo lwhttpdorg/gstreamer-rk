@@ -222,6 +222,7 @@ gst_video_sink_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_READY_TO_PAUSED:
+      gst_video_info_clear (&vsink->priv->info);
       gst_video_info_init (&vsink->priv->info);
       break;
     default:
