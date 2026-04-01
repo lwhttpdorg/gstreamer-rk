@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <glib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,6 +101,10 @@ void video_orc_unpack_Y444 (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRIC
 void video_orc_pack_Y444 (guint8 * ORC_RESTRICT d1, guint8 * ORC_RESTRICT d2, guint8 * ORC_RESTRICT d3, const guint8 * ORC_RESTRICT s1, int n);
 void video_orc_unpack_GRAY8 (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int n);
 void video_orc_pack_GRAY8 (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int n);
+void video_orc_unpack_GRAY_16 (guint8 * ORC_RESTRICT d1, const guint16 * ORC_RESTRICT s1, int p1, int p2, int n);
+void video_orc_unpack_GRAY_16_swap (guint8 * ORC_RESTRICT d1, const guint16 * ORC_RESTRICT s1, int p1, int p2, int n);
+void video_orc_pack_GRAY_16 (guint16 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int p1, int n);
+void video_orc_pack_GRAY_16_swap (guint16 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int p1, int n);
 void video_orc_unpack_BGRA (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int n);
 void video_orc_pack_BGRA (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int n);
 void video_orc_pack_RGBA_le (guint8 * ORC_RESTRICT d1, const guint8 * ORC_RESTRICT s1, int n);
