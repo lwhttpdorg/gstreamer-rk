@@ -7711,7 +7711,8 @@ sctp_move_to_outqueue(struct sctp_tcb *stcb,
                       int *giveup,
                       int eeor_mode,
                       int *bail,
-                      int so_locked)
+                      int so_locked,
+                      int cwnd_almost_full)
 {
 	/* Move from the stream to the send_queue keeping track of the total */
 	struct sctp_association *asoc;
@@ -7912,7 +7913,8 @@ re_look:
 		rcv_flags |= SCTP_DATA_UNORDERED;
 	}
 	if (SCTP_BASE_SYSCTL(sctp_enable_sack_immediately) &&
-	    (sp->sinfo_flags & SCTP_EOF) == SCTP_EOF) {
+	    ((sp->sinfo_flags & SCTP_EOF) == SCTP_EOF ||
+	     cwnd_almost_full > 0)) {
 		rcv_flags |= SCTP_DATA_SACK_IMMEDIATELY;
 	}
 	/* clear out the chunk before setting up */
@@ -8233,7 +8235,7 @@ out_of:
 
 static void
 sctp_fill_outqueue(struct sctp_tcb *stcb,
-    struct sctp_nets *net, int frag_point, int eeor_mode, int *quit_now, int so_locked)
+    struct sctp_nets *net, int frag_point, int eeor_mode, int *quit_now, int so_locked, int cwnd_almost_full)
 {
 	struct sctp_association *asoc;
 	struct sctp_stream_out *strq;
@@ -8274,7 +8276,7 @@ sctp_fill_outqueue(struct sctp_tcb *stcb,
 	bail = 0;
 	while ((space_left > 0) && (strq != NULL)) {
 		moved = sctp_move_to_outqueue(stcb, strq, space_left, frag_point,
-		                              &giveup, eeor_mode, &bail, so_locked);
+		                              &giveup, eeor_mode, &bail, so_locked, cwnd_almost_full);
 		stcb->asoc.ss_functions.sctp_ss_scheduled(stcb, net, asoc, strq, moved);
 		if ((giveup != 0) || (bail != 0)) {
 			break;
@@ -8390,6 +8392,7 @@ sctp_med_chunk_output(struct sctp_inpcb *inp,
 	int override_ok = 1;
 	int skip_fill_up = 0;
 	int data_auth_reqd = 0;
+	int cwnd_almost_full = 0;
 	/* JRS 5/14/07 - Add flag for whether a heartbeat is sent to
 	   the destination. */
 	int quit_now = 0;
@@ -8517,10 +8520,13 @@ sctp_med_chunk_output(struct sctp_inpcb *inp,
 				}
 				continue;
 			}
+			if (net->flight_size + net->mtu >= net->cwnd) {
+				cwnd_almost_full = 1;
+			}
 			if (SCTP_BASE_SYSCTL(sctp_logging_level) & SCTP_CWND_LOGGING_ENABLE) {
 				sctp_log_cwnd(stcb, net, 4, SCTP_CWND_LOG_FILL_OUTQ_CALLED);
 			}
-			sctp_fill_outqueue(stcb, net, frag_point, eeor_mode, &quit_now, so_locked);
+			sctp_fill_outqueue(stcb, net, frag_point, eeor_mode, &quit_now, so_locked, cwnd_almost_full);
 			if (quit_now) {
 				/* memory alloc failure */
 				no_data_chunks = 1;
