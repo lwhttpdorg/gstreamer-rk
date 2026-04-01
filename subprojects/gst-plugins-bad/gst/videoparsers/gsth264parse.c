@@ -284,6 +284,8 @@ gst_h264_parse_reset_stream_info (GstH264Parse * h264parse)
   h264parse->first_frame = TRUE;
   h264parse->ignore_vui_fps = FALSE;
 
+  h264parse->have_interlacing_info = FALSE;
+
   gst_buffer_replace (&h264parse->codec_data, NULL);
   gst_buffer_replace (&h264parse->codec_data_in, NULL);
 
@@ -2458,18 +2460,61 @@ gst_h264_parse_update_src_caps (GstH264Parse * h264parse, GstCaps * caps)
 
       if (s && !gst_structure_has_field (s, "interlace-mode")) {
         const gchar *interlace_mode;
-        /* If a picture timing is present, and upstream didn't specify the
-         * interlace mode, we are in mixed mode (i.e. we are not guaranteed we
-         * will either be always interlaced or always progressive)
-         */
-        if (vui->pic_struct_present_flag)
-          interlace_mode = "mixed";
-        else
-          interlace_mode = "progressive";
-        GST_DEBUG_OBJECT (h264parse, "Setting interlace-mode : %s",
-            interlace_mode);
-        gst_caps_set_simple (caps, "interlace-mode", G_TYPE_STRING,
-            interlace_mode, NULL);
+
+        if (!h264parse->have_interlacing_info
+            || h264parse->interlace_mode != GST_VIDEO_INTERLACE_MODE_MIXED) {
+          gboolean top_field_first, repeat_first_field, interlaced;
+          GstH264VUIParams *vui = &sps->vui_parameters;
+          GstVideoInterlaceMode video_interlace_mode;
+
+          if (!vui->pic_struct_present_flag) {
+            h264parse->have_interlacing_info = TRUE;
+            video_interlace_mode = GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
+          } else if (parse_interlacing_information (h264parse, &interlaced,
+                  &top_field_first, &repeat_first_field)) {
+            if (!h264parse->have_interlacing_info) {
+              h264parse->top_field_first = top_field_first;
+              h264parse->repeat_first_field = repeat_first_field;
+            }
+
+            if (repeat_first_field) {
+              video_interlace_mode = GST_VIDEO_INTERLACE_MODE_MIXED;
+            } else if (interlaced
+                && top_field_first == h264parse->top_field_first) {
+              video_interlace_mode = GST_VIDEO_INTERLACE_MODE_INTERLEAVED;
+            } else {
+              video_interlace_mode = GST_VIDEO_INTERLACE_MODE_MIXED;
+              GST_DEBUG_OBJECT (h264parse, "interlaced %d tff %d prev tff %d",
+                  interlaced, top_field_first, h264parse->top_field_first);
+            }
+            h264parse->have_interlacing_info = TRUE;
+            h264parse->top_field_first = top_field_first;
+            h264parse->repeat_first_field = repeat_first_field;
+            h264parse->interlace_mode = video_interlace_mode;
+          }
+        }
+
+        switch (h264parse->interlace_mode) {
+          case GST_VIDEO_INTERLACE_MODE_MIXED:
+            interlace_mode = "mixed";
+            break;
+          case GST_VIDEO_INTERLACE_MODE_INTERLEAVED:
+            interlace_mode = "interleaved";
+            break;
+          case GST_VIDEO_INTERLACE_MODE_PROGRESSIVE:
+            interlace_mode = "progressive";
+            break;
+          default:
+            g_assert_not_reached ();
+            break;
+        }
+
+        if (h264parse->have_interlacing_info) {
+          GST_DEBUG_OBJECT (h264parse,
+              "Setting interlace-mode : %s", interlace_mode);
+          gst_caps_set_simple (caps, "interlace-mode", G_TYPE_STRING,
+              interlace_mode, NULL);
+        }
       }
 
       /* Pass through or set output stereo/multiview config */
@@ -4115,6 +4160,9 @@ gst_h264_parse_event (GstBaseParse * parse, GstEvent * event)
       res = GST_BASE_PARSE_CLASS (parent_class)->sink_event (parse, event);
       break;
     }
+    case GST_EVENT_STREAM_START:
+      h264parse->have_interlacing_info = FALSE;
+      G_GNUC_FALLTHROUGH;
     default:
       res = GST_BASE_PARSE_CLASS (parent_class)->sink_event (parse, event);
       break;

@@ -160,6 +160,12 @@ struct _GstH264Parse
   GstVideoMultiviewFlags multiview_flags;
   gboolean first_in_bundle;
 
+  /* Interlacing info */
+  gboolean have_interlacing_info;
+  GstVideoInterlaceMode interlace_mode;
+  gboolean top_field_first;
+  gboolean repeat_first_field;
+
   GstVideoParseUserData user_data;
   GstVideoParseUserDataUnregistered user_data_unregistered;
 
