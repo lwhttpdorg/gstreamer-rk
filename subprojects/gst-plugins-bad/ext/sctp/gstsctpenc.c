@@ -75,7 +75,7 @@ static GParamSpec *properties[NUM_PROPERTIES];
 #define DEFAULT_SCTP_PPID 1
 #define DEFAULT_USE_SOCK_STREAM FALSE
 
-#define BUFFER_FULL_SLEEP_TIME 100000
+#define BUFFER_FULL_SLEEP_TIME 1000
 
 GType gst_sctp_enc_pad_get_type (void);
 
