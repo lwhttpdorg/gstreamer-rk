@@ -110,6 +110,16 @@ _priv_gst_tag_initialize (void)
   gst_tag_register_static (GST_TAG_TITLE_SORTNAME, GST_TAG_FLAG_META,
       G_TYPE_STRING,
       _("title sortname"), _("commonly used title for sorting purposes"), NULL);
+  gst_tag_register_static (GST_TAG_ROLE, GST_TAG_FLAG_META,
+      G_TYPE_STRING,
+      _("role"),
+      _("Role describing the purpose of the content set by the author"),
+      gst_tag_merge_strings_with_comma);
+  gst_tag_register_static (GST_TAG_ACCESSIBILITY, GST_TAG_FLAG_META,
+      G_TYPE_STRING,
+      _("accessibility"),
+      _("Accessibility consideration of the conent"),
+      gst_tag_merge_strings_with_comma);
   gst_tag_register_static (GST_TAG_ARTIST, GST_TAG_FLAG_META,
       G_TYPE_STRING,
       _("artist"),

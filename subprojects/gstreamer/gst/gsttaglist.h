@@ -1129,7 +1129,31 @@ gboolean     gst_tag_list_is_writable   (const GstTagList * taglist);
  *
  * Since: 1.24
  */
+
 #define GST_TAG_CONTAINER_SPECIFIC_TRACK_ID "container-specific-track-id"
+/** 
+ * GST_TAG_ROLE
+ *
+ * Role describing te type of the content set by the author (string) e.g Main, Alternate
+ *
+ * Role descriptor in context of Preselections in MPEG-DASH describing entire experiences
+ * rather than individual audio programme components.
+ *
+ * Since: 1.28
+ */
+
+ #define GST_TAG_ROLE          "role"
+/** 
+ * GST_TAG_ACCESSIBILITY
+ *
+ * Accessibility consideration of the conent (string)
+ *
+ * type of accessibility consideration, e.g. 'audio-description', 'captions'
+ *
+ * Since: 1.28
+ */
+
+ #define GST_TAG_ACCESSIBILITY          "accessibility"
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTagList, gst_tag_list_unref)
 
