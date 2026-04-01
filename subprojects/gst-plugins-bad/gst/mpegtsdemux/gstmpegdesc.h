@@ -243,5 +243,6 @@
 #define DRF_ID_VANC       0x56414e43   /* defined in SMPTE ST-2038 */
 #define DRF_ID_VP09       0x56503039   /* Custom GStreamer vp9 */
 #define DRF_ID_AV1G       0x41563147   /* Custom AV1 GStreamer mapping */
+#define DRF_ID_AV01       0x41563031   /* Official AOMedia AV1 registration ID */
 
 #endif /* __GST_MPEG_DESC_H__ */

@@ -234,7 +234,7 @@ struct _TSDemuxStream
     "video/x-h265,stream-format=(string)byte-stream;" \
     "video/x-h266,stream-format=(string)byte-stream;" \
     "video/x-vp9;" \
-    "video/x-av1,stream-format=(string)obu-stream,alignment=(string)frame;" \
+    "video/x-av1,stream-format=(string)obu-stream,alignment=(string)tu;" \
     "video/x-dirac;" \
     "video/x-cavs;" \
     "video/x-wmv," \
@@ -1512,11 +1512,13 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
           caps = gst_caps_new_empty_simple ("audio/x-smpte-302m");
           break;
         case DRF_ID_AV1G:
-          GST_DEBUG ("AV1");
+        case DRF_ID_AV01:
+          GST_DEBUG_OBJECT (demux, "AV1 stream (registration ID: 0x%08x)",
+              bstream->registration_id);
           is_video = TRUE;
           caps =
               gst_caps_new_simple ("video/x-av1", "stream-format",
-              G_TYPE_STRING, "obu-stream", "alignment", G_TYPE_STRING, "frame",
+              G_TYPE_STRING, "obu-stream", "alignment", G_TYPE_STRING, "tu",
               NULL);
           desc = mpegts_get_descriptor_from_stream (bstream, 0x80);
           if (desc != NULL) {
@@ -3591,6 +3593,66 @@ error:
   }
 }
 
+/* Reconstruct AV1 buffer by removing start codes and emulation prevention bytes
+ * as specified in the AV1 in MPEG-2 TS specification */
+static GstBuffer *
+gst_ts_demux_reconstruct_av1_buffer (TSDemuxStream * stream)
+{
+  const guint8 *in_data = stream->data;
+  gsize in_size = stream->current_size;
+  guint8 *out_data;
+  gsize idx_src, idx_out;
+  GstMapInfo out_map;
+
+  GST_DEBUG_OBJECT (stream->pad, "Reconstructing AV1 buffer");
+
+  /* Allocate input size by default, will trim later */
+  GstBuffer *out_buf = gst_buffer_new_and_alloc (in_size);
+  if (!out_buf)
+    return NULL;
+
+  if (!gst_buffer_map (out_buf, &out_map, GST_MAP_WRITE)) {
+    gst_buffer_unref (out_buf);
+    return NULL;
+  }
+
+  out_data = out_map.data;
+
+  /* Second pass: copy data with reconstruction */
+  idx_out = 0;
+  for (idx_src = 0; idx_src < in_size; idx_src++) {
+    if (idx_src + 2 < in_size && in_data[idx_src] == 0x00
+        && in_data[idx_src + 1] == 0x00) {
+      /* Skip start code 0x000001 */
+      if (in_data[idx_src + 2] == 0x01) {
+        GST_TRACE_OBJECT (stream->pad,
+            "Skipping startcode at offset %" G_GSIZE_FORMAT, idx_src);
+        idx_src += 2;
+        continue;
+      }
+      /* Skip emulation prevention byte 0x03 */
+      if (in_data[idx_src + 2] == 0x03) {
+        out_data[idx_out++] = 0x00;
+        out_data[idx_out++] = 0x00;
+        GST_TRACE_OBJECT (stream->pad, "Skip emulation byte");
+        idx_src += 2;
+        continue;
+      }
+    }
+    out_data[idx_out++] = in_data[idx_src];
+  }
+
+  gst_buffer_unmap (out_buf, &out_map);
+  /* Resize to actual size */
+  gst_buffer_set_size (out_buf, idx_out);
+
+  g_free (stream->data);
+  stream->data = NULL;
+  stream->current_size = 0;
+
+  return out_buf;
+}
+
 /* Extract Access Unit content in the format used by GStreamer */
 static GstBuffer *
 parse_access_unit (GstTSDemux * demux, TSDemuxStream * stream,
@@ -3620,6 +3682,9 @@ parse_access_unit (GstTSDemux * demux, TSDemuxStream * stream,
     }
   } else if (bs->stream_type == GST_MPEGTS_STREAM_TYPE_VIDEO_JPEG_XS) {
     buffer = parse_jpegxs_access_unit (stream);
+  } else if (bs->stream_type == GST_MPEGTS_STREAM_TYPE_PRIVATE_PES_PACKETS &&
+      bs->registration_id == DRF_ID_AV01) {
+    buffer = gst_ts_demux_reconstruct_av1_buffer (stream);
   } else {
     buffer = gst_buffer_new_wrapped (stream->data, stream->current_size);
   }
