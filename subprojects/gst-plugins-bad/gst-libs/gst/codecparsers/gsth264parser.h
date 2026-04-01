@@ -1606,6 +1606,9 @@ GstH264Profile gst_h264_profile_from_string (const gchar * profile);
 GST_CODEC_PARSERS_API
 const gchar *   gst_h264_slice_type_to_string      (GstH264SliceType slice_type);
 
+GST_CODEC_PARSERS_API
+const gchar *   gst_h264_sps_get_profile_string    (const GstH264SPS * sps);
+
 G_END_DECLS
 
 #endif

@@ -784,6 +784,19 @@ gst_codec_timestamper_change_state (GstElement * element,
   return ret;
 }
 
+guint
+gst_codec_timestamper_get_window_size (GstCodecTimestamper * timestamper)
+{
+  GstCodecTimestamperPrivate *priv = timestamper->priv;
+  guint window_size;
+
+  g_rec_mutex_lock (&priv->lock);
+  window_size = priv->window_size;
+  g_rec_mutex_unlock (&priv->lock);
+
+  return window_size;
+}
+
 void
 gst_codec_timestamper_set_window_size (GstCodecTimestamper * timestamper,
     guint window_size)

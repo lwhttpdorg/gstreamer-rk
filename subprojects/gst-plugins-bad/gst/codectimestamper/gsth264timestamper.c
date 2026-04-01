@@ -46,6 +46,22 @@
  * will confuse the muxer element and will result in unexpected (or bogus)
  * duration/framerate/timestamp values in the muxed container stream.
  *
+ * ## Messages
+ *
+ * This element posts element messages named `h264timestamper-window-size` on the
+ * bus when the window size is determined from the SPS. The message structure
+ * contains the following fields:
+ *
+ * * #guint `window_size`: The window size used for frame reordering.
+ * * #gchararray `profile`: The H.264 profile string (e.g., "high", "baseline").
+ * * #guint `max_reorder_frames`: The maximum number of frames that can be
+ *   reordered according to the SPS.
+ * * #guint `max_dpb_frames`: The maximum decoded picture buffer size in frames.
+ * * #guint `vui_parameters_present`: Whether VUI parameters are present in the SPS.
+ * * #guint `bitstream_restriction`: Whether bitstream restriction flag is set.
+ * * #guint `max_dec_frame_buffering`: Maximum decoded frame buffering value.
+ * * #guint `num_reorder_frames`: Number of reorder frames from VUI if present.
+ *
  * ## Example launch line
  * ```
  * gst-launch-1.0 filesrc location=video.mkv ! matroskademux ! h264parse ! h264timestamper ! mp4mux ! filesink location=output.mp4
@@ -239,6 +255,8 @@ h264_level_to_max_dpb_mbs (GstH264Level level)
   return 0;
 }
 
+
+
 static void
 gst_h264_timestamper_process_sps (GstH264Timestamper * self, GstH264SPS * sps)
 {
@@ -310,6 +328,21 @@ gst_h264_timestamper_process_sps (GstH264Timestamper * self, GstH264SPS * sps)
 
   gst_codec_timestamper_set_window_size (GST_CODEC_TIMESTAMPER_CAST (self),
       max_reorder_frames);
+
+  gst_element_post_message (GST_ELEMENT (self),
+      gst_message_new_element (GST_OBJECT (self),
+          gst_structure_new ("h264timestamper-window-size",
+              "window_size", G_TYPE_UINT,
+              gst_codec_timestamper_get_window_size (GST_CODEC_TIMESTAMPER_CAST
+                  (self)), "profile", G_TYPE_STRING,
+              gst_h264_sps_get_profile_string (sps), "max_reorder_frames",
+              G_TYPE_UINT, max_reorder_frames, "max_dpb_frames", G_TYPE_UINT,
+              max_dpb_frames, "vui_parameters_present", G_TYPE_UINT,
+              sps->vui_parameters_present_flag, "bitstream_restriction",
+              G_TYPE_UINT, sps->vui_parameters.bitstream_restriction_flag,
+              "max_dec_frame_buffering", G_TYPE_UINT,
+              sps->vui_parameters.max_dec_frame_buffering, "num_reorder_frames",
+              G_TYPE_UINT, sps->vui_parameters.num_reorder_frames, NULL)));
 }
 
 static void

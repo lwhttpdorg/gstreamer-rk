@@ -46,6 +46,17 @@
  * will confuse the muxer element and will result in unexpected (or bogus)
  * duration/framerate/timestamp values in the muxed container stream.
  *
+ * ## Messages
+ *
+ * This element posts element messages named `h265timestamper-window-size` on the
+ * bus when the window size is determined from the SPS. The message structure
+ * contains the following fields:
+ *
+ * * #guint `window-size`: The window size used for frame reordering.
+ * * #gchararray `profile`: The H.265 profile string (e.g., "main", "main-10").
+ * * #guint `max_reorder_frames`: The maximum number of frames that can be
+ *   reordered according to the SPS.
+ *
  * ## Example launch line
  * ```
  * gst-launch-1.0 filesrc location=video.mkv ! matroskademux ! h265parse ! h265timestamper ! mp4mux ! filesink location=output.mp4
@@ -209,6 +220,15 @@ gst_h265_timestamper_process_sps (GstH265Timestamper * self, GstH265SPS * sps)
 
   gst_codec_timestamper_set_window_size (GST_CODEC_TIMESTAMPER_CAST (self),
       max_reorder_frames);
+
+  gst_element_post_message (GST_ELEMENT (self),
+      gst_message_new_element (GST_OBJECT (self),
+          gst_structure_new ("h265timestamper-window-size",
+              "window-size", G_TYPE_UINT,
+              gst_codec_timestamper_get_window_size (GST_CODEC_TIMESTAMPER_CAST
+                  (self)), "profile", G_TYPE_STRING,
+              gst_h265_profile_to_string (gst_h265_get_profile_from_sps (sps)),
+              "max_reorder_frames", G_TYPE_UINT, max_reorder_frames, NULL)));
 }
 
 static void

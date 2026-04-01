@@ -2020,82 +2020,6 @@ digit_to_string (guint digit)
     return NULL;
 }
 
-static const gchar *
-get_profile_string (GstH264SPS * sps)
-{
-  const gchar *profile = NULL;
-
-  switch (sps->profile_idc) {
-    case 66:
-      if (sps->constraint_set1_flag)
-        profile = "constrained-baseline";
-      else
-        profile = "baseline";
-      break;
-    case 77:
-      profile = "main";
-      break;
-    case 88:
-      profile = "extended";
-      break;
-    case 100:
-      if (sps->constraint_set4_flag) {
-        if (sps->constraint_set5_flag)
-          profile = "constrained-high";
-        else
-          profile = "progressive-high";
-      } else
-        profile = "high";
-      break;
-    case 110:
-      if (sps->constraint_set3_flag)
-        profile = "high-10-intra";
-      else if (sps->constraint_set4_flag)
-        profile = "progressive-high-10";
-      else
-        profile = "high-10";
-      break;
-    case 122:
-      if (sps->constraint_set3_flag)
-        profile = "high-4:2:2-intra";
-      else
-        profile = "high-4:2:2";
-      break;
-    case 244:
-      if (sps->constraint_set3_flag)
-        profile = "high-4:4:4-intra";
-      else
-        profile = "high-4:4:4";
-      break;
-    case 44:
-      profile = "cavlc-4:4:4-intra";
-      break;
-    case 118:
-      profile = "multiview-high";
-      break;
-    case 128:
-      profile = "stereo-high";
-      break;
-    case 83:
-      if (sps->constraint_set5_flag)
-        profile = "scalable-constrained-baseline";
-      else
-        profile = "scalable-baseline";
-      break;
-    case 86:
-      if (sps->constraint_set3_flag)
-        profile = "scalable-high-intra";
-      else if (sps->constraint_set5_flag)
-        profile = "scalable-constrained-high";
-      else
-        profile = "scalable-high";
-      break;
-    default:
-      return NULL;
-  }
-
-  return profile;
-}
 
 static const gchar *
 get_level_string (GstH264SPS * sps)
@@ -2537,7 +2461,7 @@ gst_h264_parse_update_src_caps (GstH264Parse * h264parse, GstCaps * caps)
     if (sps) {
       const gchar *profile, *level;
 
-      profile = get_profile_string (sps);
+      profile = gst_h264_sps_get_profile_string (sps);
       if (profile != NULL)
         gst_caps_set_simple (caps, "profile", G_TYPE_STRING, profile, NULL);
 
