@@ -4850,7 +4850,7 @@ GST_START_TEST (test_video_meta_transform_matrix_rotation_45)
 GST_END_TEST;
 
 /*
- * gst_video_info_clear() on a uninitialized struct must not crash.
+ * gst_video_info_clear() on a uninitialized struct.
  * This exercises the finfo == NULL guard.
  */
 GST_START_TEST (test_video_info_clear_uninitialized)
@@ -4858,7 +4858,7 @@ GST_START_TEST (test_video_info_clear_uninitialized)
   GstVideoInfo info;
 
   memset (&info, 0, sizeof (info));
-  gst_video_info_clear (&info); /* must not crash */
+  gst_video_info_clear (&info);
 }
 
 GST_END_TEST;
@@ -4914,8 +4914,6 @@ GST_START_TEST (test_video_info_reinit)
   gst_video_info_init (&info);
   gst_video_info_set_format (&info, GST_VIDEO_FORMAT_NV12, 1920, 1080);
 
-  /* Correct re-init pattern: clear first, then init. For formats with
-   * extensions (e.g. GENERIC), gst_video_info_clear() releases them. */
   gst_video_info_clear (&info);
   gst_video_info_init (&info);
   fail_unless (GST_VIDEO_INFO_FORMAT (&info) == GST_VIDEO_FORMAT_UNKNOWN);
@@ -5026,6 +5024,28 @@ make_generic_rgb_caps (gint width, gint height)
   return caps;
 }
 
+/* Verify gst_video_info_from_caps() is safe on uninitialized stack memory.
+ * Both gst_video_info_from_caps() and gst_video_info_init_from_caps_extended()
+ * initialize the struct internally, so no prior initialization is required. */
+GST_START_TEST (test_video_info_from_caps_no_init)
+{
+  GstCaps *caps;
+  GstVideoInfo info;            /* raw stack, intentionally not initialized */
+
+  caps = gst_caps_from_string ("video/x-raw, format=I420, width=320,"
+      " height=240, framerate=25/1");
+  fail_unless (caps != NULL);
+
+  fail_unless (gst_video_info_from_caps (&info, caps));
+  fail_unless_equals_int (GST_VIDEO_INFO_FORMAT (&info), GST_VIDEO_FORMAT_I420);
+  fail_unless_equals_int (GST_VIDEO_INFO_WIDTH (&info), 320);
+  fail_unless_equals_int (GST_VIDEO_INFO_HEIGHT (&info), 240);
+
+  gst_caps_unref (caps);
+}
+
+GST_END_TEST;
+
 /* gst_video_info_from_caps() must reject GENERIC caps (gatekeeper). */
 GST_START_TEST (test_video_info_generic_gatekeeper)
 {
@@ -5040,15 +5060,14 @@ GST_START_TEST (test_video_info_generic_gatekeeper)
 
 GST_END_TEST;
 
-/* gst_video_info_from_caps_extended() parses GENERIC caps correctly. */
+/* gst_video_info_init_from_caps_extended() parses GENERIC caps correctly. */
 GST_START_TEST (test_video_info_generic_from_caps)
 {
   GstCaps *caps = make_generic_rgb_caps (320, 240);
   GstVideoInfo info;
   const GstGenericVideoParams *params;
 
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
 
   fail_unless (GST_VIDEO_INFO_FORMAT (&info) == GST_VIDEO_FORMAT_GENERIC);
   fail_unless_equals_int (GST_VIDEO_INFO_WIDTH (&info), 320);
@@ -5078,8 +5097,7 @@ GST_START_TEST (test_video_info_generic_lifecycle)
   GstVideoInfo orig, copy;
   const GstGenericVideoParams *params;
 
-  gst_video_info_init (&orig);
-  fail_unless (gst_video_info_from_caps_extended (&orig, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&orig, caps));
   fail_unless (orig.ABI.abi.extensions != NULL);
   fail_unless_equals_int (GST_MINI_OBJECT_REFCOUNT (orig.ABI.abi.extensions),
       1);
@@ -5167,8 +5185,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
 
   /* interleave: 8-bit RGB 1920x1080 -> stride=5760, size=6220800 */
   caps = make_generic_caps (1920, 1080, rgb8, 3, 0, "interleave", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 5760);
   fail_unless_equals_int (info.size, 6220800);
   gst_video_info_clear (&info);
@@ -5176,8 +5193,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
 
   /* interleave: 10-bit RGB block_size=4 1920x1080 -> stride=7680, size=8294400 */
   caps = make_generic_caps (1920, 1080, rgb10, 3, 0, "interleave", 4, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 7680);
   fail_unless_equals_int (info.size, 8294400);
   gst_video_info_clear (&info);
@@ -5185,8 +5201,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
 
   /* component: 8-bit YCbCr 4:4:4 1920x1080 -> strides=1920, size=6220800 */
   caps = make_generic_caps (1920, 1080, ycbcr8, 3, 0, "component", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 1920);
   fail_unless_equals_int (info.stride[1], 1920);
   fail_unless_equals_int (info.stride[2], 1920);
@@ -5200,8 +5215,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
   /* row-interleave: 8-bit RGB 1920x1080 -> stride=5760, size=6220800 */
   caps =
       make_generic_caps (1920, 1080, rgb8, 3, 0, "row-interleave", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 5760);
   fail_unless_equals_int (info.size, 6220800);
   gst_video_info_clear (&info);
@@ -5212,8 +5226,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
   caps =
       make_generic_caps (1920, 1080, ycbcr8, 3, 0, "mixed-interleave", 0, 0,
       1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 1920);
   fail_unless_equals_int (info.stride[1], 3840);
   fail_unless_equals_int (info.offset[0], 0);
@@ -5225,8 +5238,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
   /* multi-Y: Y+Y+Cb+Cr sampling=0, 1920x1080
    * group_bytes=4, stride=(1920/2)*4=3840, size=4147200 */
   caps = make_generic_caps (1920, 1080, yycbcr8, 4, 0, "multi-Y", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 3840);
   fail_unless_equals_int (info.size, 4147200);
   gst_video_info_clear (&info);
@@ -5236,8 +5248,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
    * tile_w=480, tile_h=270, stride[i]=480, size=480*270*3*16=6220800 */
   caps =
       make_generic_caps (1920, 1080, rgb8, 3, 0, "tile-component", 0, 0, 4, 4);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 480);
   fail_unless_equals_int (info.stride[1], 480);
   fail_unless_equals_int (info.stride[2], 480);
@@ -5248,8 +5259,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
   /* row_align: component, 8-bit RGB, 320x240, row_align=256
    * align(320,256)=512 -> stride=512, size=512*240*3=368640 */
   caps = make_generic_caps (320, 240, rgb8, 3, 0, "component", 0, 256, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   fail_unless_equals_int (info.stride[0], 512);
   fail_unless_equals_int (info.stride[1], 512);
   fail_unless_equals_int (info.stride[2], 512);
@@ -5259,8 +5269,7 @@ GST_START_TEST (test_video_info_generic_stride_vectors)
 
   /* sampling_type=1 must return FALSE (A5: only sampling_type=0 supported) */
   caps = make_generic_caps (1920, 1080, ycbcr8, 3, 1, "component", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_if (gst_video_info_from_caps_extended (&info, caps));
+  fail_if (gst_video_info_init_from_caps_extended (&info, caps));
   gst_video_info_clear (&info);
   gst_caps_unref (caps);
 }
@@ -5276,14 +5285,12 @@ GST_START_TEST (test_video_info_generic_round_trip)
   GstCaps *caps2;
   const GstGenericVideoParams *p1, *p2;
 
-  gst_video_info_init (&info1);
-  fail_unless (gst_video_info_from_caps_extended (&info1, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info1, caps));
 
   caps2 = gst_video_info_to_caps (&info1);
   fail_unless (caps2 != NULL);
 
-  gst_video_info_init (&info2);
-  fail_unless (gst_video_info_from_caps_extended (&info2, caps2));
+  fail_unless (gst_video_info_init_from_caps_extended (&info2, caps2));
 
   fail_unless (gst_video_info_is_equal (&info1, &info2));
 
@@ -5320,8 +5327,7 @@ GST_START_TEST (test_video_frame_generic_map_unmap)
 
   caps = make_generic_caps (1, 1, rgb8, G_N_ELEMENTS (rgb8),
       0, "interleave", 0, 0, 1, 1);
-  gst_video_info_init (&info);
-  fail_unless (gst_video_info_from_caps_extended (&info, caps));
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
   gst_caps_unref (caps);
 
   ext = info.ABI.abi.extensions;
@@ -5404,8 +5410,7 @@ GST_START_TEST (test_video_info_generic_caps_negotiation)
   {
     GstCaps *caps = make_generic_caps (640, 480, ycbcr8,
         G_N_ELEMENTS (ycbcr8), 0, "component", 0, 0, 1, 1);
-    gst_video_info_init (&upstream_info);
-    fail_unless (gst_video_info_from_caps_extended (&upstream_info, caps));
+    fail_unless (gst_video_info_init_from_caps_extended (&upstream_info, caps));
     gst_caps_unref (caps);
   }
 
@@ -5417,8 +5422,7 @@ GST_START_TEST (test_video_info_generic_caps_negotiation)
   fail_if (gst_video_info_from_caps (&downstream_info, negotiated_caps));
 
   /* Extended path must accept and produce an equal result */
-  gst_video_info_init (&downstream_info);
-  fail_unless (gst_video_info_from_caps_extended (&downstream_info,
+  fail_unless (gst_video_info_init_from_caps_extended (&downstream_info,
           negotiated_caps));
 
   fail_unless (gst_video_info_is_equal (&upstream_info, &downstream_info));
@@ -5430,6 +5434,254 @@ GST_START_TEST (test_video_info_generic_caps_negotiation)
   gst_caps_unref (negotiated_caps);
   gst_video_info_clear (&upstream_info);
   gst_video_info_clear (&downstream_info);
+}
+
+GST_END_TEST;
+
+/* Integer pack/unpack round-trips for interleaved and planar GENERIC formats. */
+GST_START_TEST (test_video_format_generic_pack_unpack)
+{
+  static const GenericCompDef rgb8[] = {
+    {"red", 8, "unsigned-int", 0},
+    {"green", 8, "unsigned-int", 0},
+    {"blue", 8, "unsigned-int", 0},
+  };
+  static const GenericCompDef rgb10[] = {
+    {"red", 10, "unsigned-int", 0},
+    {"green", 10, "unsigned-int", 0},
+    {"blue", 10, "unsigned-int", 0},
+  };
+  static const GenericCompDef ycbcr8[] = {
+    {"luma", 8, "unsigned-int", 0},
+    {"chroma-blue", 8, "unsigned-int", 0},
+    {"chroma-red", 8, "unsigned-int", 0},
+  };
+  GstVideoInfo info;
+  GstCaps *caps;
+  GstVideoFormat unpack_fmt;
+
+  /* 8-bit RGB interleaved -> ARGB64 -> pack back, byte-exact */
+  caps = make_generic_caps (4, 1, rgb8, 3, 0, "interleave", 0, 0, 1, 1);
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
+
+  unpack_fmt = gst_video_format_generic_get_unpack_format (&info);
+  fail_unless_equals_int (unpack_fmt, GST_VIDEO_FORMAT_ARGB64);
+
+  {
+    /* 4 pixels with R=100 G=150 B=200 */
+    guint8 src_buf[4 * 3];
+    guint8 dst_buf[4 * 3];
+    guint16 unpacked[4 * 4];
+    const gpointer planes_in[GST_VIDEO_MAX_PLANES] = { src_buf, NULL, NULL,
+      NULL
+    };
+    gpointer planes_out[GST_VIDEO_MAX_PLANES] = { dst_buf, NULL, NULL, NULL };
+    gint strides[GST_VIDEO_MAX_PLANES] = { 12, 0, 0, 0 };
+    gint i;
+
+    memset (dst_buf, 0, sizeof (dst_buf));
+    for (i = 0; i < 4; i++) {
+      src_buf[i * 3 + 0] = 100;
+      src_buf[i * 3 + 1] = 150;
+      src_buf[i * 3 + 2] = 200;
+    }
+
+    fail_unless (gst_video_format_generic_unpack (&info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked,
+            (const gpointer *) planes_in, strides, 0, 0, 4));
+
+    /* ARGB64: A=0xffff, R=100*257, G=150*257, B=200*257 */
+    fail_unless_equals_int (unpacked[0], 0xffff);
+    fail_unless_equals_int (unpacked[1], 100 * 257);
+    fail_unless_equals_int (unpacked[2], 150 * 257);
+    fail_unless_equals_int (unpacked[3], 200 * 257);
+
+    fail_unless (gst_video_format_generic_pack (&info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked, 4 * 4 * 2,
+            planes_out, strides, 0, 4));
+
+    for (i = 0; i < 4; i++) {
+      fail_unless_equals_int (dst_buf[i * 3 + 0], 100);
+      fail_unless_equals_int (dst_buf[i * 3 + 1], 150);
+      fail_unless_equals_int (dst_buf[i * 3 + 2], 200);
+    }
+  }
+  gst_video_info_clear (&info);
+  gst_caps_unref (caps);
+
+  /* 10-bit RGB interleaved with TRUNCATE_RANGE: val << (16-10) = val * 64 */
+  caps = make_generic_caps (4, 1, rgb10, 3, 0, "interleave", 0, 0, 1, 1);
+  gst_caps_set_simple (caps, "components-little-endian", G_TYPE_BOOLEAN,
+      (G_BYTE_ORDER == G_LITTLE_ENDIAN), NULL);
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
+
+  unpack_fmt = gst_video_format_generic_get_unpack_format (&info);
+  fail_unless_equals_int (unpack_fmt, GST_VIDEO_FORMAT_ARGB64);
+
+  {
+    guint16 src_buf[4 * 3];
+    guint16 dst_buf[4 * 3];
+    guint16 unpacked[4 * 4];
+    const gpointer planes_in[GST_VIDEO_MAX_PLANES] = { src_buf, NULL, NULL,
+      NULL
+    };
+    gpointer planes_out[GST_VIDEO_MAX_PLANES] = { dst_buf, NULL, NULL, NULL };
+    gint strides[GST_VIDEO_MAX_PLANES] = { 4 * 6, 0, 0, 0 };
+    gint i;
+
+    memset (dst_buf, 0, sizeof (dst_buf));
+    for (i = 0; i < 4; i++) {
+      src_buf[i * 3 + 0] = 400;
+      src_buf[i * 3 + 1] = 600;
+      src_buf[i * 3 + 2] = 800;
+    }
+
+    fail_unless (gst_video_format_generic_unpack (&info,
+            GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE, unpacked,
+            (const gpointer *) planes_in, strides, 0, 0, 4));
+
+    fail_unless_equals_int (unpacked[0], 0xffff);
+    fail_unless_equals_int (unpacked[1], 400 * 64);
+    fail_unless_equals_int (unpacked[2], 600 * 64);
+    fail_unless_equals_int (unpacked[3], 800 * 64);
+
+    fail_unless (gst_video_format_generic_pack (&info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked, 4 * 4 * 2,
+            planes_out, strides, 0, 4));
+
+    for (i = 0; i < 4; i++) {
+      fail_unless_equals_int (dst_buf[i * 3 + 0], 400);
+      fail_unless_equals_int (dst_buf[i * 3 + 1], 600);
+      fail_unless_equals_int (dst_buf[i * 3 + 2], 800);
+    }
+  }
+  gst_video_info_clear (&info);
+  gst_caps_unref (caps);
+
+  /* 8-bit YCbCr 4:4:4 planar -> AYUV64 -> pack back */
+  caps = make_generic_caps (4, 1, ycbcr8, 3, 0, "component", 0, 0, 1, 1);
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
+
+  unpack_fmt = gst_video_format_generic_get_unpack_format (&info);
+  fail_unless_equals_int (unpack_fmt, GST_VIDEO_FORMAT_AYUV64);
+
+  {
+    guint8 y_plane[4], u_plane[4], v_plane[4];
+    guint8 y_out[4], u_out[4], v_out[4];
+    guint16 unpacked[4 * 4];
+    const gpointer planes_in[GST_VIDEO_MAX_PLANES] = { y_plane, u_plane,
+      v_plane, NULL
+    };
+    gpointer planes_out[GST_VIDEO_MAX_PLANES] = { y_out, u_out, v_out, NULL };
+    gint strides[GST_VIDEO_MAX_PLANES] = { 4, 4, 4, 0 };
+    gint i;
+
+    memset (y_out, 0, 4);
+    memset (u_out, 0, 4);
+    memset (v_out, 0, 4);
+    for (i = 0; i < 4; i++) {
+      y_plane[i] = 77;
+      u_plane[i] = 128;
+      v_plane[i] = 200;
+    }
+
+    fail_unless (gst_video_format_generic_unpack (&info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked,
+            (const gpointer *) planes_in, strides, 0, 0, 4));
+
+    /* AYUV64: A=0xffff, Y=77*257, U=128*257, V=200*257 */
+    fail_unless_equals_int (unpacked[0], 0xffff);
+    fail_unless_equals_int (unpacked[1], 77 * 257);
+    fail_unless_equals_int (unpacked[2], 128 * 257);
+    fail_unless_equals_int (unpacked[3], 200 * 257);
+
+    fail_unless (gst_video_format_generic_pack (&info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked, 4 * 4 * 2,
+            planes_out, strides, 0, 4));
+
+    for (i = 0; i < 4; i++) {
+      fail_unless_equals_int (y_out[i], 77);
+      fail_unless_equals_int (u_out[i], 128);
+      fail_unless_equals_int (v_out[i], 200);
+    }
+  }
+  gst_video_info_clear (&info);
+  gst_caps_unref (caps);
+}
+
+GST_END_TEST;
+
+/* End-to-end: write pixel data into a GstBuffer, map as GstVideoFrame,
+ * call unpack using frame.info and plane pointers, verify ARGB64 values,
+ * and check that extension refcount goes 1→2 on map and 2→1 on unmap. */
+GST_START_TEST (test_video_format_generic_frame_unpack)
+{
+  static const GenericCompDef rgb8[] = {
+    {"red", 8, "unsigned-int", 0},
+    {"green", 8, "unsigned-int", 0},
+    {"blue", 8, "unsigned-int", 0},
+  };
+  GstCaps *caps;
+  GstVideoInfo info;
+  GstBuffer *buf;
+  GstVideoFrame frame;
+  guint16 unpacked[2 * 4];      /* 2 pixels × 4 channels (ARGB64) */
+  gint i;
+
+  caps = make_generic_caps (2, 1, rgb8, G_N_ELEMENTS (rgb8),
+      0, "interleave", 0, 0, 1, 1);
+  fail_unless (gst_video_info_init_from_caps_extended (&info, caps));
+  gst_caps_unref (caps);
+
+  buf = gst_buffer_new_allocate (NULL, info.size, NULL);
+
+  /* Write 2 pixels: R=100, G=150, B=200 */
+  {
+    GstMapInfo map;
+    guint8 *data;
+    fail_unless (gst_buffer_map (buf, &map, GST_MAP_WRITE));
+    data = map.data;
+    for (i = 0; i < 2; i++) {
+      data[i * 3 + 0] = 100;
+      data[i * 3 + 1] = 150;
+      data[i * 3 + 2] = 200;
+    }
+    gst_buffer_unmap (buf, &map);
+  }
+
+  /* Extensions refcount goes 1→2 on frame map. */
+  fail_unless (gst_video_frame_map (&frame, &info, buf, GST_MAP_READ));
+  fail_unless_equals_int (GST_MINI_OBJECT_REFCOUNT (info.ABI.abi.extensions),
+      2);
+
+  {
+    const gpointer planes[GST_VIDEO_MAX_PLANES] = {
+      GST_VIDEO_FRAME_PLANE_DATA (&frame, 0), NULL, NULL, NULL
+    };
+    gint strides[GST_VIDEO_MAX_PLANES] = {
+      GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0), 0, 0, 0
+    };
+
+    fail_unless (gst_video_format_generic_unpack (&frame.info,
+            GST_VIDEO_PACK_FLAG_NONE, unpacked,
+            (const gpointer *) planes, strides, 0, 0, 2));
+  }
+
+  /* ARGB64: A=0xffff, R=100*257, G=150*257, B=200*257 */
+  for (i = 0; i < 2; i++) {
+    fail_unless_equals_int (unpacked[i * 4 + 0], 0xffff);
+    fail_unless_equals_int (unpacked[i * 4 + 1], 100 * 257);
+    fail_unless_equals_int (unpacked[i * 4 + 2], 150 * 257);
+    fail_unless_equals_int (unpacked[i * 4 + 3], 200 * 257);
+  }
+
+  /* Extensions refcount goes 2→1 on unmap. */
+  gst_video_frame_unmap (&frame);
+  fail_unless_equals_int (GST_MINI_OBJECT_REFCOUNT (info.ABI.abi.extensions),
+      1);
+
+  gst_buffer_unref (buf);
+  gst_video_info_clear (&info);
 }
 
 GST_END_TEST;
@@ -5512,15 +5764,18 @@ video_suite (void)
   tcase_add_test (tc_chain, test_video_info_clear_initialized);
   tcase_add_test (tc_chain, test_video_info_copy_into);
   tcase_add_test (tc_chain, test_video_info_reinit);
+  tcase_add_test (tc_chain, test_video_info_from_caps_no_init);
   tcase_add_test (tc_chain, test_video_info_generic_gatekeeper);
   tcase_add_test (tc_chain, test_video_info_generic_from_caps);
   tcase_add_test (tc_chain, test_video_info_generic_lifecycle);
   tcase_add_test (tc_chain, test_video_info_generic_copy_heap);
   tcase_add_test (tc_chain, test_video_info_generic_stride_vectors);
   tcase_add_test (tc_chain, test_video_info_generic_round_trip);
+  tcase_add_test (tc_chain, test_video_format_generic_pack_unpack);
   tcase_add_test (tc_chain, test_video_frame_generic_map_unmap);
   tcase_add_test (tc_chain, test_video_info_generic_backwards_compat);
   tcase_add_test (tc_chain, test_video_info_generic_caps_negotiation);
+  tcase_add_test (tc_chain, test_video_format_generic_frame_unpack);
 
   return s;
 }
