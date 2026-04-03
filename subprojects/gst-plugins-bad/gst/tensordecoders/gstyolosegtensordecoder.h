@@ -57,6 +57,9 @@ struct _GstYoloSegTensorDecoder
   /* BufferPool for mask */
   GstBufferPool *mask_pool;
 
+  /* Use nearest-neighbor prototype sampling instead of bilinear interpolation */
+  gboolean force_nearest;
+
   /* Those are only valid during the call to
    * the base call gst_yolo_tensor_decoder_decode_f32
    */

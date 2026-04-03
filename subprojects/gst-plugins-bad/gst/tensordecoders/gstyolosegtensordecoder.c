@@ -117,10 +117,21 @@ typedef struct _DebugCandidates
   gsize start;                  /* First field index to debug */
 } DebugCandidates;
 
+enum
+{
+  PROP_0,
+  PROP_FORCE_NEAREST,
+};
+
 /* GstYoloSegTensorDecoder Prototypes */
 static gboolean gst_yolo_seg_tensor_decoder_stop (GstBaseTransform * trans);
 static GstFlowReturn gst_yolo_seg_tensor_decoder_transform_ip (GstBaseTransform
     * trans, GstBuffer * buf);
+
+static void gst_yolo_seg_tensor_decoder_set_property (GObject * object,
+    guint prop_id, const GValue * value, GParamSpec * pspec);
+static void gst_yolo_seg_tensor_decoder_get_property (GObject * object,
+    guint prop_id, GValue * value, GParamSpec * pspec);
 
 static void gst_yolo_seg_tensor_decoder_object_found (GstYoloTensorDecoder * od,
     GstAnalyticsRelationMeta * rmeta, BBox * bb, gfloat confidence,
@@ -146,11 +157,52 @@ gst_yolo_seg_tensor_decoder_stop (GstBaseTransform * trans)
 }
 
 static void
+gst_yolo_seg_tensor_decoder_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstYoloSegTensorDecoder *self = GST_YOLO_SEG_TENSOR_DECODER (object);
+
+  switch (prop_id) {
+    case PROP_FORCE_NEAREST:
+      self->force_nearest = g_value_get_boolean (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_yolo_seg_tensor_decoder_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstYoloSegTensorDecoder *self = GST_YOLO_SEG_TENSOR_DECODER (object);
+
+  switch (prop_id) {
+    case PROP_FORCE_NEAREST:
+      g_value_set_boolean (value, self->force_nearest);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
 gst_yolo_seg_tensor_decoder_class_init (GstYoloSegTensorDecoderClass * klass)
 {
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstElementClass *element_class = (GstElementClass *) klass;
   GstBaseTransformClass *basetransform_class = (GstBaseTransformClass *) klass;
   GstYoloTensorDecoderClass *od_class = (GstYoloTensorDecoderClass *) klass;
+
+  gobject_class->set_property = gst_yolo_seg_tensor_decoder_set_property;
+  gobject_class->get_property = gst_yolo_seg_tensor_decoder_get_property;
+
+  g_object_class_install_property (gobject_class, PROP_FORCE_NEAREST,
+      g_param_spec_boolean ("force-nearest", "Force nearest-neighbor",
+          "Use nearest-neighbor prototype sampling instead of bilinear interpolation",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /* Define GstYoloSegTensorDecoder debug category. */
   GST_DEBUG_CATEGORY_INIT (yolo_seg_tensor_decoder_debug,
@@ -188,6 +240,7 @@ gst_yolo_seg_tensor_decoder_init (GstYoloSegTensorDecoder * self)
   self->mask_h = 0;
   self->mask_length = 0;
   self->mask_pool = NULL;
+  self->force_nearest = FALSE;
   memset (&self->mask_roi, 0, sizeof (BBox));
 
   gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (self), FALSE);
@@ -384,6 +437,7 @@ gst_yolo_seg_tensor_decoder_object_found (GstYoloTensorDecoder * od,
   GstMapInfo out_mask_info;
   guint region_ids[2] = { 0, count };
   GstAnalyticsMtd seg_mtd;
+  gboolean use_nearest;
 
   gst_analytics_relation_meta_add_od_mtd (rmeta, class_quark,
       bb->x, bb->y, bb->w, bb->h, confidence, &od_mtd);
@@ -393,31 +447,100 @@ gst_yolo_seg_tensor_decoder_object_found (GstYoloTensorDecoder * od,
   bb_mask.w = self->bb2mask_gain * bb->w;
   bb_mask.h = self->bb2mask_gain * bb->h;
 
+  if (bb->w == 0 || bb->h == 0) {
+    GST_TRACE_OBJECT (self, "Skipping zero-sized segmentation bbox");
+    return;
+  }
+
   flowret = gst_buffer_pool_acquire_buffer (self->mask_pool, &mask_buf, NULL);
-  g_assert (flowret == GST_FLOW_OK);
-  gst_buffer_map (mask_buf, &out_mask_info, GST_MAP_READWRITE);
+  if (flowret != GST_FLOW_OK) {
+    GST_ERROR_OBJECT (self,
+        "Critical: Failed to acquire segmentation mask buffer from pool: %s",
+        gst_flow_get_name (flowret));
+    g_assert_not_reached ();
+    return;
+  }
+  g_assert (mask_buf != NULL);
+
+  if (!gst_buffer_map (mask_buf, &out_mask_info, GST_MAP_READWRITE)) {
+    GST_WARNING_OBJECT (self, "Failed to map segmentation mask buffer");
+    gst_buffer_unref (mask_buf);
+    return;
+  }
 
   GstVideoMeta *vmeta = gst_buffer_get_video_meta (mask_buf);
-  g_assert (vmeta != NULL);
-  vmeta->width = bb_mask.w;
-  vmeta->height = bb_mask.h;
-  /* Keep metadata stride consistent with packed writes below (i++ indexing). */
-  vmeta->stride[0] = bb_mask.w;
+  if (vmeta == NULL) {
+    vmeta = gst_buffer_add_video_meta (mask_buf, GST_VIDEO_FRAME_FLAG_NONE,
+        GST_VIDEO_FORMAT_GRAY8, bb->w, bb->h);
+    if (vmeta == NULL) {
+      GST_WARNING_OBJECT (self,
+          "Failed to attach video meta to segmentation mask buffer");
+      gst_buffer_unmap (mask_buf, &out_mask_info);
+      gst_buffer_unref (mask_buf);
+      return;
+    }
+  }
+  /* The mask buffer is written as a tightly packed bb->w x bb->h image
+   * (see i = oy * bb->w + ox below). Keep video-meta consistent with that
+   * physical layout so downstream resampling doesn't interpret rows/columns
+   * with mismatched geometry. */
+  vmeta->width = bb->w;
+  vmeta->height = bb->h;
+  vmeta->stride[0] = bb->w;
 
-#define MX_MAX (bb_mask.x + bb_mask.w)
-#define MY_MAX (bb_mask.y + bb_mask.h)
+  use_nearest = self->force_nearest;
 
-  for (gint my = bb_mask.y, i = 0; my < MY_MAX; my++) {
-    for (gint mx = bb_mask.x; mx < MX_MAX; mx++, i++) {
+  for (guint oy = 0; oy < bb->h; oy++) {
+    for (guint ox = 0; ox < bb->w; ox++) {
+      gsize i = (gsize) oy * bb->w + ox;
       float sum = 0.0f;
-      gint j = my * self->mask_w + mx;
-      for (gsize k = 0; k < self->logits_tensor->dims[1]; ++k) {
-        GST_TRACE_OBJECT (self, "protos data at ((mx=%d,my=%d)=%d, %zu) is %f",
-            mx, my, j, k, data_logits[k * self->mask_length + j]);
-        sum += candidate_masks[offset * k] *
-            data_logits[k * self->mask_length + j];
+
+      if (use_nearest) {
+        gfloat mx = bb_mask.x + ((gfloat) ox * bb_mask.w / bb->w);
+        gfloat my = bb_mask.y + ((gfloat) oy * bb_mask.h / bb->h);
+        gint x = (gint) CLAMP (mx, 0.0f, (gfloat) self->mask_w - 1.0f);
+        gint y = (gint) CLAMP (my, 0.0f, (gfloat) self->mask_h - 1.0f);
+        gsize j = (gsize) y * self->mask_w + x;
+
+        for (gsize k = 0; k < self->logits_tensor->dims[1]; ++k)
+          sum += candidate_masks[offset * k] *
+              data_logits[k * self->mask_length + j];
+      } else {
+        /* Interpolate prototype logits first, then threshold once. This keeps
+         * mask edges smoother than upscaling already-quantized label IDs. */
+        gfloat mx = bb_mask.x + ((ox + 0.5f) * bb_mask.w / bb->w) - 0.5f;
+        gfloat my = bb_mask.y + ((oy + 0.5f) * bb_mask.h / bb->h) - 0.5f;
+
+        mx = CLAMP (mx, 0.0f, (gfloat) self->mask_w - 1.0f);
+        my = CLAMP (my, 0.0f, (gfloat) self->mask_h - 1.0f);
+
+        gint x0 = (gint) floorf (mx);
+        gint y0 = (gint) floorf (my);
+        gint x1 = MIN (x0 + 1, (gint) self->mask_w - 1);
+        gint y1 = MIN (y0 + 1, (gint) self->mask_h - 1);
+        gfloat tx = mx - x0;
+        gfloat ty = my - y0;
+
+        gfloat w00 = (1.0f - tx) * (1.0f - ty);
+        gfloat w10 = tx * (1.0f - ty);
+        gfloat w01 = (1.0f - tx) * ty;
+        gfloat w11 = tx * ty;
+
+        gsize j00 = (gsize) y0 * self->mask_w + x0;
+        gsize j10 = (gsize) y0 * self->mask_w + x1;
+        gsize j01 = (gsize) y1 * self->mask_w + x0;
+        gsize j11 = (gsize) y1 * self->mask_w + x1;
+
+        for (gsize k = 0; k < self->logits_tensor->dims[1]; ++k) {
+          gfloat proto = data_logits[k * self->mask_length + j00] * w00 +
+              data_logits[k * self->mask_length + j10] * w10 +
+              data_logits[k * self->mask_length + j01] * w01 +
+              data_logits[k * self->mask_length + j11] * w11;
+          sum += candidate_masks[offset * k] * proto;
+        }
       }
-      out_mask_info.data[i] = sigmoid (sum) > 0.5 ? count : 0;
+
+      out_mask_info.data[i] = sigmoid (sum) > 0.5f ? count : 0;
     }
   }
 
