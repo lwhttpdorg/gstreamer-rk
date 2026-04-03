@@ -33,6 +33,7 @@
 #include <stdio.h>
 
 #include "video-info.h"
+#include "video-info-ext-priv.h"
 #include "video-tile.h"
 
 #ifndef GST_DISABLE_GST_DEBUG
@@ -58,6 +59,32 @@ ensure_debug_category (void)
 #endif /* GST_DISABLE_GST_DEBUG */
 
 /**
+ * gst_video_info_clear:
+ * @info: a #GstVideoInfo
+ *
+ * Release any resources held by @info. The structure itself is not freed.
+ * After this call @info must not be used without re-initializing it.
+ *
+ * Since: 1.30
+ */
+void
+gst_video_info_clear (GstVideoInfo * info)
+{
+  g_return_if_fail (info != NULL);
+
+  /* Guard against uninitialized structs: finfo is the first field set by
+   * gst_video_info_init(), so a NULL finfo means the struct has never been
+   * initialized and extensions cannot hold a valid reference. */
+  if (info->finfo == NULL)
+    return;
+
+  if (info->ABI.abi.extensions != NULL) {
+    gst_mini_object_unref (GST_MINI_OBJECT_CAST (info->ABI.abi.extensions));
+    info->ABI.abi.extensions = NULL;
+  }
+}
+
+/**
  * gst_video_info_copy:
  * @info: a #GstVideoInfo
  *
@@ -70,7 +97,34 @@ ensure_debug_category (void)
 GstVideoInfo *
 gst_video_info_copy (const GstVideoInfo * info)
 {
-  return g_memdup2 (info, sizeof (GstVideoInfo));
+  GstVideoInfo *copy = g_memdup2 (info, sizeof (GstVideoInfo));
+
+  if (copy->ABI.abi.extensions != NULL)
+    gst_mini_object_ref (GST_MINI_OBJECT_CAST (copy->ABI.abi.extensions));
+
+  return copy;
+}
+
+/**
+ * gst_video_info_copy_into:
+ * @dest: a #GstVideoInfo
+ * @src: a #GstVideoInfo
+ *
+ * Copy @src into @dest, properly handling any existing resources in @dest.
+ *
+ * Since: 1.30
+ */
+void
+gst_video_info_copy_into (GstVideoInfo * dest, const GstVideoInfo * src)
+{
+  g_return_if_fail (dest != NULL);
+  g_return_if_fail (src != NULL);
+
+  gst_video_info_clear (dest);
+  memcpy (dest, src, sizeof (GstVideoInfo));
+
+  if (dest->ABI.abi.extensions != NULL)
+    gst_mini_object_ref (GST_MINI_OBJECT_CAST (dest->ABI.abi.extensions));
 }
 
 /**
@@ -85,6 +139,10 @@ gst_video_info_copy (const GstVideoInfo * info)
 void
 gst_video_info_free (GstVideoInfo * info)
 {
+  if (info == NULL)
+    return;
+
+  gst_video_info_clear (info);
   g_free (info);
 }
 
@@ -455,6 +513,12 @@ gst_video_info_from_caps (GstVideoInfo * info, const GstCaps * caps)
     if (format == GST_VIDEO_FORMAT_UNKNOWN)
       goto unknown_format;
 
+    if (format == GST_VIDEO_FORMAT_GENERIC) {
+      GST_WARNING
+          ("format=GENERIC caps require gst_video_info_init_from_caps_extended()");
+      return FALSE;
+    }
+
   } else if (g_str_has_prefix (gst_structure_get_name (structure), "video/") ||
       g_str_has_prefix (gst_structure_get_name (structure), "image/")) {
     format = GST_VIDEO_FORMAT_ENCODED;
@@ -700,7 +764,209 @@ gst_video_info_is_equal (const GstVideoInfo * info, const GstVideoInfo * other)
       return FALSE;
   }
 
+  if (GST_VIDEO_INFO_FORMAT (info) == GST_VIDEO_FORMAT_GENERIC) {
+    const GstGenericVideoParams *p_info =
+        gst_video_info_extensions_get_generic_params_priv
+        (info->ABI.abi.extensions);
+    const GstGenericVideoParams *p_other =
+        gst_video_info_extensions_get_generic_params_priv
+        (other->ABI.abi.extensions);
+
+    if (p_info == NULL || p_other == NULL)
+      return p_info == p_other;
+
+    if (memcmp (p_info, p_other, sizeof (GstGenericVideoParams)) != 0)
+      return FALSE;
+  }
+
   return TRUE;
+}
+
+/**
+ * gst_video_info_get_generic_params:
+ * @info: a #GstVideoInfo
+ *
+ * Returns the #GstGenericVideoParams associated with @info, or %NULL if
+ * @info does not carry a %GST_VIDEO_FORMAT_GENERIC format. The returned pointer
+ * remains owned by @info. Callers must not free it.
+ *
+ * Returns: (nullable) (transfer none): the generic params, or %NULL.
+ *
+ * Since: 1.30
+ */
+const GstGenericVideoParams *
+gst_video_info_get_generic_params (const GstVideoInfo * info)
+{
+  g_return_val_if_fail (info != NULL, NULL);
+
+  if (info->ABI.abi.extensions == NULL)
+    return NULL;
+
+  return gst_video_info_extensions_get_generic_params_priv
+      (info->ABI.abi.extensions);
+}
+
+/**
+ * gst_video_info_init_from_caps_extended:
+ * @info: (out caller-allocates): a #GstVideoInfo
+ * @caps: a #GstCaps
+ *
+ * Initialize @info and parse @caps into it. Unlike gst_video_info_from_caps(),
+ * this function also accepts caps with format=GENERIC.
+ *
+ * @info is always initialized before parsing, so it is safe to pass
+ * uninitialized stack memory. If @info previously held GENERIC extensions,
+ * call gst_video_info_clear() before this function to release them.
+ *
+ * Returns: %TRUE if @caps could be parsed.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_video_info_init_from_caps_extended (GstVideoInfo * info,
+    const GstCaps * caps)
+{
+  GstStructure *structure;
+  const gchar *s;
+  GstVideoFormat format;
+  gint width = 0, height = 0;
+  gint fps_n, fps_d;
+  gint par_n, par_d;
+  guint multiview_flags;
+
+  g_return_val_if_fail (info != NULL, FALSE);
+  g_return_val_if_fail (caps != NULL, FALSE);
+  g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
+
+  gst_video_info_init (info);
+
+  structure = gst_caps_get_structure (caps, 0);
+
+  if (!gst_structure_has_name (structure, "video/x-raw"))
+    return gst_video_info_from_caps (info, caps);
+
+  s = gst_structure_get_string (structure, "format");
+  if (!s)
+    return gst_video_info_from_caps (info, caps);
+
+  format = gst_video_format_from_string (s);
+  if (format != GST_VIDEO_FORMAT_GENERIC)
+    return gst_video_info_from_caps (info, caps);
+
+  GST_DEBUG ("parsing GENERIC caps %" GST_PTR_FORMAT, caps);
+
+  if (!gst_structure_get_int (structure, "width", &width))
+    goto no_width;
+  if (!gst_structure_get_int (structure, "height", &height))
+    goto no_height;
+
+  gst_video_info_init (info);
+
+  info->finfo = gst_video_format_get_info (GST_VIDEO_FORMAT_GENERIC);
+  info->width = width;
+  info->height = height;
+
+  if (gst_structure_get_fraction (structure, "framerate", &fps_n, &fps_d)) {
+    if (fps_n == 0) {
+      info->flags |= GST_VIDEO_FLAG_VARIABLE_FPS;
+      gst_structure_get_fraction (structure, "max-framerate", &fps_n, &fps_d);
+    }
+    info->fps_n = fps_n;
+    info->fps_d = fps_d;
+  } else {
+    info->fps_n = 0;
+    info->fps_d = 1;
+  }
+
+  if (gst_structure_get_fraction (structure, "pixel-aspect-ratio",
+          &par_n, &par_d)) {
+    info->par_n = par_n;
+    info->par_d = par_d;
+  } else {
+    info->par_n = 1;
+    info->par_d = 1;
+  }
+
+  if ((s = gst_structure_get_string (structure, "interlace-mode")))
+    info->interlace_mode = gst_video_interlace_mode_from_string (s);
+  else
+    info->interlace_mode = GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
+
+  if (GST_VIDEO_INFO_IS_INTERLACED (info) &&
+      (s = gst_structure_get_string (structure, "field-order")))
+    GST_VIDEO_INFO_FIELD_ORDER (info) = gst_video_field_order_from_string (s);
+  else
+    GST_VIDEO_INFO_FIELD_ORDER (info) = GST_VIDEO_FIELD_ORDER_UNKNOWN;
+
+  if ((s = gst_structure_get_string (structure, "multiview-mode")))
+    GST_VIDEO_INFO_MULTIVIEW_MODE (info) =
+        gst_video_multiview_mode_from_caps_string (s);
+  else
+    GST_VIDEO_INFO_MULTIVIEW_MODE (info) = GST_VIDEO_MULTIVIEW_MODE_NONE;
+
+  if (gst_structure_get_flagset (structure, "multiview-flags",
+          &multiview_flags, NULL))
+    GST_VIDEO_INFO_MULTIVIEW_FLAGS (info) = multiview_flags;
+
+  if (!gst_structure_get_int (structure, "views", &info->views))
+    info->views = 1;
+
+  if ((s = gst_structure_get_string (structure, "chroma-site")))
+    info->chroma_site = gst_video_chroma_site_from_string (s);
+  else
+    info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+
+  if ((s = gst_structure_get_string (structure, "colorimetry"))) {
+    if (!gst_video_colorimetry_from_string (&info->colorimetry, s)) {
+      GST_WARNING ("unparsable colorimetry, using default");
+      set_default_colorimetry (info);
+    }
+  } else {
+    set_default_colorimetry (info);
+  }
+
+  /* GENERIC-specific fields: component-definition, sampling-type,
+   * interleave-type, stride/offset/size computation, and extension. */
+  if (!gst_video_info_generic_fill_info_priv (info, structure))
+    return FALSE;
+
+  return TRUE;
+
+  /* ERROR */
+no_width:
+  GST_ERROR ("no width property given");
+  return FALSE;
+no_height:
+  GST_ERROR ("no height property given");
+  return FALSE;
+}
+
+/**
+ * gst_video_info_new_from_caps_extended:
+ * @caps: a #GstCaps
+ *
+ * Allocate a new #GstVideoInfo structure and parse @caps into it, including
+ * caps with format=GENERIC.
+ *
+ * Returns: (transfer full) (nullable): a new #GstVideoInfo, or %NULL.
+ *   Free with gst_video_info_free().
+ *
+ * Since: 1.30
+ */
+GstVideoInfo *
+gst_video_info_new_from_caps_extended (const GstCaps * caps)
+{
+  GstVideoInfo *info;
+
+  g_return_val_if_fail (caps != NULL, NULL);
+
+  info = g_new0 (GstVideoInfo, 1);
+  if (!gst_video_info_init_from_caps_extended (info, caps)) {
+    gst_video_info_free (info);
+    return NULL;
+  }
+
+  return info;
 }
 
 /**
@@ -836,6 +1102,17 @@ gst_video_info_to_caps (const GstVideoInfo * info)
     /* no variable fps or no max-framerate */
     gst_caps_set_simple_static_str (caps, "framerate", GST_TYPE_FRACTION,
         info->fps_n, info->fps_d, NULL);
+  }
+
+  if (info->finfo->format == GST_VIDEO_FORMAT_GENERIC) {
+    const GstGenericVideoParams *params =
+        gst_video_info_get_generic_params (info);
+    if (!params) {
+      GST_ERROR ("GENERIC format but no params attached");
+      gst_caps_unref (caps);
+      return NULL;
+    }
+    gst_video_info_generic_fill_caps_priv (params, caps);
   }
 
   return caps;
@@ -1400,6 +1677,7 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
     }
     case GST_VIDEO_FORMAT_ENCODED:
     case GST_VIDEO_FORMAT_DMA_DRM:
+    case GST_VIDEO_FORMAT_GENERIC:
       break;
     case GST_VIDEO_FORMAT_UNKNOWN:
       GST_ERROR ("invalid format");

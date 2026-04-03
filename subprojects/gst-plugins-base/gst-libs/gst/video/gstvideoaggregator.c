@@ -1724,6 +1724,7 @@ gst_video_aggregator_reset (GstVideoAggregator * vagg)
   GList *l;
 
   GST_OBJECT_LOCK (vagg);
+  gst_video_info_clear (&vagg->info);
   gst_video_info_init (&vagg->info);
   GST_OBJECT_UNLOCK (vagg);
 
@@ -1744,6 +1745,7 @@ gst_video_aggregator_reset (GstVideoAggregator * vagg)
     p->priv->start_time = -1;
     p->priv->end_time = -1;
 
+    gst_video_info_clear (&p->info);
     gst_video_info_init (&p->info);
   }
   GST_OBJECT_UNLOCK (vagg);

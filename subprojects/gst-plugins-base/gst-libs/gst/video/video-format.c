@@ -8269,6 +8269,9 @@ static const VideoFormat formats[] = {
       PLANE0, OFFS0, SUB4444, PACK_BGR10A2_LE),
   MAKE_RGB_LE_FORMAT (RGB10x2_LE, "raw video", DPTH10_10_10, PSTR444,
       PLANE0, OFFS0, SUB4444, PACK_RGB10A2_LE),
+  {0x00000000, {GST_VIDEO_FORMAT_GENERIC, "GENERIC",
+              "generic parametric video format",
+          GST_VIDEO_FORMAT_FLAG_COMPLEX, DPTH0, PSTR0, PLANE_NA, OFFS0}},
 };
 
 G_GNUC_END_IGNORE_DEPRECATIONS;

@@ -75,7 +75,7 @@ gst_video_filter_propose_allocation (GstBaseTransform * trans,
   if (caps == NULL)
     return FALSE;
 
-  if (!gst_video_info_from_caps (&info, caps))
+  if (!gst_video_info_init_from_caps_extended (&info, caps))
     return FALSE;
 
   size = GST_VIDEO_INFO_SIZE (&info);
@@ -146,8 +146,7 @@ gst_video_filter_decide_allocation (GstBaseTransform * trans, GstQuery * query)
     GstVideoInfo vinfo;
 
     gst_query_parse_allocation (query, &outcaps, NULL);
-    gst_video_info_init (&vinfo);
-    gst_video_info_from_caps (&vinfo, outcaps);
+    gst_video_info_init_from_caps_extended (&vinfo, outcaps);
     size = vinfo.size;
     min = max = 0;
     update_pool = FALSE;
@@ -198,7 +197,7 @@ gst_video_filter_transform_size (GstBaseTransform * btrans,
 
   g_assert (size);
 
-  ret = gst_video_info_from_caps (&info, othercaps);
+  ret = gst_video_info_init_from_caps_extended (&info, othercaps);
   if (ret)
     *othersize = info.size;
 
@@ -211,7 +210,7 @@ gst_video_filter_get_unit_size (GstBaseTransform * btrans, GstCaps * caps,
 {
   GstVideoInfo info;
 
-  if (!gst_video_info_from_caps (&info, caps)) {
+  if (!gst_video_info_init_from_caps_extended (&info, caps)) {
     GST_WARNING_OBJECT (btrans, "Failed to parse caps %" GST_PTR_FORMAT, caps);
     return FALSE;
   }
@@ -234,11 +233,11 @@ gst_video_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
   gboolean res;
 
   /* input caps */
-  if (!gst_video_info_from_caps (&in_info, incaps))
+  if (!gst_video_info_init_from_caps_extended (&in_info, incaps))
     goto invalid_caps;
 
   /* output caps */
-  if (!gst_video_info_from_caps (&out_info, outcaps))
+  if (!gst_video_info_init_from_caps_extended (&out_info, outcaps))
     goto invalid_caps;
 
   fclass = GST_VIDEO_FILTER_GET_CLASS (filter);
@@ -248,8 +247,8 @@ gst_video_filter_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     res = TRUE;
 
   if (res) {
-    filter->in_info = in_info;
-    filter->out_info = out_info;
+    gst_video_info_copy_into (&filter->in_info, &in_info);
+    gst_video_info_copy_into (&filter->out_info, &out_info);
     if (fclass->transform_frame == NULL)
       gst_base_transform_set_in_place (trans, TRUE);
     if (fclass->transform_frame_ip == NULL)
@@ -384,14 +383,27 @@ gst_video_filter_transform_meta (GstBaseTransform * trans, GstBuffer * outbuf,
 }
 
 static void
+gst_video_filter_finalize (GObject * object)
+{
+  GstVideoFilter *filter = GST_VIDEO_FILTER_CAST (object);
+
+  gst_video_info_clear (&filter->in_info);
+  gst_video_info_clear (&filter->out_info);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
+static void
 gst_video_filter_class_init (GstVideoFilterClass * g_class)
 {
+  GObjectClass *gobject_class = (GObjectClass *) g_class;
   GstBaseTransformClass *trans_class;
   GstVideoFilterClass *klass;
 
   klass = (GstVideoFilterClass *) g_class;
   trans_class = (GstBaseTransformClass *) klass;
 
+  gobject_class->finalize = gst_video_filter_finalize;
   trans_class->set_caps = GST_DEBUG_FUNCPTR (gst_video_filter_set_caps);
   trans_class->propose_allocation =
       GST_DEBUG_FUNCPTR (gst_video_filter_propose_allocation);
