@@ -1,3 +1,11 @@
+add_languages('rust', native : false, required : true)
+rustc = meson.get_compiler('rust')
+
+rust_req = '1.77'
+if not rustc.version().version_compare('>=' + rust_req)
+  error('Requires least Rust @0@, found @1@'.format(rust_req, rustc.version()))
+endif
+
 typefindfunctions_extra_defs = []
 typefindfunctions_extra_deps = []
 if not get_option('gio-typefinder').disabled()
@@ -18,6 +26,29 @@ typefindfunctions_headers = [
   'gsttypefindfunctionsplugin.h',
 ]
 
+rust = import('rust')
+typefindfunctions_bindgen_rs = rust.bindgen(
+    input : 'bindgen.h',
+    output : 'bindgen.rs',
+    c_args : gst_plugins_base_args,
+    dependencies : [gst_dep],
+    args : ['--no-prepend-enum-name'],
+)
+
+typefindfunctions_rs = static_library('typefindfunctions_rs',
+  structured_sources(
+    [
+      'rust/typefindfunctions.rs',
+      'rust/helpers.rs',
+    ],
+    {
+      '.': typefindfunctions_bindgen_rs,
+    },
+  ),
+  override_options : ['rust_std=2021'],
+  rust_abi : 'c',
+)
+
 doc_sources = []
 foreach s: typefindfunctions_sources + typefindfunctions_headers
   doc_sources += meson.current_source_dir() / s
@@ -36,6 +67,7 @@ gsttypefind = library('gsttypefindfunctions',
   c_args : gst_plugins_base_args + typefindfunctions_extra_defs,
   include_directories: [configinc, libsinc],
   dependencies : [pbutils_dep, gst_base_dep, typefindfunctions_extra_deps],
+  link_with : typefindfunctions_rs,
   install : true,
   install_dir : plugins_install_dir,
 )
