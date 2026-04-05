@@ -6220,14 +6220,53 @@ gst_rtspsrc_handle_data (GstRTSPSrc * src, GstRTSPMessage * message)
   /* If needed send a new segment, don't forget we are live and buffer are
    * timestamped with running time */
   if (src->need_segment) {
-    src->need_segment = FALSE;
+    gboolean pushed = FALSE;
+
     if (src->onvif_mode) {
-      gst_rtspsrc_push_event (src, gst_event_new_segment (&src->out_segment));
+      GstSegment fallback_segment;
+      const GstSegment *segment;
+      GstEvent *event = NULL;
+
+      segment = src->need_range ? &src->segment : &src->out_segment;
+
+      if (G_UNLIKELY (segment->format != GST_FORMAT_TIME || segment->rate == 0.0)) {
+        GST_WARNING_OBJECT (src,
+            "Invalid ONVIF segment format=%s rate=%g (need-range=%d), using current segment",
+            GST_STR_NULL (gst_format_get_name (segment->format)), segment->rate,
+            src->need_range);
+        segment = &src->segment;
+      }
+
+      if (G_UNLIKELY (segment->format != GST_FORMAT_TIME || segment->rate == 0.0)) {
+        GST_WARNING_OBJECT (src,
+            "Current segment format=%s rate=%g is invalid, using default TIME segment",
+            GST_STR_NULL (gst_format_get_name (segment->format)), segment->rate);
+
+        gst_segment_init (&fallback_segment, GST_FORMAT_TIME);
+        segment = &fallback_segment;
+      }
+
+      event = gst_event_new_segment (segment);
+      if (event != NULL)
+        pushed = gst_rtspsrc_push_event (src, event);
+      else
+        GST_WARNING_OBJECT (src, "Failed to create ONVIF segment event");
     } else {
       GstSegment segment;
+      GstEvent *event;
 
       gst_segment_init (&segment, GST_FORMAT_TIME);
-      gst_rtspsrc_push_event (src, gst_event_new_segment (&segment));
+      event = gst_event_new_segment (&segment);
+
+      if (event != NULL)
+        pushed = gst_rtspsrc_push_event (src, event);
+    }
+
+    if (pushed) {
+      src->need_segment = FALSE;
+    } else {
+      GST_WARNING_OBJECT (src,
+          "Failed to push pending segment event, keeping segment pending");
     }
   }
 
