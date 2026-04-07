@@ -1971,24 +1971,6 @@ the @system_frame_number</doc>
           </parameter>
         </parameters>
       </method>
-      <method name="get_sps_ext" c:identifier="gst_h265_decoder_get_sps_ext" version="1.28">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.c">Retrieve the extended SPS values attached to the given #GstH265SPS</doc>
-        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.h"/>
-        <return-value transfer-ownership="none" nullable="1">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.c">a #GstH265SPSEXT if successful, or %NULL otherwise</doc>
-          <type name="GstCodecParsers.H265SPSEXT" c:type="const GstH265SPSEXT*"/>
-        </return-value>
-        <parameters>
-          <instance-parameter name="decoder" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.c">a #GstH265Decoder</doc>
-            <type name="H265Decoder" c:type="const GstH265Decoder*"/>
-          </instance-parameter>
-          <parameter name="sps" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.c">the #GstH265SPS matching the requested #GstH265SPSEXT</doc>
-            <type name="GstCodecParsers.H265SPS" c:type="const GstH265SPS*"/>
-          </parameter>
-        </parameters>
-      </method>
       <method name="set_process_ref_pic_lists" c:identifier="gst_h265_decoder_set_process_ref_pic_lists" version="1.20">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.c">Called to en/disable reference picture modification process.</doc>
         <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecs/gsth265decoder.h"/>
