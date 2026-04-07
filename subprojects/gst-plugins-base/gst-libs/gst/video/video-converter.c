@@ -2436,8 +2436,8 @@ gst_video_converter_new_with_pool (const GstVideoInfo * in_info,
 
   convert = g_new0 (GstVideoConverter, 1);
 
-  convert->in_info = *in_info;
-  convert->out_info = *out_info;
+  gst_video_info_copy_into (&convert->in_info, in_info);
+  gst_video_info_copy_into (&convert->out_info, out_info);
 
   convert->in_maxwidth = GST_VIDEO_INFO_WIDTH (in_info);
   convert->in_maxheight = GST_VIDEO_INFO_FIELD_HEIGHT (in_info);
@@ -2698,6 +2698,9 @@ gst_video_converter_free (GstVideoConverter * convert)
     g_free (convert->tasks[i]);
     g_free (convert->tasks_p[i]);
   }
+
+  gst_video_info_clear (&convert->in_info);
+  gst_video_info_clear (&convert->out_info);
 
   g_free (convert);
 }
@@ -7925,6 +7928,7 @@ get_scale_format (GstVideoFormat format, gint plane)
     case GST_VIDEO_FORMAT_NV12_10BE_8L128:
     case GST_VIDEO_FORMAT_NV12_10LE40_4L4:
     case GST_VIDEO_FORMAT_DMA_DRM:
+    case GST_VIDEO_FORMAT_PARAMETRIC:
     case GST_VIDEO_FORMAT_MT2110T:
     case GST_VIDEO_FORMAT_MT2110R:
       res = format;

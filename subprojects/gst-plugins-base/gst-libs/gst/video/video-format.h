@@ -177,6 +177,7 @@ G_BEGIN_DECLS
  * @GST_VIDEO_FORMAT_NV16_10LE40: Fully packed variant of NV16_10LE32 (Since: 1.28)
  * @GST_VIDEO_FORMAT_BGR10x2_LE: packed 4:4:4 RGB (B-G-R-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
  * @GST_VIDEO_FORMAT_RGB10x2_LE: packed 4:4:4 RGB (R-G-B-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
+ * @GST_VIDEO_FORMAT_PARAMETRIC: Parametric generic video format described by extended GstVideoInfo parameters (Since: 1.30)
  *
  * Enum value describing the most common video formats.
  *
@@ -701,6 +702,17 @@ typedef enum {
    */
   GST_VIDEO_FORMAT_RGB10x2_LE,
 
+  /**
+   * GST_VIDEO_FORMAT_PARAMETRIC:
+   *
+   * Parametric generic video format. Use gst_video_info_init_from_caps_extended()
+   * to parse caps with this format. The format parameters are stored in
+   * GstVideoInfo extensions rather than in GstVideoFormatInfo.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_PARAMETRIC,
+
   /* Update GST_VIDEO_FORMAT_LAST below when adding more formats here */
 } GstVideoFormat;
 
@@ -711,7 +723,7 @@ typedef enum {
  *
  * Since: 1.26
  */
-#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_RGB10x2_LE + 1)
+#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_PARAMETRIC + 1)
 
 #define GST_VIDEO_MAX_PLANES 4
 #define GST_VIDEO_MAX_COMPONENTS 4

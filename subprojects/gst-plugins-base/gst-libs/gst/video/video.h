@@ -37,6 +37,8 @@ typedef struct _GstVideoRectangle GstVideoRectangle;
 #include <gst/video/video-scaler.h>
 #include <gst/video/video-multiview.h>
 #include <gst/video/video-info-dma.h>
+#include <gst/video/video-info-ext.h>
+#include <gst/video/video-info-parametric.h>
 
 G_BEGIN_DECLS
 

@@ -22,6 +22,7 @@
 
 #include "gst/video/gstvideometa.h"
 #include "gst/video/gstvideopool.h"
+#include "gst/video/video-info-parametric.h"
 
 
 GST_DEBUG_CATEGORY_STATIC (gst_video_pool_debug);
@@ -149,6 +150,10 @@ video_buffer_pool_set_config (GstBufferPool * pool, GstStructure * config)
       goto wrong_caps;
 
     info = drm_info.vinfo;
+  } else if (gst_video_info_init_from_caps_extended (&info, caps) &&
+      GST_VIDEO_INFO_FORMAT (&info) == GST_VIDEO_FORMAT_PARAMETRIC) {
+    /* PARAMETRIC caps carry runtime layout, gst_video_info_from_caps() rejects
+     * them, so use the extended parser which handles them. */
   } else {
     if (!gst_video_info_from_caps (&info, caps))
       goto wrong_caps;
