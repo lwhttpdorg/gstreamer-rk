@@ -6261,34 +6261,6 @@ gst_h265_slice_hdr_free() when it is no longer needed</doc>
           </parameter>
         </parameters>
       </method>
-      <method name="parse_slice_hdr_ext" c:identifier="gst_h265_parser_parse_slice_hdr_ext" version="1.28">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Parses @data, and fills the @slice structure.
-The resulting @slice_hdr structure shall be deallocated with
-gst_h265_slice_hdr_free() when it is no longer needed</doc>
-        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
-        <return-value transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">a #GstH265ParserResult</doc>
-          <type name="H265ParserResult" c:type="GstH265ParserResult"/>
-        </return-value>
-        <parameters>
-          <instance-parameter name="parser" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">a #GstH265Parser</doc>
-            <type name="H265Parser" c:type="GstH265Parser*"/>
-          </instance-parameter>
-          <parameter name="nalu" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The `GST_H265_NAL_SLICE` #GstH265NalUnit to parse</doc>
-            <type name="H265NalUnit" c:type="GstH265NalUnit*"/>
-          </parameter>
-          <parameter name="slice" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SliceHdr to fill.</doc>
-            <type name="H265SliceHdr" c:type="GstH265SliceHdr*"/>
-          </parameter>
-          <parameter name="sps_ext" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPSEXT to fill.</doc>
-            <type name="H265SPSEXT" c:type="GstH265SPSEXT*"/>
-          </parameter>
-        </parameters>
-      </method>
       <method name="parse_sps" c:identifier="gst_h265_parser_parse_sps">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Parses @data, and fills the @sps structure.</doc>
         <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
@@ -6308,36 +6280,6 @@ gst_h265_slice_hdr_free() when it is no longer needed</doc>
           <parameter name="sps" transfer-ownership="none">
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPS to fill.</doc>
             <type name="H265SPS" c:type="GstH265SPS*"/>
-          </parameter>
-          <parameter name="parse_vui_params" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Whether to parse the vui_params or not</doc>
-            <type name="gboolean" c:type="gboolean"/>
-          </parameter>
-        </parameters>
-      </method>
-      <method name="parse_sps_ext" c:identifier="gst_h265_parser_parse_sps_ext" version="1.28">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Parses @data, and fills the @sps structure.</doc>
-        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
-        <return-value transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">a #GstH265ParserResult</doc>
-          <type name="H265ParserResult" c:type="GstH265ParserResult"/>
-        </return-value>
-        <parameters>
-          <instance-parameter name="parser" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">a #GstH265Parser</doc>
-            <type name="H265Parser" c:type="GstH265Parser*"/>
-          </instance-parameter>
-          <parameter name="nalu" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The %GST_H265_NAL_SPS #GstH265NalUnit to parse</doc>
-            <type name="H265NalUnit" c:type="GstH265NalUnit*"/>
-          </parameter>
-          <parameter name="sps" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPS to fill.</doc>
-            <type name="H265SPS" c:type="GstH265SPS*"/>
-          </parameter>
-          <parameter name="sps_ext" transfer-ownership="none">
-            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPSEXT matching the #GstH265SPS to fill.</doc>
-            <type name="H265SPSEXT" c:type="GstH265SPSEXT*"/>
           </parameter>
           <parameter name="parse_vui_params" transfer-ownership="none">
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Whether to parse the vui_params or not</doc>
@@ -7299,15 +7241,6 @@ profiles.</doc>
         <type name="gboolean" c:type="gboolean"/>
       </field>
     </record>
-    <record name="H265SPSEXT" c:type="GstH265SPSEXT" version="1.28">
-      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">H265 Sequence Parameter Set extension</doc>
-      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
-      <field name="short_term_ref_pic_set_ext" writable="1">
-        <array zero-terminated="0" fixed-size="65">
-          <type name="H265ShortTermRefPicSetExt" c:type="GstH265ShortTermRefPicSetExt"/>
-        </array>
-      </field>
-    </record>
     <record name="H265SPSExtensionParams" c:type="GstH265SPSExtensionParams">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Defines the GstH265SPSExtensionParams</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
@@ -7485,6 +7418,35 @@ Defines the _GstH265SPSSccExtensionParams</doc>
  the value of the variable deltaRps</doc>
         <type name="guint16" c:type="guint16"/>
       </field>
+      <field name="use_delta_flag" version="1.30" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Bit j equals to 1 specifies that the j-th entry in the source candidate
+short-term RPS is included in this candidate short-term RPS.</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint8" c:type="guint8"/>
+        </array>
+      </field>
+      <field name="used_by_curr_pic_flag" version="1.30" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Bit j specifies if short-term RPS j is used by the current picture.</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint8" c:type="guint8"/>
+        </array>
+      </field>
+      <field name="delta_poc_s0_minus1" version="1.30" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Specifies the negative picture order count delta for the i-th entry in
+the short-term RPS. See details in section 7.4.8 "Short-term reference
+picture set semantics" of the specification.</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint32" c:type="guint32"/>
+        </array>
+      </field>
+      <field name="delta_poc_s1_minus1" version="1.30" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Specifies the positive picture order count delta for the i-th entry in
+the short-term RPS. See details in section 7.4.8 "Short-term reference
+picture set semantics" of the specification.</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint32" c:type="guint32"/>
+        </array>
+      </field>
       <field name="NumDeltaPocs" writable="1">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">sum of @NumNegativePics and @NumPositivePics.</doc>
         <type name="guint8" c:type="guint8"/>
@@ -7542,38 +7504,6 @@ Defines the _GstH265SPSSccExtensionParams</doc>
  If inter_ref_pic_set_prediction_flag is equal to 0,
  this value should be ignored (Since: 1.18)</doc>
         <type name="guint8" c:type="guint8"/>
-      </field>
-    </record>
-    <record name="H265ShortTermRefPicSetExt" c:type="GstH265ShortTermRefPicSetExt" version="1.28">
-      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Defines the extended #GstH265ShortTermRefPicSetExt params</doc>
-      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
-      <field name="use_delta_flag" writable="1">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Bit j equals to 1 specifies that the j-th entry in the source candidate
- short-term RPS is included in this candidate short-term RPS.</doc>
-        <array zero-terminated="0" fixed-size="16">
-          <type name="guint8" c:type="guint8"/>
-        </array>
-      </field>
-      <field name="used_by_curr_pic_flag" writable="1">
-        <array zero-terminated="0" fixed-size="16">
-          <type name="guint8" c:type="guint8"/>
-        </array>
-      </field>
-      <field name="delta_poc_s0_minus1" writable="1">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Specifies the negative picture order count delta for the i-th
- entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
- picture set semantics" of the specification.</doc>
-        <array zero-terminated="0" fixed-size="16">
-          <type name="guint32" c:type="guint32"/>
-        </array>
-      </field>
-      <field name="delta_poc_s1_minus1" writable="1">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h">Specifies the positive picture order count delta for the i-th
- entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
- picture set semantics" of the specification.</doc>
-        <array zero-terminated="0" fixed-size="16">
-          <type name="guint32" c:type="guint32"/>
-        </array>
       </field>
     </record>
     <record name="H265SliceHdr" c:type="GstH265SliceHdr">
@@ -20043,36 +19973,6 @@ Parses @data, and fills the @sps structure.</doc>
         <parameter name="sps" transfer-ownership="none">
           <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPS to fill.</doc>
           <type name="H265SPS" c:type="GstH265SPS*"/>
-        </parameter>
-        <parameter name="parse_vui_params" transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Whether to parse the vui_params or not</doc>
-          <type name="gboolean" c:type="gboolean"/>
-        </parameter>
-      </parameters>
-    </function>
-    <function name="h265_parse_sps_ext" c:identifier="gst_h265_parse_sps_ext" version="1.28">
-      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">parser: The #GstH265Parser
-Parses @data, and fills the @sps structure.</doc>
-      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.h"/>
-      <return-value transfer-ownership="none">
-        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">a #GstH265ParserResult</doc>
-        <type name="H265ParserResult" c:type="GstH265ParserResult"/>
-      </return-value>
-      <parameters>
-        <parameter name="parser" transfer-ownership="none">
-          <type name="H265Parser" c:type="GstH265Parser*"/>
-        </parameter>
-        <parameter name="nalu" transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The %GST_H265_NAL_SPS #GstH265NalUnit to parse</doc>
-          <type name="H265NalUnit" c:type="GstH265NalUnit*"/>
-        </parameter>
-        <parameter name="sps" transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPS to fill.</doc>
-          <type name="H265SPS" c:type="GstH265SPS*"/>
-        </parameter>
-        <parameter name="sps_ext" transfer-ownership="none">
-          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">The #GstH265SPSEXT matching the #GstH265SPS to fill.</doc>
-          <type name="H265SPSEXT" c:type="GstH265SPSEXT*"/>
         </parameter>
         <parameter name="parse_vui_params" transfer-ownership="none">
           <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/gsth265parser.c">Whether to parse the vui_params or not</doc>
