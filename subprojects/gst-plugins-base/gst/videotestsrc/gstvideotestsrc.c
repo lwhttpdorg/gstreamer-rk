@@ -44,6 +44,7 @@
 #include "gstvideotestsrc.h"
 #include "gstvideotestsrcorc.h"
 #include "videotestsrc.h"
+#include <gst/video/video-info-parametric.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -116,7 +117,12 @@ enum
   "width = " GST_VIDEO_SIZE_RANGE ", "                                 \
   "height = " GST_VIDEO_SIZE_RANGE ", "                                \
   "framerate = " GST_VIDEO_FPS_RANGE ", "                              \
-  "multiview-mode = { mono, left, right }"
+  "multiview-mode = { mono, left, right }"                            \
+  ";" \
+  "video/x-raw, format = (string) PARAMETRIC, " \
+  "width = " GST_VIDEO_SIZE_RANGE ", " \
+  "height = " GST_VIDEO_SIZE_RANGE ", " \
+  "framerate = " GST_VIDEO_FPS_RANGE
 
 
 static GstStaticPadTemplate gst_video_test_src_template =
@@ -1031,6 +1037,7 @@ gst_video_test_src_setcaps (GstBaseSrc * bsrc, GstCaps * caps)
   guint n_lines;
   gint offset;
 
+  gst_video_info_init (&info);
   videotestsrc = GST_VIDEO_TEST_SRC (bsrc);
 
   structure = gst_caps_get_structure (caps, 0);
@@ -1038,9 +1045,15 @@ gst_video_test_src_setcaps (GstBaseSrc * bsrc, GstCaps * caps)
   GST_OBJECT_LOCK (videotestsrc);
 
   if (gst_structure_has_name (structure, "video/x-raw")) {
-    /* we can use the parsing code */
-    if (!gst_video_info_from_caps (&info, caps))
-      goto parse_failed;
+    if (gst_structure_has_field_typed (structure, "format", G_TYPE_STRING) &&
+        g_str_equal (gst_structure_get_string (structure, "format"),
+            "PARAMETRIC")) {
+      if (!gst_video_info_init_from_caps_extended (&info, caps))
+        goto parse_failed;
+    } else {
+      if (!gst_video_info_from_caps (&info, caps))
+        goto parse_failed;
+    }
 
   } else if (gst_structure_has_name (structure, "video/x-bayer")) {
     if (!gst_video_test_src_parse_caps (caps, &info, videotestsrc))
@@ -1050,11 +1063,13 @@ gst_video_test_src_setcaps (GstBaseSrc * bsrc, GstCaps * caps)
   }
 
   /* create chroma subsampler */
-  if (videotestsrc->subsample)
-    gst_video_chroma_resample_free (videotestsrc->subsample);
-  videotestsrc->subsample = gst_video_chroma_resample_new (0,
-      info.chroma_site, 0, info.finfo->unpack_format, -info.finfo->w_sub[2],
-      -info.finfo->h_sub[2]);
+  if (GST_VIDEO_INFO_FORMAT (&info) != GST_VIDEO_FORMAT_PARAMETRIC) {
+    if (videotestsrc->subsample)
+      gst_video_chroma_resample_free (videotestsrc->subsample);
+    videotestsrc->subsample = gst_video_chroma_resample_new (0,
+        info.chroma_site, 0, info.finfo->unpack_format, -info.finfo->w_sub[2],
+        -info.finfo->h_sub[2]);
+  }
 
   for (i = 0; i < videotestsrc->n_lines; i++)
     g_free (videotestsrc->lines[i]);

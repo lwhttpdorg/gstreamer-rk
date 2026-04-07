@@ -28,6 +28,7 @@
 #include "gstvideotestsrcorc.h"
 
 #include <gst/math-compat.h>
+#include <gst/video/video-info-parametric.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -157,7 +158,10 @@ static const struct vts_color_struct vts_colors_bt601_ycbcr_75[] = {
 static void paint_tmpline_ARGB (paintinfo * p, int x, int w);
 static void paint_tmpline_AYUV (paintinfo * p, int x, int w);
 
-static void convert_hline_generic (paintinfo * p, GstVideoFrame * frame, int y);
+static void convert_hline_parametric (paintinfo * p, GstVideoFrame * frame,
+    int y);
+static void convert_hline_parametric_raw (paintinfo * p, GstVideoFrame * frame,
+    int y);
 static void convert_hline_bayer8 (paintinfo * p, GstVideoFrame * frame, int y);
 static void convert_hline_bayer16 (paintinfo * p, GstVideoFrame * frame, int y);
 
@@ -215,14 +219,21 @@ videotestsrc_setup_paintinfo (GstVideoTestSrc * v, paintinfo * p, int w, int h)
     p->colors = vts_colors_bt709_ycbcr_100;
   }
 
-  if (v->bayer) {
+  if (GST_VIDEO_INFO_FORMAT (info) == GST_VIDEO_FORMAT_PARAMETRIC) {
+    /* Use the unpack format to pick ARGB (RGB) vs AYUV intermediate. */
+    GstVideoFormat unpack_fmt =
+        gst_video_format_parametric_get_unpack_format (info);
+    p->paint_tmpline = (unpack_fmt == GST_VIDEO_FORMAT_ARGB64)
+        ? paint_tmpline_ARGB : paint_tmpline_AYUV;
+    p->convert_tmpline = convert_hline_parametric_raw;
+  } else if (v->bayer) {
     p->paint_tmpline = paint_tmpline_ARGB;
     if (v->bpp == 8)
       p->convert_tmpline = convert_hline_bayer8;
     else
       p->convert_tmpline = convert_hline_bayer16;
   } else {
-    p->convert_tmpline = convert_hline_generic;
+    p->convert_tmpline = convert_hline_parametric;
     if (GST_VIDEO_INFO_IS_RGB (info)) {
       p->paint_tmpline = paint_tmpline_ARGB;
     } else {
@@ -360,7 +371,13 @@ videotestsrc_blend_line (GstVideoTestSrc * v, guint8 * dest,
     const struct vts_color_struct *b, int x1, int x2)
 {
   int i;
-  if (v->bayer || GST_VIDEO_INFO_IS_RGB (&v->info)) {
+  /* PARAMETRIC formats with an ARGB64 intermediate (RGB colour model) must blend
+   * in R/G/B space so that the resulting p->tmpline has ARGB layout, matching
+   * what paint_tmpline_ARGB writes and what convert_hline_parametric_raw reads. */
+  if (v->bayer || GST_VIDEO_INFO_IS_RGB (&v->info)
+      || (GST_VIDEO_INFO_FORMAT (&v->info) == GST_VIDEO_FORMAT_PARAMETRIC
+          && gst_video_format_parametric_get_unpack_format (&v->info) ==
+          GST_VIDEO_FORMAT_ARGB64)) {
     for (i = x1; i < x2; i++) {
       dest[i * 4 + 0] = BLEND (a->A, b->A, src[i]);
       dest[i * 4 + 1] = BLEND (a->R, b->R, src[i]);
@@ -1624,7 +1641,7 @@ paint_tmpline_AYUV (paintinfo * p, int x, int w)
 }
 
 static void
-convert_hline_generic (paintinfo * p, GstVideoFrame * frame, int y)
+convert_hline_parametric (paintinfo * p, GstVideoFrame * frame, int y)
 {
   const GstVideoFormatInfo *finfo, *uinfo;
   gint line, offset, i, width, height, bits;
@@ -1680,6 +1697,50 @@ convert_hline_generic (paintinfo * p, GstVideoFrame * frame, int y)
           frame->info.chroma_site, idx, width);
     }
   }
+}
+
+static void
+convert_hline_parametric_raw (paintinfo * p, GstVideoFrame * frame, int y)
+{
+  gint width = GST_VIDEO_FRAME_WIDTH (frame);
+  gint i;
+  const gpointer planes[GST_VIDEO_MAX_PLANES] = {
+    frame->data[0], frame->data[1], frame->data[2], frame->data[3]
+  };
+
+  if (gst_video_format_parametric_get_unpack_format (&frame->info) ==
+      GST_VIDEO_FORMAT_AYUV64) {
+    /* paint_tmpline_AYUV and blend_line produce BT.709 limited-range values:
+     * luma [16, 235] and chroma [16, 240] centred at 128.
+     * gst_video_format_parametric_pack() expects full-range [0, 65535], so
+     * expand before packing, mirroring the range GstVideoParametricConverter
+     * sets on its intermediate (GST_VIDEO_COLOR_RANGE_0_255). */
+    for (i = 0; i < width; i++) {
+      p->tmpline_u16[i * 4 + 0] = TO_16 (p->tmpline[i * 4 + 0]);
+      p->tmpline_u16[i * 4 + 1] =
+          (guint16) CLAMP (((gint) p->tmpline[i * 4 + 1] - 16) * 65535 / 219,
+          0, 65535);
+      p->tmpline_u16[i * 4 + 2] =
+          (guint16) CLAMP (((gint) p->tmpline[i * 4 + 2] - 128) * 65535 / 224
+          + 32768, 0, 65535);
+      p->tmpline_u16[i * 4 + 3] =
+          (guint16) CLAMP (((gint) p->tmpline[i * 4 + 3] - 128) * 65535 / 224
+          + 32768, 0, 65535);
+    }
+  } else {
+    /* paint_tmpline_ARGB produces full-range R/G/B values; TO_16 replication
+     * correctly maps 8-bit [0, 255] to 16-bit [0, 65535]. */
+    for (i = 0; i < width; i++) {
+      p->tmpline_u16[i * 4 + 0] = TO_16 (p->tmpline[i * 4 + 0]);
+      p->tmpline_u16[i * 4 + 1] = TO_16 (p->tmpline[i * 4 + 1]);
+      p->tmpline_u16[i * 4 + 2] = TO_16 (p->tmpline[i * 4 + 2]);
+      p->tmpline_u16[i * 4 + 3] = TO_16 (p->tmpline[i * 4 + 3]);
+    }
+  }
+
+  gst_video_format_parametric_pack (&frame->info, GST_VIDEO_PACK_FLAG_NONE,
+      p->tmpline_u16, width * 8,
+      (gpointer *) planes, frame->info.stride, y, width);
 }
 
 static void
