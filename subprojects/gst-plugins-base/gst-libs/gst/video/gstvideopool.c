@@ -270,7 +270,10 @@ video_buffer_pool_alloc (GstBufferPool * pool, GstBuffer ** buffer,
   if (*buffer == NULL)
     goto no_memory;
 
-  if (priv->add_videometa) {
+  /* GstVideoMeta cannot represent a parametric layout, the full
+   * description is already carried in the caps extensions. */
+  if (priv->add_videometa &&
+      GST_VIDEO_INFO_FORMAT (info) != GST_VIDEO_FORMAT_PARAMETRIC) {
     GST_DEBUG_OBJECT (pool, "adding GstVideoMeta");
 
     gst_buffer_add_video_meta_full (*buffer, GST_VIDEO_FRAME_FLAG_NONE,
