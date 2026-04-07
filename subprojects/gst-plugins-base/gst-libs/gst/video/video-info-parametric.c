@@ -41,6 +41,58 @@
 #include "video-info-ext-priv.h"
 #include "video-info.h"
 
+typedef enum
+{
+  PARAMETRIC_COLOR_RGB,
+  PARAMETRIC_COLOR_YCBCR,
+  PARAMETRIC_COLOR_GRAYSCALE,
+  PARAMETRIC_COLOR_UNKNOWN,
+} GenericColorModel;
+
+static GenericColorModel
+detect_color_model (const GstVideoParametricParams * params)
+{
+  gboolean has_r = FALSE, has_g = FALSE, has_b = FALSE;
+  gboolean has_luma = FALSE, has_gray = FALSE, has_cb = FALSE, has_cr = FALSE;
+  guint i;
+
+  for (i = 0; i < params->num_components; i++) {
+    switch (params->component_definition[i].type) {
+      case GST_VIDEO_COMPONENT_TYPE_RED:
+        has_r = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_GREEN:
+        has_g = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_BLUE:
+        has_b = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_LUMA:
+        has_luma = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_GRAYSCALE:
+        has_gray = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_CHROMA_BLUE:
+        has_cb = TRUE;
+        break;
+      case GST_VIDEO_COMPONENT_TYPE_CHROMA_RED:
+        has_cr = TRUE;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (has_r && has_g && has_b)
+    return PARAMETRIC_COLOR_RGB;
+  if (has_luma && has_cb && has_cr)
+    return PARAMETRIC_COLOR_YCBCR;
+  if (has_gray || has_luma)
+    return PARAMETRIC_COLOR_GRAYSCALE;
+  return PARAMETRIC_COLOR_UNKNOWN;
+}
+
 static gboolean
 component_type_from_string (const gchar * s, GstVideoComponentType * out)
 {
@@ -196,6 +248,182 @@ align_stride (gsize bytes, guint align)
   return align > 0 ? ((bytes + align - 1) / align) * align : bytes;
 }
 
+/* Assign an aligned stride to *out, guarding against overflow into gint. */
+static inline gboolean
+assign_stride (gint * out, gsize raw)
+{
+  if (G_UNLIKELY (raw > (gsize) G_MAXINT)) {
+    GST_ERROR ("stride overflow: %" G_GSIZE_FORMAT, raw);
+    return FALSE;
+  }
+  *out = (gint) raw;
+  return TRUE;
+}
+
+static guint32
+read_comp_val (const guint8 * src, guint bytes, guint depth,
+    gboolean little_endian, gboolean pad_lsb)
+{
+  guint32 raw = 0;
+
+  switch (bytes) {
+    case 1:
+      raw = src[0];
+      break;
+    case 2:
+      raw = little_endian ? GST_READ_UINT16_LE (src) : GST_READ_UINT16_BE (src);
+      break;
+    case 4:
+      raw = little_endian ? GST_READ_UINT32_LE (src) : GST_READ_UINT32_BE (src);
+      break;
+    default:
+      return 0;
+  }
+
+  /* pad_lsb: value is in MSBs; shift down to extract it.
+   * Guard against a misconfigured align_size smaller than depth requires. */
+  if (pad_lsb) {
+    if (G_UNLIKELY (bytes * 8 < depth))
+      return 0;
+    raw >>= (bytes * 8 - depth);
+  } else {
+    raw &= (1u << depth) - 1;
+  }
+
+  return raw;
+}
+
+static void
+write_comp_val (guint8 * dst, guint bytes, guint depth, guint32 val,
+    gboolean little_endian, gboolean pad_lsb)
+{
+  guint32 raw;
+
+  val &= (1u << depth) - 1;
+  /* Guard against a misconfigured align_size smaller than depth requires. */
+  if (G_UNLIKELY (pad_lsb && bytes * 8 < depth))
+    return;
+  raw = pad_lsb ? val << (bytes * 8 - depth) : val;
+
+  switch (bytes) {
+    case 1:
+      dst[0] = (guint8) raw;
+      break;
+    case 2:
+      if (little_endian)
+        GST_WRITE_UINT16_LE (dst, (guint16) raw);
+      else
+        GST_WRITE_UINT16_BE (dst, (guint16) raw);
+      break;
+    case 4:
+      if (little_endian)
+        GST_WRITE_UINT32_LE (dst, raw);
+      else
+        GST_WRITE_UINT32_BE (dst, raw);
+      break;
+    default:
+      break;
+  }
+}
+
+/* Scale a depth-bit value to 16-bit.
+ * Without TRUNCATE_RANGE and depth >= 8, MSBs are replicated into LSBs so
+ * that the maximum value maps exactly to 0xffff. */
+static guint16
+scale_to_16bit (guint32 val, guint depth, gboolean truncate)
+{
+  g_return_val_if_fail (depth > 0 && depth <= 16, 0);
+  if (depth == 16)
+    return (guint16) val;
+  if (truncate || depth < 8)
+    return (guint16) (val << (16 - depth));
+  return (guint16) ((val << (16 - depth)) | (val >> (2 * depth - 16)));
+}
+
+static guint32
+scale_from_16bit (guint16 val, guint depth)
+{
+  g_return_val_if_fail (depth > 0 && depth <= 16, 0);
+  if (depth == 16)
+    return val;
+  return (guint32) (val >> (16 - depth));
+}
+
+/* Map a component -> the channel index in ARGB64/AYUV64 (A=0, R/Y=1, G/Cb=2, B/Cr=3). */
+static void
+map_comp_to_channel (GstVideoComponentType type, guint16 val16,
+    guint16 chans[4])
+{
+  switch (type) {
+    case GST_VIDEO_COMPONENT_TYPE_ALPHA:
+      chans[0] = val16;
+      break;
+    case GST_VIDEO_COMPONENT_TYPE_RED:
+    case GST_VIDEO_COMPONENT_TYPE_LUMA:
+    case GST_VIDEO_COMPONENT_TYPE_GRAYSCALE:
+      chans[1] = val16;
+      break;
+    case GST_VIDEO_COMPONENT_TYPE_GREEN:
+    case GST_VIDEO_COMPONENT_TYPE_CHROMA_BLUE:
+      chans[2] = val16;
+      break;
+    case GST_VIDEO_COMPONENT_TYPE_BLUE:
+    case GST_VIDEO_COMPONENT_TYPE_CHROMA_RED:
+      chans[3] = val16;
+      break;
+    default:
+      break;
+  }
+}
+
+/* Inverse of map_comp_to_channel: channel index -> component value. */
+static guint16
+channel_from_comp_type (GstVideoComponentType type, const guint16 * pixel)
+{
+  switch (type) {
+    case GST_VIDEO_COMPONENT_TYPE_ALPHA:
+      return pixel[0];
+    case GST_VIDEO_COMPONENT_TYPE_RED:
+    case GST_VIDEO_COMPONENT_TYPE_LUMA:
+    case GST_VIDEO_COMPONENT_TYPE_GRAYSCALE:
+      return pixel[1];
+    case GST_VIDEO_COMPONENT_TYPE_GREEN:
+    case GST_VIDEO_COMPONENT_TYPE_CHROMA_BLUE:
+      return pixel[2];
+    case GST_VIDEO_COMPONENT_TYPE_BLUE:
+    case GST_VIDEO_COMPONENT_TYPE_CHROMA_RED:
+      return pixel[3];
+    default:
+      return 0;
+  }
+}
+
+static gboolean
+validate_params_for_pack_unpack (const GstVideoParametricParams * params)
+{
+  guint i;
+
+  if (params->sampling_type != 0) {
+    GST_ERROR ("pack/unpack only supports sampling_type=0");
+    return FALSE;
+  }
+
+  for (i = 0; i < params->num_components; i++) {
+    if (params->component_definition[i].format !=
+        GST_VIDEO_COMPONENT_FORMAT_UNSIGNED_INT) {
+      GST_ERROR ("pack/unpack only supports unsigned-int components");
+      return FALSE;
+    }
+    if (params->component_definition[i].depth == 0 ||
+        params->component_definition[i].depth > 16) {
+      GST_ERROR ("pack/unpack only supports component depth 1-16");
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
 /* Parses PARAMETRIC-specific caps fields, computes stride/offset/size, and
  * attaches a GstVideoInfoExtensions carrying the resulting
  * GstVideoParametricParams to @info. Returns TRUE on success. */
@@ -342,8 +570,9 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
             psize += comp_bytes (&params.component_definition[i]);
         }
 
-        info->stride[0] =
-            (gint) align_stride ((gsize) width * psize, row_align);
+        if (!assign_stride (&info->stride[0],
+                align_stride ((gsize) width * psize, row_align)))
+          return FALSE;
         info->offset[0] = 0;
         info->size = (gsize) info->stride[0] * height;
         break;
@@ -361,9 +590,11 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
         }
 
         for (i = 0; i < n; i++) {
-          info->stride[i] = (gint) align_stride (
-              (gsize) width * comp_bytes (&params.component_definition[i]),
-              row_align);
+          if (!assign_stride (&info->stride[i],
+                  align_stride (
+                      (gsize) width *
+                      comp_bytes (&params.component_definition[i]), row_align)))
+            return FALSE;
           info->offset[i] = offset;
           offset += (gsize) info->stride[i] * height;
         }
@@ -402,14 +633,17 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
         }
 
         /* Luma plane */
-        info->stride[0] =
-            (gint) align_stride ((gsize) width * luma_bytes, row_align);
+        if (!assign_stride (&info->stride[0],
+                align_stride ((gsize) width * luma_bytes, row_align)))
+          return FALSE;
         info->offset[0] = 0;
         offset = (gsize) info->stride[0] * height;
 
         /* Interleaved chroma plane */
-        info->stride[1] = (gint) align_stride (
-            (gsize) width * (cb_bytes + cr_bytes), row_align);
+        if (!assign_stride (&info->stride[1],
+                align_stride ((gsize) width * (cb_bytes + cr_bytes),
+                    row_align)))
+          return FALSE;
         info->offset[1] = offset;
         info->size = offset + (gsize) info->stride[1] * height;
         break;
@@ -424,7 +658,9 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
           row_bytes +=
               (gsize) width *comp_bytes (&params.component_definition[i]);
 
-        info->stride[0] = (gint) align_stride (row_bytes, row_align);
+        if (!assign_stride (&info->stride[0],
+                align_stride (row_bytes, row_align)))
+          return FALSE;
         info->offset[0] = 0;
         info->size = (gsize) info->stride[0] * height;
         break;
@@ -453,8 +689,9 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
           return FALSE;
         }
 
-        info->stride[0] =
-            (gint) align_stride ((width / num_luma) * group_bytes, row_align);
+        if (!assign_stride (&info->stride[0],
+                align_stride ((width / num_luma) * group_bytes, row_align)))
+          return FALSE;
         info->offset[0] = 0;
         info->size = (gsize) info->stride[0] * height;
         break;
@@ -476,9 +713,11 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
         tile_h = (height + params.num_tile_rows - 1) / params.num_tile_rows;
 
         for (i = 0; i < n; i++) {
-          info->stride[i] = (gint) align_stride (
-              (gsize) tile_w * comp_bytes (&params.component_definition[i]),
-              row_align);
+          if (!assign_stride (&info->stride[i],
+                  align_stride (
+                      (gsize) tile_w *
+                      comp_bytes (&params.component_definition[i]), row_align)))
+            return FALSE;
           /* offsets are intra-tile, absolute tile addressing requires GstVideoMeta */
           info->offset[i] = 0;
           tile_size += (gsize) info->stride[i] * tile_h;
@@ -584,9 +823,7 @@ GstVideoFormat
 gst_video_format_parametric_get_unpack_format (const GstVideoInfo * info)
 {
   const GstVideoParametricParams *params;
-  gboolean has_r = FALSE, has_g = FALSE, has_b = FALSE;
-  gboolean has_luma = FALSE, has_gray = FALSE, has_cb = FALSE, has_cr = FALSE;
-  guint i;
+  GenericColorModel cm;
 
   g_return_val_if_fail (info != NULL, GST_VIDEO_FORMAT_UNKNOWN);
 
@@ -594,31 +831,300 @@ gst_video_format_parametric_get_unpack_format (const GstVideoInfo * info)
   if (!params)
     return GST_VIDEO_FORMAT_UNKNOWN;
 
-  for (i = 0; i < params->num_components; i++) {
-    switch (params->component_definition[i].type) {
-      case GST_VIDEO_COMPONENT_TYPE_RED:
-        has_r = TRUE;
-        break;
-      case GST_VIDEO_COMPONENT_TYPE_GREEN:
-        has_g = TRUE;
-        break;
-      case GST_VIDEO_COMPONENT_TYPE_BLUE:
-        has_b = TRUE;
-        break;
-      case GST_VIDEO_COMPONENT_TYPE_LUMA:
-        has_luma = TRUE;
-        break;
-      case GST_VIDEO_COMPONENT_TYPE_GRAYSCALE:
-        has_gray = TRUE;
-        break;
-      default:
-        break;
-    }
+  cm = detect_color_model (params);
+  switch (cm) {
+    case PARAMETRIC_COLOR_RGB:
+      return GST_VIDEO_FORMAT_ARGB64;
+    case PARAMETRIC_COLOR_YCBCR:
+    case PARAMETRIC_COLOR_GRAYSCALE:
+      return GST_VIDEO_FORMAT_AYUV64;
+    default:
+      return GST_VIDEO_FORMAT_UNKNOWN;
+  }
+}
+
+/**
+ * gst_video_format_parametric_unpack: (skip)
+ * @info: a #GstVideoInfo with format %GST_VIDEO_FORMAT_PARAMETRIC
+ * @flags: #GstVideoPackFlags
+ * @dest: (out caller-allocates): destination buffer for unpacked pixels
+ * @data: (array fixed-size=4) (element-type gpointer): source plane pointers
+ * @stride: (array fixed-size=4): source plane strides
+ * @width: number of pixels to unpack
+ *
+ * Unpacks @width pixels from row @y (starting at column @x) into @dest as
+ * ARGB64 or AYUV64 (determined by gst_video_format_parametric_get_unpack_format()).
+ * Supports %GST_VIDEO_INTERLEAVE_TYPE_INTERLEAVE and %GST_VIDEO_INTERLEAVE_TYPE_COMPONENT,
+ * unsigned-int components with depth 1–16, and sampling_type=0 only.
+ *
+ * Returns: %TRUE on success.
+ * Since: 1.30
+ */
+gboolean
+gst_video_format_parametric_unpack (const GstVideoInfo * info,
+    GstVideoPackFlags flags,
+    gpointer dest,
+    const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  const GstVideoParametricParams *params;
+  GenericColorModel cm;
+  gboolean truncate;
+  guint16 *d;
+  guint n, i;
+  gint px;
+
+  g_return_val_if_fail (info != NULL, FALSE);
+  g_return_val_if_fail (dest != NULL, FALSE);
+  g_return_val_if_fail (data != NULL, FALSE);
+  g_return_val_if_fail (stride != NULL, FALSE);
+  g_return_val_if_fail (width > 0, FALSE);
+
+  params = gst_video_info_get_parametric_params (info);
+  if (!params)
+    return FALSE;
+
+  if (!validate_params_for_pack_unpack (params))
+    return FALSE;
+
+  cm = detect_color_model (params);
+  if (cm == PARAMETRIC_COLOR_UNKNOWN) {
+    GST_ERROR ("unpack: unrecognised colour model");
+    return FALSE;
   }
 
-  if (has_r && has_g && has_b)
-    return GST_VIDEO_FORMAT_ARGB64;
-  if (has_gray || has_luma)
-    return GST_VIDEO_FORMAT_AYUV64;
-  return GST_VIDEO_FORMAT_UNKNOWN;
+  truncate = (flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE) != 0;
+  d = (guint16 *) dest;
+  n = params->num_components;
+
+  switch (params->interleave_type) {
+    case GST_VIDEO_INTERLEAVE_TYPE_INTERLEAVE:
+    {
+      gsize psize = 0;
+      const guint8 *src;
+
+      if (params->pixel_size > 0)
+        psize = params->pixel_size;
+      else if (params->block_size > 0)
+        psize = params->block_size;
+      else
+        for (i = 0; i < n; i++)
+          psize += comp_bytes (&params->component_definition[i]);
+
+      if (G_UNLIKELY (data[0] == NULL)) {
+        GST_ERROR ("unpack: plane 0 is NULL");
+        return FALSE;
+      }
+      src = (const guint8 *) data[0] + y * stride[0] + x * psize;
+
+      for (px = 0; px < width; px++) {
+        const guint8 *csrc = src;
+        guint16 chans[4];
+
+        /* Default alpha=opaque; default chroma=midpoint for YCbCr. */
+        chans[0] = 0xffff;
+        chans[1] = 0;
+        chans[2] = (cm != PARAMETRIC_COLOR_RGB) ? 0x8000 : 0;
+        chans[3] = (cm != PARAMETRIC_COLOR_RGB) ? 0x8000 : 0;
+
+        for (i = 0; i < n; i++) {
+          const GstVideoParametricComponent *cd =
+              &params->component_definition[i];
+          guint bytes = comp_bytes (cd);
+          guint32 raw = read_comp_val (csrc, bytes, cd->depth,
+              params->components_little_endian, params->components_pad_lsb);
+          map_comp_to_channel (cd->type,
+              scale_to_16bit (raw, cd->depth, truncate), chans);
+          csrc += bytes;
+        }
+
+        d[px * 4 + 0] = chans[0];
+        d[px * 4 + 1] = chans[1];
+        d[px * 4 + 2] = chans[2];
+        d[px * 4 + 3] = chans[3];
+        src += psize;
+      }
+      break;
+    }
+
+    case GST_VIDEO_INTERLEAVE_TYPE_COMPONENT:
+    {
+      if (n > GST_VIDEO_MAX_PLANES) {
+        GST_ERROR ("unpack: too many components for component interleave");
+        return FALSE;
+      }
+
+      for (i = 0; i < n; i++) {
+        if (G_UNLIKELY (data[i] == NULL)) {
+          GST_ERROR ("unpack: plane %u is NULL", i);
+          return FALSE;
+        }
+      }
+
+      for (px = 0; px < width; px++) {
+        guint16 chans[4];
+
+        chans[0] = 0xffff;
+        chans[1] = 0;
+        chans[2] = (cm != PARAMETRIC_COLOR_RGB) ? 0x8000 : 0;
+        chans[3] = (cm != PARAMETRIC_COLOR_RGB) ? 0x8000 : 0;
+
+        for (i = 0; i < n; i++) {
+          const GstVideoParametricComponent *cd =
+              &params->component_definition[i];
+          guint bytes = comp_bytes (cd);
+          const guint8 *csrc = (const guint8 *) data[i]
+              + y * stride[i] + (x + px) * bytes;
+          guint32 raw = read_comp_val (csrc, bytes, cd->depth,
+              params->components_little_endian, params->components_pad_lsb);
+          map_comp_to_channel (cd->type,
+              scale_to_16bit (raw, cd->depth, truncate), chans);
+        }
+
+        d[px * 4 + 0] = chans[0];
+        d[px * 4 + 1] = chans[1];
+        d[px * 4 + 2] = chans[2];
+        d[px * 4 + 3] = chans[3];
+      }
+      break;
+    }
+
+    default:
+      GST_ERROR ("unpack: unsupported interleave type %d",
+          params->interleave_type);
+      return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
+ * gst_video_format_parametric_pack: (skip)
+ * @info: a #GstVideoInfo with format %GST_VIDEO_FORMAT_PARAMETRIC
+ * @flags: #GstVideoPackFlags
+ * @src: source buffer of canonical pixels (ARGB64 or AYUV64)
+ * @sstride: stride of @src in bytes
+ * @data: (array fixed-size=4) (element-type gpointer): destination plane pointers
+ * @stride: (array fixed-size=4): destination plane strides
+ * @y: destination row
+ * @width: number of pixels to pack
+ *
+ * Packs @width pixels from @src into row @y of the planes in @data.
+ * @src must be in the format returned by
+ * gst_video_format_parametric_get_unpack_format().
+ * Supports %GST_VIDEO_INTERLEAVE_TYPE_INTERLEAVE and %GST_VIDEO_INTERLEAVE_TYPE_COMPONENT,
+ * unsigned-int components with depth 1–16, and sampling_type=0 only.
+ *
+ * Returns: %TRUE on success.
+ * Since: 1.30
+ */
+gboolean
+gst_video_format_parametric_pack (const GstVideoInfo * info,
+    GstVideoPackFlags flags,
+    const gpointer src, gint sstride,
+    gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint y, gint width)
+{
+  const GstVideoParametricParams *params;
+  const guint16 *s;
+  guint n, i;
+  gint px;
+
+  g_return_val_if_fail (info != NULL, FALSE);
+  g_return_val_if_fail (src != NULL, FALSE);
+  g_return_val_if_fail (data != NULL, FALSE);
+  g_return_val_if_fail (stride != NULL, FALSE);
+  g_return_val_if_fail (width > 0, FALSE);
+
+  params = gst_video_info_get_parametric_params (info);
+  if (!params)
+    return FALSE;
+
+  if (!validate_params_for_pack_unpack (params))
+    return FALSE;
+
+  if (detect_color_model (params) == PARAMETRIC_COLOR_UNKNOWN) {
+    GST_ERROR ("pack: unrecognised colour model");
+    return FALSE;
+  }
+
+  s = (const guint16 *) src;
+  n = params->num_components;
+
+  switch (params->interleave_type) {
+    case GST_VIDEO_INTERLEAVE_TYPE_INTERLEAVE:
+    {
+      gsize psize = 0;
+      guint8 *dst;
+
+      if (params->pixel_size > 0)
+        psize = params->pixel_size;
+      else if (params->block_size > 0)
+        psize = params->block_size;
+      else
+        for (i = 0; i < n; i++)
+          psize += comp_bytes (&params->component_definition[i]);
+
+      if (G_UNLIKELY (data[0] == NULL)) {
+        GST_ERROR ("pack: plane 0 is NULL");
+        return FALSE;
+      }
+      dst = (guint8 *) data[0] + y * stride[0];
+
+      for (px = 0; px < width; px++) {
+        const guint16 *spx = s + px * 4;
+        guint8 *cdst = dst + px * psize;
+
+        for (i = 0; i < n; i++) {
+          const GstVideoParametricComponent *cd =
+              &params->component_definition[i];
+          guint bytes = comp_bytes (cd);
+          guint16 val16 = channel_from_comp_type (cd->type, spx);
+          write_comp_val (cdst, bytes, cd->depth,
+              scale_from_16bit (val16, cd->depth),
+              params->components_little_endian, params->components_pad_lsb);
+          cdst += bytes;
+        }
+      }
+      break;
+    }
+
+    case GST_VIDEO_INTERLEAVE_TYPE_COMPONENT:
+    {
+      if (n > GST_VIDEO_MAX_PLANES) {
+        GST_ERROR ("pack: too many components for component interleave");
+        return FALSE;
+      }
+
+      for (i = 0; i < n; i++) {
+        if (G_UNLIKELY (data[i] == NULL)) {
+          GST_ERROR ("pack: plane %u is NULL", i);
+          return FALSE;
+        }
+      }
+
+      for (px = 0; px < width; px++) {
+        const guint16 *spx = s + px * 4;
+
+        for (i = 0; i < n; i++) {
+          const GstVideoParametricComponent *cd =
+              &params->component_definition[i];
+          guint bytes = comp_bytes (cd);
+          guint8 *cdst = (guint8 *) data[i] + y * stride[i] + px * bytes;
+          guint16 val16 = channel_from_comp_type (cd->type, spx);
+          write_comp_val (cdst, bytes, cd->depth,
+              scale_from_16bit (val16, cd->depth),
+              params->components_little_endian, params->components_pad_lsb);
+        }
+      }
+      break;
+    }
+
+    default:
+      GST_ERROR ("pack: unsupported interleave type %d",
+          params->interleave_type);
+      return FALSE;
+  }
+
+  return TRUE;
 }
