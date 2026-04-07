@@ -389,7 +389,7 @@ gst_video_info_dma_drm_to_video_info (const GstVideoInfoDmaDrm * drm_info,
   g_return_val_if_fail (info, FALSE);
 
   if (GST_VIDEO_INFO_FORMAT (&drm_info->vinfo) != GST_VIDEO_FORMAT_DMA_DRM) {
-    *info = drm_info->vinfo;
+    gst_video_info_copy_into (info, &drm_info->vinfo);
     return TRUE;
   }
 
@@ -402,7 +402,7 @@ gst_video_info_dma_drm_to_video_info (const GstVideoInfoDmaDrm * drm_info,
           GST_VIDEO_INFO_HEIGHT (&drm_info->vinfo)))
     return FALSE;
 
-  *info = drm_info->vinfo;
+  gst_video_info_copy_into (info, &drm_info->vinfo);
   info->finfo = tmp_info.finfo;
   for (i = 0; i < GST_VIDEO_MAX_PLANES; i++)
     info->stride[i] = tmp_info.stride[i];
