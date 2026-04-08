@@ -51,8 +51,8 @@ enum
 };
 
 static const gchar *factories[NUM_FLAVOURS][NUM_ELEM] = {
-  {"audiotestsrc", "adder", "volume", "audioconvert"},
-  {"videotestsrc", "videomixer", "videoscale", "videoconvert"}
+  {"audiotestsrc", "audiomixer", "volume", "audioconvert"},
+  {"videotestsrc", "compositor", "videoscale", "videoconvert"}
 };
 
 static const gchar *sink_pads[NUM_FLAVOURS][NUM_ELEM] = {

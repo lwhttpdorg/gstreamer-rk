@@ -425,6 +425,9 @@ gst_interleave_class_init (GstInterleaveClass * klass)
       GST_DEBUG_FUNCPTR (gst_interleave_release_pad);
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_interleave_change_state);
+
+  g_warning_once
+      ("The `interleave` element is deprecated. The `audiointerleave` element should be used instead");
 }
 
 static void
