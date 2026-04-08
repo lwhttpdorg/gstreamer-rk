@@ -408,6 +408,7 @@ output_done (void *data, struct wl_output *wl_output)
   GstWlDisplay *self = g_object_steal_data (G_OBJECT (output), "display");
   GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
   const gchar *name = gst_wl_output_get_name (output);
+  const gchar *key = name ? name : "unknown";
 
   GST_INFO ("Adding output %s (%p):", name, wl_output);
   GST_INFO ("  Make:       %s", gst_wl_output_get_make (output));
@@ -430,10 +431,9 @@ output_done (void *data, struct wl_output *wl_output)
   GST_INFO ("---");
 
   g_mutex_lock (&priv->outputs_mutex);
-  if (name)
-    g_hash_table_replace (priv->outputs, g_strdup (name), output);
-  else
-    GST_WARNING ("Compositor has provided an unnamed output, ignoring.");
+  if (!name)
+    GST_WARNING ("Compositor has provided an unnamed output, mark as unknown.");
+  g_hash_table_replace (priv->outputs, g_strdup (key), output);
   g_mutex_unlock (&priv->outputs_mutex);
 }
 
