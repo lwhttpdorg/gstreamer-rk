@@ -1192,7 +1192,9 @@ gst_type_find_element_loop (GstPad * pad)
     GST_DEBUG ("Emitting found caps %" GST_PTR_FORMAT, found_caps);
     /* Set to MODE_NORMAL before emitting have-type, in case it triggers a seek */
     typefind->mode = MODE_NORMAL;
+    GST_PAD_STREAM_UNLOCK (pad);
     gst_type_find_element_emit_have_type (typefind, probability, found_caps);
+    GST_PAD_STREAM_LOCK (pad);
     gst_caps_unref (found_caps);
   } else if (typefind->mode == MODE_NORMAL) {
     GstBuffer *outbuf = NULL;
