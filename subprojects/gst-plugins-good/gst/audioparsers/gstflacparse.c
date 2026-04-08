@@ -905,7 +905,6 @@ gst_flac_parse_handle_frame (GstBaseParse * parse,
     }
 
     if (next == 0) {
-      ret = TRUE;
     } else if (next > map.size) {
       GST_DEBUG_OBJECT (flacparse, "Requesting %u bytes", next);
       *skipsize = 0;
