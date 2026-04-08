@@ -133,10 +133,10 @@ typedef enum {
  * Since: 1.30
  */
 typedef struct {
-  GstVideoComponentType            type;
-  guint                       depth;
-  GstVideoComponentNumericalFormat format;
-  guint                       align_size;
+  GstVideoComponentType             type;
+  guint                             depth;
+  GstVideoComponentNumericalFormat  format;
+  guint                             align_size;
 } GstVideoParametricComponent;
 
 /**
@@ -148,6 +148,16 @@ typedef struct {
  * Since: 1.30
  */
 #define GST_VIDEO_PARAMETRIC_MAX_COMPONENTS 16
+
+/**
+ * GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN:
+ *
+ * Maximum number of cells in a filter array pattern.  A 4x4 pattern has 16
+ * cells.
+ *
+ * Since: 1.30
+ */
+#define GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN 16
 
 /**
  * GstVideoParametricParams:
@@ -167,6 +177,12 @@ typedef struct {
  * @row_align_size: Row stride alignment in bytes (0 = no alignment)
  * @num_tile_cols: Number of tile columns (1 = no tiling)
  * @num_tile_rows: Number of tile rows (1 = no tiling)
+ * @filter_pattern_width: Width in pixels of the filter array pattern (0 = no pattern)
+ * @filter_pattern_height: Height in pixels of the filter array pattern (0 = no pattern)
+ * @filter_pattern: Component types for each pattern cell, row-major.  Valid
+ *   when @filter_pattern_width and @filter_pattern_height are both non-zero.
+ *   The product of the two dimensions must not exceed
+ *   %GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN.
  *
  * Parametric description of a %GST_VIDEO_FORMAT_PARAMETRIC video format.
  * Obtained via gst_video_info_get_parametric_params().
@@ -189,6 +205,10 @@ typedef struct {
   guint                  row_align_size;
   guint                  num_tile_cols;
   guint                  num_tile_rows;
+  /* Filter array pattern (e.g., Bayer). */
+  guint                 filter_pattern_width;
+  guint                 filter_pattern_height;
+  GstVideoComponentType filter_pattern[GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN];
 } GstVideoParametricParams;
 
 GST_VIDEO_API

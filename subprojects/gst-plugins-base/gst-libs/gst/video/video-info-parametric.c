@@ -46,8 +46,27 @@ typedef enum
   PARAMETRIC_COLOR_RGB,
   PARAMETRIC_COLOR_YCBCR,
   PARAMETRIC_COLOR_GRAYSCALE,
+  PARAMETRIC_COLOR_FILTER,
   PARAMETRIC_COLOR_UNKNOWN,
 } GenericColorModel;
+
+static const GstVideoParametricComponent *
+find_filter_component (const GstVideoParametricParams * params)
+{
+  guint i;
+
+  for (i = 0; i < params->num_components; i++) {
+    if (params->component_definition[i].type == GST_VIDEO_COMPONENT_TYPE_FILTER)
+      return &params->component_definition[i];
+  }
+  return NULL;
+}
+
+static gboolean
+has_filter_component (const GstVideoParametricParams * params)
+{
+  return find_filter_component (params) != NULL;
+}
 
 static GenericColorModel
 detect_color_model (const GstVideoParametricParams * params)
@@ -79,6 +98,14 @@ detect_color_model (const GstVideoParametricParams * params)
       case GST_VIDEO_COMPONENT_TYPE_CHROMA_RED:
         has_cr = TRUE;
         break;
+      case GST_VIDEO_COMPONENT_TYPE_FILTER:
+        if (params->filter_pattern_width == 0
+            || params->filter_pattern_height == 0) {
+          GST_ERROR ("FILTER component requires non-zero filter_pattern_width "
+              "and filter_pattern_height");
+          return PARAMETRIC_COLOR_UNKNOWN;
+        }
+        return PARAMETRIC_COLOR_FILTER;
       default:
         break;
     }
@@ -90,6 +117,7 @@ detect_color_model (const GstVideoParametricParams * params)
     return PARAMETRIC_COLOR_YCBCR;
   if (has_gray || has_luma)
     return PARAMETRIC_COLOR_GRAYSCALE;
+
   return PARAMETRIC_COLOR_UNKNOWN;
 }
 
@@ -547,6 +575,69 @@ gst_video_info_parametric_fill_info_priv (GstVideoInfo * info,
   if (params.num_tile_rows == 0)
     params.num_tile_rows = 1;
 
+  /* filter-pattern-width / filter-pattern-height / filter-pattern
+   * Required when component type is GST_VIDEO_COMPONENT_TYPE_FILTER
+   * which include bayer filters */
+  {
+    gboolean has_filter = has_filter_component (&params);
+
+    if (has_filter) {
+      guint pw = 0, ph = 0;
+      const GValue *pat_array;
+
+      if (!gst_structure_get_uint (structure, "filter-pattern-width", &pw)) {
+        gint v = 0;
+        if (gst_structure_get_int (structure, "filter-pattern-width", &v)
+            && v > 0)
+          pw = (guint) v;
+      }
+      if (!gst_structure_get_uint (structure, "filter-pattern-height", &ph)) {
+        gint v = 0;
+        if (gst_structure_get_int (structure, "filter-pattern-height", &v)
+            && v > 0)
+          ph = (guint) v;
+      }
+      pat_array = gst_structure_get_value (structure, "filter-pattern");
+
+      if (pw == 0 || ph == 0 || !pat_array
+          || !GST_VALUE_HOLDS_ARRAY (pat_array)) {
+        GST_WARNING ("FILTER component present but filter-pattern-width, "
+            "filter-pattern-height, and filter-pattern are required ");
+        return FALSE;
+      } else {
+        guint n_cells = pw * ph;
+        guint k;
+
+        if (n_cells > GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN) {
+          GST_WARNING ("filter pattern %u x %u = %u cells exceeds maximum %u",
+              pw, ph, n_cells, GST_VIDEO_PARAMETRIC_MAX_FILTER_PATTERN);
+          return FALSE;
+        } else if (gst_value_array_get_size (pat_array) != n_cells) {
+          GST_WARNING ("filter-pattern array size %u does not match "
+              "filter-pattern-width * filter-pattern-height = %u",
+              gst_value_array_get_size (pat_array), n_cells);
+          return FALSE;
+        } else {
+          for (k = 0; k < n_cells; k++) {
+            const GValue *elem = gst_value_array_get_value (pat_array, k);
+            const gchar *type_str = g_value_get_string (elem);
+            GstVideoComponentType ct;
+
+            if (!component_type_from_string (type_str, &ct)) {
+              GST_WARNING ("filter-pattern[%u]: unknown component type '%s'",
+                  k, type_str);
+              return FALSE;
+            }
+            params.filter_pattern[k] = ct;
+          }
+
+          params.filter_pattern_width = pw;
+          params.filter_pattern_height = ph;
+        }
+      }
+    }
+  }
+
   params.version = 1;
 
   /* stride, offset and size calculation */
@@ -806,6 +897,30 @@ gst_video_info_parametric_fill_caps_priv (const GstVideoParametricParams *
   if (params->num_tile_rows > 1)
     gst_caps_set_simple (caps, "num-tile-rows", G_TYPE_UINT,
         params->num_tile_rows, NULL);
+
+  if (params->filter_pattern_width > 0 && params->filter_pattern_height > 0) {
+    GValue pat_array = G_VALUE_INIT;
+    guint n_cells =
+        params->filter_pattern_width * params->filter_pattern_height;
+    guint k;
+
+    g_value_init (&pat_array, GST_TYPE_ARRAY);
+    for (k = 0; k < n_cells; k++) {
+      GValue v = G_VALUE_INIT;
+      g_value_init (&v, G_TYPE_STRING);
+      g_value_set_string (&v,
+          component_type_to_string (params->filter_pattern[k]));
+      gst_value_array_append_value (&pat_array, &v);
+      g_value_unset (&v);
+    }
+
+    gst_caps_set_simple (caps,
+        "filter-pattern-width", G_TYPE_UINT, params->filter_pattern_width,
+        "filter-pattern-height", G_TYPE_UINT, params->filter_pattern_height,
+        NULL);
+    gst_caps_set_value (caps, "filter-pattern", &pat_array);
+    g_value_unset (&pat_array);
+  }
 }
 
 /**
@@ -834,6 +949,7 @@ gst_video_format_parametric_get_unpack_format (const GstVideoInfo * info)
   cm = detect_color_model (params);
   switch (cm) {
     case PARAMETRIC_COLOR_RGB:
+    case PARAMETRIC_COLOR_FILTER:
       return GST_VIDEO_FORMAT_ARGB64;
     case PARAMETRIC_COLOR_YCBCR:
     case PARAMETRIC_COLOR_GRAYSCALE:
@@ -889,13 +1005,116 @@ gst_video_format_parametric_unpack (const GstVideoInfo * info,
 
   cm = detect_color_model (params);
   if (cm == PARAMETRIC_COLOR_UNKNOWN) {
-    GST_ERROR ("unpack: unrecognised colour model");
+    if (!has_filter_component (params))
+      GST_ERROR ("unpack: unrecognised colour model");
     return FALSE;
   }
 
   truncate = (flags & GST_VIDEO_PACK_FLAG_TRUNCATE_RANGE) != 0;
   d = (guint16 *) dest;
   n = params->num_components;
+
+  if (cm == PARAMETRIC_COLOR_FILTER) {
+    guint pw = params->filter_pattern_width;
+    guint ph = params->filter_pattern_height;
+    const GstVideoParametricComponent *cd;
+    gsize psize;
+
+    cd = find_filter_component (params);
+    if (G_UNLIKELY (cd == NULL)) {
+      GST_ERROR ("unpack: FILTER component not found in component_definition");
+      return FALSE;
+    }
+    psize = comp_bytes (cd);
+
+    if (G_UNLIKELY (data[0] == NULL)) {
+      GST_ERROR ("unpack: plane 0 is NULL");
+      return FALSE;
+    }
+
+    /* Bilinear demosaicing for any pw x ph filter pattern.  For each output
+     * pixel, the channel its filter cell directly captured is used as-is.
+     * Each missing channel is estimated by averaging all same-type cells at
+     * the minimum L1 distance within a search window of +-pw-1
+     * columns and +-ph-1 rows.  Any pw x ph tile is guaranteed to contain
+     * every type in those bounds, so the search always finds a neighbour.
+     * This mirrors the bilinear interpolation performed by bayer2rgb on
+     * video/x-bayer for the standard 2x2 case. */
+    {
+      gint height = GST_VIDEO_INFO_HEIGHT (info);
+      gint full_width = GST_VIDEO_INFO_WIDTH (info);
+      static const GstVideoComponentType rgb_types[3] = {
+        GST_VIDEO_COMPONENT_TYPE_RED,
+        GST_VIDEO_COMPONENT_TYPE_GREEN,
+        GST_VIDEO_COMPONENT_TYPE_BLUE
+      };
+
+      for (px = 0; px < width; px++) {
+        gint ax = x + px;
+        GstVideoComponentType own_type =
+            params->filter_pattern[(y % ph) * pw + (ax % pw)];
+        guint16 chans[4] = { 0xffff, 0, 0, 0 };
+        gint ci;
+
+        for (ci = 0; ci < 3; ci++) {
+          GstVideoComponentType target = rgb_types[ci];
+          guint32 sum = 0;
+          guint cnt = 0;
+
+          if (own_type == target) {
+            const guint8 *p =
+                (const guint8 *) data[0] + y * stride[0] + ax * psize;
+            guint32 raw = read_comp_val (p, psize, cd->depth,
+                params->components_little_endian, params->components_pad_lsb);
+            sum = scale_to_16bit (raw, cd->depth, truncate);
+            cnt = 1;
+          } else {
+            gint min_dist = G_MAXINT;
+            gint dx, dy;
+
+            for (dy = -(gint) ph + 1; dy <= (gint) ph - 1; dy++) {
+              gint ny = y + dy;
+              if (ny < 0 || ny >= height)
+                continue;
+              for (dx = -(gint) pw + 1; dx <= (gint) pw - 1; dx++) {
+                gint nx = ax + dx;
+                gint dist;
+                if (nx < 0 || nx >= full_width)
+                  continue;
+                if (params->filter_pattern[(ny % ph) * pw + (nx % pw)] !=
+                    target)
+                  continue;
+                dist = abs (dx) + abs (dy);
+                if (dist < min_dist) {
+                  min_dist = dist;
+                  sum = 0;
+                  cnt = 0;
+                }
+                if (dist == min_dist) {
+                  const guint8 *p =
+                      (const guint8 *) data[0] + ny * stride[0] + nx * psize;
+                  guint32 raw = read_comp_val (p, psize, cd->depth,
+                      params->components_little_endian,
+                      params->components_pad_lsb);
+                  sum += scale_to_16bit (raw, cd->depth, truncate);
+                  cnt++;
+                }
+              }
+            }
+          }
+
+          if (cnt > 0)
+            map_comp_to_channel (target, (guint16) (sum / cnt), chans);
+        }
+
+        d[px * 4 + 0] = chans[0];
+        d[px * 4 + 1] = chans[1];
+        d[px * 4 + 2] = chans[2];
+        d[px * 4 + 3] = chans[3];
+      }
+    }
+    return TRUE;
+  }
 
   switch (params->interleave_type) {
     case GST_VIDEO_INTERLEAVE_TYPE_INTERLEAVE:
@@ -1043,9 +1262,48 @@ gst_video_format_parametric_pack (const GstVideoInfo * info,
   if (!validate_params_for_pack_unpack (params))
     return FALSE;
 
-  if (detect_color_model (params) == PARAMETRIC_COLOR_UNKNOWN) {
-    GST_ERROR ("pack: unrecognised colour model");
-    return FALSE;
+  {
+    GenericColorModel cm_pack = detect_color_model (params);
+    if (cm_pack == PARAMETRIC_COLOR_UNKNOWN) {
+      GST_ERROR ("pack: unrecognised colour model");
+      return FALSE;
+    }
+
+    if (cm_pack == PARAMETRIC_COLOR_FILTER) {
+      /* Filter-array pack: each pixel's value is taken from the ARGB64
+       * intermediate channel indicated by the filter pattern at that pixel's
+       * position.  The pattern repeats with period (pw, ph). */
+      guint pw = params->filter_pattern_width;
+      guint ph = params->filter_pattern_height;
+      const GstVideoParametricComponent *cd = NULL;
+      gsize psize;
+      guint8 *dst;
+
+      s = (const guint16 *) src;
+
+      cd = find_filter_component (params);
+      if (G_UNLIKELY (cd == NULL)) {
+        GST_ERROR ("pack: FILTER component not found in component_definition");
+        return FALSE;
+      }
+      psize = comp_bytes (cd);
+
+      if (G_UNLIKELY (data[0] == NULL)) {
+        GST_ERROR ("pack: plane 0 is NULL");
+        return FALSE;
+      }
+      dst = (guint8 *) data[0] + y * stride[0];
+
+      for (px = 0; px < width; px++) {
+        GstVideoComponentType cell_type =
+            params->filter_pattern[(y % ph) * pw + (px % pw)];
+        guint16 val16 = channel_from_comp_type (cell_type, s + px * 4);
+        write_comp_val (dst + px * psize, psize, cd->depth,
+            scale_from_16bit (val16, cd->depth),
+            params->components_little_endian, params->components_pad_lsb);
+      }
+      return TRUE;
+    }
   }
 
   s = (const guint16 *) src;
