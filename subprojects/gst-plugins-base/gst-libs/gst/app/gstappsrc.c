@@ -3106,6 +3106,48 @@ gst_app_src_event (GstBaseSrc * src, GstEvent * event)
       priv->is_eos = FALSE;
       g_mutex_unlock (&priv->mutex);
       break;
+    case GST_EVENT_SEEK:
+      gdouble rate;
+      gdouble current_rate;
+      GstFormat format;
+      GstSeekFlags flags;
+      GstSeekType start_type, stop_type;
+      gint64 start, stop;
+      gboolean res;
+
+      gst_event_parse_seek (event, &rate, &format, &flags,
+          &start_type, &start, &stop_type, &stop);
+
+      if (flags & GST_SEEK_FLAG_INSTANT_RATE_CHANGE) {
+
+        /* not sure acquiring the lock to get the rate is required, qtdemux doesn't do it */
+        g_mutex_lock (&priv->mutex);
+        current_rate = priv->current_segment.rate;
+        g_mutex_unlock (&priv->mutex);
+
+        /* instant rate change only supported if direction does not change. All
+         * other requirements are already checked before creating the seek event
+         * but let's double-check here to be sure */
+        if ((current_rate > 0 && rate < 0) ||
+            (current_rate < 0 && rate > 0) ||
+            start_type != GST_SEEK_TYPE_NONE ||
+            stop_type != GST_SEEK_TYPE_NONE || (flags & GST_SEEK_FLAG_FLUSH)) {
+          GST_ERROR_OBJECT (appsrc,
+              "Instant rate change seeks only supported in the "
+              "same direction, without flushing and position change");
+          return FALSE;
+        }
+
+        GST_DEBUG_OBJECT (appsrc,
+            "Handling instant rate change from %g to %g", current_rate, rate);
+
+        GstEvent *ev = gst_event_new_instant_rate_change (rate / current_rate,
+            (GstSegmentFlags) (flags & GST_SEGMENT_INSTANT_FLAGS));
+        gst_event_set_seqnum (ev, gst_event_get_seqnum (event));
+
+        res = gst_pad_push_event (GST_BASE_SRC_PAD (src), ev);
+        return res;
+      }
     default:
       break;
   }
