@@ -54,6 +54,7 @@ struct _GstGDIScreenCapSrc
   gint capture_h;
   gint monitor;
   gboolean show_cursor;
+  gboolean capture_blt;
 
   /* Source pad frame rate */
   gint rate_numerator;
