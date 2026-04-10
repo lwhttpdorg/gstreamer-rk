@@ -659,7 +659,8 @@ gst_gl_context_egl_choose_config (GstGLContextEGL * egl, GstGLAPI gl_api,
   EGLint egl_api = 0;
   EGLBoolean ret = EGL_FALSE;
   EGLint surface_type = EGL_WINDOW_BIT;
-  EGLint alpha_size = 1;
+  EGLint color_size = 8;
+  EGLint alpha_size = 8;
   GstGLWindow *window;
 
   window = gst_gl_context_get_window (GST_GL_CONTEXT (egl));
@@ -732,11 +733,11 @@ try_again:
     config_attrib[i++] = EGL_DEPTH_SIZE;
     config_attrib[i++] = 16;
     config_attrib[i++] = EGL_RED_SIZE;
-    config_attrib[i++] = 1;
+    config_attrib[i++] = color_size;
     config_attrib[i++] = EGL_GREEN_SIZE;
-    config_attrib[i++] = 1;
+    config_attrib[i++] = color_size;
     config_attrib[i++] = EGL_BLUE_SIZE;
-    config_attrib[i++] = 1;
+    config_attrib[i++] = color_size;
     config_attrib[i++] = EGL_ALPHA_SIZE;
     config_attrib[i++] = alpha_size;
   }
@@ -751,6 +752,13 @@ try_again:
     if (surface_type == EGL_PBUFFER_BIT) {
       surface_type = EGL_WINDOW_BIT;
       GST_TRACE_OBJECT (egl, "Retrying config with window bit");
+      goto try_again;
+    }
+
+    if (color_size == 8) {
+      color_size = 1;
+      alpha_size = 1;
+      GST_TRACE_OBJECT (egl, "Retrying config not forcing 8bit colors");
       goto try_again;
     }
 
