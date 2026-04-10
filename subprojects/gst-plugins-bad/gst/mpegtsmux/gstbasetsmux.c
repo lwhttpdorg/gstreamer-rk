@@ -1663,10 +1663,15 @@ gst_base_ts_mux_prepare_and_accumulate_buffer (GstBaseTsMux * mux,
 
   GST_DEBUG_OBJECT (mux, "Pads collected");
 
-  if (buf && gst_buffer_get_size (buf) == 0
-      && GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP)) {
+  if (buf && gst_buffer_get_size (buf) == 0) {
+    if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP)) {
+      GST_DEBUG_OBJECT (mux, "Dropping GAP buffer");
+      gst_buffer_unref (buf);
+      return GST_FLOW_OK;
+    }
+    GST_ERROR_OBJECT (mux, "Received non-GAP empty buffer");
     gst_buffer_unref (buf);
-    return GST_FLOW_OK;
+    return GST_FLOW_ERROR;
   }
 
   g_mutex_lock (&mux->lock);
@@ -2855,6 +2860,16 @@ gst_base_ts_mux_aggregate (GstAggregator * agg, gboolean timeout)
       if (!buffer) {
         /* We might have gotten a flush event after we picked the pad */
         goto maybe_eos;
+      }
+      if (gst_buffer_get_size (buffer) == 0) {
+        if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_GAP)) {
+          GST_DEBUG_OBJECT (mux, "Dropping GAP buffer");
+        } else {
+          GST_ERROR_OBJECT (mux, "Received non-GAP empty buffer");
+          ret = GST_FLOW_ERROR;
+        }
+        gst_buffer_unref (buffer);
+        goto done;
       }
 
       if (best->prepare_func) {
