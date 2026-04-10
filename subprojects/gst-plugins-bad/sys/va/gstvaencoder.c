@@ -32,6 +32,100 @@
 #include "gstvacaps.h"
 #include "gstvaprofile.h"
 #include "gstvadisplay_priv.h"
+#include "gst/va/gstvaobjectpool-private.h"
+
+GST_DEBUG_CATEGORY_STATIC (gst_va_encoder_debug);
+#define GST_CAT_DEFAULT gst_va_encoder_debug
+
+typedef struct _GstVaCodedBufferPool GstVaCodedBufferPool;
+typedef struct _GstVaCodedBufferPoolClass GstVaCodedBufferPoolClass;
+
+#define GST_VA_CODED_BUFFER_POOL_CAST(obj) ((GstVaCodedBufferPool *)(obj))
+
+struct _GstVaCodedBufferPool
+{
+  GstVaObjectPool parent;
+
+  VAContextID context;
+  guint size;
+};
+
+struct _GstVaCodedBufferPoolClass
+{
+  GstVaObjectPoolClass parent;
+};
+
+GType gst_va_coded_buffer_pool_get_type (void);
+
+G_DEFINE_TYPE (GstVaCodedBufferPool, gst_va_coded_buffer_pool,
+    GST_TYPE_VA_OBJECT_POOL);
+
+static VAGenericID
+gst_va_coded_buffer_pool_alloc (GstVaObjectPool * pool)
+{
+  VABufferID buffer;
+  VADisplay dpy;
+  VAStatus status;
+  GstVaCodedBufferPool *self = GST_VA_CODED_BUFFER_POOL_CAST (pool);
+
+  dpy = gst_va_display_get_va_dpy (pool->display);
+  status = vaCreateBuffer (dpy, self->context, VAEncCodedBufferType,
+      self->size, 1, NULL, &buffer);
+  if (status != VA_STATUS_SUCCESS) {
+    GST_ERROR_OBJECT (pool, "vaCreateBuffer: %s", vaErrorStr (status));
+    return VA_INVALID_ID;
+  }
+
+  GST_INFO_OBJECT (pool, "Coded buffer created [0x%x]", buffer);
+  return buffer;
+}
+
+static void
+gst_va_coded_buffer_pool_free (GstVaObjectPool * pool, VAGenericID object)
+{
+  VAStatus status;
+  VADisplay dpy = gst_va_display_get_va_dpy (pool->display);
+
+  GST_INFO_OBJECT (pool, "Destroying Coded buffer [0x%x]", object);
+  status = vaDestroyBuffer (dpy, object);
+  if (status != VA_STATUS_SUCCESS) {
+    GST_WARNING_OBJECT (pool, "Failed to destroy the buffer [0x%x]: %s", object,
+        vaErrorStr (status));
+  }
+}
+
+static void
+gst_va_coded_buffer_pool_init (GstVaCodedBufferPool * self)
+{
+}
+
+static void
+gst_va_coded_buffer_pool_class_init (GstVaCodedBufferPoolClass * klass)
+{
+  GstVaObjectPoolClass *vaobjectpool_class = GST_VA_OBJECT_POOL_CLASS (klass);
+
+  vaobjectpool_class->alloc = gst_va_coded_buffer_pool_alloc;
+  vaobjectpool_class->free = gst_va_coded_buffer_pool_free;
+}
+
+static GstVaObjectPool *
+gst_va_coded_buffer_pool_new (GstVaDisplay * display, VAContextID context,
+    guint size)
+{
+  GstVaCodedBufferPool *self;
+  GstVaObjectPool *pool;
+
+  pool = g_object_new (gst_va_coded_buffer_pool_get_type (), NULL);
+  pool->display = gst_object_ref (display);
+
+  self = GST_VA_CODED_BUFFER_POOL_CAST (pool);
+  self->context = context;
+  self->size = size;
+
+  return pool;
+}
+
+/* ========================================================================== */
 
 struct _GstVaEncoder
 {
@@ -48,7 +142,6 @@ struct _GstVaEncoder
   guint rt_format;
   gint coded_width;
   gint coded_height;
-  gint codedbuf_size;
 
   struct
   {
@@ -56,10 +149,9 @@ struct _GstVaEncoder
     GstVideoFormat format;
     gint max_surfaces;
   } recon;
-};
 
-GST_DEBUG_CATEGORY_STATIC (gst_va_encoder_debug);
-#define GST_CAT_DEFAULT gst_va_encoder_debug
+  GstVaObjectPool *codedbuf_pool;
+};
 
 #define gst_va_encoder_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE (GstVaEncoder, gst_va_encoder, GST_TYPE_OBJECT,
@@ -173,9 +265,12 @@ gst_va_encoder_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_HEIGHT:
       g_value_set_int (value, self->coded_height);
       break;
-    case PROP_CODED_BUF_SIZE:
-      g_value_set_int (value, self->codedbuf_size);
+    case PROP_CODED_BUF_SIZE:{
+      gint size = self->codedbuf_pool ?
+          GST_VA_CODED_BUFFER_POOL_CAST (self->codedbuf_pool)->size : 0;
+      g_value_set_int (value, size);
       break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -193,7 +288,6 @@ gst_va_encoder_init (GstVaEncoder * self)
   self->rt_format = 0;
   self->coded_width = -1;
   self->coded_height = -1;
-  self->codedbuf_size = 0;
 
   self->recon.pool = NULL;
   self->recon.max_surfaces = 0;
@@ -245,6 +339,7 @@ _destroy_context (GstVaEncoder * self)
   VAStatus status;
   VAContextID context;
   GstBufferPool *pool;
+  GstVaObjectPool *codedbuf_pool;
 
   GST_OBJECT_LOCK (self);
   context = self->context;
@@ -257,7 +352,13 @@ _destroy_context (GstVaEncoder * self)
     self->recon.format = GST_VIDEO_FORMAT_UNKNOWN;
     self->recon.max_surfaces = 0;
   }
+
+  if ((codedbuf_pool = self->codedbuf_pool))
+    self->codedbuf_pool = NULL;
   GST_OBJECT_UNLOCK (self);
+
+  if (codedbuf_pool)
+    gst_object_unref (codedbuf_pool);
 
   if (pool) {
     gst_buffer_pool_set_active (pool, FALSE);
@@ -794,11 +895,24 @@ void
 gst_va_encoder_set_coded_buffer_size (GstVaEncoder * self,
     guint coded_buffer_size)
 {
+  gint codedbuff_size;
+
   g_return_if_fail (GST_IS_VA_ENCODER (self));
   g_return_if_fail (coded_buffer_size > 0);
 
   GST_OBJECT_LOCK (self);
-  self->codedbuf_size = coded_buffer_size;
+  if (self->codedbuf_pool) {
+    codedbuff_size = GST_VA_CODED_BUFFER_POOL_CAST (self->codedbuf_pool)->size;
+    if (codedbuff_size == coded_buffer_size) {
+      GST_OBJECT_UNLOCK (self);
+      return;
+    }
+
+    gst_object_unref (self->codedbuf_pool);
+  }
+
+  self->codedbuf_pool = gst_va_coded_buffer_pool_new (self->display,
+      self->context, coded_buffer_size);
   GST_OBJECT_UNLOCK (self);
 }
 
@@ -1174,9 +1288,6 @@ gst_va_encode_picture_new (GstVaEncoder * self, GstBuffer * raw_buffer)
 {
   GstVaEncodePicture *pic;
   VABufferID coded_buffer;
-  VADisplay dpy;
-  VAStatus status;
-  gint codedbuf_size;
   GstBufferPool *recon_pool = NULL;
   GstBuffer *reconstruct_buffer = NULL;
   GstFlowReturn ret;
@@ -1195,8 +1306,6 @@ gst_va_encode_picture_new (GstVaEncoder * self, GstBuffer * raw_buffer)
     return NULL;
   }
 
-  codedbuf_size = self->codedbuf_size;
-
   GST_OBJECT_UNLOCK (self);
 
   recon_pool = _get_reconstructed_buffer_pool (self);
@@ -1213,22 +1322,19 @@ gst_va_encode_picture_new (GstVaEncoder * self, GstBuffer * raw_buffer)
     return NULL;
   }
 
-  /* this has to be assigned before */
-  g_assert (codedbuf_size > 0);
+  {
+    g_assert (self->codedbuf_pool);
 
-  dpy = gst_va_display_get_va_dpy (self->display);
-  status = vaCreateBuffer (dpy, self->context, VAEncCodedBufferType,
-      codedbuf_size, 1, NULL, &coded_buffer);
-  if (status != VA_STATUS_SUCCESS) {
-    GST_ERROR_OBJECT (self, "vaCreateBuffer: %s", vaErrorStr (status));
-    gst_clear_buffer (&reconstruct_buffer);
-    return NULL;
+    coded_buffer = gst_va_object_pool_acquire (self->codedbuf_pool);
+    if (coded_buffer == VA_INVALID_ID)
+      return NULL;
   }
 
   pic = g_new (GstVaEncodePicture, 1);
   pic->raw_buffer = gst_buffer_ref (raw_buffer);
   pic->reconstruct_buffer = reconstruct_buffer;
   pic->coded_buffer = coded_buffer;
+  pic->codedbuf_pool = gst_object_ref (self->codedbuf_pool);
 
   pic->params = g_array_sized_new (FALSE, FALSE, sizeof (VABufferID), 8);
 
@@ -1238,18 +1344,12 @@ gst_va_encode_picture_new (GstVaEncoder * self, GstBuffer * raw_buffer)
 void
 gst_va_encode_picture_free (GstVaEncodePicture * pic)
 {
-  GstVaDisplay *display;
-
   g_return_if_fail (pic);
 
   _destroy_all_buffers (pic);
 
-  display = gst_va_buffer_peek_display (pic->raw_buffer);
-  if (!display)
-    return;
-
-  if (pic->coded_buffer != VA_INVALID_ID)
-    _destroy_buffer (display, pic->coded_buffer);
+  gst_va_object_pool_release (pic->codedbuf_pool, pic->coded_buffer);
+  gst_object_unref (pic->codedbuf_pool);
 
   gst_buffer_unref (pic->raw_buffer);
   gst_buffer_unref (pic->reconstruct_buffer);

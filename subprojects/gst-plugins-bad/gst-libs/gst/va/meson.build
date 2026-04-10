@@ -10,6 +10,7 @@ va_sources_priv = files(
   'gstvasurfacecopy.c',
   'gstvavideoformat.c',
   'vasurfaceimage.c',
+  'gstvaobjectpool-private.c',
 )
 
 va_headers = files(
