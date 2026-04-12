@@ -216,6 +216,7 @@ plugin_init (GstPlugin * plugin)
   GST_TYPE_FIND_REGISTER (gxf, plugin);
   GST_TYPE_FIND_REGISTER (iff, plugin);
   GST_TYPE_FIND_REGISTER (av1, plugin);
+  GST_TYPE_FIND_REGISTER (apv1, plugin);
 
   return TRUE;
 }

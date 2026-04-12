@@ -6993,6 +6993,42 @@ av1_type_find (GstTypeFind * tf, gpointer unused)
         "alignment", G_TYPE_STRING, "none", NULL);
 }
 
+/*** Advanced Professional Video, https://datatracker.ietf.org/doc/html/draft-lim-apv ***/
+
+static GstStaticCaps apv1_caps =
+GST_STATIC_CAPS ("video/x-apv1,alignment=none");
+
+#define APV1_CAPS gst_static_caps_get(&apv1_caps)
+
+static void
+apv1_type_find (GstTypeFind * tf, gpointer private)
+{
+  const guint8 *data;
+  guint32 au_size;
+  guint64 tf_length;
+
+  tf_length = gst_type_find_get_length (tf);
+
+  data = gst_type_find_peek (tf, 0, 8);
+  if (data != NULL) {
+    // first four bytes are the size of the access unit in bytes
+    au_size = GST_READ_UINT32_BE (data);
+    // next four bytes are the signature
+    if ((au_size != 0) && (memcmp (data + 4, "aPv1", 4) == 0)) {
+      if (tf_length < au_size + 12) {
+        // we have enough data to check for the next AU too
+        data = gst_type_find_peek (tf, au_size + 4, 8);
+        au_size = GST_READ_UINT32_BE (data);
+        if ((au_size != 0) && (memcmp (data + 4, "aPv1", 4) == 0)) {
+          gst_type_find_suggest (tf, GST_TYPE_FIND_NEARLY_CERTAIN, APV1_CAPS);
+        }
+      } else {
+        gst_type_find_suggest (tf, GST_TYPE_FIND_LIKELY, APV1_CAPS);
+      }
+    }
+  }
+}
+
 /*Type find definition by functions */
 GST_TYPE_FIND_REGISTER_DEFINE (musepack, "audio/x-musepack", GST_RANK_PRIMARY,
     musepack_type_find, "mpc,mpp,mp+", MUSEPACK_CAPS, NULL, NULL);
@@ -7262,3 +7298,5 @@ GST_TYPE_FIND_REGISTER_DEFINE (wsvqa, "application/x-wsvqa", GST_RANK_MARGINAL,
     wsvqa_type_find, "wsvqa", WSVQA_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (av1, "video/x-av1", GST_RANK_MARGINAL,
     av1_type_find, "av1", AV1_CAPS, NULL, NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (apv1, "video/x-apv1", GST_RANK_MARGINAL,
+    apv1_type_find, "apv", APV1_CAPS, NULL, NULL);
