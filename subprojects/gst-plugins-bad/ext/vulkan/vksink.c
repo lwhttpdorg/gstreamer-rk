@@ -391,6 +391,11 @@ gst_vulkan_sink_change_state (GstElement * element, GstStateChange transition)
         gst_vulkan_window_set_window_handle (vk_sink->window,
             vk_sink->set_window_handle);
 
+      if (GST_VIDEO_SINK_WIDTH (vk_sink) > 0
+          && GST_VIDEO_SINK_HEIGHT (vk_sink) > 0)
+        gst_vulkan_window_resize (vk_sink->window,
+            GST_VIDEO_SINK_WIDTH (vk_sink), GST_VIDEO_SINK_HEIGHT (vk_sink));
+
       if (!gst_vulkan_window_open (vk_sink->window, &error)) {
         GST_ELEMENT_ERROR (vk_sink, RESOURCE, NOT_FOUND,
             ("Failed to open window"), ("%s", error ? error->message : ""));
@@ -611,6 +616,11 @@ gst_vulkan_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
 
   if (!_configure_display_from_info (vk_sink, &v_info))
     return FALSE;
+
+  if (vk_sink->window && GST_VIDEO_SINK_WIDTH (vk_sink) > 0 &&
+      GST_VIDEO_SINK_HEIGHT (vk_sink) > 0)
+    gst_vulkan_window_resize (vk_sink->window, GST_VIDEO_SINK_WIDTH (vk_sink),
+        GST_VIDEO_SINK_HEIGHT (vk_sink));
 
   if (!gst_vulkan_swapper_set_caps (vk_sink->swapper, caps, &error)) {
     GST_ELEMENT_ERROR (vk_sink, RESOURCE, NOT_FOUND,
