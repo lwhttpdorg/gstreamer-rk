@@ -72,6 +72,7 @@ struct _GstVulkanSwapperPrivate
   /* <private> */
   /* runtime variables */
   gint to_quit;
+  gint pending_resize;
   GstBuffer *current_buffer;
   gboolean any_current_extent;
 
@@ -1261,6 +1262,11 @@ _render_buffer_unlocked (GstVulkanSwapper * swapper,
 
   gst_vulkan_trash_list_gc (priv->trash_list);
 
+  if (g_atomic_int_compare_and_exchange (&priv->pending_resize, TRUE, FALSE)) {
+    if (!_swapchain_resize (swapper, error))
+      goto error;
+  }
+
   if (!buffer) {
     g_set_error (error, GST_VULKAN_ERROR,
         VK_ERROR_INITIALIZATION_FAILED, "Invalid buffer");
@@ -1481,16 +1487,8 @@ _on_window_resize (GstVulkanWindow * window, guint width, guint height,
     GstVulkanSwapper * swapper)
 {
   GstVulkanSwapperPrivate *priv = GET_PRIV (swapper);
-  GError *error = NULL;
 
-  RENDER_LOCK (swapper);
-  if (priv->any_current_extent) {
-    if (!_swapchain_resize (swapper, &error))
-      GST_ERROR_OBJECT (swapper, "Failed to resize swapchain: %s",
-          error->message);
-    g_clear_error (&error);
-  }
-  RENDER_UNLOCK (swapper);
+  g_atomic_int_set (&priv->pending_resize, TRUE);
 }
 
 /**
