@@ -10891,6 +10891,17 @@
                         "type": "GstSample",
                         "writable": false
                     },
+                    "shared-sink": {
+                        "blurb": "single sink element for both audio and video output",
+                        "conditionally-available": false,
+                        "construct": false,
+                        "construct-only": false,
+                        "controllable": false,
+                        "mutable": "null",
+                        "readable": true,
+                        "type": "GstElement",
+                        "writable": true
+                    },
                     "source": {
                         "blurb": "Source element",
                         "conditionally-available": false,
@@ -11428,6 +11439,17 @@
                         "type": "GstSample",
                         "writable": false
                     },
+                    "shared-sink": {
+                        "blurb": "single sink element for both audio and video output",
+                        "conditionally-available": false,
+                        "construct": false,
+                        "construct-only": false,
+                        "controllable": false,
+                        "mutable": "null",
+                        "readable": true,
+                        "type": "GstElement",
+                        "writable": true
+                    },
                     "subtitle-encoding": {
                         "blurb": "Encoding to assume if input subtitles are not in UTF-8 encoding. If not set, the GST_SUBTITLE_ENCODING environment variable will be checked for an encoding to use. If that is not set either, ISO-8859-15 will be assumed.",
                         "conditionally-available": false,
@@ -11776,6 +11798,17 @@
                         "mutable": "null",
                         "readable": true,
                         "type": "GstPlaySinkSendEventMode",
+                        "writable": true
+                    },
+                    "shared-sink": {
+                        "blurb": "single sink element for both audio and video output",
+                        "conditionally-available": false,
+                        "construct": false,
+                        "construct-only": false,
+                        "controllable": false,
+                        "mutable": "null",
+                        "readable": true,
+                        "type": "GstElement",
                         "writable": true
                     },
                     "subtitle-encoding": {

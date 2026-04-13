@@ -63,6 +63,16 @@ typedef enum
   MODE_FIRST = 1
 } GstPlaySinkSendEventMode;
 
+/* Shared sink pad template types */
+typedef enum
+{
+  SHARED_SINK_PAD_NONE = 0,
+  SHARED_SINK_PAD_TYPED,        /* video_%u / audio_%u */
+  SHARED_SINK_PAD_GENERIC       /* sink_%u */
+} SharedSinkPadType;
+
+/* Forward declaration */
+static SharedSinkPadType check_shared_sink_support (GstElement * element);
 
 #define GST_TYPE_PLAY_SINK_SEND_EVENT_MODE (gst_play_sink_send_event_mode_get_type ())
 static GType
@@ -291,6 +301,12 @@ struct _GstPlaySink
   gboolean text_custom_flush_finished;
   gboolean text_ignore_wrong_state;
   gboolean text_pending_flush;
+
+  /* Shared sink support - single sink for both audio and video */
+  GstElement *shared_sink;
+  SharedSinkPadType shared_sink_pad_type;
+  GstPad *shared_sink_video_pad;
+  GstPad *shared_sink_audio_pad;
 };
 
 struct _GstPlaySinkClass
@@ -350,7 +366,8 @@ enum
   PROP_SEND_EVENT_MODE,
   PROP_FORCE_ASPECT_RATIO,
   PROP_VIDEO_FILTER,
-  PROP_AUDIO_FILTER
+  PROP_AUDIO_FILTER,
+  PROP_SHARED_SINK
 };
 
 /* signals */
@@ -587,6 +604,24 @@ gst_play_sink_class_init (GstPlaySinkClass * klass)
       g_param_spec_object ("audio-sink", "Audio Sink",
           "the audio output element to use (NULL = default sink)",
           GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstPlaySink:shared-sink:
+   *
+   * Set a single sink element for both audio and video output. The sink must
+   * have REQUEST pad templates (video_%u/audio_%u or sink_%u). This is useful
+   * for combined sinks like #webrtcsink.
+   *
+   * When set, this takes precedence over audio-sink and video-sink.
+   * Setting to NULL falls back to using audio-sink and video-sink.
+   *
+   * playsink must be in %GST_STATE_NULL
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_klass, PROP_SHARED_SINK,
+      g_param_spec_object ("shared-sink", "Shared Sink",
+          "single sink element for both audio and video output",
+          GST_TYPE_ELEMENT, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstPlaySink:text-sink:
@@ -796,6 +831,29 @@ gst_play_sink_dispose (GObject * object)
     gst_object_unref (playsink->video_filter);
     playsink->video_filter = NULL;
   }
+
+  /* Clean up shared sink request pads before disposing sinks */
+  if (playsink->shared_sink_video_pad) {
+    if (playsink->shared_sink)
+      gst_element_release_request_pad (playsink->shared_sink,
+          playsink->shared_sink_video_pad);
+    gst_object_unref (playsink->shared_sink_video_pad);
+    playsink->shared_sink_video_pad = NULL;
+  }
+  if (playsink->shared_sink_audio_pad) {
+    if (playsink->shared_sink)
+      gst_element_release_request_pad (playsink->shared_sink,
+          playsink->shared_sink_audio_pad);
+    gst_object_unref (playsink->shared_sink_audio_pad);
+    playsink->shared_sink_audio_pad = NULL;
+  }
+  playsink->shared_sink_pad_type = SHARED_SINK_PAD_NONE;
+
+  if (playsink->shared_sink != NULL) {
+    gst_element_set_state (playsink->shared_sink, GST_STATE_NULL);
+    gst_object_unref (playsink->shared_sink);
+    playsink->shared_sink = NULL;
+  }
   if (playsink->audio_sink != NULL) {
     gst_element_set_state (playsink->audio_sink, GST_STATE_NULL);
     gst_object_unref (playsink->audio_sink);
@@ -919,11 +977,13 @@ gst_play_sink_set_sink (GstPlaySink * playsink, GstPlaySinkType type,
   GST_PLAY_SINK_UNLOCK (playsink);
 
 #ifndef GST_DISABLE_GST_DEBUG
-  /* Check and warn if an application sets a sink with no 'sink' pad */
+  /* Check and warn if an application sets a sink with no 'sink' pad
+   * Skip warning for sinks with REQUEST pads (e.g., webrtcsink) that can be
+   * used in shared sink mode */
   if (sink && elem) {
     if ((sink_pad = gst_element_get_static_pad (sink, "sink")) != NULL) {
       gst_object_unref (sink_pad);
-    } else {
+    } else if (check_shared_sink_support (sink) == SHARED_SINK_PAD_NONE) {
       GST_ELEMENT_WARNING (playsink, CORE, FAILED,
           ("Application error - playback can't work"),
           ("custom %s sink has no pad named \"sink\"", sink_type));
@@ -1737,6 +1797,80 @@ update_colorbalance (GstPlaySink * playsink)
   gst_object_unref (balance);
 }
 
+/* Check if element supports being used as a shared sink by looking for
+ * REQUEST sink pad templates matching known patterns */
+static SharedSinkPadType
+check_shared_sink_support (GstElement * element)
+{
+  GList *padlist, *walk;
+  gboolean has_video_template = FALSE;
+  gboolean has_audio_template = FALSE;
+  gboolean has_generic_template = FALSE;
+
+  padlist = gst_element_get_pad_template_list (element);
+
+  for (walk = padlist; walk; walk = walk->next) {
+    GstPadTemplate *templ = (GstPadTemplate *) walk->data;
+    const gchar *name;
+
+    /* Only interested in REQUEST sink pads */
+    if (GST_PAD_TEMPLATE_DIRECTION (templ) != GST_PAD_SINK)
+      continue;
+    if (GST_PAD_TEMPLATE_PRESENCE (templ) != GST_PAD_REQUEST)
+      continue;
+
+    name = GST_PAD_TEMPLATE_NAME_TEMPLATE (templ);
+
+    /* Check for type-specific templates */
+    if (g_strcmp0 (name, "video_%u") == 0)
+      has_video_template = TRUE;
+    else if (g_strcmp0 (name, "audio_%u") == 0)
+      has_audio_template = TRUE;
+    /* Check for generic sink template */
+    else if (g_strcmp0 (name, "sink_%u") == 0)
+      has_generic_template = TRUE;
+  }
+
+  /* Prefer type-specific templates if both exist */
+  if (has_video_template && has_audio_template)
+    return SHARED_SINK_PAD_TYPED;
+
+  /* Fall back to generic template if available */
+  if (has_generic_template)
+    return SHARED_SINK_PAD_GENERIC;
+
+  return SHARED_SINK_PAD_NONE;
+}
+
+/* Request a pad from a shared sink element */
+static GstPad *
+request_shared_sink_pad (GstPlaySink * playsink, GstElement * sink,
+    SharedSinkPadType pad_type, gboolean is_video)
+{
+  GstPad *pad = NULL;
+
+  if (pad_type == SHARED_SINK_PAD_TYPED) {
+    /* Request type-specific pad: video_%u or audio_%u */
+    const gchar *template_name = is_video ? "video_%u" : "audio_%u";
+    pad = gst_element_request_pad_simple (sink, template_name);
+  } else if (pad_type == SHARED_SINK_PAD_GENERIC) {
+    /* Request generic pad: sink_%u */
+    pad = gst_element_request_pad_simple (sink, "sink_%u");
+  }
+
+  if (!pad) {
+    GST_WARNING_OBJECT (playsink,
+        "Failed to request %s pad from shared sink %" GST_PTR_FORMAT,
+        is_video ? "video" : "audio", sink);
+  } else {
+    GST_DEBUG_OBJECT (playsink,
+        "Requested %s pad %" GST_PTR_FORMAT " from shared sink",
+        is_video ? "video" : "audio", pad);
+  }
+
+  return pad;
+}
+
 /* make the element (bin) that contains the elements needed to perform
  * video display.
  *
@@ -1764,7 +1898,30 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
 
   GST_DEBUG_OBJECT (playsink, "making video chain %p", chain);
 
-  if (playsink->video_sink) {
+  if (playsink->shared_sink) {
+    /* Shared sink mode - use the shared sink for video */
+    GstPad *video_pad;
+
+    GST_DEBUG_OBJECT (playsink, "using shared sink %" GST_PTR_FORMAT,
+        playsink->shared_sink);
+
+    if (playsink->shared_sink_pad_type == SHARED_SINK_PAD_NONE)
+      goto invalid_shared_sink;
+
+    video_pad =
+        request_shared_sink_pad (playsink, playsink->shared_sink,
+        playsink->shared_sink_pad_type, TRUE);
+    if (video_pad) {
+      chain->sink = try_element (playsink, playsink->shared_sink, FALSE);
+      if (chain->sink) {
+        playsink->shared_sink_video_pad = video_pad;
+      } else {
+        /* Cleanup on failure */
+        gst_element_release_request_pad (playsink->shared_sink, video_pad);
+        gst_object_unref (video_pad);
+      }
+    }
+  } else if (playsink->video_sink) {
     GST_DEBUG_OBJECT (playsink, "trying configured videosink");
     chain->sink = try_element (playsink, playsink->video_sink, FALSE);
   } else {
@@ -1789,19 +1946,27 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
     goto no_sinks;
   head = chain->sink;
 
-  /* if we can disable async behaviour of the sink, we can avoid adding a
-   * queue for the audio chain. */
-  elem =
-      gst_play_sink_find_property_sinks (playsink, chain->sink, "async",
-      G_TYPE_BOOLEAN);
-  if (elem) {
-    GST_DEBUG_OBJECT (playsink, "setting async property to %d on element %s",
-        async, GST_ELEMENT_NAME (elem));
-    g_object_set (elem, "async", async, NULL);
-    chain->async = async;
+  /* If we can disable async behaviour of the sink, we can avoid adding a
+   * queue for the audio chain.
+   *
+   * In shared sink mode, the sink is responsible for managing its own async
+   * behavior - don't override it. */
+  if (!playsink->shared_sink) {
+    elem =
+        gst_play_sink_find_property_sinks (playsink, chain->sink, "async",
+        G_TYPE_BOOLEAN);
+    if (elem) {
+      GST_DEBUG_OBJECT (playsink, "setting async property to %d on element %s",
+          async, GST_ELEMENT_NAME (elem));
+      g_object_set (elem, "async", async, NULL);
+      chain->async = async;
+    } else {
+      GST_DEBUG_OBJECT (playsink, "no async property on the sink");
+      chain->async = TRUE;
+    }
   } else {
-    GST_DEBUG_OBJECT (playsink, "no async property on the sink");
-    chain->async = TRUE;
+    GST_DEBUG_OBJECT (playsink, "shared sink mode - not modifying async");
+    chain->async = FALSE;
   }
 
   /* Make sure the aspect ratio is kept */
@@ -1977,9 +2142,21 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
 
   if (prev) {
     GST_DEBUG_OBJECT (playsink, "linking to sink");
-    if (!gst_element_link_pads_full (prev, "src", chain->sink, NULL,
-            GST_PAD_LINK_CHECK_TEMPLATE_CAPS))
-      goto link_failed;
+    if (playsink->shared_sink && playsink->shared_sink_video_pad) {
+      /* In shared sink mode, link to the specific request pad */
+      GstPad *srcpad = gst_element_get_static_pad (prev, "src");
+      GstPadLinkReturn ret;
+
+      ret = gst_pad_link_full (srcpad, playsink->shared_sink_video_pad,
+          GST_PAD_LINK_CHECK_TEMPLATE_CAPS);
+      gst_object_unref (srcpad);
+      if (ret != GST_PAD_LINK_OK)
+        goto link_failed;
+    } else {
+      if (!gst_element_link_pads_full (prev, "src", chain->sink, NULL,
+              GST_PAD_LINK_CHECK_TEMPLATE_CAPS))
+        goto link_failed;
+    }
   }
 
   pad = gst_element_get_static_pad (head, "sink");
@@ -2000,6 +2177,15 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
   return chain;
 
   /* ERRORS */
+invalid_shared_sink:
+  {
+    GST_ELEMENT_ERROR (playsink, CORE, MISSING_PLUGIN,
+        (_("Configured shared-sink %s has no compatible REQUEST pad templates "
+                "(need video_%%u/audio_%%u or sink_%%u)."),
+            GST_ELEMENT_NAME (playsink->shared_sink)), (NULL));
+    free_chain ((GstPlayChain *) chain);
+    return NULL;
+  }
 no_sinks:
   {
     if (!elem && !playsink->video_sink) {
@@ -2706,7 +2892,23 @@ gen_audio_chain (GstPlaySink * playsink, gboolean raw)
 
   GST_DEBUG_OBJECT (playsink, "making audio chain %p", chain);
 
-  if (playsink->audio_sink) {
+  if (playsink->shared_sink) {
+    /* Shared sink mode: request an audio pad from the shared sink */
+    GstPad *audio_pad;
+
+    GST_DEBUG_OBJECT (playsink,
+        "Shared sink mode: requesting audio pad from %" GST_PTR_FORMAT,
+        playsink->shared_sink);
+
+    audio_pad =
+        request_shared_sink_pad (playsink, playsink->shared_sink,
+        playsink->shared_sink_pad_type, FALSE);
+    if (audio_pad) {
+      playsink->shared_sink_audio_pad = audio_pad;
+      /* Reference the sink but don't add it to this bin - video chain owns it */
+      chain->sink = gst_object_ref (playsink->shared_sink);
+    }
+  } else if (playsink->audio_sink) {
     GST_DEBUG_OBJECT (playsink, "trying configured audiosink %" GST_PTR_FORMAT,
         playsink->audio_sink);
     chain->sink = try_element (playsink, playsink->audio_sink, FALSE);
@@ -2734,7 +2936,11 @@ gen_audio_chain (GstPlaySink * playsink, gboolean raw)
   chain->chain.bin = gst_bin_new ("abin");
   bin = GST_BIN_CAST (chain->chain.bin);
   gst_object_ref_sink (bin);
-  gst_bin_add (bin, chain->sink);
+
+  /* In shared sink mode, don't add sink to this bin - it's in the video bin */
+  if (!playsink->shared_sink) {
+    gst_bin_add (bin, chain->sink);
+  }
 
   head = chain->sink;
   prev = NULL;
@@ -2896,9 +3102,21 @@ gen_audio_chain (GstPlaySink * playsink, gboolean raw)
     /* we only have to link to the previous element if we have something in
      * front of the sink */
     GST_DEBUG_OBJECT (playsink, "linking to sink");
-    if (!gst_element_link_pads_full (prev, "src", chain->sink, NULL,
-            GST_PAD_LINK_CHECK_TEMPLATE_CAPS))
-      goto link_failed;
+    if (playsink->shared_sink && playsink->shared_sink_audio_pad) {
+      /* In shared sink mode, link to the specific request pad */
+      GstPad *srcpad = gst_element_get_static_pad (prev, "src");
+      GstPadLinkReturn ret;
+
+      ret = gst_pad_link_full (srcpad, playsink->shared_sink_audio_pad,
+          GST_PAD_LINK_CHECK_TEMPLATE_CAPS);
+      gst_object_unref (srcpad);
+      if (ret != GST_PAD_LINK_OK)
+        goto link_failed;
+    } else {
+      if (!gst_element_link_pads_full (prev, "src", chain->sink, NULL,
+              GST_PAD_LINK_CHECK_TEMPLATE_CAPS))
+        goto link_failed;
+    }
   }
 
   /* post a warning if we have no way to configure the volume */
@@ -3353,6 +3571,16 @@ gst_play_sink_do_reconfigure (GstPlaySink * playsink)
         }
 
         activate_chain (GST_PLAY_CHAIN (playsink->videochain), FALSE);
+
+        /* Release shared sink video pad before freeing chain */
+        if (playsink->shared_sink_video_pad) {
+          if (playsink->shared_sink)
+            gst_element_release_request_pad (playsink->shared_sink,
+                playsink->shared_sink_video_pad);
+          gst_object_unref (playsink->shared_sink_video_pad);
+          playsink->shared_sink_video_pad = NULL;
+        }
+
         free_chain ((GstPlayChain *) playsink->videochain);
         playsink->videochain = NULL;
 
@@ -3593,6 +3821,16 @@ gst_play_sink_do_reconfigure (GstPlaySink * playsink)
 
         activate_chain (GST_PLAY_CHAIN (playsink->audiochain), FALSE);
         disconnect_audio_chain (playsink->audiochain, playsink);
+
+        /* Release shared sink audio pad before freeing chain */
+        if (playsink->shared_sink_audio_pad) {
+          if (playsink->shared_sink)
+            gst_element_release_request_pad (playsink->shared_sink,
+                playsink->shared_sink_audio_pad);
+          gst_object_unref (playsink->shared_sink_audio_pad);
+          playsink->shared_sink_audio_pad = NULL;
+        }
+
         if (playsink->audiochain->volume)
           gst_object_unref (playsink->audiochain->volume);
         playsink->audiochain->volume = NULL;
@@ -5184,6 +5422,22 @@ gst_play_sink_change_state (GstElement * element, GstStateChange transition)
         if (playsink->video_filter != NULL)
           gst_element_set_state (playsink->video_filter, GST_STATE_NULL);
 
+        /* Release shared sink pads before freeing chains */
+        if (playsink->shared_sink_video_pad) {
+          if (playsink->shared_sink)
+            gst_element_release_request_pad (playsink->shared_sink,
+                playsink->shared_sink_video_pad);
+          gst_object_unref (playsink->shared_sink_video_pad);
+          playsink->shared_sink_video_pad = NULL;
+        }
+        if (playsink->shared_sink_audio_pad) {
+          if (playsink->shared_sink)
+            gst_element_release_request_pad (playsink->shared_sink,
+                playsink->shared_sink_audio_pad);
+          gst_object_unref (playsink->shared_sink_audio_pad);
+          playsink->shared_sink_audio_pad = NULL;
+        }
+
         free_chain ((GstPlayChain *) playsink->videodeinterlacechain);
         playsink->videodeinterlacechain = NULL;
         free_chain ((GstPlayChain *) playsink->videochain);
@@ -5287,6 +5541,24 @@ gst_play_sink_set_property (GObject * object, guint prop_id,
       GST_PLAY_SINK_UNLOCK (playsink);
       break;
     }
+    case PROP_SHARED_SINK:
+    {
+      GstElement *sink = g_value_get_object (value);
+      GST_PLAY_SINK_LOCK (playsink);
+      if (playsink->shared_sink) {
+        gst_element_set_state (playsink->shared_sink, GST_STATE_NULL);
+        gst_object_unref (playsink->shared_sink);
+      }
+      if (sink) {
+        gst_object_ref_sink (sink);
+        playsink->shared_sink_pad_type = check_shared_sink_support (sink);
+      } else {
+        playsink->shared_sink_pad_type = SHARED_SINK_PAD_NONE;
+      }
+      playsink->shared_sink = sink;
+      GST_PLAY_SINK_UNLOCK (playsink);
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, spec);
       break;
@@ -5352,6 +5624,11 @@ gst_play_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_FORCE_ASPECT_RATIO:
       g_value_set_boolean (value, playsink->force_aspect_ratio);
+      break;
+    case PROP_SHARED_SINK:
+      GST_PLAY_SINK_LOCK (playsink);
+      g_value_set_object (value, playsink->shared_sink);
+      GST_PLAY_SINK_UNLOCK (playsink);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, spec);
