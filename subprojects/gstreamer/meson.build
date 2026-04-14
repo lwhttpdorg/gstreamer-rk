@@ -625,6 +625,27 @@ if static_build
   gst_c_args += ['-DGST_STATIC_COMPILATION']
 endif
 
+gir_dir_prefix = get_option('gir_dir_prefix')
+if gir_dir_prefix == '' or gir_dir_prefix == get_option('datadir')
+  gir_dir_prefix = get_option('datadir')
+  gir_dir_pc_prefix = '${datadir}'
+else
+  gir_dir_pc_prefix = '${prefix}' / gir_dir_prefix
+endif
+
+# This is effectively the GIR XML format major version
+gir_suffix = 'gir-1.0'
+
+gst_girdir = prefix / gir_dir_prefix / gir_suffix
+
+
+if build_gir
+  gst_c_args += [
+    '-DGIR_SUFFIX="@0@"'.format(gir_suffix),
+    '-DGIR_DIR="@0@"'.format(gst_girdir),
+  ]
+endif
+
 # Used in gst/parse/meson.build and below
 python3 = import('python').find_installation()
 
@@ -672,7 +693,7 @@ pkgconfig_variables = [
   'exec_prefix=${prefix}',
   'toolsdir=${exec_prefix}/bin',
   'pluginsdir=${libdir}/gstreamer-1.0',
-  'girdir=${datadir}/gir-1.0',
+  'girdir=' + gir_dir_pc_prefix / gir_suffix,
   'typelibdir=${libdir}/girepository-1.0',
   'pluginscannerdir=${libexecdir}/gstreamer-1.0'
 ]

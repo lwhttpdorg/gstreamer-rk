@@ -335,6 +335,7 @@ if build_gir
     'export_packages' : pkg_name,
     'includes' : ['GLib-2.0', 'GObject-2.0', 'GModule-2.0' ],
     'install' : true,
+    'install_dir_gir': gst_girdir,
     'extra_args' : gst_gir_extra_args,
   }
   library_def += {'gir': [gir]}

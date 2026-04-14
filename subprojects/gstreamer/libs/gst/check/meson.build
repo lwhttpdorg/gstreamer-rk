@@ -86,6 +86,7 @@ if build_gir
     'include_directories' : [configinc, libsinc, privinc],
     'includes' : ['GLib-2.0', 'GObject-2.0', 'GModule-2.0', 'Gst-1.0'],
     'install' : true,
+    'install_dir_gir': gst_girdir,
     'extra_args' : gst_gir_extra_args,
   }
   library_def += {'gir': [gir]}
