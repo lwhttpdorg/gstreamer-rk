@@ -580,7 +580,7 @@ rtp_twcc_write_chunks (GArray * packet_chunks,
   chunk_bit_writer_flush (&writer);
 }
 
-static void
+static gboolean
 rtp_twcc_manager_add_fci (RTPTWCCManager * twcc, GstRTCPPacket * packet)
 {
   RecvPacket *first, *last, *prev;
@@ -689,7 +689,9 @@ rtp_twcc_manager_add_fci (RTPTWCCManager * twcc, GstRTCPPacket * packet)
 
   if (!gst_rtcp_packet_fb_set_fci_length (packet, fci_chunks)) {
     GST_ERROR ("Could not fit: %u packets", packet_count);
-    g_assert_not_reached ();
+    g_array_unref (packet_chunks);
+    g_array_set_size (twcc->recv_packets, 0);
+    return FALSE;
   }
 
   fci_data = gst_rtcp_packet_fb_get_fci (packet);
@@ -710,6 +712,7 @@ rtp_twcc_manager_add_fci (RTPTWCCManager * twcc, GstRTCPPacket * packet)
 
   g_array_unref (packet_chunks);
   g_array_set_size (twcc->recv_packets, 0);
+  return TRUE;
 }
 
 static void
@@ -730,11 +733,15 @@ rtp_twcc_manager_create_feedback (RTPTWCCManager * twcc)
     gst_rtcp_packet_fb_set_sender_ssrc (&packet, twcc->recv_sender_ssrc);
   gst_rtcp_packet_fb_set_media_ssrc (&packet, twcc->recv_media_ssrc);
 
-  rtp_twcc_manager_add_fci (twcc, &packet);
+  gboolean ret = rtp_twcc_manager_add_fci (twcc, &packet);
 
   gst_rtcp_buffer_unmap (&rtcp);
 
-  g_queue_push_tail (twcc->rtcp_buffers, buf);
+  if (ret) {
+    g_queue_push_tail (twcc->rtcp_buffers, buf);
+  } else {
+    gst_buffer_unref (buf);
+  }
 }
 
 /* we have calculated a (very pessimistic) max-packets per RTCP feedback,
