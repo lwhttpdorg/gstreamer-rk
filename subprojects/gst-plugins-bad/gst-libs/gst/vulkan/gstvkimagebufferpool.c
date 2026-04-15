@@ -312,8 +312,8 @@ gst_vulkan_image_buffer_pool_fill_buffer (GstVulkanImageBufferPool * vk_pool,
       width = GST_VIDEO_INFO_WIDTH (&priv->v_info);
       height = GST_VIDEO_INFO_HEIGHT (&priv->v_info);
     } else {
-      width = GST_VIDEO_INFO_COMP_WIDTH (&priv->v_info, i);
-      height = GST_VIDEO_INFO_COMP_HEIGHT (&priv->v_info, i);
+      width = GST_ROUND_UP_2 (GST_VIDEO_INFO_COMP_WIDTH (&priv->v_info, i));
+      height = GST_ROUND_UP_2 (GST_VIDEO_INFO_COMP_HEIGHT (&priv->v_info, i));
     }
 
     image_info.format = priv->vk_fmts[i];
