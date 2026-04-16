@@ -176,7 +176,19 @@ G_BEGIN_DECLS
  * @GST_VIDEO_FORMAT_GRAY10_LE16: 10-bit grayscale, packed into 16bit words (6 bits padding) (Since: 1.26)
  * @GST_VIDEO_FORMAT_NV16_10LE40: Fully packed variant of NV16_10LE32 (Since: 1.28)
  * @GST_VIDEO_FORMAT_BGR10x2_LE: packed 4:4:4 RGB (B-G-R-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
- * @GST_VIDEO_FORMAT_RGB10x2_LE: packed 4:4:4 RGB (R-G-B-x), 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
+ * @GST_VIDEO_FORMAT_RGB10x2_LE: packed 4:4:4 RGB (R-G-B-x) LE, 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.28)
+ * @GST_VIDEO_FORMAT_RGB10x2_BE: packed 4:4:4 RGB (R-G-B-x) BE, 10 bits for R/G/B channel and MSB 2 bits for padding (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB12x4_LE: packed 4:4:4 RGB (R-G-B-x) LE, 12 bits for R/G/B channel and MSB 4 bits for padding (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB12x4_BE: packed 4:4:4 RGB (R-G-B-x) BE, 12 bits for R/G/B channel and MSB 4 bits for padding (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB14x6_LE: packed 4:4:4 RGB (R-G-B-x) LE, 14 bits for R/G/B channel and MSB 6 bits for padding (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB14x6_BE: packed 4:4:4 RGB (R-G-B-x) BE, 14 bits for R/G/B channel and MSB 6 bits for padding (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB16_LE: packed 4:4:4 RGB (R-G-B) LE, 16 bits for R/G/B channel (Since: 1.30)
+ * @GST_VIDEO_FORMAT_RGB16_BE: packed 4:4:4 RGB (R-G-B) BE, 16 bits for R/G/B channel (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY10x6_BE: 10-bit grayscale big-endian, packed into 16bit words (6 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY12x4_BE: 12-bit grayscale big-endian, packed into 16bit words (4 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY12x4_LE: 12-bit grayscale big-endian, packed into 16bit words (4 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY14x2_BE: 14-bit grayscale big-endian, packed into 16bit words (2 least-significant-bits padding) (Since: 1.30)
+ * @GST_VIDEO_FORMAT_GRAY14x2_LE: 14-bit grayscale big-endian, packed into 16bit words (2 least-significant-bits padding) (Since: 1.30)
  *
  * Enum value describing the most common video formats.
  *
@@ -689,8 +701,16 @@ typedef enum {
    *
    * Since: 1.28
    */
-
   GST_VIDEO_FORMAT_BGR10x2_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB10x2_BE:
+   *
+   * packed 4:4:4 RGB (R-G-B-x) big-endian, 10 bits for R/G/B channel and MSB 2 bits for padding.
+   *
+   * Since: 1.28
+   */
+  GST_VIDEO_FORMAT_RGB10x2_BE,
 
   /**
    * GST_VIDEO_FORMAT_RGB10x2_LE:
@@ -700,6 +720,105 @@ typedef enum {
    * Since: 1.28
    */
   GST_VIDEO_FORMAT_RGB10x2_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB12x4_LE:
+   *
+   * packed 4:4:4 RGB (R-G-B-x) little-endian, 12 bits for R/G/B channel and MSB 4 bits padding.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB12x4_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB12x4_BE:
+   *
+   * packed 4:4:4 RGB (R-G-B-x) big-endian, 12 bits for R/G/B channel and MSB 4 bits padding.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB12x4_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB14x6_LE:
+   *
+   * packed 4:4:4 RGB (R-G-B-x) little-endian, 14 bits for R/G/B channel and MSB 6 bits padding.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB14x6_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB14x6_BE:
+   *
+   * packed 4:4:4 RGB (R-G-B-x) big-endian, 14 bits for R/G/B channel and MSB 6 bits padding.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB14x6_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB16_LE:
+   *
+   * packed 4:4:4 RGB (R-G-B) little-endian, 16 bits for R/G/B channel.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB16_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_RGB16_BE:
+   *
+   * packed 4:4:4 RGB (R-G-B) big-endian, 16 bits for R/G/B channel.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_RGB16_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY10x6_BE:
+   *
+   * 10-bit grayscale (Y-x) big-endian, packed into a 16bit word (6 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY10x6_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY12x4_BE:
+   *
+   * 12-bit grayscale (Y-x) big-endian, packed into a 16bit word (4 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY12x4_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY12x4_LE:
+   *
+   * 12-bit grayscale (Y-x) little-endian, packed into a 16bit word (4 bits int least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY12x4_LE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY14x2_BE:
+   *
+   * 14-bit grayscale (Y-x) big-endian, packed into a 16bit word (2 bits in least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY14x2_BE,
+
+  /**
+   * GST_VIDEO_FORMAT_GRAY14x2_LE:
+   *
+   * 14-bit grayscale (Y-x) little-endian, packed into a 16bit word (2 bits int least-significant-bits padding)
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_FORMAT_GRAY14x2_LE,
 
   /* Update GST_VIDEO_FORMAT_LAST below when adding more formats here */
 } GstVideoFormat;
@@ -711,7 +830,7 @@ typedef enum {
  *
  * Since: 1.26
  */
-#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_RGB10x2_LE + 1)
+#define GST_VIDEO_FORMAT_LAST (GST_VIDEO_FORMAT_GRAY14x2_LE + 1)
 
 #define GST_VIDEO_MAX_PLANES 4
 #define GST_VIDEO_MAX_COMPONENTS 4
@@ -1187,16 +1306,18 @@ gconstpointer  gst_video_format_get_palette          (GstVideoFormat format, gsi
     "A444_10LE, GBRA_10LE, A422_10BE, A422_10LE, A420_10BE, A420_10LE, Y410, " \
     "BGR10A2_LE, RGB10A2_LE, A444, GBRA, AYUV, VUYA, RGBA, RBGA, ARGB, BGRA, " \
     "ABGR, A422, A420, AV12, Y444_16BE, GBR_16BE, Y444_16LE, GBR_16LE, " \
-    "Y216_BE, v216, Y216_LE, P016_BE, P016_LE, Y444_12BE, GBR_12BE, Y444_12LE, " \
-    "GBR_12LE, I422_12BE, I422_12LE, Y212_BE, Y212_LE, I420_12BE, I420_12LE, " \
+    "Y216_BE, v216, Y216_LE, P016_BE, P016_LE, RGB16_BE48, RGB16_LE48, " \
+    "RGB14x6_BE, RGB14x6_LE, Y444_12BE, GBR_12BE, Y444_12LE, " \
+    "GBR_12LE, RGB12x4_BE, RGB12x4_LE, I422_12BE, I422_12LE, Y212_BE, Y212_LE, I420_12BE, I420_12LE, " \
     "P012_BE, P012_LE, Y444_10BE, GBR_10BE, Y444_10LE, GBR_10LE, r210, " \
-    "BGR10x2_LE, RGB10x2_LE, I422_10BE, I422_10LE, NV16_10LE40, NV16_10LE32, " \
+    "BGR10x2_LE, RGB10x2_BE, RGB10x2_LE, I422_10BE, I422_10LE, NV16_10LE40, NV16_10LE32, " \
     "Y210, UYVP, v210, I420_10BE, I420_10LE, P010_10BE, MT2110R, MT2110T, " \
     "NV12_10BE_8L128, NV12_10LE40_4L4, P010_10LE, NV12_10LE40, NV12_10LE32, " \
     "Y444, BGRP, GBR, RGBP, NV24, v308, IYU2, RGBx, xRGB, BGRx, xBGR, RGB, " \
     "BGR, Y42B, NV16, NV61, YUY2, YVYU, UYVY, VYUY, I420, YV12, NV12, NV21, " \
     "NV12_16L32S, NV12_32L32, NV12_4L4, NV12_64Z32, NV12_8L128, Y41B, IYU1, " \
     "YUV9, YVU9, BGR16, RGB16, BGR15, RGB15, RGB8P, GRAY16_BE, GRAY16_LE, " \
+    "GRAY14x2_BE, GRAY14x2_LE, GRAY12x4_BE, GRAY12x4_LE, GRAY10x6_BE, " \
     "GRAY10_LE16, GRAY10_LE32, GRAY8"
 #elif G_BYTE_ORDER == G_LITTLE_ENDIAN
 #define GST_VIDEO_FORMATS_ALL_STR "A444_16LE, A444_16BE, Y416_LE, AYUV64, " \
@@ -1207,17 +1328,20 @@ gconstpointer  gst_video_format_get_palette          (GstVideoFormat format, gsi
     "A444_10BE, GBRA_10BE, A422_10LE, A422_10BE, A420_10LE, A420_10BE, " \
     "BGR10A2_LE, RGB10A2_LE, Y410, A444, GBRA, AYUV, VUYA, RGBA, RBGA, ARGB, " \
     "BGRA, ABGR, A422, A420, AV12, Y444_16LE, GBR_16LE, Y444_16BE, GBR_16BE, " \
-    "Y216_LE, Y216_BE, v216, P016_LE, P016_BE, Y444_12LE, GBR_12LE, Y444_12BE, " \
-    "GBR_12BE, I422_12LE, I422_12BE, Y212_LE, Y212_BE, I420_12LE, I420_12BE, " \
-    "P012_LE, P012_BE, Y444_10LE, GBR_10LE, Y444_10BE, GBR_10BE, BGR10x2_LE, " \
-    "RGB10x2_LE, r210, I422_10LE, I422_10BE, NV16_10LE40, NV16_10LE32, Y210, " \
+    "Y216_LE, Y216_BE, v216, P016_LE, P016_BE, RGB16_LE, RGB16_BE, " \
+    "RGB14x6_LE, RGB14x6_BE, Y444_12LE, GBR_12LE, Y444_12BE, " \
+    "GBR_12BE, RGB12x4_LE, RGB12x4_BE, I422_12LE, I422_12BE, Y212_LE, " \
+    "Y212_BE, I420_12LE, I420_12BE, P012_LE, P012_BE, Y444_10LE, GBR_10LE, " \
+    "Y444_10BE, GBR_10BE, BGR10x2_LE, RGB10x2_LE, RGB10x2_BE, r210, " \
+    "I422_10LE, I422_10BE, NV16_10LE40, NV16_10LE32, Y210, " \
     "UYVP, v210, I420_10LE, I420_10BE, P010_10LE, NV12_10LE40, NV12_10LE32, " \
     "P010_10BE, MT2110R, MT2110T, NV12_10BE_8L128, NV12_10LE40_4L4, Y444, " \
     "BGRP, GBR, RGBP, NV24, v308, IYU2, RGBx, xRGB, BGRx, xBGR, RGB, BGR, " \
     "Y42B, NV16, NV61, YUY2, YVYU, UYVY, VYUY, I420, YV12, NV12, NV21, " \
     "NV12_16L32S, NV12_32L32, NV12_4L4, NV12_64Z32, NV12_8L128, Y41B, IYU1, " \
     "YUV9, YVU9, BGR16, RGB16, BGR15, RGB15, RGB8P, GRAY16_LE, GRAY16_BE, " \
-    "GRAY10_LE16, GRAY10_LE32, GRAY8"
+    "GRAY14x2_LE, GRAY14x2_BE, GRAY12x4_LE, GRAY12x4_BE, " \
+    "GRAY10x6_BE, GRAY10_LE16, GRAY10_LE32, GRAY8"
 #endif
 
 /**

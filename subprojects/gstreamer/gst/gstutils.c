@@ -5134,3 +5134,64 @@ _priv_gst_thread_pool_cleanup (void)
   }
   G_UNLOCK (thread_pool_lock);
 }
+
+static guint64
+_gst_expand_fallback (guint64 value, guint from_depth, guint8 to_depth)
+{
+  guint64 result = 0;
+  gint remaining = to_depth;
+
+  while (remaining > 0) {
+    if (remaining >= from_depth) {
+      result = (result << from_depth) | value;
+      remaining -= from_depth;
+    } else {
+      guint64 msbits = value >> (from_depth - remaining);
+      result = (result << remaining) | msbits;
+      remaining = 0;
+    }
+  }
+
+  return result;
+}
+
+guint64
+gst_bits_promote (guint64 value, guint from_depth, guint to_depth)
+{
+  // Fast path for common combination {2, 4, 6, 8} -> {8, 16}
+  if (from_depth == 2) {
+    if (to_depth == 8) {
+      // 0x55 is a 2 bits replicating pattern on 8 bits
+      return value * 0x55;
+    } else if (to_depth == 16) {
+      // 0x5555 is a 2 bits replicating pattern on 16 bits
+      return value * 0x5555;
+    }
+  } else if (from_depth == 4) {
+    if (to_depth == 8) {
+      // 0x11 is a 4 bits replicating pattern on 8 bits
+      return value * 0x11;
+    } else if (to_depth == 16) {
+      // 0x1111 is a 4 bits replicating pattern on 8 bits
+      return value * 0x1111;
+    }
+  } else if (from_depth == 6) {
+    // Not replacting pattern for this combination
+    if (to_depth == 8) {
+      return (value << 2) | (value >> 4);
+    } else if (to_depth == 16) {
+      return (value << 10) | (value << 4) | (value >> 2);
+    }
+  } else if (from_depth == 8) {
+    if (to_depth == 8) {
+      // identity
+      return value;
+    } else if (to_depth == 16) {
+      // 0x0101 is a 8 bits replicating pattern on 16 bits
+      return value * 0x0101;
+    }
+  }
+
+  // Fallback: like the from_depth = 6 but in a loop
+  return _gst_expand_fallback (value, from_depth, to_depth);
+}

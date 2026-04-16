@@ -7927,6 +7927,18 @@ get_scale_format (GstVideoFormat format, gint plane)
     case GST_VIDEO_FORMAT_DMA_DRM:
     case GST_VIDEO_FORMAT_MT2110T:
     case GST_VIDEO_FORMAT_MT2110R:
+    case GST_VIDEO_FORMAT_RGB10x2_BE:
+    case GST_VIDEO_FORMAT_RGB12x4_LE:
+    case GST_VIDEO_FORMAT_RGB12x4_BE:
+    case GST_VIDEO_FORMAT_RGB14x6_LE:
+    case GST_VIDEO_FORMAT_RGB14x6_BE:
+    case GST_VIDEO_FORMAT_RGB16_LE:
+    case GST_VIDEO_FORMAT_RGB16_BE:
+    case GST_VIDEO_FORMAT_GRAY10x6_BE:
+    case GST_VIDEO_FORMAT_GRAY12x4_BE:
+    case GST_VIDEO_FORMAT_GRAY12x4_LE:
+    case GST_VIDEO_FORMAT_GRAY14x2_BE:
+    case GST_VIDEO_FORMAT_GRAY14x2_LE:
       res = format;
       g_assert_not_reached ();
       break;
