@@ -51,9 +51,7 @@ GType gst_vulkan_full_screen_quad_get_type (void);
  * @descriptor_set: the configured #GstVulkanDescriptorSet
  * @framebuffer: the configured `VkFramebuffer`
  * @sampler: the configured `VkSampler`
- * @cmd_pool: the #GstVulkanCommandPool to allocate #GstVulkanCommandBuffer's from
- * @trash_list: the #GstVulkanTrashList for freeing unused resources
- * @last_fence: the last configured #GstVulkanFences
+ * @exec: the #GstVulkanOperation for command submission
  *
  * Since: 1.18
  */
@@ -76,10 +74,7 @@ struct _GstVulkanFullScreenQuad
   GstVulkanHandle                  *framebuffer;
   GstVulkanHandle                  *sampler;
 
-  GstVulkanCommandPool             *cmd_pool;
-
-  GstVulkanTrashList               *trash_list;
-  GstVulkanFence                   *last_fence;
+  GstVulkanOperation               *exec;
 
   /* <private> */
   gpointer _reserved        [GST_PADDING];
@@ -137,16 +132,18 @@ void                gst_vulkan_full_screen_quad_enable_clear        (GstVulkanFu
                                                                      gboolean enable_clear);
 
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_prepare_draw        (GstVulkanFullScreenQuad * self, GstVulkanFence * fence, GError ** error);
+gboolean            gst_vulkan_full_screen_quad_prepare_draw        (GstVulkanFullScreenQuad * self, GError ** error);
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_fill_command_buffer (GstVulkanFullScreenQuad * self, GstVulkanCommandBuffer * cmd, GstVulkanFence * fence, GError ** error);
+gboolean            gst_vulkan_full_screen_quad_fill_command_buffer (GstVulkanFullScreenQuad * self, GError ** error);
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_submit              (GstVulkanFullScreenQuad * self, GstVulkanCommandBuffer * cmd, GstVulkanFence * fence, GError ** error);
+gboolean            gst_vulkan_full_screen_quad_submit              (GstVulkanFullScreenQuad * self, GError ** error);
 GST_VULKAN_API
 gboolean            gst_vulkan_full_screen_quad_draw                (GstVulkanFullScreenQuad * self, GError ** error);
 
 GST_VULKAN_API
 GstVulkanFence *    gst_vulkan_full_screen_quad_get_last_fence      (GstVulkanFullScreenQuad * self) G_GNUC_WARN_UNUSED_RESULT;
+GST_VULKAN_API
+GstVulkanOperation * gst_vulkan_full_screen_quad_get_operation      (GstVulkanFullScreenQuad * self);
 
 GST_VULKAN_API
 GstVulkanQueue *    gst_vulkan_full_screen_quad_get_queue           (GstVulkanFullScreenQuad * self) G_GNUC_WARN_UNUSED_RESULT;

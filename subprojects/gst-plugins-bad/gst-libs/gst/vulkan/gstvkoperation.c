@@ -66,6 +66,7 @@ struct _GstVulkanOperationPrivate
   gsize query_data_stride;
   gpointer query_data;
   gboolean op_submitted;
+  GstVulkanFence *last_fence;
 
   gboolean has_sync2;
   gboolean has_video;
@@ -212,6 +213,7 @@ gst_vulkan_operation_finalize (GObject * object)
     priv->query_pool = VK_NULL_HANDLE;
   }
 
+  gst_clear_mini_object ((GstMiniObject **) & priv->last_fence);
   gst_clear_object (&priv->trash_list);
   gst_clear_object (&priv->cmd_pool);
 
@@ -528,6 +530,8 @@ gst_vulkan_operation_end (GstVulkanOperation * self, GError ** error)
           gst_vulkan_trash_mini_object_unref,
           GST_MINI_OBJECT_CAST (self->cmd_buf)));
 
+  gst_clear_mini_object ((GstMiniObject **) & priv->last_fence);
+  priv->last_fence = gst_vulkan_fence_ref (fence);
   gst_vulkan_fence_unref (fence);
 
   gst_vulkan_trash_list_gc (priv->trash_list);
@@ -589,6 +593,37 @@ gst_vulkan_operation_wait (GstVulkanOperation * self)
 
   priv = GET_PRIV (self);
   ret = gst_vulkan_trash_list_wait (priv->trash_list, G_MAXUINT64);
+
+  return ret;
+}
+
+/**
+ * gst_vulkan_operation_get_last_fence:
+ * @self: a #GstVulkanOperation
+ *
+ * Gets the fence from the last gst_vulkan_operation_end() call. If no
+ * operation has been submitted yet, returns a fence that is always signalled.
+ *
+ * Returns: (transfer full): a #GstVulkanFence
+ *
+ * Since: 1.28
+ */
+GstVulkanFence *
+gst_vulkan_operation_get_last_fence (GstVulkanOperation * self)
+{
+  GstVulkanOperationPrivate *priv;
+  GstVulkanFence *ret;
+
+  g_return_val_if_fail (GST_IS_VULKAN_OPERATION (self), NULL);
+
+  priv = GET_PRIV (self);
+
+  GST_OBJECT_LOCK (self);
+  if (priv->last_fence)
+    ret = gst_vulkan_fence_ref (priv->last_fence);
+  else
+    ret = gst_vulkan_fence_new_always_signalled (priv->cmd_pool->queue->device);
+  GST_OBJECT_UNLOCK (self);
 
   return ret;
 }
