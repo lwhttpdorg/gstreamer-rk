@@ -144,6 +144,10 @@ struct _GstDiscovererPrivate
   gulong bus_cb_id;
 
   gboolean use_cache;
+
+  /* Use `urisourcebin` instead of `uridecodebin` */
+  gboolean use_urisourcebin;
+  GstStreamCollection *stream_collection;
 };
 
 #define DISCO_LOCK(dc) g_mutex_lock (&dc->priv->lock);
@@ -364,6 +368,13 @@ gst_discoverer_init (GstDiscoverer * dc)
 
   dc->priv = gst_discoverer_get_instance_private (dc);
 
+  if (g_getenv ("GST_USE_URISOURCEBIN") != NULL) {
+    dc->priv->use_urisourcebin = TRUE;
+  } else {
+    dc->priv->use_urisourcebin = FALSE;
+  }
+  dc->priv->stream_collection = NULL;
+
   dc->priv->timeout = DEFAULT_PROP_TIMEOUT;
   dc->priv->use_cache = DEFAULT_PROP_USE_CACHE;
   dc->priv->async = FALSE;
@@ -381,17 +392,33 @@ gst_discoverer_init (GstDiscoverer * dc)
 
   GST_LOG ("Creating pipeline");
   dc->priv->pipeline = (GstBin *) gst_pipeline_new ("Discoverer");
-  GST_LOG_OBJECT (dc, "Creating uridecodebin");
-  dc->priv->uridecodebin =
-      gst_element_factory_make ("uridecodebin", "discoverer-uri");
-  if (G_UNLIKELY (dc->priv->uridecodebin == NULL)) {
-    GST_ERROR_OBJECT (dc, "Can't create uridecodebin");
-    return;
+
+  if (dc->priv->use_urisourcebin) {
+    GST_LOG_OBJECT (dc, "Creating urisourcebin");
+    dc->priv->uridecodebin =
+        gst_element_factory_make ("urisourcebin", "discoverer-uri");
+    if (G_UNLIKELY (dc->priv->uridecodebin == NULL)) {
+      GST_ERROR_OBJECT (dc, "Can't create urisourcebin");
+      return;
+    }
+
+    g_object_set (dc->priv->uridecodebin, "parse-streams", TRUE, NULL);
+
+    GST_LOG_OBJECT (dc, "Adding urisourcebin to pipeline");
+  } else {
+    GST_LOG_OBJECT (dc, "Creating uridecodebin");
+    dc->priv->uridecodebin =
+        gst_element_factory_make ("uridecodebin", "discoverer-uri");
+    if (G_UNLIKELY (dc->priv->uridecodebin == NULL)) {
+      GST_ERROR_OBJECT (dc, "Can't create uridecodebin");
+      return;
+    }
+
+    g_object_set (dc->priv->uridecodebin, "post-stream-topology", TRUE, NULL);
+
+    GST_LOG_OBJECT (dc, "Adding uridecodebin to pipeline");
   }
 
-  g_object_set (dc->priv->uridecodebin, "post-stream-topology", TRUE, NULL);
-
-  GST_LOG_OBJECT (dc, "Adding uridecodebin to pipeline");
   gst_bin_add (dc->priv->pipeline, dc->priv->uridecodebin);
 
   dc->priv->pad_added_id =
@@ -910,7 +937,7 @@ make_info (GstDiscovererStreamInfo * parent, GType type, GstCaps * caps)
  */
 static GstDiscovererStreamInfo *
 collect_information (GstDiscoverer * dc, const GstStructure * st,
-    GstDiscovererStreamInfo * parent)
+    GstCaps * stream_caps, GstDiscovererStreamInfo * parent)
 {
   GstPad *srcpad;
   GstCaps *caps = NULL;
@@ -920,25 +947,34 @@ collect_information (GstDiscoverer * dc, const GstStructure * st,
   gint tmp, tmp2;
   guint utmp;
 
-  if (!st || (!gst_structure_has_field (st, "caps")
-          && !gst_structure_has_field (st, "element-srcpad"))) {
-    GST_WARNING ("Couldn't find caps !");
-    return make_info (parent, GST_TYPE_DISCOVERER_STREAM_INFO, NULL);
-  }
+  if (!dc->priv->use_urisourcebin) {
+    if (!st || (!gst_structure_has_field (st, "caps")
+            && !gst_structure_has_field (st, "element-srcpad"))) {
+      GST_WARNING ("Couldn't find caps !");
+      return make_info (parent, GST_TYPE_DISCOVERER_STREAM_INFO, NULL);
+    }
 
-  if (gst_structure_get (st, "element-srcpad", GST_TYPE_PAD, &srcpad, NULL)) {
-    caps = gst_pad_get_current_caps (srcpad);
-    gst_object_unref (srcpad);
-  }
-  if (!caps) {
-    gst_structure_get (st, "caps", GST_TYPE_CAPS, &caps, NULL);
-  }
+    if (gst_structure_get (st, "element-srcpad", GST_TYPE_PAD, &srcpad, NULL)) {
+      caps = gst_pad_get_current_caps (srcpad);
+      gst_object_unref (srcpad);
+    }
+    if (!caps) {
+      gst_structure_get (st, "caps", GST_TYPE_CAPS, &caps, NULL);
+    }
 
-  if (!caps || gst_caps_is_empty (caps) || gst_caps_is_any (caps)) {
-    GST_WARNING ("Couldn't find caps !");
-    if (caps)
-      gst_caps_unref (caps);
-    return make_info (parent, GST_TYPE_DISCOVERER_STREAM_INFO, NULL);
+    if (!caps || gst_caps_is_empty (caps) || gst_caps_is_any (caps)) {
+      GST_WARNING ("Couldn't find caps !");
+      if (caps)
+        gst_caps_unref (caps);
+      return make_info (parent, GST_TYPE_DISCOVERER_STREAM_INFO, NULL);
+    }
+  } else {
+    if (!stream_caps) {
+      GST_WARNING ("Couldn't find caps in stream !");
+      return make_info (parent, GST_TYPE_DISCOVERER_STREAM_INFO, NULL);
+    }
+
+    caps = stream_caps;
   }
 
   caps_st = gst_caps_get_structure (caps, 0);
@@ -1120,6 +1156,92 @@ collect_information (GstDiscoverer * dc, const GstStructure * st,
 
 }
 
+static GstDiscovererStreamInfo *
+create_stream_info_from_collection (GstDiscoverer * dc, GstStream * stream)
+{
+  GstDiscovererStreamInfo *sinfo = NULL;
+  GstStructure *st = NULL;
+  GstTagList *tags;
+  const gchar *sid;
+  GstCaps *caps;
+
+  sid = gst_stream_get_stream_id (stream);
+  caps = gst_stream_get_caps (stream);
+  tags = gst_stream_get_tags (stream);
+
+  if (tags) {
+    /* Mimic having stream-topology with `tags` */
+    st = gst_structure_new_static_str_empty ("stream-topology");
+    gst_structure_set_static_str (st, "tags", GST_TYPE_TAG_LIST, tags, NULL);
+  }
+
+  sinfo = collect_information (dc, st, caps, NULL);
+
+  if (sinfo && sid)
+    sinfo->stream_id = g_strdup (sid);
+
+  gst_caps_unref (caps);
+  gst_tag_list_unref (tags);
+
+  if (st) {
+    gst_structure_get (st, "taglist", GST_TYPE_TAG_LIST, &tags, NULL);
+    gst_tag_list_unref (tags);
+    gst_structure_free (st);
+  }
+
+  sinfo = gst_discoverer_stream_info_ref (sinfo);
+
+  return sinfo;
+}
+
+static void
+build_info_from_stream_collection (GstDiscoverer * dc)
+{
+  GstStreamCollection *collection = dc->priv->stream_collection;
+  GstDiscovererContainerInfo *cont = NULL;
+  guint i, nb_streams;
+
+  g_assert (collection);
+
+  nb_streams = gst_stream_collection_get_size (collection);
+  GST_DEBUG_OBJECT (dc,
+      "Building DiscovererStreamInfo from StreamCollection with (%u streams)",
+      nb_streams);
+
+  if (nb_streams > 1) {
+    cont = (GstDiscovererContainerInfo *)
+        g_object_new (GST_TYPE_DISCOVERER_CONTAINER_INFO, NULL);
+    cont->parent.stream_number = 0;
+  }
+
+  for (i = 0; i < nb_streams; i++) {
+    GstStream *st = gst_stream_collection_get_stream (collection, i);
+    if (!st) {
+      GST_WARNING ("Stream %d in collection is NULL", i);
+      continue;
+    }
+
+    GstDiscovererStreamInfo *sinfo =
+        create_stream_info_from_collection (dc, st);
+    if (!sinfo)
+      continue;
+
+    sinfo->stream_number = (gint) i + 1;
+
+    dc->priv->current_info->stream_list =
+        g_list_append (dc->priv->current_info->stream_list, sinfo);
+
+    if (cont)
+      cont->streams = g_list_append (cont->streams, sinfo);
+    else
+      dc->priv->current_info->stream_info = sinfo;
+  }
+
+  if (cont)
+    dc->priv->current_info->stream_info =
+        gst_discoverer_stream_info_ref (GST_DISCOVERER_STREAM_INFO (cont));
+}
+
 static GstStructure *
 find_stream_for_node (GstDiscoverer * dc, const GstStructure * topology)
 {
@@ -1237,11 +1359,11 @@ parse_stream_topology (GstDiscoverer * dc, const GstStructure * topology,
     gboolean add_to_list = TRUE;
 
     if (st) {
-      res = collect_information (dc, st, parent);
+      res = collect_information (dc, st, NULL, parent);
       gst_structure_free (st);
     } else {
       /* Didn't find a stream structure, so let's just use the caps we have */
-      res = collect_information (dc, topology, parent);
+      res = collect_information (dc, topology, NULL, parent);
     }
 
     if (nval == NULL) {
@@ -1504,7 +1626,14 @@ discoverer_collect (GstDiscoverer * dc)
     else
       dc->priv->current_info->live = TRUE;
 
-    if (dc->priv->current_topology) {
+    if (dc->priv->stream_collection) {
+      if (dc->priv->current_topology) {
+        gst_structure_free (dc->priv->current_topology);
+        dc->priv->current_topology = NULL;
+      }
+
+      build_info_from_stream_collection (dc);
+    } else if (dc->priv->current_topology) {
       dc->priv->current_info_stream_count = 1;
       dc->priv->current_info->stream_info = parse_stream_topology (dc,
           dc->priv->current_topology, NULL);
@@ -1754,6 +1883,28 @@ handle_message (GstDiscoverer * dc, GstMessage * msg)
           GST_PTR_FORMAT, dc->priv->current_info, tmp);
     }
       break;
+    case GST_MESSAGE_STREAM_COLLECTION:
+    {
+      GstStreamCollection *collection;
+
+      if (dc->priv->use_urisourcebin) {
+        gst_message_parse_stream_collection (msg, &collection);
+
+        if (collection) {
+          GST_DEBUG_OBJECT (dc, "Got StreamCollection with %d streams",
+              gst_stream_collection_get_size (collection));
+
+          gst_object_replace ((GstObject **) & dc->priv->stream_collection,
+              (GstObject *) collection);
+
+          gst_object_unref (collection);
+
+          done = TRUE;
+          dump_name = "gst-discoverer-stream-collection";
+        }
+      }
+    }
+      break;
 
     default:
       break;
@@ -1992,6 +2143,11 @@ discoverer_cleanup (GstDiscoverer * dc)
   gst_bus_set_flushing (dc->priv->bus, FALSE);
 
   DISCO_LOCK (dc);
+  if (dc->priv->stream_collection) {
+    gst_object_unref (dc->priv->stream_collection);
+    dc->priv->stream_collection = NULL;
+  }
+
   dc->priv->current_error = NULL;
   if (dc->priv->current_topology) {
     gst_structure_free (dc->priv->current_topology);
