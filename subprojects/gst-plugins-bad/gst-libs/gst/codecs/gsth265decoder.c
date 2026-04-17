@@ -1197,6 +1197,9 @@ gst_h265_decoder_parse_codec_data (GstH265Decoder * self, const guint8 * data,
             goto out;
           }
           gst_h265_parser_update_sps (priv->preproc_parser, &sps);
+          ret = gst_h265_decoder_process_sps (self, &sps);
+          if (ret != GST_FLOW_OK)
+            GST_WARNING_OBJECT (self, "Couldn't procsess SPS in codec_data");
           break;
         case GST_H265_NAL_PPS:
           pres = gst_h265_parser_parse_pps (parser, nalu, &pps);
