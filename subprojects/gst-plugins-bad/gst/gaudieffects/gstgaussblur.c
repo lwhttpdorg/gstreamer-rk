@@ -2,6 +2,7 @@
  * GStreamer
  * Copyright (C) <2010> Jan Schmidt <thaytan@noraisin.net>
  * Copyright (C) <2012> Luis de Bethencourt <luis@debethencourt.com>
+ * Copyright (C) <2024> Diego Nieto <diego.nieto.m@outlook.com>
  *
  * Chromium - burning chrome video effect.
  * Based on Pete Warden's FreeFrame plugin with the same name.
@@ -63,6 +64,12 @@
 #include <string.h>
 #endif
 
+#ifdef _OPENMP
+#include <omp.h>
+#else
+#define omp_get_max_threads() 1
+#endif
+
 #include <math.h>
 #include <gst/gst.h>
 
@@ -104,7 +111,8 @@ GST_STATIC_PAD_TEMPLATE ("src",
 enum
 {
   PROP_0,
-  PROP_SIGMA
+  PROP_SIGMA,
+  PROP_N_THREADS
 };
 
 static gboolean make_gaussian_kernel (GstGaussianBlur * gb, float sigma);
@@ -118,6 +126,7 @@ GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (gaussianblur, "gaussianblur",
     GST_DEBUG_CATEGORY_INIT (gst_gauss_blur_debug, "gaussianblur", 0,
         "Gaussian Blur video effect"));
 #define DEFAULT_SIGMA 1.2
+#define DEFAULT_N_THREADS 1
 
 /* Initialize the gaussianblur's class. */
 static void
@@ -148,6 +157,18 @@ gst_gaussianblur_class_init (GstGaussianBlurClass * klass)
           -20.0, 20.0, DEFAULT_SIGMA,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstGaussianBlur:n-threads:
+   *
+   * The maximum number of threads to use in this element to process each frame.
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_N_THREADS,
+      g_param_spec_uint ("n-threads", "Threads",
+          "Maximum number of threads to use", 0, G_MAXUINT,
+          DEFAULT_N_THREADS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   vfilter_class->transform_frame =
       GST_DEBUG_FUNCPTR (gst_gaussianblur_transform_frame);
   vfilter_class->set_info = GST_DEBUG_FUNCPTR (gst_gaussianblur_set_info);
@@ -177,6 +198,10 @@ gst_gaussianblur_init (GstGaussianBlur * gb)
 {
   gb->sigma = (gfloat) DEFAULT_SIGMA;
   gb->cur_sigma = -1.0;
+  gb->first = TRUE;
+#ifdef _OPENMP
+  gb->n_threads = DEFAULT_N_THREADS;
+#endif
 }
 
 static void
@@ -290,63 +315,90 @@ blur_row_x (GstGaussianBlur * gb, guint8 * in_row, gfloat * out_row)
 }
 
 static void
-gaussian_smooth (GstGaussianBlur * gb, guint8 * image, guint8 * out_image)
+blur_row (GstGaussianBlur * gb, guint8 * in_row, guint8 * out_image,
+    int r, float *tmp_out_row, int iters, int stride, int offset)
 {
-  int r, c, rr, center;
+  int c, rr, center;
   float dot[4], sum;
-  int k, kmin, kmax;
-  guint8 *in_row = image;
-  float *tmp_out_row = gb->tempim;
+  int k, kmin, kmax, i, current_stride;
   float *tmp_in_pos;
-  gint y_avail = 0;
   guint8 *out_row;
 
   /* Apply the gaussian kernel */
   center = gb->windowsize / 2;
 
   /* Blur in the y - direction. */
-  for (r = 0; r < gb->height; r++) {
-    /* Calculate input row range */
-    rr = center - r;
-    kmin = MAX (0, rr);
-    rr = kmin - rr;
-    /* Calc max */
-    kmax = MIN (gb->windowsize, gb->height - rr);
+  /* Calculate input row range */
+  rr = center - r;
+  kmin = MAX (0, rr);
+  rr = kmin - rr;
+  /* Calc max */
+  kmax = MIN (gb->windowsize, gb->height - rr);
 
-    /* Precalculate sum for range */
-    sum = gb->kernel_sum[kmax - 1];
-    sum -= kmin ? gb->kernel_sum[kmin - 1] : 0.0;
+  /* Precalculate sum for range */
+  sum = gb->kernel_sum[kmax - 1];
+  sum -= kmin ? gb->kernel_sum[kmin - 1] : 0.0;
 
-    /* Blur more input rows (x direction blur) */
-    while (y_avail <= (r + center) && y_avail < gb->height) {
-      blur_row_x (gb, in_row, tmp_out_row);
-      in_row += gb->stride;
-      tmp_out_row += gb->stride;
-      y_avail++;
+  /* Blur more input rows (x direction blur) */
+
+  for (i = 0; i < iters; i++) {
+    current_stride = i * stride + offset;
+    blur_row_x (gb, in_row + current_stride, tmp_out_row + current_stride);
+  }
+
+  tmp_in_pos = gb->tempim + (rr * gb->stride);
+  out_row = out_image + r * gb->stride;
+
+  for (c = 0; c < gb->width; c++) {
+    float *tmp = tmp_in_pos;
+
+    dot[0] = dot[1] = dot[2] = dot[3] = 0.0;
+    for (k = kmin; k < kmax; k++, tmp += gb->stride) {
+      float kern = gb->kernel[k];
+      dot[0] += tmp[0] * kern;
+      dot[1] += tmp[1] * kern;
+      dot[2] += tmp[2] * kern;
+      dot[3] += tmp[3] * kern;
     }
 
-    tmp_in_pos = gb->tempim + (rr * gb->stride);
-    out_row = out_image + r * gb->stride;
+    *out_row++ = (guint8) CLAMP ((dot[0] / sum + 0.5), 0, 255);
+    *out_row++ = (guint8) CLAMP ((dot[1] / sum + 0.5), 0, 255);
+    *out_row++ = (guint8) CLAMP ((dot[2] / sum + 0.5), 0, 255);
+    *out_row++ = (guint8) CLAMP ((dot[3] / sum + 0.5), 0, 255);
 
-    for (c = 0; c < gb->width; c++) {
-      float *tmp = tmp_in_pos;
+    tmp_in_pos += 4;
+  }
+}
 
-      dot[0] = dot[1] = dot[2] = dot[3] = 0.0;
-      for (k = kmin; k < kmax; k++, tmp += gb->stride) {
-        float kern = gb->kernel[k];
-        dot[0] += tmp[0] * kern;
-        dot[1] += tmp[1] * kern;
-        dot[2] += tmp[2] * kern;
-        dot[3] += tmp[3] * kern;
-      }
+static void
+gaussian_smooth (GstGaussianBlur * gb, guint8 * image, guint8 * out_image)
+{
+  int r;
+  int center = (gb->windowsize / 2);
 
-      *out_row++ = (guint8) CLAMP ((dot[0] / sum + 0.5), 0, 255);
-      *out_row++ = (guint8) CLAMP ((dot[1] / sum + 0.5), 0, 255);
-      *out_row++ = (guint8) CLAMP ((dot[2] / sum + 0.5), 0, 255);
-      *out_row++ = (guint8) CLAMP ((dot[3] / sum + 0.5), 0, 255);
+  // Blur first row according kernel size
+  blur_row (gb, image, out_image, 0, gb->tempim, center + 1, gb->stride, 0);
 
-      tmp_in_pos += 4;
+  if (gb->first) {
+    for (r = 1; r < gb->height - center; r++) {
+      blur_row (gb, image + (r * gb->stride), out_image, r,
+          gb->tempim + (r * gb->stride), 1, 0, gb->stride * center);
     }
+    gb->first = FALSE;
+  } else {
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(gb->n_threads)
+#endif
+    for (r = 1; r < gb->height - center; r++) {
+      blur_row (gb, image + (r * gb->stride), out_image, r,
+          gb->tempim + (r * gb->stride), 1, 0, gb->stride * center);
+    }
+  }
+
+  // Blur last rows according kernel size
+  for (r = gb->height - center; r < gb->height; r++) {
+    blur_row (gb, image + (r * gb->stride), out_image, r,
+        gb->tempim + (r * gb->stride), 0, 0, 0);
   }
 }
 
@@ -421,16 +473,19 @@ gst_gaussianblur_set_property (GObject * object,
     guint prop_id, const GValue * value, GParamSpec * pspec)
 {
   GstGaussianBlur *gb = GST_GAUSSIANBLUR (object);
+  GST_OBJECT_LOCK (object);
   switch (prop_id) {
     case PROP_SIGMA:
-      GST_OBJECT_LOCK (object);
       gb->sigma = g_value_get_double (value);
-      GST_OBJECT_UNLOCK (object);
+      break;
+    case PROP_N_THREADS:
+      gb->n_threads = g_value_get_uint (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK (object);
 }
 
 static void
@@ -438,14 +493,17 @@ gst_gaussianblur_get_property (GObject * object,
     guint prop_id, GValue * value, GParamSpec * pspec)
 {
   GstGaussianBlur *gb = GST_GAUSSIANBLUR (object);
+  GST_OBJECT_LOCK (gb);
   switch (prop_id) {
     case PROP_SIGMA:
-      GST_OBJECT_LOCK (gb);
       g_value_set_double (value, gb->sigma);
-      GST_OBJECT_UNLOCK (gb);
+      break;
+    case PROP_N_THREADS:
+      g_value_set_uint (value, gb->n_threads);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK (gb);
 }

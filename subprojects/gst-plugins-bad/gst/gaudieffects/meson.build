@@ -52,11 +52,18 @@ else
     copy : true)
 endif
 
+gstgaudioeffects_deps = [gstbase_dep, gstvideo_dep, orc_dep, libm]
+openmp_deps = dependency('openmp', required: false)
+
+if openmp_deps.found()
+  gstgaudioeffects_deps += openmp_deps
+endif
+
 gstgaudioeffects = library('gstgaudieffects',
   gaudio_sources, orc_c, orc_h,
-  c_args : gst_plugins_bad_args,
+  c_args : [gst_plugins_bad_args],
   include_directories : [configinc],
-  dependencies : [gstbase_dep, gstvideo_dep, orc_dep, libm],
+  dependencies : gstgaudioeffects_deps,
   install : true,
   install_dir : plugins_install_dir,
 )
