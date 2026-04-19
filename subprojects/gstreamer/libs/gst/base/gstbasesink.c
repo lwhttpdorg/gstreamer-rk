@@ -3847,8 +3847,12 @@ gst_base_sink_chain_unlocked (GstBaseSink * basesink, GstPad * pad,
 
     if (G_UNLIKELY (!gst_segment_clip (segment,
                 GST_FORMAT_TIME, pts, pts_end, NULL, NULL)
-            && priv->drop_out_of_segment))
+            && priv->drop_out_of_segment)) {
+      if (!is_list && bclass->out_of_segment) {
+        bclass->out_of_segment (basesink, GST_BUFFER_CAST (obj));
+      }
       goto out_of_segment;
+    }
   }
 
   if (bclass->prepare || bclass->prepare_list) {

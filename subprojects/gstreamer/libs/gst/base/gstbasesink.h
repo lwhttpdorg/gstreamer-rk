@@ -157,6 +157,8 @@ struct _GstBaseSink {
  *     correct moment if the #GstBaseSink has been set to sync to the clock.
  * @render_list: Same as @render but used with buffer lists instead of
  *     buffers.
+ * @out_of_segment: Called to process the buffers that are out of segment
+ *     if desired.
  *
  * Subclasses can override any of the available virtual methods or not, as
  * needed. At the minimum, the @render method should be overridden to
@@ -222,6 +224,7 @@ struct _GstBaseSinkClass {
   GstFlowReturn (*render)       (GstBaseSink *sink, GstBuffer *buffer);
   /* Render a BufferList */
   GstFlowReturn (*render_list)  (GstBaseSink *sink, GstBufferList *buffer_list);
+  GstFlowReturn (*out_of_segment) (GstBaseSink *sink, GstBuffer *buffer);
 
   /*< private >*/
   gpointer       _gst_reserved[GST_PADDING_LARGE];
