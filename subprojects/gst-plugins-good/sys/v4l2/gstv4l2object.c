@@ -4389,6 +4389,9 @@ gst_v4l2_object_set_format_full (GstV4l2Object * v4l2object, GstCaps * caps,
     align.padding_right = format.fmt.pix.width - width;
   }
 
+  if (GST_VIDEO_INFO_FORMAT (&info.vinfo) == GST_VIDEO_FORMAT_DMA_DRM)
+    n_v4l_planes = format.fmt.pix_mp.num_planes;
+
   if (is_mplane && format.fmt.pix_mp.num_planes != n_v4l_planes)
     goto invalid_planes;
 
