@@ -4822,7 +4822,7 @@ pack_A422_16 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 
 /* Helpers for the most common tile format */
 static void
-get_tile_NV12 (const GstVideoFormatInfo * info, gint tx, gint ty,
+get_tile_NV (const GstVideoFormatInfo * info, gint tx, gint ty,
     const gpointer data[GST_VIDEO_MAX_PLANES],
     const gint stride[GST_VIDEO_MAX_PLANES],
     gpointer tile_data[GST_VIDEO_MAX_PLANES],
@@ -4890,7 +4890,7 @@ unpack_TILED (GstVideoFormat inner_format,
     gint tstride[GST_VIDEO_MAX_PLANES];
     gint unpack_width;
 
-    get_tile_NV12 (info, tx, ty, data, stride, tdata, tstride);
+    get_tile_NV (info, tx, ty, data, stride, tdata, tstride);
 
     /* the number of pixels left to unpack */
     unpack_width = MIN (width - x, tile_width - x);
@@ -4940,7 +4940,7 @@ pack_TILED (GstVideoFormat inner_format,
     gint tstride[GST_VIDEO_MAX_PLANES];
     gint pack_width;
 
-    get_tile_NV12 (info, tx, ty, data, stride, tdata, tstride);
+    get_tile_NV (info, tx, ty, data, stride, tdata, tstride);
 
     /* the number of pixels left to pack */
     pack_width = MIN (width, tile_width);
