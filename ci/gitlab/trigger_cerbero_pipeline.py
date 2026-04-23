@@ -32,6 +32,35 @@ def fprint(msg):
     sys.stdout.flush()
 
 
+def find_existing_pipeline(cerbero, cerbero_branch, variables):
+    fprint(
+        f"-> Looking for existing pipelines in {cerbero.path_with_namespace} for branch {cerbero_branch} with variables {variables}...\n")
+
+    try:
+        pipelines = cerbero.pipelines.list(status='running',
+                                           ref=cerbero_branch,
+                                           # token=os.environ['CI_JOB_TOKEN'],
+                                           iterator=True)
+
+    except Exception as e:
+        fprint(f'\tError: {e}\n')
+        return None
+
+    for p in pipelines:
+        pipeline_env = {}
+        for var in p.variables.list(token=os.environ['CI_JOB_TOKEN'], iterator=True):
+            v = var.asdict()
+            if v['variable_type'] == 'env_var':
+                pipeline_env[v['key']] = v['value']
+
+        print('Pipeline', p, 'with variables', pipeline_env, '\n')
+
+        if pipeline_env == variables:
+            return p
+
+    return None
+
+
 if __name__ == "__main__":
     server = os.environ['CI_SERVER_URL']
     gl = gitlab.Gitlab(server,
@@ -69,8 +98,6 @@ if __name__ == "__main__":
         cerbero_branch = os.environ["GST_UPSTREAM_BRANCH"]
         cerbero = gl.projects.get(cerbero_name)
 
-    fprint(f"-> Triggering on branch {cerbero_branch} in {cerbero_name}\n")
-
     # CI_PROJECT_URL is not necessarily the project where the branch we need to
     # build resides, for instance merge request pipelines can be run on
     # 'gstreamer' namespace. Fetch the branch name in the same way, just in
@@ -82,6 +109,8 @@ if __name__ == "__main__":
         project_path = os.environ['CI_PROJECT_PATH']
         project_branch = os.environ['CI_COMMIT_REF_NAME']
 
+    commit_sha = os.environ['CI_COMMIT_SHORT_SHA']
+
     variables = {
         "CI_GSTREAMER_PATH": project_path,
         "CI_GSTREAMER_REF_NAME": project_branch,
@@ -89,6 +118,10 @@ if __name__ == "__main__":
         # trigger API, which means it can use a deps cache instead of
         # building from scratch.
         "CI_GSTREAMER_TRIGGERED": "true",
+        # Pass the commit sha of the parent pipeline, so that if we later
+        # try to find a matching sub-pipeline we don't accidentally use one
+        # that was an older parent project revision but is still running.
+        "CI_GSTREAMER_PARENT_PROJECT_COMMIT_SHORT_SHA": commit_sha,
     }
 
     meson_commit = os.environ.get('MESON_COMMIT')
@@ -98,26 +131,32 @@ if __name__ == "__main__":
         variables['MESON_COMMIT'] = meson_commit
         del variables['CI_GSTREAMER_TRIGGERED']
 
-    try:
-        pipe = cerbero.trigger_pipeline(
-            token=os.environ['CI_JOB_TOKEN'],
-            ref=cerbero_branch,
-            variables=variables,
-        )
-    except gitlab.exceptions.GitlabCreateError as e:
-        if e.response_code == 400:
-            exit('''
+    pipe = find_existing_pipeline(cerbero, cerbero_branch, variables)
 
-            Could not start cerbero sub-pipeline due to insufficient permissions.
+    if not pipe:
+        fprint(f"-> Triggering on branch {cerbero_branch} in {cerbero_name}\n")
+        try:
+            pipe = cerbero.trigger_pipeline(
+                token=os.environ['CI_JOB_TOKEN'],
+                ref=cerbero_branch,
+                variables=variables,
+            )
+        except gitlab.exceptions.GitlabCreateError as e:
+            if e.response_code == 400:
+                exit('''
 
-            This is not a problem and is expected if you are not a GStreamer
-            developer with merge permission in the cerbero project.
+                Could not start cerbero sub-pipeline due to insufficient permissions.
 
-            When your Merge Request is assigned to Marge (our merge bot), it
-            will trigger the cerbero sub-pipeline with the correct permissions.
-            ''')
-        else:
-            exit(f'Could not create cerbero sub-pipeline. Error: {e}')
+                This is not a problem and is expected if you are not a GStreamer
+                developer with merge permission in the cerbero project.
+
+                When your Merge Request is assigned to Marge (our merge bot), it
+                will trigger the cerbero sub-pipeline with the correct permissions.
+                ''')
+            else:
+                exit(f'Could not create cerbero sub-pipeline. Error: {e}')
+    else:
+        fprint('Found existing running cerbero sub-pipeline.\n')
 
     fprint(f'Cerbero pipeline running at {pipe.web_url} ')
     while True:
