@@ -416,6 +416,7 @@ gst_v4l2_video_dec_negotiate (GstVideoDecoder * decoder)
   GstVideoCodecState *output_state;
   GstCaps *acquired_caps, *acquired_drm_caps;
   GstCaps *fixation_caps, *available_caps, *caps, *filter;
+  GstStructure *st;
   gboolean active;
   GstBufferPool *cpool;
   gboolean ret;
@@ -511,6 +512,26 @@ gst_v4l2_video_dec_negotiate (GstVideoDecoder * decoder)
 
   if (gst_caps_is_subset (acquired_caps, caps))
     goto use_acquired_caps;
+
+  /* Prefer colorimetry from acquired caps for fixate */
+  {
+    const gchar *output_cl, *capture_cl;
+
+    output_cl =
+        gst_structure_get_string (gst_caps_get_structure (self->
+            input_state->caps, 0), "colorimetry");
+    capture_cl =
+        gst_structure_get_string (gst_caps_get_structure (acquired_caps, 0),
+        "colorimetry");
+
+    if (output_cl && g_strcmp0 (output_cl, capture_cl))
+      GST_WARNING_OBJECT (self,
+          "Output colorimetry %s and capture colorimetry %s are different",
+          output_cl, capture_cl);
+
+    st = gst_caps_get_structure (caps, 0);
+    gst_structure_fixate_field_string (st, "colorimetry", capture_cl);
+  }
 
   /* Fixate pixel format */
   caps = gst_caps_fixate (caps);
