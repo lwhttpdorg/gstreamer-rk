@@ -105,6 +105,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_dash_sink_debug);
  * @GST_DASH_SINK_MUXER_TS: Use mpegtsmux
  * @GST_DASH_SINK_MUXER_MP4: Use mp4mux
  * @GST_DASH_SINK_MUXER_DASHMP4: Use dashmp4mux
+ * @GST_DASH_SINK_MUXER_WEBM: Use webmmux
  *
  * Muxer type
  */
@@ -113,6 +114,7 @@ typedef enum
   GST_DASH_SINK_MUXER_TS = 0,
   GST_DASH_SINK_MUXER_MP4 = 1,
   GST_DASH_SINK_MUXER_DASHMP4 = 2,
+  GST_DASH_SINK_MUXER_WEBM = 3,
 } GstDashSinkMuxerType;
 
 typedef struct _DashSinkMuxer
@@ -138,6 +140,11 @@ gst_dash_sink_muxer_get_type (void)
      * Since: 1.24
      */
     {GST_DASH_SINK_MUXER_DASHMP4, "Use dashmp4mux", "dashmp4"},
+    /** GstDashSinkMuxerType::webm
+     *
+     * Since: 1.26
+     */
+    {GST_DASH_SINK_MUXER_WEBM, "Use webmmux", "webm"},
     {0, NULL, NULL},
   };
 
@@ -164,6 +171,11 @@ static const DashSinkMuxer dash_muxer_list[] = {
         "dashmp4mux",
         "video/mp4",
       "mp4"},
+  {
+        GST_DASH_SINK_MUXER_WEBM,
+        "webmmux",
+        "video/webm",
+      "webm"},
 };
 
 #define DEFAULT_SEGMENT_LIST_TPL "_%05d"
@@ -693,6 +705,7 @@ gst_dash_sink_init (GstDashSink * sink)
   sink->mpd_filename = g_strdup (DEFAULT_MPD_FILENAME);
   sink->mpd_root_path = g_strdup (DEFAULT_MPD_ROOT_PATH);
   sink->mpd_client = NULL;
+  sink->muxer = DEFAULT_DASH_SINK_MUXER;
 
   sink->target_duration = DEFAULT_TARGET_DURATION;
   sink->send_keyframe_requests = DEFAULT_SEND_KEYFRAME_REQUESTS;
@@ -738,6 +751,9 @@ gst_dash_sink_reset (GstDashSink * sink)
     } else if (sink->muxer == GST_DASH_SINK_MUXER_DASHMP4) {
       g_object_set (stream->muxer, "fragment-duration",
           sink->target_duration * GST_SECOND, NULL);
+    } else if (sink->muxer == GST_DASH_SINK_MUXER_WEBM) {
+      g_object_set (stream->muxer, "streamable", TRUE, "min-cluster-duration",
+          0, "max-cluster-duration", 0, NULL);
     }
     if (sink->muxer == GST_DASH_SINK_MUXER_TS)
       g_object_set (stream->splitmuxsink, "reset-muxer", FALSE, NULL);
