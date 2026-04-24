@@ -507,28 +507,77 @@ reverse_buffer (GstScaletempo * st, GstBuffer * inbuf)
   return outbuf;
 }
 
+/* Predict the size, in bytes, of the output buffer that should be
+ * produced for an input of `insize` bytes given the current internal
+ * state. Returns 0 when this input alone doesn't carry enough new
+ * material to fill the internal queue up to one full output stride;
+ * the caller is then expected to accumulate the input into the queue
+ * (via fill_queue) without producing an output buffer.
+ *
+ * Triggers reinit_buffers if needed so the prediction stays in sync
+ * with what gst_scaletempo_generate_output will actually produce. */
+static gsize
+gst_scaletempo_predict_output_size (GstScaletempo * st, gsize insize)
+{
+  gint bytes_to_out;
+
+  if (st->reinit_buffers)
+    reinit_buffers (st);
+
+  bytes_to_out =
+      (gint) insize + (gint) st->bytes_queued - (gint) st->bytes_to_slide;
+  if (bytes_to_out < (gint) st->bytes_queue_max)
+    return 0;
+
+  /* while (total_buffered - stride_length * n >= queue_max) n++ */
+  return st->bytes_stride * ((guint) ((bytes_to_out - st->bytes_queue_max +
+              /* rounding protection */ st->bytes_per_frame)
+          / st->bytes_stride_scaled) + 1);
+}
+
 /* GstBaseTransform vmethod implementations */
 static GstFlowReturn
-gst_scaletempo_transform (GstBaseTransform * trans,
-    GstBuffer * inbuf, GstBuffer * outbuf)
+gst_scaletempo_generate_output (GstBaseTransform * trans, GstBuffer ** outbuf_p)
 {
   GstScaletempo *st = GST_SCALETEMPO (trans);
+  GstBaseTransformClass *bclass = GST_BASE_TRANSFORM_GET_CLASS (trans);
+  GstBuffer *inbuf;
+  GstBuffer *outbuf = NULL;
+  GstBuffer *tmpbuf = NULL;
+  GstFlowReturn ret;
+  GstMapInfo omap;
   gint8 *pout;
   guint offset_in, bytes_out;
-  GstMapInfo omap;
   GstClockTime timestamp;
-  GstBuffer *tmpbuf = NULL;
 
+  /* Take ownership of the input buffer stashed by the default
+   * submit_input_buffer. No buffer queued means there's nothing to
+   * do this cycle. */
+  inbuf = trans->queued_buf;
+  trans->queued_buf = NULL;
+  if (inbuf == NULL)
+    return GST_FLOW_OK;
+
+  /* passthrough mode aka scale == 1.0 with mode NONE: skip the transform entirely. */
+  if (gst_base_transform_is_passthrough (trans)) {
+    *outbuf_p = inbuf;
+    return GST_FLOW_OK;
+  }
+
+  /* fit-down mode: dynamically pick a scale factor from the custom
+   * meta so the output duration matches the buffer's target. */
   if (st->mode & GST_SCALETEMPO_MODE_FIT_DOWN) {
+    GstCustomMeta *meta;
+    GstClockTime target_duration;
+
     if (st->scale != 1.0) {
+      gst_buffer_unref (inbuf);
       GST_ERROR_OBJECT (st, "non-1.0 rate not supported in fit-down mode");
       return GST_FLOW_NOT_SUPPORTED;
     }
 
-    GstCustomMeta *meta =
+    meta =
         gst_buffer_get_custom_meta (inbuf, "GstScaletempoTargetDurationMeta");
-    GstClockTime target_duration;
-
     if (meta
         && gst_structure_get_uint64 (gst_custom_meta_get_structure (meta),
             "duration", &target_duration)) {
@@ -550,12 +599,49 @@ gst_scaletempo_transform (GstBaseTransform * trans,
     st->bytes_to_slide = 0;
   }
 
+  /* Decide whether this input can produce at least one output stride.
+   * Shares its prediction with gst_scaletempo_transform_size so the
+   * branch we take here matches the size base transform would
+   * compute. */
+  if (gst_scaletempo_predict_output_size (st, gst_buffer_get_size (inbuf)) == 0) {
+    /* Not enough material yet to emit a full stride. Feed the queue
+     * and return without producing an output buffer. Returning
+     * GST_FLOW_OK with *outbuf == NULL exits the base-transform push
+     * loop without marking DISCONT on the next real output (unlike
+     * GST_BASE_TRANSFORM_FLOW_DROPPED would). */
+    if (st->reverse)
+      tmpbuf = reverse_buffer (st, inbuf);
+    fill_queue (st, tmpbuf ? tmpbuf : inbuf, 0);
+    if (tmpbuf)
+      gst_buffer_unref (tmpbuf);
+
+    if (st->mode & GST_SCALETEMPO_MODE_FIT_DOWN) {
+      st->scale = 1.0;
+      st->reinit_buffers = TRUE;
+    }
+
+    gst_buffer_unref (inbuf);
+    *outbuf_p = NULL;
+    return GST_FLOW_OK;
+  }
+
+  ret = bclass->prepare_output_buffer (trans, inbuf, &outbuf);
+  if (ret != GST_FLOW_OK || outbuf == NULL) {
+    gst_buffer_unref (inbuf);
+    GST_WARNING_OBJECT (trans, "could not get buffer from pool: %s",
+        gst_flow_get_name (ret));
+    return ret == GST_FLOW_OK ? GST_FLOW_ERROR : ret;
+  }
+
+  /* we are not in passthrough when we reach this */
+  g_assert (outbuf != inbuf);
+
+  /* Run the WSOLA transform into outbuf. */
   if (st->reverse)
     tmpbuf = reverse_buffer (st, inbuf);
 
   gst_buffer_map (outbuf, &omap, GST_MAP_WRITE);
   pout = (gint8 *) omap.data;
-  bytes_out = omap.size;
 
   offset_in = fill_queue (st, tmpbuf ? tmpbuf : inbuf, 0);
   bytes_out = 0;
@@ -614,6 +700,9 @@ gst_scaletempo_transform (GstBaseTransform * trans,
   if (tmpbuf)
     gst_buffer_unref (tmpbuf);
 
+  gst_buffer_unref (inbuf);
+
+  *outbuf_p = outbuf;
   return GST_FLOW_OK;
 }
 
@@ -640,27 +729,12 @@ gst_scaletempo_transform_size (GstBaseTransform * trans,
     GstPadDirection direction,
     GstCaps * caps, gsize size, GstCaps * othercaps, gsize * othersize)
 {
-  if (direction == GST_PAD_SINK) {
-    GstScaletempo *scaletempo = GST_SCALETEMPO (trans);
-    gint bytes_to_out;
+  if (direction != GST_PAD_SINK)
+    return FALSE;
 
-    if (scaletempo->reinit_buffers)
-      reinit_buffers (scaletempo);
-
-    bytes_to_out = size + scaletempo->bytes_queued - scaletempo->bytes_to_slide;
-    if (bytes_to_out < (gint) scaletempo->bytes_queue_max) {
-      *othersize = 0;
-    } else {
-      /* while (total_buffered - stride_length * n >= queue_max) n++ */
-      *othersize = scaletempo->bytes_stride * ((guint) (
-              (bytes_to_out - scaletempo->bytes_queue_max +
-                  /* rounding protection */ scaletempo->bytes_per_frame)
-              / scaletempo->bytes_stride_scaled) + 1);
-    }
-
-    return TRUE;
-  }
-  return FALSE;
+  *othersize =
+      gst_scaletempo_predict_output_size (GST_SCALETEMPO (trans), size);
+  return TRUE;
 }
 
 static gboolean
@@ -1059,7 +1133,8 @@ gst_scaletempo_class_init (GstScaletempoClass * klass)
   basetransform_class->set_caps = GST_DEBUG_FUNCPTR (gst_scaletempo_set_caps);
   basetransform_class->transform_size =
       GST_DEBUG_FUNCPTR (gst_scaletempo_transform_size);
-  basetransform_class->transform = GST_DEBUG_FUNCPTR (gst_scaletempo_transform);
+  basetransform_class->generate_output =
+      GST_DEBUG_FUNCPTR (gst_scaletempo_generate_output);
   basetransform_class->query = GST_DEBUG_FUNCPTR (gst_scaletempo_query);
   basetransform_class->start = GST_DEBUG_FUNCPTR (gst_scaletempo_start);
   basetransform_class->stop = GST_DEBUG_FUNCPTR (gst_scaletempo_stop);
