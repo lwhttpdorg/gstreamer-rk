@@ -538,6 +538,7 @@ gst_android_init (JNIEnv * env, jobject context)
     __android_log_print (ANDROID_LOG_ERROR, "GStreamer", "%s", message);
     (*env)->ThrowNew (env, exception_class, message);
     g_free (message);
+    g_clear_error (&error);
     return;
   }
   __android_log_print (ANDROID_LOG_INFO, "GStreamer",
