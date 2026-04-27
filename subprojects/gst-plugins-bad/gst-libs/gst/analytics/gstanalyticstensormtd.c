@@ -53,8 +53,9 @@ static void gst_analytics_tensor_mtd_clear (GstBuffer * buffer,
     GstAnalyticsMtd * mtd);
 
 static gboolean
-gst_analytics_tensor_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data);
+gst_analytics_tensor_mtd_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
+    const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
+    GstAnalyticsMtd * dst_mtd);
 
 static const GstAnalyticsMtdImpl tensor_impl = {
   "tensor",
@@ -198,13 +199,17 @@ gst_analytics_tensor_mtd_clear (GstBuffer * buffer, GstAnalyticsMtd * mtd)
 }
 
 static gboolean
-gst_analytics_tensor_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data)
+gst_analytics_tensor_mtd_transform (GstBuffer * dst_buf, GstBuffer * src_buf,
+    const GstAnalyticsMtd * src_mtd, GQuark type, gpointer data,
+    GstAnalyticsMtd * dst_mtd)
 {
   GstTensor *tensor;
 
-  tensor = gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-      transmtd->id);
+  if (!gst_analytics_mtd_memcpy (src_mtd, dst_mtd))
+    return FALSE;
+
+  tensor = gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta,
+      dst_mtd->id);
 
   if (tensor->data)
     tensor->data = gst_buffer_ref (tensor->data);

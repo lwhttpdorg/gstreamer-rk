@@ -361,11 +361,6 @@ gst_analytics_relation_meta_transform (GstBuffer * transbuf,
   guint *free_match = NULL;
   guint *match = NULL;
 
-  if (!GST_META_TRANSFORM_IS_COPY (type) &&
-      !GST_VIDEO_META_TRANSFORM_IS_SCALE (type) &&
-      !GST_VIDEO_META_TRANSFORM_IS_MATRIX (type))
-    return FALSE;
-
   if (dst_rmeta == NULL) {
     GstAnalyticsRelationMetaInitParams init_params = {
       src_rmeta->rel_order, src_rmeta->max_size
@@ -391,35 +386,25 @@ gst_analytics_relation_meta_transform (GstBuffer * transbuf,
     GstAnalyticsRelatableMtdData *src_mtd_data =
         (GstAnalyticsRelatableMtdData *)
         (src_rmeta->mtd_data_lookup[i] + src_rmeta->analysis_results);
-    GstAnalyticsMtd dst_mtd;
+    GstAnalyticsMtd src_mtd = { src_mtd_data->id, src_rmeta };
+    GstAnalyticsMtd dst_mtd = { G_MAXUINT, dst_rmeta };
 
     if (src_mtd_data->impl == NULL) {
       match[i] = G_MAXUINT;
       continue;
     }
 
-    gpointer dst_data = gst_analytics_relation_meta_add_mtd (dst_rmeta,
-        src_mtd_data->impl, src_mtd_data->size, &dst_mtd);
-
-    memcpy (dst_data, src_mtd_data->data, src_mtd_data->size);
-
     if (src_mtd_data->impl->mtd_meta_transform) {
-      if (src_mtd_data->impl->mtd_meta_transform (transbuf, &dst_mtd, buffer,
-              type, data)) {
+      if (src_mtd_data->impl->mtd_meta_transform (transbuf,
+              buffer, &src_mtd, type, data, &dst_mtd)) {
+        g_assert (dst_mtd.meta == dst_rmeta);
         match[i] = dst_mtd.id;
       } else {
-        GstAnalyticsRelatableMtdData *dst_mtd_data =
-            (GstAnalyticsRelatableMtdData *)
-            (dst_rmeta->mtd_data_lookup[dst_mtd.id] +
-            dst_rmeta->analysis_results);
-
-        dst_mtd_data->impl = NULL;
         match[i] = G_MAXUINT;
       }
-    } else {
-      match[i] = dst_mtd.id;
     }
   }
+
 
   for (i = 0; i < src_rmeta->length; i++) {
     GstAnalyticsRelatableMtdData *src_mtd_data_i =
@@ -1133,4 +1118,37 @@ gst_analytics_relation_meta_iterate (GstAnalyticsRelationMeta * meta,
   }
 
   return FALSE;
+}
+
+/**
+ * gst_analytics_mtd_memcpy:
+ * @src_mtd: The #GstAnalyticsMtd to copy
+ * @dst_mtd: (inout): Must be called with the  #GstAnalyticsRelationMeta field
+ *   filled and the return value will fill the id field.
+ *
+ * Copies the data accessible via #GstAnalyticsMtd. Does a memcpy() of
+ * the Mtd data and should only be used by Mtd implemetations as it
+ * may not copy or reference any external data.
+ *
+ * Returns: TRUE if the mtd could be copied
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_mtd_memcpy (const GstAnalyticsMtd * src_mtd,
+    GstAnalyticsMtd * dst_mtd)
+{
+  gsize size = gst_analytics_mtd_get_size (src_mtd);
+  gpointer copy;
+
+  copy = gst_analytics_relation_meta_add_mtd (dst_mtd->meta,
+      (const GstAnalyticsMtdImpl *) gst_analytics_mtd_get_mtd_type (src_mtd),
+      size, dst_mtd);
+  if (copy == NULL)
+    return FALSE;
+
+  memcpy (copy, gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+          src_mtd->id), size);
+
+  return TRUE;
 }

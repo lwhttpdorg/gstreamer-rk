@@ -154,28 +154,36 @@ static void gst_analytics_keypoint_mtd_clear (GstBuffer * buffer,
     GstAnalyticsMtd * mtd);
 
 static gboolean
-gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data)
+gst_analytics_keypoint_mtd_meta_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd)
 {
   /* Handle coordinate transformation when buffer goes through video transforms */
   if (GST_VIDEO_META_TRANSFORM_IS_MATRIX (type)) {
     GstVideoMetaTransformMatrix *trans = data;
-    GstAnalyticsKeypointMtdData *kpdata =
-        gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-        transmtd->id);
+    const GstAnalyticsKeypointMtdData *kpdata =
+        gst_analytics_relation_meta_get_mtd_data (src_mtd->meta,
+        src_mtd->id);
+    GstAnalyticsKeypointDimensions dimension = kpdata->dimension;
+    gint x = kpdata->x;
+    gint y = kpdata->y;
+    gint z = kpdata->z;
 
     /* TODO: Add support for 3d point transformation, meanwhile project
      * z component on XY plane. */
-    if (kpdata->z != 0) {
+    if (z != 0) {
       GST_WARNING ("Only 2d keypoint transformation is supported, z component "
           "projected on XY plane");
-      kpdata->z = 0;
-      kpdata->dimension = GST_ANALYTICS_KEYPOINT_DIMENSIONS_2D;
+      z = 0;
+      dimension = GST_ANALYTICS_KEYPOINT_DIMENSIONS_2D;
     }
 
-    if (!gst_video_meta_transform_matrix_point (trans, &kpdata->x, &kpdata->y))
+    if (!gst_video_meta_transform_matrix_point (trans, &x, &y))
       return FALSE;
 
+    return gst_analytics_relation_meta_add_keypoint_mtd (dst_mtd->meta,
+        dimension, x, y, z, kpdata->visibility_flags, kpdata->confidence,
+        dst_mtd);
   } else if (GST_VIDEO_META_TRANSFORM_IS_SCALE (type)) {
     /* Handle scaling transforms (e.g., videoconvert with different resolution) */
     GstVideoMetaTransform *trans = data;
@@ -187,11 +195,15 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
     oh = GST_VIDEO_INFO_HEIGHT (trans->in_info);
     nh = GST_VIDEO_INFO_HEIGHT (trans->out_info);
 
-    kpdata = gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
-        transmtd->id);
-
     GST_DEBUG ("Keypoint scale transform: in=(%ux%u) out=(%ux%u)",
         ow, oh, nw, nh);
+
+    if (!gst_analytics_mtd_memcpy (src_mtd, dst_mtd))
+       return FALSE;
+
+    kpdata = gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta,
+        dst_mtd->id);
+
 
     kpdata->x *= nw;
     kpdata->x /= ow;
@@ -201,9 +213,13 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
 
     GST_DEBUG ("Keypoint scaled: (%d,%d) in frame (%u,%u) -> (%u,%u)",
         kpdata->x, kpdata->y, ow, oh, nw, nh);
+
+    return TRUE;
+  } else if (GST_META_TRANSFORM_IS_COPY (type)) {
+    return gst_analytics_mtd_memcpy (src_mtd, dst_mtd);
   }
 
-  return TRUE;
+  return FALSE;
 }
 
 static const GstAnalyticsMtdImpl keypoint_impl = {

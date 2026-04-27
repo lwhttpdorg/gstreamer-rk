@@ -68,8 +68,9 @@ struct _GstAnalyticsGroupMtdData
   guint members_inplace[];
 };
 
-static gboolean gst_analytics_group_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data);
+static gboolean gst_analytics_group_mtd_transform (GstBuffer * dst_buf,
+    GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+    gpointer data, GstAnalyticsMtd * dst_mtd);
 static void gst_analytics_group_mtd_clear (GstBuffer * buffer,
     GstAnalyticsMtd * mtd);
 
@@ -498,32 +499,23 @@ gst_analytics_relation_meta_get_group_mtd (GstAnalyticsRelationMeta * meta,
 }
 
 static gboolean
-gst_analytics_group_mtd_transform (GstBuffer * transbuf,
-    GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type, gpointer data)
+gst_analytics_group_mtd_transform (GstBuffer * dst_buf,
+      GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+      gpointer data, GstAnalyticsMtd * dst_mtd)
 {
+  const GstAnalyticsGroupMtdData *src_data =
+      gst_analytics_relation_meta_get_mtd_data (src_mtd->meta, src_mtd->id);
+
   GstAnalyticsGroupMtdData *dst_data;
 
+  if (!gst_analytics_relation_meta_add_group_mtd_with_size (dst_mtd->meta,
+          src_data->members_count, dst_mtd))
+    return FALSE;
+
   dst_data =
-      gst_analytics_relation_meta_get_mtd_data (transmtd->meta, transmtd->id);
-  g_return_val_if_fail (dst_data != NULL, FALSE);
+      gst_analytics_relation_meta_get_mtd_data (dst_mtd->meta, dst_mtd->id);
 
-  GstIdStr tmp = GST_ID_STR_INIT;
-  gst_id_str_copy_into (&tmp, &dst_data->semantic_tag);
-  gst_id_str_init (&dst_data->semantic_tag);
-  gst_id_str_move (&dst_data->semantic_tag, &tmp);
-
-  /* For dynamically allocated members we need to make an independent copy.
-   * For in-place storage, fix up the pointer to the new location since it
-   * was memcpy'd from the source struct. */
-  if (dst_data->members_allocated) {
-    guint *src_members = dst_data->members;
-    dst_data->members = g_malloc_n (dst_data->members_count, sizeof (guint));
-    memcpy (dst_data->members, src_members,
-        dst_data->members_count * sizeof (guint));
-    dst_data->members_len = dst_data->members_count;
-  } else {
-    dst_data->members = dst_data->members_inplace;
-  }
+  gst_id_str_copy_into (&dst_data->semantic_tag, &src_data->semantic_tag);
 
   return TRUE;
 }

@@ -118,9 +118,9 @@ typedef struct
 {
   const char *name;
 
-gboolean (*mtd_meta_transform) (GstBuffer * transbuf,
-      GstAnalyticsMtd * transmtd, GstBuffer * buffer, GQuark type,
-      gpointer data);
+  gboolean (*mtd_meta_transform) (GstBuffer * dst_buf,
+      GstBuffer * src_buf, const GstAnalyticsMtd * src_mtd, GQuark type,
+      gpointer data, GstAnalyticsMtd * dst_mtd);
 
   void (*mtd_meta_clear) (GstBuffer *buffer, GstAnalyticsMtd *mtd);
 
@@ -277,6 +277,11 @@ gboolean
 gst_analytics_relation_meta_get_direct_related (GstAnalyticsRelationMeta *
     meta, guint an_meta_id, GstAnalyticsRelTypes relation_type,
     GstAnalyticsMtdType type, gpointer * state, GstAnalyticsMtd * rlt_mtd);
+
+GST_ANALYTICS_META_API
+gboolean
+gst_analytics_mtd_memcpy (const GstAnalyticsMtd * src,
+    GstAnalyticsMtd * dst);
 
 G_END_DECLS
 #endif // __GST_ANALYTICS_META_H__
