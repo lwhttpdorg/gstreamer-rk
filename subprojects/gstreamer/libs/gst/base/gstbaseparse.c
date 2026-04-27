@@ -2233,6 +2233,11 @@ gst_base_parse_check_media (GstBaseParse * parse)
   if (caps)
     gst_caps_unref (caps);
 
+  /* Don't apply disable-clip for non-video parser */
+  if (!parse->priv->is_video) {
+    g_object_set (G_OBJECT (parse), "disable-clip", FALSE, NULL);
+  }
+
   parse->priv->checked_media = TRUE;
   GST_DEBUG_OBJECT (parse, "media is video: %d", parse->priv->is_video);
 }
@@ -4745,6 +4750,12 @@ gst_base_parse_handle_seek (GstBaseParse * parse, GstEvent * event)
   if (seeksegment.position <= start_ts + TARGET_DIFFERENCE) {
     GST_DEBUG_OBJECT (parse, "accurate seek possible");
     accurate = TRUE;
+  } else if (accurate) {
+    /* seek position is much larger than the position from seek tables.
+     * accurate seeking is not possible, so disable it */
+    GST_DEBUG_OBJECT (parse,
+        "seek position is much larger than the position from seek tables");
+    accurate = FALSE;
   }
 
   if (accurate) {
