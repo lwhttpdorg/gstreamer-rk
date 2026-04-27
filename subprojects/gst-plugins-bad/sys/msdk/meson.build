@@ -18,7 +18,6 @@ msdk_sources = [
   'gstmsdkvc1dec.c',
   'gstmsdkvp8dec.c',
   'gstmsdkvpp.c',
-  'gstmsdkvpputil.c',
   'msdk-enums.c',
   'msdk.c',
 ]
@@ -40,7 +39,6 @@ msdk_headers = [
   'gstmsdkenc.h',
   'gstmsdkmpeg2dec.h',
   'gstmsdkh265enc.h',
-  'gstmsdkvpputil.h',
   'msdk.h',
   'gstmsdkdecproputil.h',
   'gstmsdkh265dec.h',

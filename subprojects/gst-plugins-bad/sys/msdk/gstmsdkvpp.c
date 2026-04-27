@@ -56,7 +56,6 @@
 #include "gstmsdkvpp.h"
 #include "gstmsdkcaps.h"
 #include "gstmsdkcontextutil.h"
-#include "gstmsdkvpputil.h"
 #include "gstmsdkallocator.h"
 
 #ifndef _WIN32
@@ -1428,6 +1427,70 @@ no_vpp:
 }
 
 static gboolean
+is_deinterlace_enabled (GstMsdkVPP * msdkvpp, GstVideoInfo * vip)
+{
+  gboolean deinterlace;
+
+  switch (msdkvpp->deinterlace_mode) {
+    case GST_MSDKVPP_DEINTERLACE_MODE_AUTO:
+      deinterlace = GST_VIDEO_INFO_IS_INTERLACED (vip);
+      break;
+    case GST_MSDKVPP_DEINTERLACE_MODE_INTERLACED:
+      deinterlace = TRUE;
+      break;
+    default:
+      deinterlace = FALSE;
+      break;
+  }
+  return deinterlace;
+}
+
+static gboolean
+set_interlace_mode (GstMsdkVPP * thiz, GstVideoInfo * vinfo,
+    GstStructure * outs)
+{
+  const gchar *interlace_mode = NULL;
+
+  if (is_deinterlace_enabled (thiz, vinfo)) {
+    interlace_mode = "progressive";
+  } else {
+    interlace_mode =
+        gst_video_interlace_mode_to_string (GST_VIDEO_INFO_INTERLACE_MODE
+        (vinfo));
+  }
+
+  if (!interlace_mode)
+    return FALSE;
+
+  gst_structure_set (outs, "interlace-mode", G_TYPE_STRING, interlace_mode,
+      NULL);
+  return TRUE;
+}
+
+static gboolean
+set_multiview_mode (GstMsdkVPP * thiz, GstVideoInfo * vinfo,
+    GstStructure * outs)
+{
+  const gchar *caps_str;
+
+  caps_str =
+      gst_video_multiview_mode_to_caps_string (GST_VIDEO_INFO_MULTIVIEW_MODE
+      (vinfo));
+  if (!caps_str)
+    return TRUE;
+
+  gst_structure_set (outs, "multiview-mode", G_TYPE_STRING, caps_str,
+      "multiview-flags", GST_TYPE_VIDEO_MULTIVIEW_FLAGSET,
+      GST_VIDEO_INFO_MULTIVIEW_FLAGS (vinfo), GST_FLAG_SET_MASK_EXACT, NULL);
+
+  if (GST_VIDEO_INFO_VIEWS (vinfo) > 1) {
+    gst_structure_set (outs, "views", G_TYPE_INT, GST_VIDEO_INFO_VIEWS (vinfo),
+        NULL);
+  }
+  return TRUE;
+}
+
+static gboolean
 gst_msdkvpp_set_caps (GstBaseTransform * trans, GstCaps * caps,
     GstCaps * out_caps)
 {
@@ -1466,7 +1529,7 @@ gst_msdkvpp_set_caps (GstBaseTransform * trans, GstCaps * caps,
   thiz->use_video_memory = TRUE;
 
   /* check for deinterlace requirement */
-  deinterlace = gst_msdkvpp_is_deinterlace_enabled (thiz, &in_info);
+  deinterlace = is_deinterlace_enabled (thiz, &in_info);
   if (deinterlace)
     thiz->flags |= GST_MSDK_FLAG_DEINTERLACE;
 
@@ -1525,24 +1588,37 @@ gst_msdkvpp_fixate_caps (GstBaseTransform * trans,
     GstPadDirection direction, GstCaps * caps, GstCaps * othercaps)
 {
   GstMsdkVPP *thiz = GST_MSDKVPP (trans);
-  GstCaps *result = NULL;
+  GstCaps *result;
 
-  if (direction == GST_PAD_SRC) {
-    result = gst_caps_fixate (othercaps);
-  } else {
+  if (direction == GST_PAD_SINK && thiz->flags & GST_MSDK_FLAG_VIDEO_DIRECTION) {
     /*
      * Override mirroring & rotation properties once video-direction
      * is set explicitly
      */
-    if (thiz->flags & GST_MSDK_FLAG_VIDEO_DIRECTION)
-      gst_msdk_get_mfx_video_orientation_from_video_direction
-          (thiz->video_direction, &thiz->mirroring, &thiz->rotation);
-
-    result = gst_msdkvpp_fixate_srccaps (thiz, caps, othercaps);
+    gst_msdk_get_mfx_video_orientation_from_video_direction
+        (thiz->video_direction, &thiz->mirroring, &thiz->rotation);
   }
 
-  GST_DEBUG_OBJECT (trans, "fixated to %" GST_PTR_FORMAT, result);
-  gst_caps_unref (othercaps);
+  result =
+      gst_video_convertscale_fixate_caps (GST_OBJECT (thiz), direction,
+      thiz->video_direction, NULL, TRUE, TRUE, caps, othercaps);
+  if (!result)
+    return othercaps;
+
+  gst_clear_caps (&othercaps);
+
+  if (direction == GST_PAD_SINK) {
+    if (gst_caps_is_subset (caps, result))
+      gst_caps_replace (&result, caps);
+  }
+
+  GstVideoInfo vinfo;
+  gst_video_info_from_caps (&vinfo, caps);
+  GstStructure *outs = gst_caps_get_structure (result, 0);
+  set_interlace_mode (thiz, &vinfo, outs);
+  set_multiview_mode (thiz, &vinfo, outs);
+
+  GST_DEBUG_OBJECT (thiz, "fixated othercaps to %" GST_PTR_FORMAT, result);
 
   return result;
 }
