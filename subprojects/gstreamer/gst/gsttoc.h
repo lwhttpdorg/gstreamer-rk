@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TOC_H__
-#define __GST_TOC_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/gstminiobject.h>
@@ -244,6 +243,4 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstToc, _gst_autoptr_toc_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTocEntry, _gst_autoptr_toc_entry_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TOC_H__ */
 

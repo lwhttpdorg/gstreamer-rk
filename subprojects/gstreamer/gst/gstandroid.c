@@ -168,7 +168,7 @@ glib_log_handler (const gchar * log_domain, GLogLevelFlags log_level,
   domains = g_getenv ("G_MESSAGES_DEBUG");
   if (((log_level & INFO_LEVELS) == 0) ||
       domains == NULL ||
-      (strcmp (domains, "all") != 0 && (!log_domain
+      (g_strcmp0 (domains, "all") != 0 && (!log_domain
               || !strstr (domains, log_domain))))
     return;
 

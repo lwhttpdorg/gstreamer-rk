@@ -57,8 +57,11 @@ struct _GstStreamCollectionPrivate
 enum
 {
   SIG_STREAM_NOTIFY,
-  LAST_SIGNAL
+  LAST_SIGNAL,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -106,11 +109,11 @@ gst_stream_collection_class_init (GstStreamCollectionClass * klass)
    *
    * stream-id
    */
-  g_object_class_install_property (gobject_class, PROP_UPSTREAM_ID,
-      g_param_spec_string ("upstream-id", "Upstream ID",
-          "The stream ID of the parent stream",
-          NULL,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+  props[PROP_UPSTREAM_ID] = g_param_spec_string ("upstream-id", "Upstream ID",
+      "The stream ID of the parent stream",
+      NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   /**
    * GstStreamCollection::stream-notify:
@@ -160,10 +163,7 @@ gst_stream_collection_dispose (GObject * object)
 {
   GstStreamCollection *collection = GST_STREAM_COLLECTION_CAST (object);
 
-  if (collection->upstream_id) {
-    g_free (collection->upstream_id);
-    collection->upstream_id = NULL;
-  }
+  g_clear_pointer (&collection->upstream_id, g_free);
 
   g_clear_pointer (&collection->priv->streams, gst_vec_deque_free);
 

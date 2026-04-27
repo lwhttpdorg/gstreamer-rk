@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_TAGLIST_H__
-#define __GST_TAGLIST_H__
+#pragma once
 
 #include <gst/gstdatetime.h>
 #include <gst/gstsample.h>
@@ -1134,5 +1133,3 @@ gboolean     gst_tag_list_is_writable   (const GstTagList * taglist);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTagList, gst_tag_list_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TAGLIST_H__ */

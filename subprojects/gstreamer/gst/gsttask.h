@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TASK_H__
-#define __GST_TASK_H__
+#pragma once
 
 #include <gst/gstobject.h>
 #include <gst/gsttaskpool.h>
@@ -216,5 +215,3 @@ gboolean        gst_task_join           (GstTask *task);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTask, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TASK_H__ */

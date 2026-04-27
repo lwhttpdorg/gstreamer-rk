@@ -337,12 +337,12 @@ gst_caps_new_empty_simple (const char *media_type)
   GstStructure *structure;
 
   caps = gst_caps_new_empty ();
-  if (strcmp ("ANY", media_type) == 0) {
+  if (g_strcmp0 ("ANY", media_type) == 0) {
     g_warning
         ("media_type should not be ANY. Please consider using `gst_caps_new_any` or `gst_caps_from_string`.");
   }
-  if (strcmp ("", media_type) == 0 || strcmp ("EMPTY", media_type) == 0
-      || strcmp ("NONE", media_type) == 0) {
+  if (g_strcmp0 ("", media_type) == 0 || strcmp ("EMPTY", media_type) == 0
+      || g_strcmp0 ("NONE", media_type) == 0) {
     g_warning
         ("media_type should not be `%s`. Please consider using `gst_caps_new_empty` or `gst_caps_from_string`.",
         media_type);
@@ -375,12 +375,12 @@ gst_caps_new_static_str_empty_simple (const char *media_type)
   GstStructure *structure;
 
   caps = gst_caps_new_empty ();
-  if (strcmp ("ANY", media_type) == 0) {
+  if (g_strcmp0 ("ANY", media_type) == 0) {
     g_warning
         ("media_type should not be ANY. Please consider using `gst_caps_new_any` or `gst_caps_from_string`.");
   }
-  if (strcmp ("", media_type) == 0 || strcmp ("EMPTY", media_type) == 0
-      || strcmp ("NONE", media_type) == 0) {
+  if (g_strcmp0 ("", media_type) == 0 || strcmp ("EMPTY", media_type) == 0
+      || g_strcmp0 ("NONE", media_type) == 0) {
     g_warning
         ("media_type should not be `%s`. Please consider using `gst_caps_new_empty` or `gst_caps_from_string`.",
         media_type);
@@ -2393,7 +2393,7 @@ gst_caps_compare_structures (gconstpointer one, gconstpointer two)
 
   /* FIXME: this orders alphabetically, but ordering the quarks might be faster
      So what's the best way? */
-  ret = strcmp (gst_structure_get_name (struct1),
+  ret = g_strcmp0 (gst_structure_get_name (struct1),
       gst_structure_get_name (struct2));
 
   if (ret)
@@ -2454,8 +2454,7 @@ gst_caps_structure_simplify (GstStructure ** result,
       return TRUE;
     } else {                    /* multiple results */
       g_slist_foreach (list, (GFunc) gst_structure_free, NULL);
-      g_slist_free (list);
-      list = NULL;
+      g_clear_slist (&list, NULL);
     }
   }
 
@@ -2766,12 +2765,12 @@ gst_caps_from_string_inplace (GstCaps * caps, const gchar * string)
   GstStructure *structure;
   gchar *s, *copy, *end, *next, save;
 
-  if (strcmp ("ANY", string) == 0) {
+  if (g_strcmp0 ("ANY", string) == 0) {
     GST_CAPS_FLAGS (caps) = GST_CAPS_FLAG_ANY;
     return TRUE;
   }
 
-  if (strcmp ("EMPTY", string) == 0 || strcmp ("NONE", string) == 0) {
+  if (g_strcmp0 ("EMPTY", string) == 0 || strcmp ("NONE", string) == 0) {
     return TRUE;
   }
 

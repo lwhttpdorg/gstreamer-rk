@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TOC_SETTER_H__
-#define __GST_TOC_SETTER_H__
+#pragma once
 
 #include <gst/gst.h>
 
@@ -67,6 +66,4 @@ GST_API
 void          gst_toc_setter_set_toc (GstTocSetter *setter, GstToc *toc);
 
 G_END_DECLS
-
-#endif /* __GST_TOC_SETTER_H__ */
 

@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_TYPE_FIND_H__
-#define __GST_TYPE_FIND_H__
+#pragma once
 
 #include <gst/gstcaps.h>
 #include <gst/gstplugin.h>
@@ -217,5 +216,3 @@ gboolean  gst_type_find_register   (GstPlugin            * plugin,
                                     GDestroyNotify         data_notify);
 
 G_END_DECLS
-
-#endif /* __GST_TYPE_FIND_H__ */

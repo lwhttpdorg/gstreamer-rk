@@ -18,8 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ID_STR_H__
-#define __GST_ID_STR_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <glib-object.h>
@@ -109,6 +108,4 @@ GST_API
 gboolean gst_id_str_is_equal_to_str_with_len (const GstIdStr *s1, const gchar *s2, gsize len) G_GNUC_PURE;
 
 G_END_DECLS
-
-#endif
 

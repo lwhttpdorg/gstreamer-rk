@@ -454,7 +454,7 @@ _priv_gst_debug_init (void)
   if (add_default_log_func) {
     env = g_getenv ("GST_DEBUG_FILE");
     if (env != NULL && *env != '\0') {
-      if (strcmp (env, "-") == 0) {
+      if (g_strcmp0 (env, "-") == 0) {
         log_file = stdout;
       } else {
         gchar *name = _priv_gst_debug_file_name (env);
@@ -2156,11 +2156,11 @@ gst_debug_set_color_mode (GstDebugColorMode mode)
 void
 gst_debug_set_color_mode_from_string (const gchar * mode)
 {
-  if ((strcmp (mode, "on") == 0) || (strcmp (mode, "auto") == 0))
+  if ((g_strcmp0 (mode, "on") == 0) || (strcmp (mode, "auto") == 0))
     gst_debug_set_color_mode (GST_DEBUG_COLOR_MODE_ON);
-  else if ((strcmp (mode, "off") == 0) || (strcmp (mode, "disable") == 0))
+  else if ((g_strcmp0 (mode, "off") == 0) || (strcmp (mode, "disable") == 0))
     gst_debug_set_color_mode (GST_DEBUG_COLOR_MODE_OFF);
-  else if (strcmp (mode, "unix") == 0)
+  else if (g_strcmp0 (mode, "unix") == 0)
     gst_debug_set_color_mode (GST_DEBUG_COLOR_MODE_UNIX);
 }
 
@@ -2552,7 +2552,7 @@ _gst_debug_get_category_locked (const gchar * name)
 
   for (node = __categories; node; node = g_slist_next (node)) {
     ret = (GstDebugCategory *) node->data;
-    if (!strcmp (name, ret->name)) {
+    if (!g_strcmp0 (name, ret->name)) {
       return ret;
     }
   }
@@ -2606,23 +2606,23 @@ parse_debug_level (gchar * str, GstDebugLevel * level)
     } else {
       return FALSE;
     }
-  } else if (strcmp (str, "NONE") == 0) {
+  } else if (g_strcmp0 (str, "NONE") == 0) {
     *level = GST_LEVEL_NONE;
-  } else if (strcmp (str, "ERROR") == 0) {
+  } else if (g_strcmp0 (str, "ERROR") == 0) {
     *level = GST_LEVEL_ERROR;
   } else if (strncmp (str, "WARN", 4) == 0) {
     *level = GST_LEVEL_WARNING;
-  } else if (strcmp (str, "FIXME") == 0) {
+  } else if (g_strcmp0 (str, "FIXME") == 0) {
     *level = GST_LEVEL_FIXME;
-  } else if (strcmp (str, "INFO") == 0) {
+  } else if (g_strcmp0 (str, "INFO") == 0) {
     *level = GST_LEVEL_INFO;
-  } else if (strcmp (str, "DEBUG") == 0) {
+  } else if (g_strcmp0 (str, "DEBUG") == 0) {
     *level = GST_LEVEL_DEBUG;
-  } else if (strcmp (str, "LOG") == 0) {
+  } else if (g_strcmp0 (str, "LOG") == 0) {
     *level = GST_LEVEL_LOG;
-  } else if (strcmp (str, "TRACE") == 0) {
+  } else if (g_strcmp0 (str, "TRACE") == 0) {
     *level = GST_LEVEL_TRACE;
-  } else if (strcmp (str, "MEMDUMP") == 0) {
+  } else if (g_strcmp0 (str, "MEMDUMP") == 0) {
     *level = GST_LEVEL_MEMDUMP;
   } else
     return FALSE;
@@ -3244,15 +3244,9 @@ _gst_log_context_cleanup (void)
   g_mutex_lock (&_log_contexts_registry_lock);
   g_mutex_lock (&_once_log_contexts_registry_lock);
 
-  if (_log_contexts_registry) {
-    g_hash_table_unref (_log_contexts_registry);
-    _log_contexts_registry = NULL;
-  }
+  g_clear_pointer (&_log_contexts_registry, g_hash_table_unref);
 
-  if (_once_log_contexts_registry) {
-    g_hash_table_unref (_once_log_contexts_registry);
-    _once_log_contexts_registry = NULL;
-  }
+  g_clear_pointer (&_once_log_contexts_registry, g_hash_table_unref);
 
   g_mutex_unlock (&_once_log_contexts_registry_lock);
   g_mutex_unlock (&_log_contexts_registry_lock);
@@ -3266,10 +3260,7 @@ _priv_gst_debug_cleanup (void)
 
   g_mutex_lock (&__dbg_functions_mutex);
 
-  if (__gst_function_pointers) {
-    g_hash_table_unref (__gst_function_pointers);
-    __gst_function_pointers = NULL;
-  }
+  g_clear_pointer (&__gst_function_pointers, g_hash_table_unref);
 
   g_mutex_unlock (&__dbg_functions_mutex);
 

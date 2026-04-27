@@ -21,8 +21,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CONTEXT_H__
-#define __GST_CONTEXT_H__
+#pragma once
 
 #include <glib.h>
 
@@ -133,5 +132,3 @@ gboolean              gst_context_is_persistent            (const GstContext * c
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstContext, gst_context_unref)
 
 G_END_DECLS
-
-#endif /* __GST_CONTEXT_H__ */

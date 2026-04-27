@@ -48,8 +48,11 @@ enum
   PROP_DISPLAY_NAME = 1,
   PROP_CAPS,
   PROP_DEVICE_CLASS,
-  PROP_PROPERTIES
+  PROP_PROPERTIES,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -86,22 +89,24 @@ gst_device_class_init (GstDeviceClass * klass)
   object_class->set_property = gst_device_set_property;
   object_class->finalize = gst_device_finalize;
 
-  g_object_class_install_property (object_class, PROP_DISPLAY_NAME,
+  props[PROP_DISPLAY_NAME] =
       g_param_spec_string ("display-name", "Display Name",
-          "The user-friendly name of the device", "",
-          G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-  g_object_class_install_property (object_class, PROP_CAPS,
+      "The user-friendly name of the device", "",
+      G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  props[PROP_CAPS] =
       g_param_spec_boxed ("caps", "Device Caps",
-          "The possible caps of a device", GST_TYPE_CAPS,
-          G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-  g_object_class_install_property (object_class, PROP_DEVICE_CLASS,
+      "The possible caps of a device", GST_TYPE_CAPS,
+      G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  props[PROP_DEVICE_CLASS] =
       g_param_spec_string ("device-class", "Device Class",
-          "The Class of the device", "",
-          G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-  g_object_class_install_property (object_class, PROP_PROPERTIES,
+      "The Class of the device", "",
+      G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+  props[PROP_PROPERTIES] =
       g_param_spec_boxed ("properties", "Properties",
-          "The extra properties of the device", GST_TYPE_STRUCTURE,
-          G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+      "The extra properties of the device", GST_TYPE_STRUCTURE,
+      G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
+
+  g_object_class_install_properties (object_class, N_PROPS, props);
 
   signals[REMOVED] = g_signal_new ("removed", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);

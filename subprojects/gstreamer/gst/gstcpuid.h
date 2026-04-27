@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2025 L. E. Segovia <amy@centricular.com>
 // SPDX-License-Identifier: BSD-3-Clause
 
-#ifndef __GST_CPUID_H__
-#define __GST_CPUID_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <glib.h>
@@ -38,5 +37,3 @@ GST_API
 gboolean gst_cpuid_supports_arm_neon64(void);
 
 G_END_DECLS
-
-#endif

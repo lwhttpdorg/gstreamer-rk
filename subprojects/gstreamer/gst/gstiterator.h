@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ITERATOR_H__
-#define __GST_ITERATOR_H__
+#pragma once
 
 #include <glib-object.h> /* for GValue in the fold */
 #include <gst/gstconfig.h>
@@ -286,5 +285,3 @@ gboolean                gst_iterator_find_custom        (GstIterator *it, GCompa
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstIterator, gst_iterator_free)
 
 G_END_DECLS
-
-#endif /* __GST_ITERATOR_H__ */

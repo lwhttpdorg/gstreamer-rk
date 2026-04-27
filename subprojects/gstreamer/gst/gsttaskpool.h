@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TASK_POOL_H__
-#define __GST_TASK_POOL_H__
+#pragma once
 
 #include <gst/gstcontext.h>
 #include <gst/gstobject.h>
@@ -198,5 +197,3 @@ GstTaskPool *   gst_shared_task_pool_new             (void) G_GNUC_WARN_UNUSED_R
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstSharedTaskPool, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TASK_POOL_H__ */

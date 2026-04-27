@@ -949,7 +949,7 @@ pad_compare_name (GstPad * pad1, const gchar * name)
   gint result;
 
   GST_OBJECT_LOCK (pad1);
-  result = strcmp (GST_PAD_NAME (pad1), name);
+  result = g_strcmp0 (GST_PAD_NAME (pad1), name);
   GST_OBJECT_UNLOCK (pad1);
 
   return result;
@@ -1010,7 +1010,7 @@ gst_element_is_valid_request_template_name (const gchar * templ_name,
   g_return_val_if_fail (name != NULL, FALSE);
 
   /* Is this the template name? */
-  if (strcmp (templ_name, name) == 0)
+  if (g_strcmp0 (templ_name, name) == 0)
     return TRUE;
 
   /* otherwise check all the specifiers */
@@ -1503,7 +1503,7 @@ gst_element_class_add_pad_template (GstElementClass * klass,
     GstPadTemplate *padtempl = (GstPadTemplate *) template_list->data;
 
     /* Found pad with the same name, replace and return */
-    if (strcmp (templ->name_template, padtempl->name_template) == 0) {
+    if (g_strcmp0 (templ->name_template, padtempl->name_template) == 0) {
       gst_object_unref (padtempl);
       gst_object_ref_sink (templ);
       template_list->data = templ;
@@ -1801,7 +1801,7 @@ gst_element_class_get_pad_template (GstElementClass *
   while (padlist) {
     GstPadTemplate *padtempl = (GstPadTemplate *) padlist->data;
 
-    if (strcmp (padtempl->name_template, name) == 0)
+    if (g_strcmp0 (padtempl->name_template, name) == 0)
       return padtempl;
 
     padlist = g_list_next (padlist);

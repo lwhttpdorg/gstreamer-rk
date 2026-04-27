@@ -553,8 +553,7 @@ gst_registry_chunks_load_pad_template (GstElementFactory * factory, gchar ** in,
   return TRUE;
 fail:
   GST_INFO ("Reading pad template failed");
-  if (template)
-    g_free (template);
+  g_free (template);
   return FALSE;
 }
 
@@ -896,7 +895,7 @@ _priv_gst_registry_chunks_load_plugin (GstRegistry * registry, gchar ** in,
 
   /* If the license string is 'BLACKLIST', mark this as a blacklisted
    * plugin */
-  if (strcmp (plugin->desc.license, "BLACKLIST") == 0)
+  if (g_strcmp0 (plugin->desc.license, "BLACKLIST") == 0)
     GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED);
 
   plugin->basename = g_path_get_basename (plugin->filename);

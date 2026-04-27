@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_STREAMS_H__
-#define __GST_STREAMS_H__
+#pragma once
 
 #include <gst/gstobject.h>
 
@@ -165,5 +164,3 @@ const gchar *  gst_stream_type_get_name (GstStreamType stype);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstStream, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_STREAMS_H__ */

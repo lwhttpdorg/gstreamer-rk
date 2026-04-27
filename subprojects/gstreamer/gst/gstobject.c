@@ -97,13 +97,11 @@ enum
   LAST_SIGNAL
 };
 
-enum
+typedef enum
 {
-  PROP_0,
-  PROP_NAME,
+  PROP_NAME = 1,
   PROP_PARENT,
-  PROP_LAST
-};
+} GstObjectProps;
 
 enum
 {
@@ -131,7 +129,7 @@ static gboolean gst_object_set_name_default (GstObject * object);
 
 static guint gst_object_signals[LAST_SIGNAL] = { 0 };
 
-static GParamSpec *properties[PROP_LAST];
+static GParamSpec *properties[PROP_PARENT + 1];
 
 G_DEFINE_ABSTRACT_TYPE (GstObject, gst_object, G_TYPE_INITIALLY_UNOWNED);
 
@@ -172,7 +170,8 @@ gst_object_class_init (GstObjectClass * klass)
       GST_TYPE_OBJECT,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_DOC_SHOW_DEFAULT);
 
-  g_object_class_install_properties (gobject_class, PROP_LAST, properties);
+  g_object_class_install_properties (gobject_class, G_N_ELEMENTS (properties),
+      properties);
 
   /**
    * GstObject::deep-notify:
@@ -394,8 +393,7 @@ gst_object_dispose (GObject * object)
     for (node = self->control_bindings; node; node = g_list_next (node)) {
       gst_object_unparent (node->data);
     }
-    g_list_free (self->control_bindings);
-    self->control_bindings = NULL;
+    g_clear_list (&self->control_bindings, NULL);
   }
 
   ((GObjectClass *) gst_object_parent_class)->dispose (object);
@@ -515,7 +513,7 @@ gst_object_default_deep_notify (GObject * object, GstObject * orig,
   if (pspec->flags & G_PARAM_READABLE) {
     /* let's not print these out for excluded properties... */
     while (excluded_props != NULL && *excluded_props != NULL) {
-      if (strcmp (pspec->name, *excluded_props) == 0)
+      if (g_strcmp0 (pspec->name, *excluded_props) == 0)
         return;
       excluded_props++;
     }
@@ -947,7 +945,7 @@ gst_object_check_uniqueness (GList * list, const gchar * name)
     child = GST_OBJECT_CAST (list->data);
 
     GST_OBJECT_LOCK (child);
-    eq = strcmp (GST_OBJECT_NAME (child), name) == 0;
+    eq = g_strcmp0 (GST_OBJECT_NAME (child), name) == 0;
     GST_OBJECT_UNLOCK (child);
 
     if (G_UNLIKELY (eq)) {
@@ -967,7 +965,7 @@ gst_object_set_property (GObject * object, guint prop_id,
 
   gstobject = GST_OBJECT_CAST (object);
 
-  switch (prop_id) {
+  switch ((GstObjectProps) prop_id) {
     case PROP_NAME:
       gst_object_set_name_intern (gstobject, g_value_get_string (value));
       break;
@@ -988,7 +986,7 @@ gst_object_get_property (GObject * object, guint prop_id,
 
   gstobject = GST_OBJECT_CAST (object);
 
-  switch (prop_id) {
+  switch ((GstObjectProps) prop_id) {
     case PROP_NAME:
       g_value_take_string (value, gst_object_get_name (gstobject));
       break;
@@ -1108,7 +1106,7 @@ gst_object_find_control_binding (GstObject * self, const gchar * name)
   for (node = self->control_bindings; node; node = g_list_next (node)) {
     binding = node->data;
     /* FIXME: eventually use GQuark to speed it up */
-    if (!strcmp (binding->name, name)) {
+    if (!g_strcmp0 (binding->name, name)) {
       GST_DEBUG_OBJECT (self, "found control binding for property '%s'", name);
       return binding;
     }

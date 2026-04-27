@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CHILD_PROXY_H__
-#define __GST_CHILD_PROXY_H__
+#pragma once
 
 #include <glib-object.h>
 #include <gst/gst.h>
@@ -162,5 +161,3 @@ void      gst_child_proxy_child_removed      (GstChildProxy * parent, GObject * 
                                               const gchar *name);
 
 G_END_DECLS
-
-#endif /* __GST_CHILD_PROXY_H__ */

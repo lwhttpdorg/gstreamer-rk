@@ -106,8 +106,11 @@ enum
   PROP_0,
   PROP_DELAY,
   PROP_AUTO_FLUSH_BUS,
-  PROP_LATENCY
+  PROP_LATENCY,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 struct _GstPipelinePrivate
 {
@@ -175,11 +178,10 @@ gst_pipeline_class_init (GstPipelineClass * klass)
    * PLAYING state expressed in nanoseconds.
    * see gst_pipeline_set_delay() for more information on this option.
    **/
-  g_object_class_install_property (gobject_class, PROP_DELAY,
-      g_param_spec_uint64 ("delay", "Delay",
-          "Expected delay needed for elements "
-          "to spin up to PLAYING in nanoseconds", 0, G_MAXUINT64, DEFAULT_DELAY,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  props[PROP_DELAY] = g_param_spec_uint64 ("delay", "Delay",
+      "Expected delay needed for elements "
+      "to spin up to PLAYING in nanoseconds", 0, G_MAXUINT64, DEFAULT_DELAY,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPipeline:auto-flush-bus:
@@ -188,11 +190,11 @@ gst_pipeline_class_init (GstPipelineClass * klass)
    * pipeline's bus when going from READY to NULL state. Please see
    * gst_pipeline_set_auto_flush_bus() for more information on this option.
    **/
-  g_object_class_install_property (gobject_class, PROP_AUTO_FLUSH_BUS,
+  props[PROP_AUTO_FLUSH_BUS] =
       g_param_spec_boolean ("auto-flush-bus", "Auto Flush Bus",
-          "Whether to automatically flush the pipeline's bus when going "
-          "from READY into NULL state", DEFAULT_AUTO_FLUSH_BUS,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+      "Whether to automatically flush the pipeline's bus when going "
+      "from READY into NULL state", DEFAULT_AUTO_FLUSH_BUS,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPipeline:latency:
@@ -201,10 +203,11 @@ gst_pipeline_class_init (GstPipelineClass * klass)
    *
    * Since: 1.6
    **/
-  g_object_class_install_property (gobject_class, PROP_LATENCY,
-      g_param_spec_uint64 ("latency", "Latency",
-          "Latency to configure on the pipeline", 0, G_MAXUINT64,
-          DEFAULT_LATENCY, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  props[PROP_LATENCY] = g_param_spec_uint64 ("latency", "Latency",
+      "Latency to configure on the pipeline", 0, G_MAXUINT64,
+      DEFAULT_LATENCY, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   gobject_class->dispose = gst_pipeline_dispose;
 

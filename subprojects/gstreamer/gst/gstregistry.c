@@ -273,8 +273,7 @@ gst_registry_finalize (GObject * object)
   GList *plugins, *p;
   GList *features, *f;
 
-  plugins = registry->priv->plugins;
-  registry->priv->plugins = NULL;
+  plugins = g_steal_pointer (&registry->priv->plugins);
   registry->priv->n_plugins = 0;
 
   GST_DEBUG_OBJECT (registry, "registry finalize");
@@ -291,8 +290,7 @@ gst_registry_finalize (GObject * object)
   }
   g_list_free (plugins);
 
-  features = registry->priv->features;
-  registry->priv->features = NULL;
+  features = g_steal_pointer (&registry->priv->features);
 
   f = features;
   while (f) {
@@ -307,10 +305,8 @@ gst_registry_finalize (GObject * object)
   }
   g_list_free (features);
 
-  g_hash_table_destroy (registry->priv->feature_hash);
-  registry->priv->feature_hash = NULL;
-  g_hash_table_destroy (registry->priv->basename_hash);
-  registry->priv->basename_hash = NULL;
+  g_clear_pointer (&registry->priv->feature_hash, g_hash_table_destroy);
+  g_clear_pointer (&registry->priv->basename_hash, g_hash_table_destroy);
 
   if (registry->priv->element_factory_list) {
     GST_DEBUG_OBJECT (registry, "Cleaning up cached element factory list");
@@ -462,7 +458,7 @@ gst_registry_add_plugin (GstRegistry * registry, GstPlugin * plugin)
       /* If the new plugin is blacklisted and the existing one isn't cached, do not
        * accept if it's from a different location than the existing one */
       if (GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED) &&
-          strcmp (plugin->filename, existing_plugin->filename)) {
+          g_strcmp0 (plugin->filename, existing_plugin->filename)) {
         GST_WARNING_OBJECT (registry,
             "Not replacing plugin because new one (%s) is blacklisted but for a different location than existing one (%s)",
             plugin->filename, existing_plugin->filename);
@@ -714,7 +710,7 @@ gst_plugin_feature_type_name_filter (GstPluginFeature * feature,
 
   return ((data->type == G_TYPE_INVALID
           || data->type == G_OBJECT_TYPE (feature)) && (data->name == NULL
-          || !strcmp (data->name, GST_OBJECT_NAME (feature))));
+          || !g_strcmp0 (data->name, GST_OBJECT_NAME (feature))));
 }
 
 /* returns TRUE if the list was changed
@@ -763,7 +759,7 @@ type_find_factory_rank_cmp (const GstPluginFeature * fac1,
 
   /* to make the order in which things happen more deterministic,
    * sort by name when the ranks are the same. */
-  return strcmp (GST_OBJECT_NAME (fac1), GST_OBJECT_NAME (fac2));
+  return g_strcmp0 (GST_OBJECT_NAME (fac1), GST_OBJECT_NAME (fac2));
 }
 
 static GList *
@@ -881,7 +877,7 @@ gst_registry_feature_filter (GstRegistry * registry,
 static gboolean
 gst_registry_plugin_name_filter (GstPlugin * plugin, const gchar * name)
 {
-  return (plugin->desc.name && !strcmp (plugin->desc.name, name));
+  return (plugin->desc.name && !g_strcmp0 (plugin->desc.name, name));
 }
 
 /**
@@ -1134,7 +1130,7 @@ init_scan_context (GstRegistryScanContext * context, GstRegistry * registry)
     /* forking enabled, see if it is disabled with an env var */
     if ((fork_env = g_getenv ("GST_REGISTRY_FORK"))) {
       /* fork enabled for any value different from "no" */
-      do_fork = strcmp (fork_env, "no") != 0;
+      do_fork = g_strcmp0 (fork_env, "no") != 0;
     }
   }
 
@@ -1227,7 +1223,7 @@ skip_directory (const gchar * parent_path, const gchar * dirent)
     return TRUE;
 
   /* gst-integration-testsuites can end up with many log files */
-  if (strcmp (dirent, "gst-integration-testsuites") == 0)
+  if (g_strcmp0 (dirent, "gst-integration-testsuites") == 0)
     return TRUE;
 
   /* skip the directories ending in .dSYM, these contain mach-o files with
@@ -1257,9 +1253,9 @@ skip_directory (const gchar * parent_path, const gchar * dirent)
 #endif
         || g_str_has_suffix (target + 7, "/release")) {
       if (dirent[0] == '.'
-          || strcmp (dirent, "build") == 0
-          || strcmp (dirent, "deps") == 0
-          || strcmp (dirent, "incremental") == 0) {
+          || g_strcmp0 (dirent, "build") == 0
+          || g_strcmp0 (dirent, "deps") == 0
+          || g_strcmp0 (dirent, "incremental") == 0) {
         return TRUE;
       }
     }
@@ -1271,12 +1267,12 @@ skip_directory (const gchar * parent_path, const gchar * dirent)
 
   /* skip the .debug directory, these contain elf files that are not
    * useful or worse, can crash dlopen () */
-  if (strcmp (dirent, ".debug") == 0)
+  if (g_strcmp0 (dirent, ".debug") == 0)
     return TRUE;
 
   /* can also skip .git and .deps dirs, those won't contain useful files.
    * This speeds up scanning a bit in development environment setups. */
-  if (strcmp (dirent, ".git") == 0 || strcmp (dirent, ".deps") == 0)
+  if (g_strcmp0 (dirent, ".git") == 0 || strcmp (dirent, ".deps") == 0)
     return TRUE;
 
   return FALSE;
@@ -1383,7 +1379,7 @@ gst_registry_scan_path_level (GstRegistryScanContext * context,
       if (plugin->file_mtime == file_status.st_mtime &&
           plugin->file_size == file_status.st_size && !env_vars_changed &&
           !(deps_changed = _priv_plugin_deps_files_changed (plugin)) &&
-          !strcmp (plugin->filename, filename)) {
+          !g_strcmp0 (plugin->filename, filename)) {
         GST_LOG_OBJECT (context->registry, "file %s cached", filename);
         GST_OBJECT_FLAG_UNSET (plugin, GST_PLUGIN_FLAG_CACHED);
         GST_LOG_OBJECT (context->registry,
@@ -1467,7 +1463,7 @@ static gboolean
 _gst_plugin_feature_filter_plugin_name (GstPluginFeature * feature,
     gpointer user_data)
 {
-  return (strcmp (feature->plugin_name, (gchar *) user_data) == 0);
+  return (g_strcmp0 (feature->plugin_name, (gchar *) user_data) == 0);
 }
 
 /**
@@ -1949,7 +1945,7 @@ ensure_current_registry (GError ** error)
 
       if ((update_env = g_getenv ("GST_REGISTRY_UPDATE"))) {
         /* do update for any value different from "no" */
-        do_update = (strcmp (update_env, "no") != 0);
+        do_update = (g_strcmp0 (update_env, "no") != 0);
       }
     }
   }
@@ -1959,7 +1955,7 @@ ensure_current_registry (GError ** error)
 
     if ((reuse_env = g_getenv ("GST_REGISTRY_REUSE_PLUGIN_SCANNER"))) {
       /* do reuse for any value different from "no" */
-      __registry_reuse_plugin_scanner = (strcmp (reuse_env, "no") != 0);
+      __registry_reuse_plugin_scanner = (g_strcmp0 (reuse_env, "no") != 0);
     }
     /* now check registry */
     GST_DEBUG ("Updating registry cache");

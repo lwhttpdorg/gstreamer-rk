@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_FORMAT_H__
-#define __GST_FORMAT_H__
+#pragma once
 
 #include <glib.h>
 
@@ -122,5 +121,3 @@ GST_API
 GstIterator*    gst_format_iterate_definitions  (void);
 
 G_END_DECLS
-
-#endif /* __GST_FORMAT_H__ */

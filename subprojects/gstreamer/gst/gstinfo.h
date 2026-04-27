@@ -21,8 +21,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GSTINFO_H__
-#define __GSTINFO_H__
+#pragma once
 
 #include "gstclock.h"
 #include <glib.h>
@@ -1708,8 +1707,6 @@ GST_API GstDebugLevel            _gst_debug_min;
 #define GST_LOG_ONCE(...)				G_STMT_START{ }G_STMT_END
 #define GST_FIXME_ONCE(...)				G_STMT_START{ }G_STMT_END
 #define GST_TRACE_ONCE(...)				G_STMT_START{ }G_STMT_END
-
-#endif /* GST_DISABLE_GST_DEBUG */
 
 
 GST_API

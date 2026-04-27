@@ -43,14 +43,12 @@ GST_DEBUG_CATEGORY_EXTERN (tracer_debug);
 
 /* tracing plugins base class */
 
-enum
+typedef enum
 {
-  PROP_0,
-  PROP_PARAMS,
-  PROP_LAST
-};
+  PROP_PARAMS = 1,
+} GstTracerProps;
 
-static GParamSpec *properties[PROP_LAST];
+static GParamSpec *properties[PROP_PARAMS + 1];
 
 typedef struct
 {
@@ -97,7 +95,8 @@ gst_tracer_class_init (GstTracerClass * klass)
       g_param_spec_string ("params", "Params", "Extra configuration parameters",
       NULL, G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS);
 
-  g_object_class_install_properties (gobject_class, PROP_LAST, properties);
+  g_object_class_install_properties (gobject_class, G_N_ELEMENTS (properties),
+      properties);
 }
 
 static void
@@ -112,7 +111,7 @@ gst_tracer_set_property (GObject * object, guint prop_id,
 {
   GstTracer *self = GST_TRACER_CAST (object);
 
-  switch (prop_id) {
+  switch ((GstTracerProps) prop_id) {
     case PROP_PARAMS:
       g_free (self->priv->params);
       self->priv->params = g_value_dup_string (value);
@@ -129,7 +128,7 @@ gst_tracer_get_property (GObject * object, guint prop_id,
 {
   GstTracer *self = GST_TRACER_CAST (object);
 
-  switch (prop_id) {
+  switch ((GstTracerProps) prop_id) {
     case PROP_PARAMS:
       g_value_set_string (value, self->priv->params);
       break;

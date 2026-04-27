@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_BUFFER_LIST_H__
-#define __GST_BUFFER_LIST_H__
+#pragma once
 
 #include <gst/gstbuffer.h>
 
@@ -188,5 +187,3 @@ gsize                    gst_buffer_list_calculate_size        (GstBufferList * 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstBufferList, gst_buffer_list_unref)
 
 G_END_DECLS
-
-#endif /* __GST_BUFFER_LIST_H__ */

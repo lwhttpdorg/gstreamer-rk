@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_MINI_OBJECT_H__
-#define __GST_MINI_OBJECT_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -310,6 +309,4 @@ GstMiniObject * gst_mini_object_steal           (GstMiniObject **olddata) G_GNUC
        (GBoxedFreeFunc) gst_mini_object_unref)
 
 G_END_DECLS
-
-#endif
 

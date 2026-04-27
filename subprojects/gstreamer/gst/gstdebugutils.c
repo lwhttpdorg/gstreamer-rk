@@ -117,7 +117,7 @@ debug_is_dots_tracer_active (void)
     GList *l, *tracers = gst_tracing_get_active_tracers ();
     gsize val = 1;
     for (l = tracers; l; l = l->next)
-      if (!g_strcmp0 (G_OBJECT_TYPE_NAME (l->data), "GstDotsTracer"))
+      if (g_strcmp0 (G_OBJECT_TYPE_NAME (l->data), "GstDotsTracer") == 0)
         val = 2;
     g_list_free_full (tracers, gst_object_unref);
     g_once_init_leave (&enabled, val);
@@ -160,13 +160,13 @@ debug_dump_get_object_params (GObject * object,
       /* skip some properties */
       if (!(property->flags & G_PARAM_READABLE))
         continue;
-      if (!strcmp (property->name, "name")
-          || !strcmp (property->name, "parent"))
+      if (!g_strcmp0 (property->name, "name")
+          || !g_strcmp0 (property->name, "parent"))
         continue;
 
       if (ignored_propnames)
         for (j = 0; ignored_propnames[j]; j++)
-          if (!g_strcmp0 (ignored_propnames[j], property->name))
+          if (g_strcmp0 (ignored_propnames[j], property->name) == 0)
             ignore = TRUE;
 
       if (ignore)
@@ -917,12 +917,9 @@ debug_dump_header (GstBin * bin, GstDebugGraphDetails details, GString * str)
         "    label=\"%s\",\n" "  ];\n" "\n", tracers_info);
   }
 
-  if (state_name)
-    g_free (state_name);
-  if (param_name)
-    g_free (param_name);
-  if (tracers_info)
-    g_free (tracers_info);
+  g_free (state_name);
+  g_free (param_name);
+  g_free (tracers_info);
 }
 
 static void

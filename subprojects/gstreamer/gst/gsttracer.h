@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TRACER_H__
-#define __GST_TRACER_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -84,6 +83,4 @@ void gst_tracer_class_set_use_structure_params   (GstTracerClass *tracer_class,
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTracer, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TRACER_H__ */
 

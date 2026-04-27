@@ -93,8 +93,11 @@ enum
   SYNC_MESSAGE,
   ASYNC_MESSAGE,
   /* add more above */
-  LAST_SIGNAL
+  LAST_SIGNAL,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 #define DEFAULT_ENABLE_ASYNC (TRUE)
 #define WARN_QUEUE_SIZE 1024
@@ -207,11 +210,13 @@ gst_bus_class_init (GstBusClass * klass)
    * This property is used to create the child element buses
    * in #GstBin.
    */
-  g_object_class_install_property (gobject_class, PROP_ENABLE_ASYNC,
+  props[PROP_ENABLE_ASYNC] =
       g_param_spec_boolean ("enable-async", "Enable Async",
-          "Enable async message delivery for bus watches and gst_bus_pop()",
-          DEFAULT_ENABLE_ASYNC,
-          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+      "Enable async message delivery for bus watches and gst_bus_pop()",
+      DEFAULT_ENABLE_ASYNC,
+      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   /**
    * GstBus::sync-message:

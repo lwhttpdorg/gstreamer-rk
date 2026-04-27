@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_ALLOCATOR_H__
-#define __GST_ALLOCATOR_H__
+#pragma once
 
 #include <gst/gstmemory.h>
 #include <gst/gstobject.h>
@@ -215,5 +214,3 @@ GstMemory *    gst_memory_new_wrapped  (GstMemoryFlags flags, gpointer data, gsi
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstAllocationParams, gst_allocation_params_free)
 
 G_END_DECLS
-
-#endif /* __GST_ALLOCATOR_H__ */

@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_META_H__
-#define __GST_META_H__
+#pragma once
 
 #include <glib.h>
 
@@ -465,5 +464,3 @@ GST_API GQuark _gst_meta_tag_memory_reference;
 #endif
 
 G_END_DECLS
-
-#endif /* __GST_META_H__ */

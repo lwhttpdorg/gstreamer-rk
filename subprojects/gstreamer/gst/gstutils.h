@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_UTILS_H__
-#define __GST_UTILS_H__
+#pragma once
 
 #include <glib.h>
 #include <gst/gstconfig.h>
@@ -1273,5 +1272,3 @@ void          gst_call_async                    (GstCallAsyncFunc func,
                                                  gpointer user_data);
 
 G_END_DECLS
-
-#endif /* __GST_UTILS_H__ */

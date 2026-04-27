@@ -165,8 +165,7 @@ gst_element_factory_cleanup (GstElementFactory * factory)
     gst_static_caps_cleanup (&templ->static_caps);
     g_free (templ);
   }
-  g_list_free (factory->staticpadtemplates);
-  factory->staticpadtemplates = NULL;
+  g_clear_list (&factory->staticpadtemplates, NULL);
   factory->numpadtemplates = 0;
   factory->uri_type = GST_URI_UNKNOWN;
   if (factory->uri_protocols) {
@@ -174,8 +173,7 @@ gst_element_factory_cleanup (GstElementFactory * factory)
     factory->uri_protocols = NULL;
   }
 
-  g_list_free (factory->interfaces);
-  factory->interfaces = NULL;
+  g_clear_list (&factory->interfaces, NULL);
 }
 
 #define CHECK_METADATA_FIELD(klass, name, key)                                 \
@@ -1021,7 +1019,7 @@ gst_element_factory_has_interface (GstElementFactory * factory,
   for (walk = factory->interfaces; walk; walk = g_list_next (walk)) {
     gchar *iname = (gchar *) walk->data;
 
-    if (!strcmp (iname, interfacename))
+    if (!g_strcmp0 (iname, interfacename))
       return TRUE;
   }
   return FALSE;

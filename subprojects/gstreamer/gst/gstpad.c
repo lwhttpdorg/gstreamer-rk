@@ -116,9 +116,12 @@ enum
   PAD_PROP_CAPS,
   PAD_PROP_DIRECTION,
   PAD_PROP_TEMPLATE,
-  PAD_PROP_OFFSET
+  PAD_PROP_OFFSET,
+  PAD_N_PROPS
       /* FILL ME */
 };
+
+static GParamSpec *props[PAD_N_PROPS] = { NULL, };
 
 #define _PAD_PROBE_TYPE_ALL_BOTH_AND_FLUSH (GST_PAD_PROBE_TYPE_ALL_BOTH | GST_PAD_PROBE_TYPE_EVENT_FLUSH)
 
@@ -364,21 +367,19 @@ gst_pad_class_init (GstPadClass * klass)
       G_STRUCT_OFFSET (GstPadClass, unlinked), NULL, NULL,
       NULL, G_TYPE_NONE, 1, GST_TYPE_PAD);
 
-  pspec_caps = g_param_spec_boxed ("caps", "Caps",
+  props[PAD_PROP_CAPS] = g_param_spec_boxed ("caps", "Caps",
       "The capabilities of the pad", GST_TYPE_CAPS,
       G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property (gobject_class, PAD_PROP_CAPS, pspec_caps);
 
-  g_object_class_install_property (gobject_class, PAD_PROP_DIRECTION,
+  props[PAD_PROP_DIRECTION] =
       g_param_spec_enum ("direction", "Direction", "The direction of the pad",
-          GST_TYPE_PAD_DIRECTION, GST_PAD_UNKNOWN,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+      GST_TYPE_PAD_DIRECTION, GST_PAD_UNKNOWN,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /* FIXME, Make G_PARAM_CONSTRUCT_ONLY when we fix ghostpads. */
-  g_object_class_install_property (gobject_class, PAD_PROP_TEMPLATE,
-      g_param_spec_object ("template", "Template",
-          "The GstPadTemplate of this pad", GST_TYPE_PAD_TEMPLATE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  props[PAD_PROP_TEMPLATE] = g_param_spec_object ("template", "Template",
+      "The GstPadTemplate of this pad", GST_TYPE_PAD_TEMPLATE,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPad:offset:
@@ -387,10 +388,11 @@ gst_pad_class_init (GstPadClass * klass)
    *
    * Since: 1.6
    */
-  g_object_class_install_property (gobject_class, PAD_PROP_OFFSET,
-      g_param_spec_int64 ("offset", "Offset",
-          "The running time offset of the pad", 0, G_MAXINT64, 0,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  props[PAD_PROP_OFFSET] = g_param_spec_int64 ("offset", "Offset",
+      "The running time offset of the pad", 0, G_MAXINT64, 0,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, PAD_N_PROPS, props);
 
   gstobject_class->path_string_separator = ".";
 
@@ -804,6 +806,9 @@ gst_pad_set_property (GObject * object, guint prop_id,
       break;
     case PAD_PROP_OFFSET:
       gst_pad_set_offset (GST_PAD_CAST (object), g_value_get_int64 (value));
+      break;
+    case PAD_PROP_CAPS:
+      g_assert_not_reached ();
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

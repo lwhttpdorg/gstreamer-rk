@@ -16,8 +16,7 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#ifndef __GNULIB_PRINTF_H__
-#define __GNULIB_PRINTF_H__
+#pragma once
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -60,5 +59,3 @@ int __gst_vasprintf (char       **result,
                      char const *format,
                      va_list      args);
 
-
-#endif /* __GNULIB_PRINTF_H__ */

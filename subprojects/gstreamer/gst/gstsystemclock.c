@@ -594,8 +594,11 @@ enum
 {
   PROP_0,
   PROP_CLOCK_TYPE,
-  /* FILL ME */
+  N_PROPS
+      /* FILL ME */
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 /* the one instance of the systemclock */
 static GstClock *_the_system_clock = NULL;
@@ -641,11 +644,12 @@ gst_system_clock_class_init (GstSystemClockClass * klass)
   gobject_class->set_property = gst_system_clock_set_property;
   gobject_class->get_property = gst_system_clock_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_CLOCK_TYPE,
-      g_param_spec_enum ("clock-type", "Clock type",
-          "The type of underlying clock implementation used",
-          GST_TYPE_CLOCK_TYPE, DEFAULT_CLOCK_TYPE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  props[PROP_CLOCK_TYPE] = g_param_spec_enum ("clock-type", "Clock type",
+      "The type of underlying clock implementation used",
+      GST_TYPE_CLOCK_TYPE, DEFAULT_CLOCK_TYPE,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   gstclock_class->get_internal_time = gst_system_clock_get_internal_time;
   gstclock_class->get_resolution = gst_system_clock_get_resolution;
@@ -727,8 +731,7 @@ gst_system_clock_dispose (GObject * object)
   GST_CAT_DEBUG_OBJECT (GST_CAT_CLOCK, clock, "joined thread");
 
   g_list_foreach (priv->entries, (GFunc) gst_clock_id_unref, NULL);
-  g_list_free (priv->entries);
-  priv->entries = NULL;
+  g_clear_list (&priv->entries, NULL);
 
   g_cond_clear (&priv->entries_changed);
 

@@ -18,8 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CAPS_FEATURES_H__
-#define __GST_CAPS_FEATURES_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/glib-compat.h>
@@ -154,5 +153,3 @@ void              gst_caps_features_remove_id_str (GstCapsFeatures * features, c
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstCapsFeatures, gst_caps_features_free)
 
 G_END_DECLS
-
-#endif /* __GST_CAPS_FEATURES_H__ */

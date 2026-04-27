@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TYPE_FIND_FACTORY_H__
-#define __GST_TYPE_FIND_FACTORY_H__
+#pragma once
 
 #include <gst/gstcaps.h>
 #include <gst/gstplugin.h>
@@ -68,5 +67,3 @@ void            gst_type_find_factory_call_function     (GstTypeFindFactory *fac
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTypeFindFactory, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TYPE_FIND_FACTORY_H__ */

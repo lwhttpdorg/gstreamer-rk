@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PARAMSPECS_H__
-#define __GST_PARAMSPECS_H__
+#pragma once
 
 #include <gst/gstvalue.h>
 
@@ -185,6 +184,4 @@ GParamSpec  * gst_param_spec_array    (const gchar * name,
                                        GParamFlags flags) G_GNUC_MALLOC;
 
 G_END_DECLS
-
-#endif /* __GST_PARAMSPECS_H__ */
 

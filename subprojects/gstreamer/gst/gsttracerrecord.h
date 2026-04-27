@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TRACER_RECORD_H__
-#define __GST_TRACER_RECORD_H__
+#pragma once
 
 #include <gst/gstobject.h>
 
@@ -102,5 +101,3 @@ void              gst_tracer_record_log (GstTracerRecord *self, ...);
 #endif
 
 G_END_DECLS
-
-#endif /* __GST_TRACER_RECORD_H__ */

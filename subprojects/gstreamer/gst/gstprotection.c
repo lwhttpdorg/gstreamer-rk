@@ -254,8 +254,7 @@ gst_protection_filter_systems_by_available_decryptors (const gchar **
   retval[i] = NULL;
 
   if (retval[0] == NULL) {
-    g_free (retval);
-    retval = NULL;
+    g_clear_pointer (&retval, g_free);
   }
 
 beach:

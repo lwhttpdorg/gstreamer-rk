@@ -120,8 +120,11 @@ enum
   PROP_0,
   PROP_WINDOW_SIZE,
   PROP_WINDOW_THRESHOLD,
-  PROP_TIMEOUT
+  PROP_TIMEOUT,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -716,20 +719,20 @@ gst_clock_class_init (GstClockClass * klass)
   gobject_class->set_property = gst_clock_set_property;
   gobject_class->get_property = gst_clock_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_WINDOW_SIZE,
-      g_param_spec_int ("window-size", "Window size",
-          "The size of the window used to calculate rate and offset", 2, 1024,
-          DEFAULT_WINDOW_SIZE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_WINDOW_THRESHOLD,
+  props[PROP_WINDOW_SIZE] = g_param_spec_int ("window-size", "Window size",
+      "The size of the window used to calculate rate and offset", 2, 1024,
+      DEFAULT_WINDOW_SIZE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  props[PROP_WINDOW_THRESHOLD] =
       g_param_spec_int ("window-threshold", "Window threshold",
-          "The threshold to start calculating rate and offset", 2, 1024,
-          DEFAULT_WINDOW_THRESHOLD,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_TIMEOUT,
+      "The threshold to start calculating rate and offset", 2, 1024,
+      DEFAULT_WINDOW_THRESHOLD, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  props[PROP_TIMEOUT] =
       g_param_spec_uint64 ("timeout", "Timeout",
-          "The amount of time, in nanoseconds, to sample master and slave clocks",
-          0, G_MAXUINT64, DEFAULT_TIMEOUT,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+      "The amount of time, in nanoseconds, to sample master and slave clocks",
+      0, G_MAXUINT64, DEFAULT_TIMEOUT,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   /**
    * GstClock::synced:
@@ -811,8 +814,7 @@ gst_clock_finalize (GObject * object)
     gst_clock_id_unref (clock->priv->clockid);
     clock->priv->clockid = NULL;
   }
-  g_free (clock->priv->times);
-  clock->priv->times = NULL;
+  g_clear_pointer (&clock->priv->times, g_free);
   clock->priv->times_temp = NULL;
   GST_CLOCK_SLAVE_UNLOCK (clock);
 

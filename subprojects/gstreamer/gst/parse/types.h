@@ -1,5 +1,4 @@
-#ifndef __GST_PARSE_TYPES_H__
-#define __GST_PARSE_TYPES_H__
+#pragma once
 
 #include <glib-object.h>
 #include "../gstelement.h"
@@ -128,5 +127,3 @@ G_GNUC_INTERNAL GstElement *priv_gst_parse_launch (const gchar      * str,
                                                    GError          ** err,
                                                    GstParseContext  * ctx,
                                                    GstParseFlags      flags);
-
-#endif /* __GST_PARSE_TYPES_H__ */

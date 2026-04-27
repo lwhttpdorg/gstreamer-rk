@@ -99,9 +99,9 @@ list_available_tracer_properties (GObjectClass * class)
         || !(prop->flags & G_PARAM_WRITABLE))
       continue;
 
-    if (!g_strcmp0 (g_param_spec_get_name (prop), "parent"))
+    if (g_strcmp0 (g_param_spec_get_name (prop), "parent") == 0)
       continue;
-    if (!g_strcmp0 (g_param_spec_get_name (prop), "params"))
+    if (g_strcmp0 (g_param_spec_get_name (prop), "params") == 0)
       continue;
 
     const gchar *type_name = G_PARAM_SPEC_TYPE_NAME (prop);
@@ -383,8 +383,7 @@ _priv_gst_tracing_deinit (void)
     g_list_free (h_node->data);
   }
   g_list_free (h_list);
-  g_hash_table_destroy (_priv_tracers);
-  _priv_tracers = NULL;
+  g_clear_pointer (&_priv_tracers, g_hash_table_destroy);
 }
 
 static void

@@ -16,8 +16,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
-#ifndef __GST_MACROS_H__
-#define __GST_MACROS_H__
+#pragma once
 
 #include <glib.h>
 
@@ -65,7 +64,5 @@ G_BEGIN_DECLS
 #endif
 
 G_END_DECLS
-
-#endif /* __GST_MACROS_H__ */
 
 

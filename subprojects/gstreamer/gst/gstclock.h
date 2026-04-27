@@ -21,8 +21,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CLOCK_H__
-#define __GST_CLOCK_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <glib.h>
@@ -719,5 +718,3 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstClock, gst_object_unref)
 G_DEFINE_AUTO_CLEANUP_FREE_FUNC(GstClockID, gst_clock_id_unref, 0)
 
 G_END_DECLS
-
-#endif /* __GST_CLOCK_H__ */

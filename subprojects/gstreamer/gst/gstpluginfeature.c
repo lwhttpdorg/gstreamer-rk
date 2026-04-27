@@ -57,6 +57,8 @@ enum
   PROP_LAST
 };
 
+static GParamSpec *props[PROP_LAST] = { NULL, };
+
 G_DEFINE_ABSTRACT_TYPE (GstPluginFeature, gst_plugin_feature, GST_TYPE_OBJECT);
 
 static void
@@ -76,11 +78,12 @@ gst_plugin_feature_class_init (GstPluginFeatureClass * klass)
    *
    * Since: 1.30
    */
-  g_object_class_install_property (gobject_class, PROP_RANK,
-      g_param_spec_int ("rank", "Rank", "The rank of the plugin feature",
-          0, G_MAXINT, GST_RANK_NONE,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS |
-          G_PARAM_EXPLICIT_NOTIFY));
+  props[PROP_RANK] =
+      g_param_spec_int ("rank", "Rank", "The rank of the plugin feature", 0,
+      G_MAXINT, GST_RANK_NONE,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+  g_object_class_install_properties (gobject_class, PROP_LAST, props);
 }
 
 static void
@@ -489,7 +492,7 @@ gst_plugin_feature_rank_compare_func (gconstpointer p1, gconstpointer p2)
   if (diff != 0)
     return diff;
 
-  diff = strcmp (GST_OBJECT_NAME (f1), GST_OBJECT_NAME (f2));
+  diff = g_strcmp0 (GST_OBJECT_NAME (f1), GST_OBJECT_NAME (f2));
 
   return diff;
 }

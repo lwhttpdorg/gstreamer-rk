@@ -115,8 +115,7 @@ _priv_gst_meta_cleanup (void)
 {
   if (metainfo != NULL) {
     g_hash_table_foreach_remove (metainfo, (GHRFunc) notify_custom, NULL);
-    g_hash_table_unref (metainfo);
-    metainfo = NULL;
+    g_clear_pointer (&metainfo, g_hash_table_unref);
   }
 }
 

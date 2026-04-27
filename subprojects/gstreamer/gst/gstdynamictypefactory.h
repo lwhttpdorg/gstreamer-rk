@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_DYNAMIC_TYPE_FACTORY_H__
-#define __GST_DYNAMIC_TYPE_FACTORY_H__
+#pragma once
 
 /**
  * GST_DYNAMIC_TYPE_REGISTER_DEFINE:
@@ -109,5 +108,3 @@ GST_API
 gboolean gst_dynamic_type_register              (GstPlugin *plugin, GType type);
 
 G_END_DECLS
-
-#endif

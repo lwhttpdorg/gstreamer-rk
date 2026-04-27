@@ -21,8 +21,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_OBJECT_H__
-#define __GST_OBJECT_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -395,6 +394,4 @@ void            gst_object_call_async             (GstObject * object,
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstObject, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_OBJECT_H__ */
 

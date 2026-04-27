@@ -822,7 +822,7 @@ check_protocol_version (GstPluginLoader * l, guint8 * payload,
     return FALSE;
 
   binary_reg_ver = payload + sizeof (guint32);
-  if (strcmp ((gchar *) binary_reg_ver, GST_MAGIC_BINARY_VERSION_STR)) {
+  if (g_strcmp0 ((gchar *) binary_reg_ver, GST_MAGIC_BINARY_VERSION_STR)) {
     GST_LOG ("Binary chunk format of child is different. Ours: %s, child %s\n",
         GST_MAGIC_BINARY_VERSION_STR, binary_reg_ver);
     return FALSE;

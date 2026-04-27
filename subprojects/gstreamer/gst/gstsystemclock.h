@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_SYSTEM_CLOCK_H__
-#define __GST_SYSTEM_CLOCK_H__
+#pragma once
 
 #include <gst/gstclock.h>
 
@@ -96,5 +95,3 @@ gboolean gst_clock_is_system_monotonic (GstClock *clock);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstSystemClock, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_SYSTEM_CLOCK_H__ */

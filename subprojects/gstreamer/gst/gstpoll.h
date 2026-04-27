@@ -21,8 +21,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_POLL_H__
-#define __GST_POLL_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -128,5 +127,3 @@ GST_API
 gboolean        gst_poll_read_control     (GstPoll *set) G_GNUC_WARN_UNUSED_RESULT;
 
 G_END_DECLS
-
-#endif /* __GST_POLL_H__ */

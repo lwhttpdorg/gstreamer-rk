@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_SEGMENT_H__
-#define __GST_SEGMENT_H__
+#pragma once
 
 #include <gst/gstformat.h>
 
@@ -351,5 +350,3 @@ gboolean     gst_segment_is_equal            (const GstSegment * s0, const GstSe
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstSegment, gst_segment_free)
 
 G_END_DECLS
-
-#endif /* __GST_SEGMENT_H__ */

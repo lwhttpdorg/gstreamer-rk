@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_TRACER_FACTORY_H__
-#define __GST_TRACER_FACTORY_H__
+#pragma once
 
 #include <gst/gstcaps.h>
 #include <gst/gstplugin.h>
@@ -61,5 +60,3 @@ GType           gst_tracer_factory_get_tracer_type   (GstTracerFactory * factory
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTracerFactory, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_TRACER_FACTORY_H__ */

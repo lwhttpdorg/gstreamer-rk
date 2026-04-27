@@ -270,7 +270,7 @@ preset_open_and_parse_header (GstPreset * preset, const gchar * preset_path,
       g_key_file_get_value (in, PRESET_HEADER, PRESET_HEADER_ELEMENT_NAME,
       NULL);
 
-  if (!name || strcmp (name, element_name))
+  if (!name || g_strcmp0 (name, element_name))
     goto wrong_name;
 
   g_free (name);
@@ -1314,7 +1314,8 @@ gst_preset_base_init (gpointer g_class)
     g_object_interface_install_property (g_class,
         g_param_spec_string ("preset-name",
             "preset-name property",
-            "load given preset", NULL, G_PARAM_WRITABLE));
+            "load given preset", NULL,
+            G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 #endif
 
     initialized = TRUE;

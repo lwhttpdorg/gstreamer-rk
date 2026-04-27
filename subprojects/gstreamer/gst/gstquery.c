@@ -2563,7 +2563,7 @@ gst_query_set_context (GstQuery * query, GstContext * context)
   g_return_if_fail (GST_QUERY_TYPE (query) == GST_QUERY_CONTEXT);
 
   gst_query_parse_context_type (query, &context_type);
-  g_return_if_fail (strcmp (gst_context_get_context_type (context),
+  g_return_if_fail (g_strcmp0 (gst_context_get_context_type (context),
           context_type) == 0);
 
   s = GST_QUERY_STRUCTURE (query);

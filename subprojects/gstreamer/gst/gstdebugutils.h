@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GSTDEBUGUTILS_H__
-#define __GSTDEBUGUTILS_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -116,6 +115,4 @@ void gst_debug_bin_to_dot_file_with_ts (GstBin *bin, GstDebugGraphDetails detail
 #endif /* GST_DISABLE_GST_DEBUG */
 
 G_END_DECLS
-
-#endif /* __GSTDEBUGUTILS_H__ */
 

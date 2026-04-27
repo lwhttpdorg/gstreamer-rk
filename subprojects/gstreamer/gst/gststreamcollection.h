@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_STREAM_COLLECTION_H__
-#define __GST_STREAM_COLLECTION_H__
+#pragma once
 
 #include <gst/gstobject.h>
 
@@ -115,5 +114,3 @@ gboolean gst_stream_collection_add_stream (GstStreamCollection *collection,
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstStreamCollection, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_STREAM_COLLECTION_H__ */

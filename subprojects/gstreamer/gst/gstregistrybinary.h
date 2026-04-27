@@ -27,8 +27,7 @@
 ** - Encrypt the registry, for security purpose, but would also reduce performances
 */
 
-#ifndef __GST_REGISTRYBINARY_H__
-#define __GST_REGISTRYBINARY_H__
+#pragma once
 
 #include <gst/gstpad.h>
 #include <gst/gstregistry.h>
@@ -71,6 +70,4 @@ typedef struct _GstBinaryRegistryMagic
 } GstBinaryRegistryMagic;
 
 G_END_DECLS
-
-#endif /* !__GST_REGISTRYBINARY_H__ */
 

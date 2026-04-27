@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_ELEMENT_H__
-#define __GST_ELEMENT_H__
+#pragma once
 
 #include <glib.h>
 
@@ -1436,5 +1435,3 @@ const gchar *           gst_element_get_metadata               (GstElement * ele
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstElement, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_ELEMENT_H__ */

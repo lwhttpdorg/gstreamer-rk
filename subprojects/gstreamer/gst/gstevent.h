@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_EVENT_H__
-#define __GST_EVENT_H__
+#pragma once
 
 #ifdef _MSC_VER
 #pragma warning(disable: 5287)
@@ -460,7 +459,6 @@ void            gst_clear_event                 (GstEvent ** event_ptr);
 
 GST_API
 GstEvent *      gst_event_copy                  (const GstEvent * event) G_GNUC_WARN_UNUSED_RESULT;
-#endif /* GST_DISABLE_MINIOBJECT_INLINE_FUNCTIONS */
 
 GST_API
 GType           gst_event_get_type              (void);

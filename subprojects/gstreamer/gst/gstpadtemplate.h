@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_PAD_TEMPLATE_H__
-#define __GST_PAD_TEMPLATE_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -241,6 +240,4 @@ void                    gst_pad_template_pad_created            (GstPadTemplate 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPadTemplate, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_PAD_TEMPLATE_H__ */
 

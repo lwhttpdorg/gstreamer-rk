@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ERROR_H__
-#define __GST_ERROR_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -270,4 +269,3 @@ GST_API
 GQuark gst_library_error_quark (void);
 
 G_END_DECLS
-#endif /* __GST_ERROR_H__ */
