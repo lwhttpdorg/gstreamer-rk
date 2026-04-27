@@ -197,11 +197,24 @@ gst_qml6_get_gl_wrapcontext (GstGLDisplay * display,
   g_return_val_if_fail (display != NULL && wrap_glcontext != NULL, FALSE);
 #if GST_GL_HAVE_WINDOW_X11 && defined (HAVE_QT_X11)
   if (GST_IS_GL_DISPLAY_X11 (display)) {
+    const gchar *qt_xcb_gl = g_getenv ("QT_XCB_GL_INTEGRATION");;
 #if GST_GL_HAVE_PLATFORM_GLX
-    platform = GST_GL_PLATFORM_GLX;
-#elif GST_GL_HAVE_PLATFORM_EGL
-    platform = GST_GL_PLATFORM_EGL;
+    if (qt_xcb_gl && g_strstr_len (qt_xcb_gl, 7, "xcb_glx")) {
+      platform = GST_GL_PLATFORM_GLX;
+    }
 #endif
+#if GST_GL_HAVE_PLATFORM_EGL
+    if (qt_xcb_gl && g_strstr_len (qt_xcb_gl, 7, "xcb_egl")) {
+      platform = GST_GL_PLATFORM_EGL;
+    }
+#endif
+    if (platform == 0) {
+#if GST_GL_HAVE_PLATFORM_GLX
+      platform = GST_GL_PLATFORM_GLX;
+#elif GST_GL_HAVE_PLATFORM_EGL
+      platform = GST_GL_PLATFORM_EGL;
+#endif
+    }
   }
 #endif
 #if GST_GL_HAVE_WINDOW_WAYLAND && defined (HAVE_QT_WAYLAND)
