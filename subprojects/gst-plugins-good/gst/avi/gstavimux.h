@@ -79,7 +79,6 @@ struct _GstAviPad {
 
   /* type */
   gboolean is_video;
-  gboolean connected;
 
   /* chunk tag */
   gchar *tag;
@@ -172,8 +171,6 @@ struct _GstAviMux {
   guint32 num_frames, numx_frames;
   /* size of hdrl list, including tag as usual */
 
-  /* total size of extra codec data */
-  guint32 codec_data_size;
   /* state info */
   gboolean write_header;
   gboolean restart;

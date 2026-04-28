@@ -352,7 +352,6 @@ gst_avi_mux_reset (GstAviMux * avimux)
   avimux->num_frames = 0;
   memset (&(avimux->avi_hdr), 0, sizeof (gst_riff_avih));
   avimux->avi_hdr.max_bps = 10000000;
-  avimux->codec_data_size = 0;
 
   if (avimux->tags_snap) {
     gst_tag_list_unref (avimux->tags_snap);
@@ -628,8 +627,6 @@ gst_avi_mux_vidsink_set_caps (GstPad * pad, GstCaps * vscaps)
     if (codec_data_in_headers) {
       avipad->vids_codec_data = gst_value_get_buffer (codec_data);
       gst_buffer_ref (avipad->vids_codec_data);
-      /* keep global track of size */
-      avimux->codec_data_size += gst_buffer_get_size (avipad->vids_codec_data);
     } else {
       avipad->prepend_buffer =
           gst_buffer_ref (gst_value_get_buffer (codec_data));
@@ -854,8 +851,6 @@ gst_avi_mux_audsink_set_caps (GstPad * pad, GstCaps * vscaps)
   if (codec_data) {
     avipad->auds_codec_data = gst_value_get_buffer (codec_data);
     gst_buffer_ref (avipad->auds_codec_data);
-    /* keep global track of size */
-    avimux->codec_data_size += gst_buffer_get_size (avipad->auds_codec_data);
   }
 
   if (!strcmp (mimetype, "audio/x-raw")) {
