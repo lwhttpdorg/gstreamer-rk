@@ -357,12 +357,22 @@ endif
 
 all_plugins_paths = []
 all_plugins_dirs = []
+plugins_filenames = []
 plugins_names = []
 foreach plugin: all_plugins
   plugin_path = plugin.get_variable('full_path')
   all_plugins_paths += plugin_path
   all_plugins_dirs += fs.parent(plugin_path)
-  plugins_names += fs.name(plugin_path)
+  name = fs.name(plugin_path)
+  plugins_filenames += name
+  name = fs.stem(name)
+  if name.startswith('lib')
+    name = name.substring(3)
+  endif
+  if name.startswith('gst')
+    name = name.substring(3)
+  endif
+  plugins_names += name
 endforeach
 
 # Work around meson bug: https://github.com/mesonbuild/meson/pull/6770
@@ -426,11 +436,11 @@ if building_full
   static_plugins = get_option('gst-full-plugins')
   plugins_to_be_initialized = []
   if static_plugins == '*'
-    all_plugin_names = ';'.join(plugins_names)
+    all_plugin_names = ';'.join(plugins_filenames)
   else
     missing_plugins = []
     foreach plugin : static_plugins.split(';')
-      if plugins_names.contains(plugin)
+      if plugin in plugins_filenames or plugin in plugins_names
         plugins_to_be_initialized += [plugin]
       else
         missing_plugins += [plugin]
@@ -525,7 +535,7 @@ if building_full
   endforeach
 
   # Build shared library
-  gstfull = build_target('gstreamer-full-1.0',
+  gstfull = build_target(get_option('gst-full-name'),
     init_static_plugins_c,
     c_args: ['-DBUILDING_GST'] + gst_c_args,
     target_type: get_option('gst-full-target-type'),
