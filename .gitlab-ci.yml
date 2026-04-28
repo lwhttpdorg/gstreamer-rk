@@ -656,7 +656,18 @@ build macos:
   variables:
     # gst-libav/ffmpeg throws Wundef errors
     GST_WERROR: "false"
-    MESON_ARGS: "${DEFAULT_MESON_ARGS}"
+    BUILD_TYPE: "--default-library=both"
+    BUILD_GST_DEBUG: "-Dgstreamer:gst_debug=true"
+    # FIXME: We currently don't have pkg-config required by gobject-introspection/pygobject/sharp
+    MESON_ARGS: >-
+      ${SIMPLE_BUILD}
+      -Dintrospection=disabled
+      -Dsharp=disabled
+      -Dpython=disabled
+      -Ddoc=disabled
+      -Dgst-plugins-base:pango=enabled
+      -Dgst-plugins-good:cairo=enabled
+      -Dgst-plugins-good:soup=enabled
     MESON_TEST_ARGS: "gst-plugins-bad:*avfassetsrc* gst-plugins-bad:*vtdec* gst-plugins-bad:*_vk*"
     SUBPROJECTS_CACHE_DIR: "/Users/gst-ci/subprojects"
   rules:
@@ -667,20 +678,21 @@ build macos:
     - changes:
         paths:
           - "subprojects/macos-*/*"
-  parallel:
-    matrix:
-      - BUILD_TYPE: ["--default-library=both"]
-        BUILD_GST_DEBUG: ["-Dgstreamer:gst_debug=true"]
-        # FIXME: We currently don't have pkg-config required by gobject-introspection/pygobject/sharp
-        MESON_ARGS: >-
-          ${SIMPLE_BUILD}
-          -Dintrospection=disabled
-          -Dsharp=disabled
-          -Dpython=disabled
-          -Ddoc=disabled
-          -Dgst-plugins-base:pango=enabled
-          -Dgst-plugins-good:cairo=enabled
-          -Dgst-plugins-good:soup=enabled
+
+build macos xcode 12.4:
+  extends:
+   - 'build macos'
+  variables:
+    MESON_ARGS: "--native-file data/machine-files/macos-custom-xcode.ini"
+    # This job must only get the mandatory deps, so we cannot use the full
+    # subproject cache
+    SUBPROJECTS_CACHE_DIR: ""
+  before_script:
+    - curl -LO https://gstreamer.freedesktop.org/src/mirror/xcode/xcode-12.4.tar.xz
+    - tar -xf xcode-12.4.tar.xz
+    - sed -i '' -e "s|^xcode_path.*|xcode_path = '$PWD/Xcode.app'|" data/machine-files/macos-custom-xcode.ini
+    # Subproject cache is quite out of date, so just download it fresh
+    - meson subprojects download glib pcre2 libffi proxy-libintl
 
 abi-check:
   stage: 'build'
