@@ -150,6 +150,14 @@ typedef struct _QtDemuxAavdEncryptionInfo QtDemuxAavdEncryptionInfo;
     g_mutex_unlock (QTDEMUX_EXPOSE_GET_LOCK (demux)); \
  } G_STMT_END
 
+#define DEFAULT_SKIP_SHORT_TRACKS FALSE
+
+enum
+{
+  PROP_0,
+  PROP_SKIP_SHORT_TRACKS,
+};
+
 /*
  * Quicktime has tracks and segments. A track is a continuous piece of
  * multimedia content. The track is not always played from start to finish but
@@ -407,6 +415,10 @@ static void qtdemux_gst_structure_free (GstStructure * gststructure);
 static void gst_qtdemux_reset (GstQTDemux * qtdemux, gboolean hard);
 static void qtdemux_clear_protection_events_on_all_streams (GstQTDemux *
     qtdemux);
+static void gst_qtdemux_set_property (GObject * object,
+    guint prop_id, const GValue * value, GParamSpec * pspec);
+static void gst_qtdemux_get_property (GObject * object,
+    guint prop_id, GValue * value, GParamSpec * pspec);
 
 static GstFlowReturn gst_qtdemux_combine_flows (GstQTDemux * demux,
     QtDemuxStream * stream, GstFlowReturn ret);
@@ -424,6 +436,8 @@ gst_qtdemux_class_init (GstQTDemuxClass * klass)
 
   gobject_class->dispose = gst_qtdemux_dispose;
   gobject_class->finalize = gst_qtdemux_finalize;
+  gobject_class->get_property = gst_qtdemux_get_property;
+  gobject_class->set_property = gst_qtdemux_set_property;
 
   gstelement_class->change_state = GST_DEBUG_FUNCPTR (gst_qtdemux_change_state);
 #if 0
@@ -447,8 +461,51 @@ gst_qtdemux_class_init (GstQTDemuxClass * klass)
       "Demultiplex a QuickTime file into audio and video streams",
       "David Schleef <ds@schleef.org>, Wim Taymans <wim@fluendo.com>");
 
+  g_object_class_install_property (gobject_class, PROP_SKIP_SHORT_TRACKS,
+      g_param_spec_boolean ("skip-short-tracks",
+          "Skip short tracks",
+          "Skip tracks that are less than 10pct of the total duration "
+          "(assuming that they're image posters)", DEFAULT_SKIP_SHORT_TRACKS,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+
   GST_DEBUG_CATEGORY_INIT (qtdemux_debug, "qtdemux", 0, "qtdemux plugin");
   gst_riff_init ();
+}
+
+static void
+gst_qtdemux_get_property (GObject * object,
+    guint prop_id, GValue * value, GParamSpec * pspec)
+{
+  GstQTDemux *qtdemux = GST_QTDEMUX_CAST (object);
+
+  GST_OBJECT_LOCK (qtdemux);
+  switch (prop_id) {
+    case PROP_SKIP_SHORT_TRACKS:
+      g_value_set_boolean (value, qtdemux->skip_short_tracks);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+  GST_OBJECT_UNLOCK (qtdemux);
+}
+
+static void
+gst_qtdemux_set_property (GObject * object,
+    guint prop_id, const GValue * value, GParamSpec * pspec)
+{
+  GstQTDemux *qtdemux = GST_QTDEMUX_CAST (object);
+
+  GST_OBJECT_LOCK (qtdemux);
+  switch (prop_id) {
+    case PROP_SKIP_SHORT_TRACKS:
+      qtdemux->skip_short_tracks = g_value_get_boolean (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+  GST_OBJECT_UNLOCK (qtdemux);
 }
 
 static void
@@ -15138,6 +15195,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
 
   /* fragmented files may have bogus duration in moov */
   if (!qtdemux->fragmented &&
+      qtdemux->skip_short_tracks &&
       qtdemux->duration != G_MAXINT64 && stream->duration != G_MAXINT32) {
     guint64 tdur1, tdur2;
 

@@ -311,6 +311,9 @@ struct _GstQTDemux {
    * fields. */
   gboolean received_seek;
   gboolean first_moof_already_parsed;
+
+  /* If TRUE, skip short tracks */
+  gboolean skip_short_tracks;
 };
 
 struct _GstQTDemuxClass {
