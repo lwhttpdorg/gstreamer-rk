@@ -193,6 +193,11 @@ else
   message('GStreamer debug system is enabled')
 endif
 
+if not get_option('glib_assert')
+  message('Disabling GLib asserts')
+  add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
+endif
+
 # NOTE: Keep entries alphabetically sorted
 warning_flags = [
   '-Waddress',
