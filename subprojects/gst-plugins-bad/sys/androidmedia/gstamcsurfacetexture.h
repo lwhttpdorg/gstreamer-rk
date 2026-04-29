@@ -32,6 +32,7 @@ G_BEGIN_DECLS
 #define GST_TYPE_AMC_SURFACE_TEXTURE gst_amc_surface_texture_get_type ()
 G_DECLARE_DERIVABLE_TYPE (GstAmcSurfaceTexture, gst_amc_surface_texture, GST, AMC_SURFACE_TEXTURE, GObject)
 
+typedef struct ANativeWindow ANativeWindow;
 typedef void (* GstAmcSurfaceTextureOnFrameAvailableCallback) (GstAmcSurfaceTexture * self, gpointer user_data);
 
 struct _GstAmcSurfaceTextureClass
@@ -63,6 +64,9 @@ struct _GstAmcSurfaceTextureClass
                                                 GstAmcSurfaceTextureOnFrameAvailableCallback callback,
                                                 gpointer user_data,
                                                 GError ** err);
+
+  ANativeWindow * (* acquire_a_native_window) (GstAmcSurfaceTexture * self,
+                                               GError ** err);
 };
 
 gboolean gst_amc_surface_texture_update_tex_image        (GstAmcSurfaceTexture *texture,
@@ -90,6 +94,9 @@ gboolean gst_amc_surface_texture_set_on_frame_available_callback (GstAmcSurfaceT
                                                                   GstAmcSurfaceTextureOnFrameAvailableCallback callback,
                                                                   gpointer user_data,
                                                                   GError ** err);
+
+ANativeWindow * gst_amc_surface_texture_acquire_a_native_window (GstAmcSurfaceTexture * self,
+                                                                 GError ** err);
 
 G_END_DECLS
 

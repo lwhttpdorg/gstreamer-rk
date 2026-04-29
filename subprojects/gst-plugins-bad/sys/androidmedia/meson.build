@@ -24,6 +24,7 @@ androidmedia_sources = [
 ndk_sources = [
   'ndk/gstamc-codec-ndk.c',
   'ndk/gstamc-format-ndk.c',
+  'ndk/gstamcsurfacetexture-ndk.c',
 ]
 
 androidmedia_headers = [
@@ -85,7 +86,7 @@ extra_cargs = [
 # Build an Ndk support if its headers exists. We don't actually link into it
 # but use only type definations (and then rely on dlopen and dlsym), so this
 # doesn't affect compatibility with older Android versions.
-if cc.check_header('media/NdkMediaCodec.h')
+if cc.check_header('media/NdkMediaCodec.h') and cc.check_header('android/surface_texture.h')
   androidmedia_sources += ndk_sources
   extra_cargs += [ '-DHAVE_NDKMEDIA' ]
   extra_deps += [ cc.find_library('android', required : true) ]
@@ -96,7 +97,8 @@ gstandroidmedia = library('gstandroidmedia',
   c_args : [gst_plugins_bad_args, extra_cargs],
   include_directories : [configinc],
   dependencies : [gstgl_dep, gstpbutils_dep, gstaudio_dep, gstvideo_dep,
-                  gstphotography_dep, gmodule_dep, orc_dep, extra_deps],
+                  gstphotography_dep, gio_dep, gmodule_dep, orc_dep,
+                  extra_deps],
   install : true,
   install_dir : plugins_install_dir)
 

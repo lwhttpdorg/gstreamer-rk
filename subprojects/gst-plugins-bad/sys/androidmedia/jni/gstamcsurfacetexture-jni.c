@@ -26,12 +26,17 @@
 #endif
 
 #include "gstjniutils.h"
+#include "gstamcsurface.h"
 #include "gstamcsurfacetexture-jni.h"
 #include "gstamc-jni.h"
 
-struct _GstAmcSurfaceTextureJNI
+#include <gio/gio.h>
+
+#include <android/native_window.h>
+#include <android/native_window_jni.h>
+
+typedef struct
 {
-  GstAmcSurfaceTexture parent_instance;
   jobject jobject;
   gint texture_id;
 
@@ -39,7 +44,7 @@ struct _GstAmcSurfaceTextureJNI
   jmethodID set_context_id;
   GstAmcSurfaceTextureOnFrameAvailableCallback callback;
   gpointer user_data;
-};
+} GstAmcSurfaceTextureJNIPrivate;
 
 static struct
 {
@@ -54,9 +59,14 @@ static struct
   jmethodID release;
 } surface_texture;
 
+static void gst_amc_surface_texture_jni_initable_iface_init (GInitableIface *
+    iface);
 
-G_DEFINE_TYPE (GstAmcSurfaceTextureJNI, gst_amc_surface_texture_jni,
-    GST_TYPE_AMC_SURFACE_TEXTURE);
+G_DEFINE_TYPE_WITH_CODE (GstAmcSurfaceTextureJNI,
+    gst_amc_surface_texture_jni, GST_TYPE_AMC_SURFACE_TEXTURE,
+    G_ADD_PRIVATE (GstAmcSurfaceTextureJNI)
+    G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
+        gst_amc_surface_texture_jni_initable_iface_init));
 
 gboolean
 gst_amc_surface_texture_jni_static_init (void)
@@ -147,11 +157,13 @@ gst_amc_surface_texture_jni_update_tex_image (GstAmcSurfaceTexture * base,
     GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
 
   env = gst_amc_jni_get_env ();
 
-  return gst_amc_jni_call_void_method (env, err, self->jobject,
+  return gst_amc_jni_call_void_method (env, err, priv->jobject,
       surface_texture.update_tex_image);
 }
 
@@ -160,15 +172,17 @@ gst_amc_surface_texture_jni_detach_from_gl_context (GstAmcSurfaceTexture * base,
     GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
   gboolean ret;
 
   env = gst_amc_jni_get_env ();
 
   ret =
-      gst_amc_jni_call_void_method (env, err, self->jobject,
+      gst_amc_jni_call_void_method (env, err, priv->jobject,
       surface_texture.detach_from_gl_context);
-  self->texture_id = 0;
+  priv->texture_id = 0;
   return ret;
 }
 
@@ -177,15 +191,17 @@ gst_amc_surface_texture_jni_attach_to_gl_context (GstAmcSurfaceTexture * base,
     gint texture_id, GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
   gboolean ret;
 
   env = gst_amc_jni_get_env ();
 
   ret =
-      gst_amc_jni_call_void_method (env, err, self->jobject,
+      gst_amc_jni_call_void_method (env, err, priv->jobject,
       surface_texture.attach_to_gl_context, texture_id);
-  self->texture_id = texture_id;
+  priv->texture_id = texture_id;
   return ret;
 }
 
@@ -194,6 +210,8 @@ gst_amc_surface_texture_jni_get_transform_matrix (GstAmcSurfaceTexture * base,
     gfloat * matrix, GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
   gboolean ret;
   /* 4x4 Matrix */
@@ -204,7 +222,7 @@ gst_amc_surface_texture_jni_get_transform_matrix (GstAmcSurfaceTexture * base,
 
   floatarray = (*env)->NewFloatArray (env, size);
   ret =
-      gst_amc_jni_call_void_method (env, err, self->jobject,
+      gst_amc_jni_call_void_method (env, err, priv->jobject,
       surface_texture.get_transform_matrix, floatarray);
   if (ret) {
     (*env)->GetFloatArrayRegion (env, floatarray, 0, size, (jfloat *) matrix);
@@ -219,11 +237,13 @@ gst_amc_surface_texture_jni_get_timestamp (GstAmcSurfaceTexture * base,
     gint64 * result, GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
 
   env = gst_amc_jni_get_env ();
 
-  return gst_amc_jni_call_long_method (env, err, self->jobject,
+  return gst_amc_jni_call_long_method (env, err, priv->jobject,
       surface_texture.get_timestamp, result);
 }
 
@@ -231,11 +251,13 @@ static gboolean
 gst_amc_surface_texture_jni_release (GstAmcSurfaceTexture * base, GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
 
   env = gst_amc_jni_get_env ();
 
-  return gst_amc_jni_call_void_method (env, err, self->jobject,
+  return gst_amc_jni_call_void_method (env, err, priv->jobject,
       surface_texture.release);
 }
 
@@ -244,15 +266,23 @@ on_frame_available_cb (JNIEnv * env, jobject thiz,
     long long context, jobject surfaceTexture)
 {
   GstAmcSurfaceTextureJNI *self = JLONG_TO_GPOINTER (context);
-  if (!self || !self->callback)
+  GstAmcSurfaceTextureJNIPrivate *priv = NULL;
+
+  if (!self)
     return;
 
-  self->callback (GST_AMC_SURFACE_TEXTURE (self), self->user_data);
+  priv = gst_amc_surface_texture_jni_get_instance_private (self);
+  if (!priv->callback)
+    return;
+
+  priv->callback (GST_AMC_SURFACE_TEXTURE (self), priv->user_data);
 }
 
 static gboolean
 create_listener (GstAmcSurfaceTextureJNI * self, JNIEnv * env, GError ** err)
 {
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   jclass listener_cls = NULL;
   jmethodID constructor_id = 0;
 
@@ -283,40 +313,43 @@ create_listener (GstAmcSurfaceTextureJNI * self, JNIEnv * env, GError ** err)
     goto done;
   }
 
-  self->set_context_id =
+  priv->set_context_id =
       gst_amc_jni_get_method_id (env, err, listener_cls, "setContext", "(J)V");
-  if (!self->set_context_id) {
+  if (!priv->set_context_id) {
     goto done;
   }
 
-  self->listener =
+  priv->listener =
       gst_amc_jni_new_object (env, err, TRUE, listener_cls, constructor_id);
-  if (!self->listener) {
+  if (!priv->listener) {
     goto done;
   }
 
-  if (!gst_amc_jni_call_void_method (env, err, self->listener,
-          self->set_context_id, GPOINTER_TO_JLONG (self))) {
-    gst_amc_jni_object_unref (env, self->listener);
-    self->listener = NULL;
+  if (!gst_amc_jni_call_void_method (env, err, priv->listener,
+          priv->set_context_id, GPOINTER_TO_JLONG (self))) {
+    gst_amc_jni_object_unref (env, priv->listener);
+    priv->listener = NULL;
   }
 
 done:
   gst_amc_jni_object_unref (env, listener_cls);
 
-  return self->listener != NULL;
+  return priv->listener != NULL;
 }
 
 static gboolean
 remove_listener (GstAmcSurfaceTextureJNI * self, JNIEnv * env, GError ** err)
 {
-  if (self->listener) {
-    if (!gst_amc_jni_call_void_method (env, err, self->listener,
-            self->set_context_id, GPOINTER_TO_JLONG (NULL)))
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
+
+  if (priv->listener) {
+    if (!gst_amc_jni_call_void_method (env, err, priv->listener,
+            priv->set_context_id, GPOINTER_TO_JLONG (NULL)))
       return FALSE;
 
-    gst_amc_jni_object_unref (env, self->listener);
-    self->listener = NULL;
+    gst_amc_jni_object_unref (env, priv->listener);
+    priv->listener = NULL;
   }
 
   return TRUE;
@@ -329,6 +362,8 @@ static gboolean
     GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
   GError *local_error = NULL;
 
@@ -337,8 +372,8 @@ static gboolean
   if (!remove_listener (self, env, err))
     return FALSE;
 
-  self->callback = callback;
-  self->user_data = user_data;
+  priv->callback = callback;
+  priv->user_data = user_data;
   if (callback == NULL)
     return TRUE;
 
@@ -348,8 +383,8 @@ static gboolean
     return FALSE;
   }
 
-  if (!gst_amc_jni_call_void_method (env, err, self->jobject,
-          surface_texture.set_on_frame_available_listener, self->listener)) {
+  if (!gst_amc_jni_call_void_method (env, err, priv->jobject,
+          surface_texture.set_on_frame_available_listener, priv->listener)) {
     remove_listener (self, env, NULL);
     return FALSE;
   }
@@ -357,10 +392,38 @@ static gboolean
   return TRUE;
 }
 
+static ANativeWindow *
+gst_amc_surface_texture_jni_acquire_a_native_window (GstAmcSurfaceTexture *
+    base, GError ** err)
+{
+  GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (base);
+  JNIEnv *env;
+  ANativeWindow *native_window;
+
+  GstAmcSurface *surface = gst_amc_surface_new (self, err);
+  if (!surface)
+    return NULL;
+
+  env = gst_amc_jni_get_env ();
+  native_window = ANativeWindow_fromSurface (env, surface->jobject);
+
+  g_object_unref (surface);
+
+  if (!native_window) {
+    g_set_error (err, GST_LIBRARY_ERROR,
+        GST_LIBRARY_ERROR_FAILED,
+        "Failed to obtain ANativeWindow from Surface");
+  }
+
+  return native_window;
+}
+
 static void
 gst_amc_surface_texture_jni_dispose (GObject * object)
 {
   GstAmcSurfaceTextureJNI *self = GST_AMC_SURFACE_TEXTURE_JNI (object);
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
   JNIEnv *env;
   GError *err = NULL;
 
@@ -374,8 +437,8 @@ gst_amc_surface_texture_jni_dispose (GObject * object)
 
   remove_listener (self, env, NULL);
 
-  if (self->jobject) {
-    gst_amc_jni_object_unref (env, self->jobject);
+  if (priv->jobject) {
+    gst_amc_jni_object_unref (env, priv->jobject);
   }
 
   G_OBJECT_CLASS (gst_amc_surface_texture_jni_parent_class)->dispose (object);
@@ -403,6 +466,8 @@ gst_amc_surface_texture_jni_class_init (GstAmcSurfaceTextureJNIClass * klass)
   surface_texture_class->release = gst_amc_surface_texture_jni_release;
   surface_texture_class->set_on_frame_available_callback =
       gst_amc_surface_texture_jni_set_on_frame_available_callback;
+  surface_texture_class->acquire_a_native_window =
+      gst_amc_surface_texture_jni_acquire_a_native_window;
 }
 
 static void
@@ -410,39 +475,54 @@ gst_amc_surface_texture_jni_init (GstAmcSurfaceTextureJNI * self)
 {
 }
 
-GstAmcSurfaceTextureJNI *
-gst_amc_surface_texture_jni_new (GError ** err)
+static gboolean
+gst_amc_surface_texture_jni_initable_init (GInitable * initable,
+    GCancellable * cancellable, GError ** err)
 {
   GstAmcSurfaceTextureJNI *self = NULL;
+  GstAmcSurfaceTextureJNIPrivate *priv = NULL;
   JNIEnv *env;
 
-  self = g_object_new (GST_TYPE_AMC_SURFACE_TEXTURE_JNI, NULL);
+  self = GST_AMC_SURFACE_TEXTURE_JNI (initable);
+  priv = gst_amc_surface_texture_jni_get_instance_private (self);
   env = gst_amc_jni_get_env ();
 
-  self->texture_id = 0;
+  priv->texture_id = 0;
 
-  self->jobject =
+  priv->jobject =
       gst_amc_jni_new_object (env, err, TRUE, surface_texture.jklass,
-      surface_texture.constructor, self->texture_id);
-  if (self->jobject == NULL) {
-    goto error;
+      surface_texture.constructor, priv->texture_id);
+  if (priv->jobject == NULL) {
+    return FALSE;
   }
 
   if (!gst_amc_surface_texture_jni_detach_from_gl_context ((GstAmcSurfaceTexture
               *) self, err)) {
-    goto error;
+    return FALSE;
   }
 
-  return self;
+  return TRUE;
+}
 
-error:
-  if (self)
-    g_object_unref (self);
-  return NULL;
+static void
+gst_amc_surface_texture_jni_initable_iface_init (GInitableIface * iface)
+{
+  iface->init = gst_amc_surface_texture_jni_initable_init;
+}
+
+GstAmcSurfaceTextureJNI *
+gst_amc_surface_texture_jni_new (GError ** err)
+{
+  return
+      GST_AMC_SURFACE_TEXTURE_JNI (g_initable_new
+      (GST_TYPE_AMC_SURFACE_TEXTURE_JNI, NULL, err, NULL));
 }
 
 jobject
 gst_amc_surface_texture_jni_get_jobject (GstAmcSurfaceTextureJNI * self)
 {
-  return self->jobject;
+  GstAmcSurfaceTextureJNIPrivate *priv =
+      gst_amc_surface_texture_jni_get_instance_private (self);
+
+  return priv->jobject;
 }

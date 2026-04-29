@@ -83,6 +83,9 @@ gst_amc_static_init (void)
   gst_amc_format_vtable = &gst_amc_format_ndk_vtable;
   gst_amc_codec_vtable = &gst_amc_codec_ndk_vtable;
 
+  /* Try to initialize NDK SurfaceTexture, but ignore if fails. */
+  gst_amc_surface_texture_ndk_static_init ();
+
   return TRUE;
 
 #endif /* HAVE_NDKMEDIA */

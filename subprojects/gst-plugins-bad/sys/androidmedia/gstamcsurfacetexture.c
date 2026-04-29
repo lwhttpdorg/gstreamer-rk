@@ -103,3 +103,12 @@ gst_amc_surface_texture_set_on_frame_available_callback (GstAmcSurfaceTexture *
   return klass->set_on_frame_available_callback (self, callback, user_data,
       err);
 }
+
+ANativeWindow *
+gst_amc_surface_texture_acquire_a_native_window (GstAmcSurfaceTexture * self,
+    GError ** err)
+{
+  GstAmcSurfaceTextureClass *klass;
+  klass = GST_AMC_SURFACE_TEXTURE_GET_CLASS (self);
+  return klass->acquire_a_native_window (self, err);
+}
