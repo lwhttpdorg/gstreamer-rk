@@ -126,7 +126,7 @@ plugin_init (GstPlugin * plugin)
     if (ref->info->plugname == NULL)
       continue;
 
-    /* Blacklist some plugins */
+    /* Skip some plugins */
     if (strcmp (ref->info->plugname, "gstreamer") == 0 ||
         strcmp (ref->info->plugname, "gdkpixbuf") == 0) {
       skip = TRUE;

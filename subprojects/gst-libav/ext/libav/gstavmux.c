@@ -140,7 +140,7 @@ typedef struct
 static const char *
 gst_ffmpegmux_get_replacement (const char *name)
 {
-  static const GstFFMpegMuxReplacement blacklist[] = {
+  static const GstFFMpegMuxReplacement blocklist[] = {
     {"avi", "avimux"},
     {"matroska", "matroskamux"},
     {"mov", "qtmux"},
@@ -163,9 +163,9 @@ gst_ffmpegmux_get_replacement (const char *name)
   };
   guint i;
 
-  for (i = 0; i < sizeof (blacklist) / sizeof (blacklist[0]); i++) {
-    if (strcmp (blacklist[i].name, name) == 0) {
-      return blacklist[i].replacement;
+  for (i = 0; i < sizeof (blocklist) / sizeof (blocklist[0]); i++) {
+    if (strcmp (blocklist[i].name, name) == 0) {
+      return blocklist[i].replacement;
     }
   }
 

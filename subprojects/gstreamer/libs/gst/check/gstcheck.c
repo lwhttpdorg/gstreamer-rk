@@ -317,7 +317,7 @@ print_plugins (void)
   for (l = plugins; l != NULL; l = l->next) {
     GstPlugin *plugin = GST_PLUGIN (l->data);
 
-    if (strcmp (gst_plugin_get_source (plugin), "BLACKLIST") != 0) {
+    if (!GST_OBJECT_FLAG_IS_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED)) {
       GST_LOG ("%20s@%s", gst_plugin_get_name (plugin),
           GST_STR_NULL (gst_plugin_get_filename (plugin)));
     }
@@ -1205,11 +1205,11 @@ gst_check_func_is_in_list (const gchar * env_var, const gchar * func_name)
 gboolean
 _gst_check_run_test_func (const gchar * func_name)
 {
-  /* if we have a whitelist, run it only if it's in the whitelist */
+  /* if we have an allowlist, run it only if it's in the allowlist */
   if (gst_check_have_checks_list ("GST_CHECKS"))
     return gst_check_func_is_in_list ("GST_CHECKS", func_name);
 
-  /* if we have a blacklist, run it only if it's not in the blacklist */
+  /* if we have a skiplist, run it only if it's not in the skiplist */
   if (gst_check_have_checks_list ("GST_CHECKS_IGNORE"))
     return !gst_check_func_is_in_list ("GST_CHECKS_IGNORE", func_name);
 

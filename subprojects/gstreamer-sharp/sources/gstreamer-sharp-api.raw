@@ -669,7 +669,7 @@
     </enum>
     <enum name="PluginFlags" cname="GstPluginFlags" type="flags" gtype="gst_plugin_flags_get_type">
       <member cname="GST_PLUGIN_FLAG_CACHED" name="Cached" value="16"/>
-      <member cname="GST_PLUGIN_FLAG_BLACKLISTED" name="Blacklisted" value="32"/>
+      <member cname="GST_PLUGIN_FLAG_BLOCKLISTED" name="Blocklisted" value="32"/>
     </enum>
     <enum name="QueryTypeFlags" cname="GstQueryTypeFlags" type="flags" gtype="gst_query_type_flags_get_type">
       <member cname="GST_QUERY_TYPE_UPSTREAM" name="Upstream" value="1"/>

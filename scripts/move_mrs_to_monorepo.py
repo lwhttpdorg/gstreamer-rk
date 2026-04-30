@@ -576,7 +576,7 @@ class GstMRMover:
                     fprint(
                         f'Moving {mr.source_branch} "{mr.title}": {URL}{from_project.path_with_namespace}/merge_requests/{mr.iid}... ')
                     if mr.source_branch in self.skipped_branches:
-                        print(f"{yellow('SKIPPED')} (blacklisted branch)")
+                        print(f"{yellow('SKIPPED')} (skiplisted branch)")
                         failed_mrs.append(
                             f"{URL}{from_project.path_with_namespace}/merge_requests/{mr.iid}")
                         continue

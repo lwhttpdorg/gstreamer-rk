@@ -28,7 +28,7 @@ from launcher.baseclasses import MediaFormatCombination
 
 TEST_MANAGER = "validate"
 
-BLACKLIST = [
+SKIPLIST = [
     ('validate.dash.playback.trick_mode_seeks.DASHIF_TestCases_2a_qualcomm_1_MultiResMPEG2',
      'https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/4670'),
     ('validate.dash.playback.trick_mode_seeks.DASHIF_TestCases_1a_netflix_exMPD_BIP_TC1',
@@ -43,7 +43,7 @@ def setup_tests(test_manager, options):
     stream_info_dir = os.path.join(testsuite_dir, "adaptive")
     if os.path.isdir(stream_info_dir):
         options.add_paths(stream_info_dir)
-    test_manager.set_default_blacklist(BLACKLIST)
+    test_manager.set_default_skiplist(SKIPLIST)
     # test_manager.add_expected_issues(EXPECTED_ISSUES)
     test_manager.register_defaults()
     scenarios = test_manager.get_scenarios()

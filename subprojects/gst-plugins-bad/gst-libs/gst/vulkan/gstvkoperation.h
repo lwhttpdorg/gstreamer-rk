@@ -146,6 +146,8 @@ GST_VULKAN_API
 gboolean                gst_vulkan_operation_end_query          (GstVulkanOperation * self,
                                                                  guint32 id);
 GST_VULKAN_API
+GstVulkanFence *        gst_vulkan_operation_get_last_fence     (GstVulkanOperation * self) G_GNUC_WARN_UNUSED_RESULT;
+GST_VULKAN_API
 gboolean                gst_vulkan_operation_use_sync2          (GstVulkanOperation * self);
 GST_VULKAN_API
 gboolean                gst_vulkan_operation_pipeline_barrier2  (GstVulkanOperation * self,

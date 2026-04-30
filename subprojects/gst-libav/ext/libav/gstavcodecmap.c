@@ -845,7 +845,7 @@ gst_ff_aud_caps_new (AVCodecContext * context, AVCodec * codec,
 
     /* regardless of encode/decode, open up channels if applicable */
     /* Until decoders/encoders expose the maximum number of channels
-     * they support, we whitelist them here. */
+     * they support, we allowlist them here. */
     switch (codec_id) {
       case AV_CODEC_ID_WMAPRO:
       case AV_CODEC_ID_TRUEHD:

@@ -81,7 +81,7 @@
 static guint _num_static_plugins;       /* 0    */
 static GstPluginDesc *_static_plugins;  /* NULL */
 static gboolean _gst_plugin_inited;
-static gchar **_plugin_loading_whitelist;       /* NULL */
+static gchar **_plugin_loading_allowlist;       /* NULL */
 
 /* static variables for segfault handling of plugin loading */
 static char *_gst_plugin_fault_handler_filename = NULL;
@@ -310,7 +310,7 @@ gst_plugin_register_static_full (gint major_version, gint minor_version,
 void
 _priv_gst_plugin_initialize (void)
 {
-  const gchar *whitelist;
+  const gchar *allowlist;
   guint i;
 
   _gst_plugin_inited = TRUE;
@@ -319,12 +319,20 @@ _priv_gst_plugin_initialize (void)
   _priv_gst_plugin_api_flags_quark =
       g_quark_from_static_string ("plugin-api-flags");
 
-  whitelist = g_getenv ("GST_PLUGIN_LOADING_WHITELIST");
-  if (whitelist != NULL && *whitelist != '\0') {
-    _plugin_loading_whitelist = g_strsplit (whitelist,
+  allowlist = g_getenv ("GST_PLUGIN_LOADING_ALLOWLIST");
+  if (allowlist == NULL || *allowlist == '\0') {
+    /* Check for deprecated env var */
+    allowlist = g_getenv ("GST_PLUGIN_LOADING_WHITELIST");
+    if (allowlist != NULL && *allowlist != '\0') {
+      g_warning ("The environment variable GST_PLUGIN_LOADING_WHITELIST is "
+          "deprecated, please use GST_PLUGIN_LOADING_ALLOWLIST instead");
+    }
+  }
+  if (allowlist != NULL && *allowlist != '\0') {
+    _plugin_loading_allowlist = g_strsplit (allowlist,
         G_SEARCHPATH_SEPARATOR_S, -1);
-    for (i = 0; _plugin_loading_whitelist[i] != NULL; ++i) {
-      GST_INFO ("plugins whitelist entry: %s", _plugin_loading_whitelist[i]);
+    for (i = 0; _plugin_loading_allowlist[i] != NULL; ++i) {
+      GST_INFO ("plugins allowlist entry: %s", _plugin_loading_allowlist[i]);
     }
   }
 
@@ -346,7 +354,7 @@ _priv_gst_plugin_initialize (void)
   }
 }
 
-/* Whitelist entry format:
+/* Allowlist entry format:
  *
  *   plugin1,plugin2@pathprefix or
  *   plugin1,plugin2@* or just
@@ -360,14 +368,14 @@ _priv_gst_plugin_initialize (void)
  * name and the plugin's source package name, to keep the format simple.
  */
 static gboolean
-gst_plugin_desc_matches_whitelist_entry (const GstPluginDesc * desc,
+gst_plugin_desc_matches_allowlist_entry (const GstPluginDesc * desc,
     const gchar * filename, const gchar * pattern)
 {
   const gchar *sep;
   gboolean ret = FALSE;
   gchar *name;
 
-  GST_LOG ("Whitelist pattern '%s', plugin: %s of %s@%s", pattern, desc->name,
+  GST_LOG ("Allowlist pattern '%s', plugin: %s of %s@%s", pattern, desc->name,
       desc->source, GST_STR_NULL (filename));
 
   if (strcmp (pattern, "*") == 0)
@@ -393,7 +401,7 @@ gst_plugin_desc_matches_whitelist_entry (const GstPluginDesc * desc,
 
   g_strstrip (name);
   if (!g_ascii_isalnum (*name)) {
-    GST_WARNING ("Invalid whitelist pattern: %s", pattern);
+    GST_WARNING ("Invalid allowlist pattern: %s", pattern);
     goto done;
   }
 
@@ -425,41 +433,41 @@ done:
 }
 
 gboolean
-priv_gst_plugin_desc_is_whitelisted (const GstPluginDesc * desc,
+priv_gst_plugin_desc_is_allowlisted (const GstPluginDesc * desc,
     const gchar * filename)
 {
   gchar **entry;
 
-  if (_plugin_loading_whitelist == NULL)
+  if (_plugin_loading_allowlist == NULL)
     return TRUE;
 
-  for (entry = _plugin_loading_whitelist; *entry != NULL; ++entry) {
-    if (gst_plugin_desc_matches_whitelist_entry (desc, filename, *entry)) {
-      GST_LOG ("Plugin %s is in whitelist", filename);
+  for (entry = _plugin_loading_allowlist; *entry != NULL; ++entry) {
+    if (gst_plugin_desc_matches_allowlist_entry (desc, filename, *entry)) {
+      GST_LOG ("Plugin %s is in allowlist", filename);
       return TRUE;
     }
   }
 
-  GST_LOG ("Plugin %s (package %s, file %s) not in whitelist", desc->name,
+  GST_LOG ("Plugin %s (package %s, file %s) not in allowlist", desc->name,
       desc->source, filename);
   return FALSE;
 }
 
 gboolean
-priv_gst_plugin_loading_have_whitelist (void)
+priv_gst_plugin_loading_have_allowlist (void)
 {
-  return (_plugin_loading_whitelist != NULL);
+  return (_plugin_loading_allowlist != NULL);
 }
 
 guint32
-priv_gst_plugin_loading_get_whitelist_hash (void)
+priv_gst_plugin_loading_get_allowlist_hash (void)
 {
   guint32 hash = 0;
 
-  if (_plugin_loading_whitelist != NULL) {
+  if (_plugin_loading_allowlist != NULL) {
     gchar **w;
 
-    for (w = _plugin_loading_whitelist; *w != NULL; ++w)
+    for (w = _plugin_loading_allowlist; *w != NULL; ++w)
       hash ^= g_str_hash (*w);
   }
 
@@ -924,12 +932,12 @@ _priv_gst_plugin_load_file_for_registry (const gchar * filename,
 
   desc = (const GstPluginDesc *) ptr;
 
-  if (priv_gst_plugin_loading_have_whitelist () &&
-      !priv_gst_plugin_desc_is_whitelisted (desc, filename)) {
-    GST_INFO ("Whitelist specified and plugin not in whitelist, not loading: "
+  if (priv_gst_plugin_loading_have_allowlist () &&
+      !priv_gst_plugin_desc_is_allowlisted (desc, filename)) {
+    GST_INFO ("Allowlist specified and plugin not in allowlist, not loading: "
         "name=%s, package=%s, file=%s", desc->name, desc->source, filename);
     g_set_error (error, GST_PLUGIN_ERROR, GST_PLUGIN_ERROR_MODULE,
-        "Not loading plugin file \"%s\", not in whitelist", filename);
+        "Not loading plugin file \"%s\", not in allowlist", filename);
     g_module_close (module);
     goto return_error;
   }

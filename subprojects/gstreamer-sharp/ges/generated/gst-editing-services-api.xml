@@ -3760,8 +3760,8 @@
         <parameters>
           <parameter name="element" type="GstElement*" />
           <parameter allow-none="1" name="wanted_categories" type="const gchar**" array="true" null_term_array="true" element_type="gchar*" />
-          <parameter allow-none="1" name="blacklist" type="const gchar**" array="true" null_term_array="true" element_type="gchar*" />
-          <parameter allow-none="1" name="whitelist" type="const gchar**" array="true" null_term_array="true" element_type="gchar*" />
+          <parameter allow-none="1" name="blocklist" type="const gchar**" array="true" null_term_array="true" element_type="gchar*" />
+          <parameter allow-none="1" name="allowlist" type="const gchar**" array="true" null_term_array="true" element_type="gchar*" />
         </parameters>
       </method>
       <method name="ClampControlSource" cname="ges_track_element_clamp_control_source" version="1.18">

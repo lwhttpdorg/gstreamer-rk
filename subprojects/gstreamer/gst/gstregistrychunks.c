@@ -894,10 +894,11 @@ _priv_gst_registry_chunks_load_plugin (GstRegistry * registry, gchar ** in,
   if (cache_str != NULL && *cache_str != '\0')
     plugin->priv->cache_data = gst_structure_from_string (cache_str, NULL);
 
-  /* If the license string is 'BLACKLIST', mark this as a blacklisted
-   * plugin */
-  if (strcmp (plugin->desc.license, "BLACKLIST") == 0)
-    GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED);
+  /* If the license string is 'BLOCKLIST', or 'BLACKLIST'
+   * (legacy), mark this as a blocklisted plugin */
+  if (strcmp (plugin->desc.license, "BLOCKLIST") == 0 ||
+      strcmp (plugin->desc.license, "BLACKLIST") == 0)
+    GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED);
 
   plugin->basename = g_path_get_basename (plugin->filename);
 

@@ -1247,16 +1247,10 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
   GstVulkanImageView *render_img_views[GST_VIDEO_MAX_PLANES] = { NULL, };
   GstVulkanImageMemory *out_img_mems[GST_VIDEO_MAX_PLANES] = { NULL, };
   GstBuffer *render_buf = NULL;
-  GstVulkanFence *fence = NULL;
-  GstVulkanCommandBuffer *cmd_buf;
+  GstVulkanOperation *exec;
   GError *error = NULL;
-  VkResult err;
   int i;
   guint in_n_mems, out_n_mems;
-
-  fence = gst_vulkan_device_create_fence (vfilter->device, &error);
-  if (!fence)
-    goto error;
 
   if (!gst_vulkan_full_screen_quad_set_input_buffer (conv->quad, inbuf, &error))
     goto error;
@@ -1271,10 +1265,6 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     }
     in_img_views[i] =
         gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *) img_mem);
-    gst_vulkan_trash_list_add (conv->quad->trash_list,
-        gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            (GstMiniObject *) in_img_views[i]));
   }
 
   {
@@ -1327,10 +1317,6 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
         gst_buffer_append_memory (render_buf,
             gst_memory_ref ((GstMemory *) render_img_mems[i]));
       }
-      gst_vulkan_trash_list_add (conv->quad->trash_list,
-          gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-              gst_vulkan_trash_mini_object_unref,
-              (GstMiniObject *) render_buf));
     } else {
       render_buf = outbuf;
     }
@@ -1345,10 +1331,6 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
       render_img_views[i] =
           gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *)
           img_mem);
-      gst_vulkan_trash_list_add (conv->quad->trash_list,
-          gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-              gst_vulkan_trash_mini_object_unref,
-              (GstMiniObject *) render_img_views[i]));
     }
   }
 
@@ -1367,35 +1349,14 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     gst_memory_unref (uniforms);
   }
 
-  if (!gst_vulkan_full_screen_quad_prepare_draw (conv->quad, fence, &error))
+  if (!gst_vulkan_full_screen_quad_prepare_draw (conv->quad, &error))
     goto error;
 
-  if (!(cmd_buf =
-          gst_vulkan_command_pool_create (conv->quad->cmd_pool, &error)))
+  if (!gst_vulkan_full_screen_quad_fill_command_buffer (conv->quad, &error))
     goto error;
 
-  {
-    VkCommandBufferBeginInfo cmd_buf_info = { 0, };
-
-    /* *INDENT-OFF* */
-    cmd_buf_info = (VkCommandBufferBeginInfo) {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = NULL
-    };
-    /* *INDENT-ON* */
-
-    gst_vulkan_command_buffer_lock (cmd_buf);
-    err = vkBeginCommandBuffer (cmd_buf->cmd, &cmd_buf_info);
-    if (gst_vulkan_error_to_g_error (err, &error, "vkBeginCommandBuffer") < 0)
-      goto error;
-  }
-
-  if (!gst_vulkan_full_screen_quad_fill_command_buffer (conv->quad, cmd_buf,
-          fence, &error))
-    goto unlock_error;
-
+  /* Record post-render blits for sub-sampled planes */
+  exec = gst_vulkan_full_screen_quad_get_operation (conv->quad);
   for (i = 0; i < out_n_mems; i++) {
     if (render_img_mems[i] != out_img_mems[i]) {
       VkImageMemoryBarrier out_image_memory_barrier;
@@ -1410,7 +1371,6 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
           .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
           .oldLayout = render_img_mems[i]->barrier.image_layout,
           .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-          /* FIXME: implement exclusive transfers */
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .image = render_img_mems[i]->image,
@@ -1423,7 +1383,6 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
           .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
           .oldLayout = out_img_mems[i]->barrier.image_layout,
           .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-          /* FIXME: implement exclusive transfers */
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .image = out_img_mems[i]->image,
@@ -1464,7 +1423,9 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
       GST_LOG_OBJECT (conv, "blitting plane %u from %p to %p", i,
           render_img_mems[i], out_img_mems[i]);
 
-      vkCmdPipelineBarrier (cmd_buf->cmd,
+      gst_vulkan_command_buffer_lock (exec->cmd_buf);
+
+      vkCmdPipelineBarrier (exec->cmd_buf->cmd,
           render_img_mems[i]->barrier.parent.pipeline_stages,
           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
           &render_image_memory_barrier);
@@ -1476,7 +1437,7 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
       render_img_mems[i]->barrier.image_layout =
           render_image_memory_barrier.newLayout;
 
-      vkCmdPipelineBarrier (cmd_buf->cmd,
+      vkCmdPipelineBarrier (exec->cmd_buf->cmd,
           out_img_mems[i]->barrier.parent.pipeline_stages,
           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
           &out_image_memory_barrier);
@@ -1490,38 +1451,27 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
 
       /* XXX: This is mostly right for a downsampling pass however if
        * anything is more complicated, then we will need a new render pass */
-      vkCmdBlitImage (cmd_buf->cmd, render_img_mems[i]->image,
+      vkCmdBlitImage (exec->cmd_buf->cmd, render_img_mems[i]->image,
           render_img_mems[i]->barrier.image_layout, out_img_mems[i]->image,
           out_img_mems[i]->barrier.image_layout, 1, &blit, VK_FILTER_LINEAR);
 
-      /* XXX: try to reuse this image later */
-      gst_vulkan_trash_list_add (conv->quad->trash_list,
-          gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-              gst_vulkan_trash_mini_object_unref,
-              (GstMiniObject *) render_img_mems[i]));
+      gst_vulkan_command_buffer_unlock (exec->cmd_buf);
     }
   }
 
-  err = vkEndCommandBuffer (cmd_buf->cmd);
-  gst_vulkan_command_buffer_unlock (cmd_buf);
-  if (gst_vulkan_error_to_g_error (err, &error, "vkEndCommandBuffer") < 0)
+  if (!gst_vulkan_full_screen_quad_submit (conv->quad, &error))
     goto error;
 
-  if (!gst_vulkan_full_screen_quad_submit (conv->quad, cmd_buf, fence, &error))
-    goto error;
-
-  gst_vulkan_fence_unref (fence);
+  /* Wait for GPU to finish before freeing scratch resources */
+  if (render_buf != outbuf) {
+    gst_vulkan_operation_wait (gst_vulkan_full_screen_quad_get_operation
+        (conv->quad));
+    gst_buffer_unref (render_buf);
+  }
 
   return GST_FLOW_OK;
 
-unlock_error:
-  if (cmd_buf) {
-    gst_vulkan_command_buffer_unlock (cmd_buf);
-    gst_vulkan_command_buffer_unref (cmd_buf);
-  }
 error:
-  gst_clear_mini_object ((GstMiniObject **) & fence);
-
   GST_ELEMENT_ERROR (bt, LIBRARY, FAILED, ("%s", error->message), (NULL));
   g_clear_error (&error);
   return GST_FLOW_ERROR;

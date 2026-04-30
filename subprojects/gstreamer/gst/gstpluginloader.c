@@ -129,7 +129,7 @@ static gboolean exchange_packets (GstPluginLoader * l);
 static gboolean plugin_loader_replay_pending (GstPluginLoader * l);
 static gboolean plugin_loader_load_and_sync (GstPluginLoader * l,
     PendingPluginEntry * entry);
-static void plugin_loader_create_blacklist_plugin (GstPluginLoader * l,
+static void plugin_loader_create_blocklist_plugin (GstPluginLoader * l,
     PendingPluginEntry * entry);
 static void plugin_loader_cleanup_child (GstPluginLoader * loader);
 static gboolean plugin_loader_sync_with_child (GstPluginLoader * l);
@@ -271,9 +271,9 @@ restart:
     if (!plugin_loader_load_and_sync (l, entry)
         && cur == l->pending_plugins) {
       /* Create dummy plugin entry to block re-scanning this file */
-      GST_ERROR ("Plugin file %s failed to load. Blacklisting",
+      GST_ERROR ("Plugin file %s failed to load. Blocklisting",
           entry->filename);
-      plugin_loader_create_blacklist_plugin (l, entry);
+      plugin_loader_create_blocklist_plugin (l, entry);
       l->got_plugin_details = TRUE;
       /* Now remove this crashy plugin from the head of the list */
       l->pending_plugins = g_list_delete_link (cur, cur);
@@ -334,7 +334,7 @@ plugin_loader_load_and_sync (GstPluginLoader * l, PendingPluginEntry * entry)
 }
 
 static void
-plugin_loader_create_blacklist_plugin (GstPluginLoader * l,
+plugin_loader_create_blocklist_plugin (GstPluginLoader * l,
     PendingPluginEntry * entry)
 {
   GstPlugin *plugin = g_object_new (GST_TYPE_PLUGIN, NULL);
@@ -342,18 +342,18 @@ plugin_loader_create_blacklist_plugin (GstPluginLoader * l,
   plugin->filename = g_strdup (entry->filename);
   plugin->file_mtime = entry->file_mtime;
   plugin->file_size = entry->file_size;
-  GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLACKLISTED);
+  GST_OBJECT_FLAG_SET (plugin, GST_PLUGIN_FLAG_BLOCKLISTED);
 
   plugin->basename = g_path_get_basename (plugin->filename);
   plugin->desc.name = g_intern_string (plugin->basename);
-  plugin->desc.description = "Plugin for blacklisted file";
+  plugin->desc.description = "Plugin for blocklisted file";
   plugin->desc.version = "0.0.0";
-  plugin->desc.license = "BLACKLIST";
+  plugin->desc.license = "BLOCKLIST";
   plugin->desc.source = plugin->desc.license;
   plugin->desc.package = plugin->desc.license;
   plugin->desc.origin = plugin->desc.license;
 
-  GST_DEBUG ("Adding blacklist plugin '%s'", plugin->desc.name);
+  GST_DEBUG ("Adding blocklist plugin '%s'", plugin->desc.name);
   gst_registry_add_plugin (l->registry, plugin);
 }
 
@@ -907,8 +907,8 @@ handle_rx_packet (GstPluginLoader * l,
         /* We got a set of plugin details - remember it for later */
         l->got_plugin_details = TRUE;
       } else if (entry != NULL) {
-        /* Create a blacklist entry for this file to prevent scanning every time */
-        plugin_loader_create_blacklist_plugin (l, entry);
+        /* Create a blocklist entry for this file to prevent scanning every time */
+        plugin_loader_create_blocklist_plugin (l, entry);
         l->got_plugin_details = TRUE;
       }
 

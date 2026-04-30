@@ -1120,7 +1120,7 @@ add_failure:
 static void
 ges_track_element_add_child_props (GESTrackElement * self,
     GstElement * child, const gchar ** wanted_categories,
-    const gchar ** blacklist, const gchar ** whitelist)
+    const gchar ** blocklist, const gchar ** allowlist)
 {
   GstElementFactory *factory;
   const gchar *klass;
@@ -1133,8 +1133,8 @@ ges_track_element_add_child_props (GESTrackElement * self,
   klass = gst_element_class_get_metadata (GST_ELEMENT_GET_CLASS (child),
       GST_ELEMENT_METADATA_KLASS);
 
-  if (factory && strv_find_str (blacklist, GST_OBJECT_NAME (factory))) {
-    GST_DEBUG_OBJECT (self, "%s blacklisted", GST_OBJECT_NAME (factory));
+  if (factory && strv_find_str (blocklist, GST_OBJECT_NAME (factory))) {
+    GST_DEBUG_OBJECT (self, "%s blocklisted", GST_OBJECT_NAME (factory));
     return;
   }
 
@@ -1151,8 +1151,8 @@ ges_track_element_add_child_props (GESTrackElement * self,
       gobject_klass = G_OBJECT_GET_CLASS (child);
       parray = g_object_class_list_properties (gobject_klass, &nb_specs);
       for (i = 0; i < nb_specs; i++) {
-        if ((!whitelist && (parray[i]->flags & G_PARAM_WRITABLE))
-            || (strv_find_str (whitelist, parray[i]->name))) {
+        if ((!allowlist && (parray[i]->flags & G_PARAM_WRITABLE))
+            || (strv_find_str (allowlist, parray[i]->name))) {
           ges_timeline_element_add_child_property (GES_TIMELINE_ELEMENT
               (self), parray[i], G_OBJECT (child));
         }
@@ -1174,21 +1174,21 @@ ges_track_element_add_child_props (GESTrackElement * self,
  * @self: A #GESTrackElement
  * @element: The child object to retrieve properties from
  * @wanted_categories: (array zero-terminated=1) (transfer none) (allow-none):
- * An array of element factory "klass" categories to whitelist, or %NULL
+ * An array of element factory "klass" categories to allowlist, or %NULL
  * to accept all categories
- * @blacklist: (array zero-terminated=1) (transfer none) (allow-none): A
- * blacklist of element factory names, or %NULL to not blacklist any
+ * @blocklist: (array zero-terminated=1) (transfer none) (allow-none): A
+ * blocklist of element factory names, or %NULL to not blocklist any
  * element factory
- * @whitelist: (array zero-terminated=1) (transfer none) (allow-none): A
- * whitelist of element property names, or %NULL to whitelist all
+ * @allowlist: (array zero-terminated=1) (transfer none) (allow-none): A
+ * allowlist of element property names, or %NULL to allowlist all
  * writeable properties
  *
  * Adds all the properties of a #GstElement that match the criteria as
  * children properties of the track element. If the name of @element's
- * #GstElementFactory is not in @blacklist, and the factory's
+ * #GstElementFactory is not in @blocklist, and the factory's
  * #GST_ELEMENT_METADATA_KLASS contains at least one member of
  * @wanted_categories (e.g. #GST_ELEMENT_FACTORY_KLASS_DECODER), then
- * all the properties of @element that are also in @whitelist are added as
+ * all the properties of @element that are also in @allowlist are added as
  * child properties of @self using
  * ges_timeline_element_add_child_property().
  *
@@ -1197,7 +1197,7 @@ ges_track_element_add_child_props (GESTrackElement * self,
 void
 ges_track_element_add_children_props (GESTrackElement * self,
     GstElement * element, const gchar ** wanted_categories,
-    const gchar ** blacklist, const gchar ** whitelist)
+    const gchar ** blocklist, const gchar ** allowlist)
 {
   GValue item = { 0, };
   GstIterator *it;
@@ -1205,7 +1205,7 @@ ges_track_element_add_children_props (GESTrackElement * self,
 
   if (!GST_IS_BIN (element)) {
     ges_track_element_add_child_props (self, element, wanted_categories,
-        blacklist, whitelist);
+        blocklist, allowlist);
     return;
   }
 
@@ -1220,7 +1220,7 @@ ges_track_element_add_children_props (GESTrackElement * self,
 
         if (!g_str_has_prefix (GST_OBJECT_NAME (child), "___ges__")) {
           ges_track_element_add_child_props (self, child, wanted_categories,
-              blacklist, whitelist);
+              blocklist, allowlist);
         }
         g_value_reset (&item);
         break;
@@ -2038,7 +2038,7 @@ ges_track_element_copy_bindings (GESTrackElement * element,
 /**
  * ges_track_element_edit:
  * @object: The #GESTrackElement to edit
- * @layers: (element-type GESLayer) (nullable): A whitelist of layers
+ * @layers: (element-type GESLayer) (nullable): An allowlist of layers
  * where the edit can be performed, %NULL allows all layers in the
  * timeline
  * @mode: The edit mode

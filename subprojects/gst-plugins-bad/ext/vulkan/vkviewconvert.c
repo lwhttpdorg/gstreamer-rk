@@ -1907,14 +1907,10 @@ static GstFlowReturn
 gst_vulkan_view_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     GstBuffer * outbuf)
 {
-  GstVulkanVideoFilter *vfilter = GST_VULKAN_VIDEO_FILTER (bt);
   GstVulkanViewConvert *conv = GST_VULKAN_VIEW_CONVERT (bt);
   GstVulkanImageView *in_img_views[GST_VIDEO_MAX_PLANES] = { NULL, };
   GstVulkanImageView *out_img_views[GST_VIDEO_MAX_PLANES] = { NULL, };
-  GstVulkanCommandBuffer *cmd_buf = NULL;
-  GstVulkanFence *fence = NULL;
   GError *error = NULL;
-  VkResult err;
   guint in_n_mems, out_n_mems;
   int i;
 
@@ -1922,10 +1918,6 @@ gst_vulkan_view_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     goto error;
   if (!gst_vulkan_full_screen_quad_set_output_buffer (conv->quad, outbuf,
           &error))
-    goto error;
-
-  fence = gst_vulkan_device_create_fence (vfilter->device, &error);
-  if (!fence)
     goto error;
 
   in_n_mems = gst_buffer_n_memory (inbuf);
@@ -1938,10 +1930,6 @@ gst_vulkan_view_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     }
     in_img_views[i] =
         gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *) img_mem);
-    gst_vulkan_trash_list_add (conv->quad->trash_list,
-        gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            (GstMiniObject *) in_img_views[i]));
   }
   out_n_mems = gst_buffer_n_memory (outbuf);
   for (i = 0; i < out_n_mems; i++) {
@@ -1953,10 +1941,6 @@ gst_vulkan_view_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     }
     out_img_views[i] =
         gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *) mem);
-    gst_vulkan_trash_list_add (conv->quad->trash_list,
-        gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            (GstMiniObject *) out_img_views[i]));
   }
 
   {
@@ -1971,57 +1955,19 @@ gst_vulkan_view_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     if (!create_descriptor_set_layout (conv, in_n_mems, &error))
       goto error;
 
-  if (!gst_vulkan_full_screen_quad_prepare_draw (conv->quad, fence, &error))
+  if (!gst_vulkan_full_screen_quad_prepare_draw (conv->quad, &error))
     goto error;
-
-  if (!(cmd_buf =
-          gst_vulkan_command_pool_create (conv->quad->cmd_pool, &error)))
-    goto error;
-
-  {
-    VkCommandBufferBeginInfo cmd_buf_info = { 0, };
-
-    /* *INDENT-OFF* */
-    cmd_buf_info = (VkCommandBufferBeginInfo) {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = NULL
-    };
-    /* *INDENT-ON* */
-
-    gst_vulkan_command_buffer_lock (cmd_buf);
-    err = vkBeginCommandBuffer (cmd_buf->cmd, &cmd_buf_info);
-    if (gst_vulkan_error_to_g_error (err, &error, "vkBeginCommandBuffer") < 0)
-      goto error;
-  }
 
   update_descriptor_set (conv, in_img_views, in_n_mems);
-  if (!gst_vulkan_full_screen_quad_fill_command_buffer (conv->quad, cmd_buf,
-          fence, &error))
-    goto unlock_error;
-
-  err = vkEndCommandBuffer (cmd_buf->cmd);
-  gst_vulkan_command_buffer_unlock (cmd_buf);
-  if (gst_vulkan_error_to_g_error (err, &error, "vkEndCommandBuffer") < 0)
+  if (!gst_vulkan_full_screen_quad_fill_command_buffer (conv->quad, &error))
     goto error;
 
-  if (!gst_vulkan_full_screen_quad_submit (conv->quad, cmd_buf, fence, &error))
+  if (!gst_vulkan_full_screen_quad_submit (conv->quad, &error))
     goto error;
-
-  gst_vulkan_fence_unref (fence);
 
   return GST_FLOW_OK;
 
-unlock_error:
-  if (cmd_buf) {
-    gst_vulkan_command_buffer_unlock (cmd_buf);
-    gst_vulkan_command_buffer_unref (cmd_buf);
-  }
-
 error:
-  gst_clear_mini_object ((GstMiniObject **) & fence);
-
   GST_ELEMENT_ERROR (bt, LIBRARY, FAILED, ("%s", error->message), (NULL));
   g_clear_error (&error);
   return GST_FLOW_ERROR;

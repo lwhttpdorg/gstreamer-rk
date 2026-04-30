@@ -124,7 +124,7 @@ fsmod = import('fs')
 test_defines = [
   '-UG_DISABLE_ASSERT',
   '-UG_DISABLE_CAST_CHECKS',
-  '-DGST_CHECK_TEST_ENVIRONMENT_BEACON="GST_PLUGIN_LOADING_WHITELIST"',
+  '-DGST_CHECK_TEST_ENVIRONMENT_BEACON="GST_PLUGIN_LOADING_ALLOWLIST"',
   '-DGST_TEST_FILES_PATH="' + fsmod.as_posix(meson.current_source_dir()) + '/../files"',
   '-DGST_TEST_FILE="' + fsmod.as_posix(meson.current_source_dir()) + '/../files/partialframe.mjpeg"', # for libs/discoverer
   '-DGST_USE_UNSTABLE_API',
@@ -166,7 +166,7 @@ foreach t : base_tests
     env.set('GST_STATE_IGNORE_ELEMENTS', 'cdio cdparanoiasrc libvisual_ alsasrc alsasink')
     env.set('CK_DEFAULT_TIMEOUT', '30')
     env.set('GST_TAG_LICENSE_TRANSLATIONS_DICT', join_paths(gst_tag_dir, 'license-translations.dict'))
-    env.set('GST_PLUGIN_LOADING_WHITELIST', 'gstreamer',
+    env.set('GST_PLUGIN_LOADING_ALLOWLIST', 'gstreamer',
         'gst-plugins-base@' + meson.project_build_root())
     env.set('GST_REGISTRY', join_paths(meson.current_build_dir(), '@0@.registry'.format(test_name)))
     env.set('GST_PLUGIN_SCANNER_1_0', gst_plugin_scanner_path)
@@ -189,7 +189,7 @@ foreach group : [1, 2, 3, 4, 5, 6]
   env.set('GST_STATE_IGNORE_ELEMENTS', 'cdio cdparanoiasrc libvisual_ alsasrc alsasink')
   env.set('CK_DEFAULT_TIMEOUT', '20')
   env.set('GST_TAG_LICENSE_TRANSLATIONS_DICT', join_paths(gst_tag_dir, 'license-translations.dict'))
-  env.set('GST_PLUGIN_LOADING_WHITELIST', 'gstreamer',
+  env.set('GST_PLUGIN_LOADING_ALLOWLIST', 'gstreamer',
       'gst-plugins-base@' + meson.project_build_root())
   env.set('GST_REGISTRY', join_paths(meson.current_build_dir(), '@0@.registry'.format(vscale_test_name)))
   env.set('GST_PLUGIN_SCANNER_1_0', gst_plugin_scanner_path)

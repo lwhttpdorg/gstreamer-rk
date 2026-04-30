@@ -1724,7 +1724,7 @@ track_element_added_cb (GESTrack * track, GESTrackElement * element,
 /* returns TRUE if no errors in adding to tracks */
 static gboolean
 _add_clip_children_to_tracks (GESTimeline * timeline, GESClip * clip,
-    gboolean add_core, GESTrack * new_track, GList * blacklist, GError ** error)
+    gboolean add_core, GESTrack * new_track, GList * blocklist, GError ** error)
 {
   GList *tmp, *children;
   gboolean no_errors = TRUE;
@@ -1735,7 +1735,7 @@ _add_clip_children_to_tracks (GESTimeline * timeline, GESClip * clip,
     GESTrackElement *el = tmp->data;
     if (ges_track_element_is_core (el) != add_core)
       continue;
-    if (g_list_find (blacklist, el))
+    if (g_list_find (blocklist, el))
       continue;
     if (ges_track_element_get_track (el) == NULL) {
       gboolean res;
@@ -1828,7 +1828,7 @@ add_object_to_tracks (GESTimeline * timeline, GESClip * clip,
   /* set the tracks for the other children, with core elements first to
    * make sure the non-core can be placed above them in the track (a
    * non-core can not be in a track by itself) */
-  /* include just_added as a blacklist to ensure we do not try the track
+  /* include just_added as a blocklist to ensure we do not try the track
    * selection a second time when track selection returns no tracks */
   if (!_add_clip_children_to_tracks (timeline, clip, TRUE, new_track,
           just_added, error)) {

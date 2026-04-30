@@ -76,15 +76,33 @@ typedef enum
 /**
  * GstPluginFlags:
  * @GST_PLUGIN_FLAG_CACHED: Temporarily loaded plugins
- * @GST_PLUGIN_FLAG_BLACKLISTED: The plugin won't be scanned (again)
+ * @GST_PLUGIN_FLAG_BLOCKLISTED: The plugin won't be scanned (again)
  *
  * The plugin loading state
  */
 typedef enum
 {
   GST_PLUGIN_FLAG_CACHED      = (GST_OBJECT_FLAG_LAST << 0),
-  GST_PLUGIN_FLAG_BLACKLISTED = (GST_OBJECT_FLAG_LAST << 1)
+  /**
+   * GST_PLUGIN_FLAG_BLOCKLISTED:
+   *
+   * The plugin won't be scanned (again)
+   *
+   * Since: 1.30
+   */
+  GST_PLUGIN_FLAG_BLOCKLISTED = (GST_OBJECT_FLAG_LAST << 1)
 } GstPluginFlags;
+
+/**
+ * GST_PLUGIN_FLAG_BLACKLISTED:
+ *
+ * Deprecated: Use GST_PLUGIN_FLAG_BLOCKLISTED instead.
+ */
+#ifndef GST_DISABLE_DEPRECATED
+#define GST_PLUGIN_FLAG_BLACKLISTED \
+  GLIB_DEPRECATED_MACRO_FOR(GST_PLUGIN_FLAG_BLOCKLISTED) \
+  GST_PLUGIN_FLAG_BLOCKLISTED
+#endif
 
 /**
  * GstPluginDependencyFlags:

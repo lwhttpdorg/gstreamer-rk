@@ -220,9 +220,16 @@ vk_overlay_upload (struct vk_overlay *overlay, GstVideoInfo * out_info,
   };
   /* *INDENT-ON* */
 
-  if (!(cmd_buf =
-          gst_vulkan_command_pool_create (overlay->quad->cmd_pool, error)))
-    goto error;
+  {
+    GstVulkanCommandPool *cmd_pool =
+        gst_vulkan_queue_create_command_pool (overlay->quad->queue, error);
+    if (!cmd_pool)
+      goto error;
+    cmd_buf = gst_vulkan_command_pool_create (cmd_pool, error);
+    gst_object_unref (cmd_pool);
+    if (!cmd_buf)
+      goto error;
+  }
 
   {
     /* *INDENT-OFF* */
@@ -293,23 +300,12 @@ vk_overlay_upload (struct vk_overlay *overlay, GstVideoInfo * out_info,
     if (gst_vulkan_error_to_g_error (err, error, "vkQueueSubmit") < 0)
       goto error;
 
-    gst_vulkan_trash_list_add (overlay->quad->trash_list,
-        gst_vulkan_trash_list_acquire (overlay->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            GST_MINI_OBJECT_CAST (cmd_buf)));
-    cmd_buf = NULL;
-    gst_vulkan_trash_list_add (overlay->quad->trash_list,
-        gst_vulkan_trash_list_acquire (overlay->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            GST_MINI_OBJECT_CAST (vkbuffer)));
-    vkbuffer = NULL;
-    gst_vulkan_trash_list_add (overlay->quad->trash_list,
-        gst_vulkan_trash_list_acquire (overlay->quad->trash_list, fence,
-            gst_vulkan_trash_mini_object_unref,
-            GST_MINI_OBJECT_CAST (gst_memory_ref (vkimage))));
-    gst_vulkan_trash_list_gc (overlay->quad->trash_list);
+    vkWaitForFences (overlay->quad->queue->device->device, 1,
+        &GST_VULKAN_FENCE_FENCE (fence), TRUE, G_MAXUINT64);
     gst_vulkan_fence_unref (fence);
     fence = NULL;
+    gst_clear_vulkan_command_buffer (&cmd_buf);
+    gst_clear_mini_object ((GstMiniObject **) & vkbuffer);
   }
 
   vk_gst_buffer = gst_buffer_new ();

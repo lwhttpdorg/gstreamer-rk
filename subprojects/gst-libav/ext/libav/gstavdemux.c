@@ -294,7 +294,7 @@ gst_ffmpegdemux_init (GstFFMpegDemux * demux)
   g_cond_init (&demux->ffpipe.cond);
   demux->ffpipe.adapter = gst_adapter_new ();
 
-  /* blacklist unreliable push-based demuxers */
+  /* blocklist unreliable push-based demuxers */
   if (strcmp (oclass->in_plugin->name, "ape"))
     demux->can_push = TRUE;
   else

@@ -2807,7 +2807,7 @@ ges_timeline_element_edit_full (GESTimelineElement * self,
 /**
  * ges_timeline_element_edit:
  * @self: The #GESTimelineElement to edit
- * @layers: (element-type GESLayer) (nullable): A whitelist of layers
+ * @layers: (element-type GESLayer) (nullable): An allowlist of layers
  * where the edit can be performed, %NULL allows all layers in the
  * timeline.
  * @new_layer_priority: The priority/index of the layer @self should be
