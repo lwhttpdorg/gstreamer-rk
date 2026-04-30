@@ -847,25 +847,24 @@ add_musicbrainz_tag (GstId3v2Tag * id3v2tag, const GstTagList * list,
     const gchar spec_id[32];
     const gchar realworld_id[32];
   } mb_ids[] = {
-    {
-          GST_TAG_MUSICBRAINZ_ARTISTID, "MusicBrainz Artist Id",
-        "musicbrainz_artistid"}, {
-          GST_TAG_MUSICBRAINZ_ALBUMID, "MusicBrainz Album Id",
-        "musicbrainz_albumid"}, {
-          GST_TAG_MUSICBRAINZ_ALBUMARTISTID, "MusicBrainz Album Artist Id",
-        "musicbrainz_albumartistid"}, {
-          GST_TAG_MUSICBRAINZ_RELEASEGROUPID, "MusicBrainz Release Group Id",
-        "musicbrainz_releasegroupid"}, {
-        GST_TAG_MUSICBRAINZ_TRMID, "MusicBrainz TRM Id", "musicbrainz_trmid"}, {
-          GST_TAG_CDDA_MUSICBRAINZ_DISCID, "MusicBrainz DiscID",
-        "musicbrainz_discid"}, {
-          /* the following one is more or less made up, there seems to be little
-           * evidence that any popular application is actually putting this info
-           * into TXXX frames; the first one comes from a musicbrainz wiki 'proposed
-           * tags' page, the second one is analogue to the vorbis/ape/flac tag. */
-        GST_TAG_CDDA_CDDB_DISCID, "CDDB DiscID", "discid"}, {
-          GST_TAG_MUSICBRAINZ_RELEASETRACKID, "MusicBrainz Track Id",
-        "musicbrainz_trackid"}
+    {GST_TAG_MUSICBRAINZ_ARTISTID, "MusicBrainz Artist Id",
+      "musicbrainz_artistid"},
+    {GST_TAG_MUSICBRAINZ_ALBUMID, "MusicBrainz Album Id",
+      "musicbrainz_albumid"},
+    {GST_TAG_MUSICBRAINZ_ALBUMARTISTID, "MusicBrainz Album Artist Id",
+      "musicbrainz_albumartistid"},
+    {GST_TAG_MUSICBRAINZ_RELEASEGROUPID, "MusicBrainz Release Group Id",
+      "musicbrainz_releasegroupid"},
+    {GST_TAG_MUSICBRAINZ_TRMID, "MusicBrainz TRM Id", "musicbrainz_trmid"},
+    {GST_TAG_CDDA_MUSICBRAINZ_DISCID, "MusicBrainz Disc Id",
+      "MusicBrainz DiscID", "musicbrainz_discid"},
+    /* the following one is more or less made up, there seems to be little
+     * evidence that any popular application is actually putting this info
+     * into TXXX frames; the first one comes from a musicbrainz wiki 'proposed
+     * tags' page, the second one is analogue to the vorbis/ape/flac tag. */
+    {GST_TAG_CDDA_CDDB_DISCID, "CDDB DiscID", "discid"},
+    {GST_TAG_MUSICBRAINZ_RELEASETRACKID, "MusicBrainz Track Id",
+      "musicbrainz_trackid"}
   };
   guint i, idx;
 
