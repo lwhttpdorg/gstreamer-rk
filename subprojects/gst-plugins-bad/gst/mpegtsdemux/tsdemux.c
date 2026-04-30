@@ -1042,12 +1042,41 @@ clean_global_taglist (GstTagList * taglist)
   gst_tag_list_remove_tag (taglist, GST_TAG_CODEC);
 }
 
+static guint32
+gst_ts_demux_get_target_seqnum (MpegTSBase * base)
+{
+  /* If the user performed a seek, we use that seqnum */
+  guint32 target_seqnum = base->last_seek_seqnum;
+  if (target_seqnum == GST_SEQNUM_INVALID) {
+    /* If not, we use the original STREAM_START */
+    GstEvent *ss =
+        gst_pad_get_sticky_event (base->sinkpad, GST_EVENT_STREAM_START, 0);
+    if (ss) {
+      target_seqnum = gst_event_get_seqnum (ss);
+      gst_event_unref (ss);
+    }
+  }
+  return target_seqnum;
+}
+
 static gboolean
 push_event (MpegTSBase * base, GstEvent * event)
 {
   GstTSDemux *demux = (GstTSDemux *) base;
   GList *tmp;
   gboolean early_ret = FALSE;
+
+  if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
+    /* Overwrite the EOS sequence number coming from filesrc */
+    guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+    if (target_seqnum != GST_SEQNUM_INVALID
+        && target_seqnum != gst_event_get_seqnum (event)) {
+      GstEvent *new_eos = gst_event_new_eos ();
+      gst_event_set_seqnum (new_eos, target_seqnum);
+      gst_event_unref (event);
+      event = new_eos;
+    }
+  }
 
   if (GST_EVENT_TYPE (event) == GST_EVENT_SEGMENT) {
     if (base->segment.format == GST_FORMAT_TIME && base->ignore_pcr) {
@@ -2165,6 +2194,11 @@ done:
       demux->group_id = gst_util_group_id_next ();
     }
     event = gst_event_new_stream_start (stream_id);
+    {
+      guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+      if (target_seqnum != GST_SEQNUM_INVALID)
+        gst_event_set_seqnum (event, target_seqnum);
+    }
     gst_event_set_stream (event, bstream->stream_object);
     if (demux->have_group_id)
       gst_event_set_group_id (event, demux->group_id);
@@ -2394,9 +2428,14 @@ gst_ts_demux_update_program (MpegTSBase * base, MpegTSBaseProgram * program)
 
   GST_DEBUG ("Updating program %d", program->program_number);
   /* Emit collection message */
-  gst_element_post_message ((GstElement *) base,
-      gst_message_new_stream_collection ((GstObject *) base,
-          program->collection));
+  {
+    GstMessage *col_msg = gst_message_new_stream_collection ((GstObject *) base,
+        program->collection);
+    guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+    if (target_seqnum != GST_SEQNUM_INVALID)
+      gst_message_set_seqnum (col_msg, target_seqnum);
+    gst_element_post_message ((GstElement *) base, col_msg);
+  }
 
   /* Add all streams, then fire no-more-pads */
   for (tmp = program->stream_list; tmp; tmp = tmp->next) {
@@ -2413,12 +2452,22 @@ gst_ts_demux_update_program (MpegTSBase * base, MpegTSBaseProgram * program)
         }
 
         GST_DEBUG_OBJECT (stream->pad, "sparse stream, pushing GAP event");
-        gst_pad_push_event (stream->pad, gst_event_new_gap (0, 0));
+        {
+          GstEvent *gap_ev = gst_event_new_gap (0, 0);
+          guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+          if (target_seqnum != GST_SEQNUM_INVALID)
+            gst_event_set_seqnum (gap_ev, target_seqnum);
+          gst_pad_push_event (stream->pad, gap_ev);
+        }
       }
     }
-    if (stream->pad)
-      gst_pad_push_event (stream->pad,
-          gst_event_new_stream_collection (program->collection));
+    if (stream->pad) {
+      GstEvent *col_ev = gst_event_new_stream_collection (program->collection);
+      guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+      if (target_seqnum != GST_SEQNUM_INVALID)
+        gst_event_set_seqnum (col_ev, target_seqnum);
+      gst_pad_push_event (stream->pad, col_ev);
+    }
   }
 }
 
@@ -2444,9 +2493,15 @@ gst_ts_demux_program_started (MpegTSBase * base, MpegTSBaseProgram * program)
     demux->program_generation = (demux->program_generation + 1) & 0xf;
 
     /* Emit collection message */
-    gst_element_post_message ((GstElement *) base,
-        gst_message_new_stream_collection ((GstObject *) base,
-            program->collection));
+    {
+      GstMessage *col_msg =
+          gst_message_new_stream_collection ((GstObject *) base,
+          program->collection);
+      guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+      if (target_seqnum != GST_SEQNUM_INVALID)
+        gst_message_set_seqnum (col_msg, target_seqnum);
+      gst_element_post_message ((GstElement *) base, col_msg);
+    }
 
     /* If this is not the initial program, we need to calculate
      * a new segment */
@@ -2507,11 +2562,22 @@ gst_ts_demux_program_started (MpegTSBase * base, MpegTSBaseProgram * program)
         }
 
         GST_DEBUG_OBJECT (stream->pad, "sparse stream, pushing GAP event");
-        gst_pad_push_event (stream->pad, gst_event_new_gap (0, 0));
+        {
+          GstEvent *gap_ev = gst_event_new_gap (0, 0);
+          guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+          if (target_seqnum != GST_SEQNUM_INVALID)
+            gst_event_set_seqnum (gap_ev, target_seqnum);
+          gst_pad_push_event (stream->pad, gap_ev);
+        }
       }
-      if (stream->pad)
-        gst_pad_push_event (stream->pad,
-            gst_event_new_stream_collection (program->collection));
+      if (stream->pad) {
+        GstEvent *col_ev =
+            gst_event_new_stream_collection (program->collection);
+        guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+        if (target_seqnum != GST_SEQNUM_INVALID)
+          gst_event_set_seqnum (col_ev, target_seqnum);
+        gst_pad_push_event (stream->pad, col_ev);
+      }
     }
 
     gst_element_no_more_pads ((GstElement *) demux);
@@ -3025,8 +3091,9 @@ calculate_and_push_newsegment (GstTSDemux * demux, TSDemuxStream * stream,
     gst_event_take (&demux->segment_event,
         gst_event_new_segment (&base->out_segment));
 
-    if (base->last_seek_seqnum != GST_SEQNUM_INVALID)
-      gst_event_set_seqnum (demux->segment_event, base->last_seek_seqnum);
+    guint32 target_seqnum = gst_ts_demux_get_target_seqnum (base);
+    if (target_seqnum != GST_SEQNUM_INVALID)
+      gst_event_set_seqnum (demux->segment_event, target_seqnum);
   }
   g_mutex_unlock (&demux->lock);
 
