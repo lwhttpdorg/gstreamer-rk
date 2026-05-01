@@ -8872,6 +8872,16 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
     }
   }
 
+  /* If we need more than 200MB in push mode then something is likely wrong
+   * so let's error out here */
+  if (demux->neededbytes >= QTDEMUX_MAX_SAMPLE_INDEX_SIZE) {
+    GST_ERROR_OBJECT (demux,
+        "Too much data necessary to buffer: %" G_GUINT64_FORMAT,
+        demux->neededbytes);
+    ret = GST_FLOW_ERROR;
+    goto done;
+  }
+
   /* when buffering movie data, at least show user something is happening */
   if (ret == GST_FLOW_OK && demux->state == QTDEMUX_STATE_BUFFER_MDAT &&
       gst_adapter_available (demux->adapter) <= demux->neededbytes) {
