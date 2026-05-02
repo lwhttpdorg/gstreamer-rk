@@ -1373,16 +1373,11 @@ gst_video_aggregator_default_negotiated_src_caps (GstAggregator * agg,
   gst_element_foreach_sink_pad (GST_ELEMENT_CAST (vagg),
       _update_conversion_info, NULL);
 
-  if (vagg->priv->current_caps == NULL ||
-      gst_caps_is_equal (caps, vagg->priv->current_caps) == FALSE) {
-    GstClockTime latency;
+  gst_caps_replace (&vagg->priv->current_caps, caps);
 
-    gst_caps_replace (&vagg->priv->current_caps, caps);
-
-    latency = gst_util_uint64_scale (GST_SECOND,
-        GST_VIDEO_INFO_FPS_D (&info), GST_VIDEO_INFO_FPS_N (&info));
-    gst_aggregator_set_latency (agg, latency, latency);
-  }
+  GstClockTime latency = gst_util_uint64_scale (GST_SECOND,
+      GST_VIDEO_INFO_FPS_D (&info), GST_VIDEO_INFO_FPS_N (&info));
+  gst_aggregator_set_latency (agg, latency, latency);
 
   ret = TRUE;
 
