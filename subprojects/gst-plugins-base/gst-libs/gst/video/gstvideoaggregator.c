@@ -1368,6 +1368,7 @@ gst_video_aggregator_default_negotiated_src_caps (GstAggregator * agg,
   GST_OBJECT_LOCK (vagg);
   vagg->info = info;
   GST_OBJECT_UNLOCK (vagg);
+  GST_VIDEO_AGGREGATOR_PAD (agg->srcpad)->info = info;
 
   /* Then browse the sinks once more, setting or unsetting conversion if needed */
   gst_element_foreach_sink_pad (GST_ELEMENT_CAST (vagg),
