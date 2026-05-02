@@ -1379,7 +1379,6 @@ gst_video_aggregator_default_negotiated_src_caps (GstAggregator * agg,
 
     gst_caps_replace (&vagg->priv->current_caps, caps);
 
-    gst_aggregator_set_src_caps (agg, caps);
     latency = gst_util_uint64_scale (GST_SECOND,
         GST_VIDEO_INFO_FPS_D (&info), GST_VIDEO_INFO_FPS_N (&info));
     gst_aggregator_set_latency (agg, latency, latency);
