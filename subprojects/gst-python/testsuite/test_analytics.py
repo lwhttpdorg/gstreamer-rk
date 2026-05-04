@@ -115,6 +115,14 @@ class TestAnalyticsODMtd(TestCase):
         self.assertEqual(location[4], 212)
         self.assertAlmostEqual(location[5], 0.3, 3)
 
+        # Tests the ImageMtd
+        depthbuf = Gst.Buffer.new_allocate(None, 100, None)
+        (ret, mtd) = meta.add_image_mtd(depthbuf, GstAnalytics.ImageDataType.DEPTH, 20, 10, GstVideo.VideoFormat.BGRA)
+        (ret, w, h) = mtd.get_image_size()
+        self.assertTrue(ret)
+        self.assertEqual(w, 20)
+        self.assertEqual(h, 10)
+
 
 class TestAnalyticsClsMtd(TestCase):
     def test(self):
