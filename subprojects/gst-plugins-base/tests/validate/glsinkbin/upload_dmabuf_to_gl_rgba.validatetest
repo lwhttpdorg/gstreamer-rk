@@ -1,0 +1,18 @@
+meta,
+    args={
+        "videotestsrc num-buffers=1 ! video/x-raw,format=RGBA ! glupload ! video/x-raw(memory:DMABuf) ! glupload name=upload ! video/x-raw(memory:GLMemory) ! fakevideosink",
+    },
+    configs={
+        [validateflow,
+            pad=upload:sink,
+            buffers-checksum=as-id,
+            ignored-event-types={
+                tag, stream-start,
+            }],
+        [validateflow,
+            pad=upload:src,
+            buffers-checksum=as-id,
+            ignored-event-types={
+                tag, stream-start,
+            }],
+    }
