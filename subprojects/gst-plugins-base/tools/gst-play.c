@@ -69,7 +69,7 @@ typedef enum
 
   /* The instant-rate setting is a flag,
    * applied on top of the trick-mode enum value.
-   * It needs to have a 2^n value bigger than 
+   * It needs to have a 2^n value bigger than
    * any of the enum values so setting it
    * won't affect the trickmode value */
   GST_PLAY_TRICK_MODE_INSTANT_RATE = (1 << 3)
@@ -125,6 +125,8 @@ typedef struct
 
   /* keyboard state tracking */
   gboolean shift_pressed;
+
+  GArray *chapters;
 } GstPlay;
 
 static gboolean quiet = FALSE;
@@ -145,6 +147,8 @@ static gboolean play_do_seek (GstPlay * play, gint64 pos, gdouble rate,
 static void gst_play_printf (const gchar * format, ...) G_GNUC_PRINTF (1, 2);
 /* *INDENT-ON* */
 
+static void parse_toc (gpointer data, gpointer user_data);
+static gboolean jump_chapter (GstPlay * play, gint direction);
 static void keyboard_cb (const gchar * key_input, gpointer user_data);
 static void relative_seek (GstPlay * play, gdouble percent);
 
@@ -280,6 +284,7 @@ play_new (gchar ** uris, const gchar * audio_sink, const gchar * video_sink,
   play->trick_mode = GST_PLAY_TRICK_MODE_NONE;
   play->start_position = start_position;
   play->accurate_seeks = accurate_seeks;
+  play->chapters = g_array_new (FALSE, FALSE, sizeof (gint64));
   return play;
 }
 
@@ -307,6 +312,8 @@ play_free (GstPlay * play)
   g_free (play->cur_audio_sid);
   g_free (play->cur_video_sid);
   g_free (play->cur_text_sid);
+  if (play->chapters)
+    g_array_free (play->chapters, TRUE);
 
   g_mutex_clear (&play->selection_lock);
 
@@ -319,6 +326,8 @@ play_reset (GstPlay * play)
 {
   g_list_foreach (play->missing, (GFunc) gst_message_unref, NULL);
   play->missing = NULL;
+  if (play->chapters)
+    g_array_set_size (play->chapters, 0);
 
   play->buffering = FALSE;
   play->is_live = FALSE;
@@ -773,6 +782,22 @@ play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data)
       }
       break;
     }
+    case GST_MESSAGE_TOC:
+    {
+      GstToc *toc;
+      GList *entries;
+      gboolean updated;
+      gst_message_parse_toc (msg, &toc, &updated);
+      gst_print ("Table of contents parsed.\n");
+      if (!play->chapters || updated || play->chapters->len == 0) {
+        if (play->chapters)
+          g_array_set_size (play->chapters, 0);
+        entries = gst_toc_get_entries (toc);
+        g_list_foreach (entries, parse_toc, play);
+      }
+      gst_toc_unref (toc);
+      break;
+    }
     default:
       break;
   }
@@ -891,6 +916,78 @@ play_prev (GstPlay * play)
 
   play_uri (play, play->uris[--play->cur_idx]);
   return TRUE;
+}
+
+static void
+parse_toc (gpointer data, gpointer user_data)
+{
+  GstPlay *play = (GstPlay *) user_data;
+  GstTocEntry *entry = (GstTocEntry *) data;
+  GList *subentries;
+  gint64 start;
+  gint64 stop;
+
+  gst_toc_entry_get_start_stop_times (entry, &start, &stop);
+  if (gst_toc_entry_get_entry_type (entry) == GST_TOC_ENTRY_TYPE_CHAPTER)
+    g_array_append_val (play->chapters, start);
+
+  /* loop over sub-toc entries */
+  subentries = gst_toc_entry_get_sub_entries (entry);
+  g_list_foreach (subentries, parse_toc, play);
+}
+
+/* returns FALSE if no TOC or end reached */
+static gboolean
+jump_chapter (GstPlay * play, gint direction)
+{
+  GstQuery *query;
+  gboolean seekable = FALSE;
+  gint64 dur = -1, pos = -1;
+  guint chap_idx;
+
+  g_return_val_if_fail ((direction != -1 || direction != 1), FALSE);
+
+  if (!play->chapters || play->chapters->len == 0)
+    goto seek_failed;
+
+  if (!gst_element_query_position (play->playbin, GST_FORMAT_TIME, &pos))
+    goto seek_failed;
+
+  query = gst_query_new_seeking (GST_FORMAT_TIME);
+  if (!gst_element_query (play->playbin, query)) {
+    gst_query_unref (query);
+    goto seek_failed;
+  }
+
+  gst_query_parse_seeking (query, NULL, &seekable, NULL, &dur);
+  gst_query_unref (query);
+
+  if (!seekable || dur <= 0)
+    goto seek_failed;
+
+  for (chap_idx = 0; chap_idx < play->chapters->len; chap_idx++) {
+    gint64 chapter_start = g_array_index (play->chapters, gint64, chap_idx);
+
+    if (direction == 1 && chapter_start > pos) {
+      play_do_seek (play, chapter_start, play->rate, play->trick_mode);
+      return TRUE;
+    } else if (direction == -1 && (chapter_start > pos
+            || chap_idx == play->chapters->len - 1)) {
+      gint64 prev_chapter_begin = 0;
+      if (chap_idx > 1)
+        prev_chapter_begin =
+            g_array_index (play->chapters, gint64, chap_idx - 2);
+      play_do_seek (play, prev_chapter_begin, play->rate, play->trick_mode);
+      return TRUE;
+    }
+  }
+  goto seek_failed;
+
+seek_failed:
+  {
+    gst_printerr ("\nCould not seek.\n");
+    return FALSE;
+  }
 }
 
 static void
@@ -1493,8 +1590,10 @@ print_keyboard_help (void)
     {
     N_("space"), N_("pause/unpause")}, {
     N_("q or ESC"), N_("quit")}, {
-    N_("> or n"), N_("play next")}, {
-    N_("< or b"), N_("play previous")}, {
+    "4", N_("play next chapter")}, {
+    "6", N_("play previous chapter")}, {
+    ">", N_("play next file")}, {
+    "<", N_("play previous file")}, {
     "\342\206\222", N_("seek forward")}, {
     "\342\206\220", N_("seek backward")}, {
     "\342\206\221", N_("volume up")}, {
@@ -1552,6 +1651,12 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
     case 'q':
     case 'Q':
       g_main_loop_quit (play->loop);
+      break;
+    case '6':
+      jump_chapter (play, +1);
+      break;
+    case '4':
+      jump_chapter (play, -1);
       break;
     case 'n':
     case '>':
