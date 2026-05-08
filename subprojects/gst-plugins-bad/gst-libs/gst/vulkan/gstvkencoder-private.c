@@ -502,6 +502,7 @@ _rate_control_mode_validate (GstVulkanEncoder * self,
  * gst_vulkan_encoder_start:
  * @self: a #GstVulkanEncoder
  * @profile: a #GstVulkanVideoProfile
+ * @session_create_pnext: a VkInStructure for video session chaining
  * @codec_quality_props: codec specific quality structure to fetch
  * @error: (out) : an error result in case of failure or %NULL
  *
@@ -512,7 +513,7 @@ _rate_control_mode_validate (GstVulkanEncoder * self,
  */
 gboolean
 gst_vulkan_encoder_start (GstVulkanEncoder * self,
-    GstVulkanVideoProfile * profile,
+    GstVulkanVideoProfile * profile, gconstpointer session_create_pnext,
     GstVulkanEncoderQualityProperties * codec_quality_props, GError ** error)
 {
   GstVulkanEncoderPrivate *priv;
@@ -529,6 +530,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   GArray *fmts;
   GstVideoFormat format;
   GError *query_err = NULL;
+  VkStructureType session_create_pnext_type;
   const VkVideoEncodeFeedbackFlagsKHR feedback_flags =
       VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BUFFER_OFFSET_BIT_KHR |
       VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR;
@@ -551,12 +553,18 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   switch (self->codec) {
     case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
       codec_idx = GST_VK_VIDEO_EXTENSION_ENCODE_H264;
+      session_create_pnext_type =
+          VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_KHR;
       break;
     case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
       codec_idx = GST_VK_VIDEO_EXTENSION_ENCODE_H265;
+      session_create_pnext_type =
+          VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_KHR;
       break;
     case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR:
       codec_idx = GST_VK_VIDEO_EXTENSION_ENCODE_AV1;
+      session_create_pnext_type =
+          VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_SESSION_CREATE_INFO_KHR;
       break;
     default:
       g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
@@ -577,6 +585,14 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
         " check your SDK path.",
         VK_CODEC_VERSION (_vk_codec_extensions[codec_idx].specVersion),
         VK_CODEC_VERSION (_vk_codec_supported_extensions[codec_idx]));
+    return FALSE;
+  }
+
+  if (session_create_pnext
+      && vk_find_struct (session_create_pnext, session_create_pnext_type)
+      == NULL) {
+    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
+        "VkVideoSessionCreateInfoKHR's pNext structure is not valid");
     return FALSE;
   }
 
@@ -746,6 +762,7 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   /* *INDENT-OFF* */
   session_create = (VkVideoSessionCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_VIDEO_SESSION_CREATE_INFO_KHR,
+    .pNext = session_create_pnext,
     .queueFamilyIndex = self->queue->family,
     .pVideoProfile = &profile->profile,
     .pictureFormat = vk_format,
