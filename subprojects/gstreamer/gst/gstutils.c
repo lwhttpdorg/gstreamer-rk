@@ -210,7 +210,7 @@ gst_util_set_object_arg (GObject * object, const gchar * name,
   g_value_init (&v, value_type);
 
   /* special case for element <-> xml (de)serialisation */
-  if (value_type == GST_TYPE_STRUCTURE && strcmp (value, "NULL") == 0) {
+  if (value_type == GST_TYPE_STRUCTURE && g_strcmp0 (value, "NULL") == 0) {
     g_value_set_boxed (&v, NULL);
     goto done;
   }
@@ -5020,12 +5020,12 @@ gst_util_filename_compare (const gchar * a, const gchar * b)
   if (a_utf8 == NULL || b_utf8 == NULL) {
     g_free (a_utf8);
     g_free (b_utf8);
-    return strcmp (a, b);
+    return g_strcmp0 (a, b);
   }
 
   a1 = g_utf8_collate_key_for_filename (a_utf8, -1);
   b1 = g_utf8_collate_key_for_filename (b_utf8, -1);
-  ret = strcmp (a1, b1);
+  ret = g_strcmp0 (a1, b1);
   g_free (a1);
   g_free (b1);
 

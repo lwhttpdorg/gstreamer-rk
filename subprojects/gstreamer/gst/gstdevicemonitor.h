@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_DEVICE_MONITOR_H__
-#define __GST_DEVICE_MONITOR_H__
+#pragma once
 
 #include <gst/gstobject.h>
 #include <gst/gstdevice.h>
@@ -114,5 +113,3 @@ gboolean  gst_device_monitor_get_show_all_devices (GstDeviceMonitor * monitor);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstDeviceMonitor, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_DEVICE_MONITOR_H__ */

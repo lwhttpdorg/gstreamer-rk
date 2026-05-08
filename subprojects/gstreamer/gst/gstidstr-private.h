@@ -18,8 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ID_STR_PRIVATE_H__
-#define __GST_ID_STR_PRIVATE_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/gstidstr.h>
@@ -284,5 +283,3 @@ _gst_id_str_is_equal_to_str_with_len_inline (const GstIdStr * s1,
 #endif
 
 G_END_DECLS
-
-#endif

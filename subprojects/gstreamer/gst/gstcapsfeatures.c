@@ -670,7 +670,7 @@ gst_caps_features_from_string (const gchar * features)
   if (!features || *features == '\0')
     return ret;
 
-  if (strcmp (features, "ANY") == 0) {
+  if (g_strcmp0 (features, "ANY") == 0) {
     ret->is_any = TRUE;
     return ret;
   }

@@ -77,15 +77,13 @@ static void gst_control_binding_finalize (GObject * object);
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GstControlBinding, gst_control_binding,
     GST_TYPE_OBJECT, G_ADD_PRIVATE (GstControlBinding) _do_init);
 
-enum
+typedef enum
 {
-  PROP_0,
-  PROP_OBJECT,
+  PROP_OBJECT = 1,
   PROP_NAME,
-  PROP_LAST
-};
+} GstControlBindingProps;
 
-static GParamSpec *properties[PROP_LAST];
+static GParamSpec *properties[PROP_NAME + 1];
 
 static void
 gst_control_binding_class_init (GstControlBindingClass * klass)
@@ -108,7 +106,8 @@ gst_control_binding_class_init (GstControlBindingClass * klass)
       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
 
-  g_object_class_install_properties (gobject_class, PROP_LAST, properties);
+  g_object_class_install_properties (gobject_class, G_N_ELEMENTS (properties),
+      properties);
 }
 
 static void
@@ -197,7 +196,7 @@ gst_control_binding_set_property (GObject * object, guint prop_id,
 {
   GstControlBinding *self = GST_CONTROL_BINDING (object);
 
-  switch (prop_id) {
+  switch ((GstControlBindingProps) prop_id) {
     case PROP_OBJECT:
       /* do not ref to avoid a ref cycle */
       self->__object = g_value_get_object (value);
@@ -222,7 +221,7 @@ gst_control_binding_get_property (GObject * object, guint prop_id,
 {
   GstControlBinding *self = GST_CONTROL_BINDING (object);
 
-  switch (prop_id) {
+  switch ((GstControlBindingProps) prop_id) {
     case PROP_OBJECT:
       g_value_take_object (value, g_weak_ref_get (&self->ABI.abi.priv->object));
       break;

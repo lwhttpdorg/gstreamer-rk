@@ -561,8 +561,7 @@ gst_iterator_filter (GstIterator * it, GCompareFunc func,
       (GstIteratorResyncFunction) filter_resync,
       (GstIteratorFreeFunction) filter_free);
 
-  result->master_lock = it->lock;
-  it->lock = NULL;
+  result->master_lock = g_steal_pointer (&it->lock);
   result->func = func;
   if (user_data) {
     g_value_init (&result->user_data, G_VALUE_TYPE (user_data));

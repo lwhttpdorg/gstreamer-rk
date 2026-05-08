@@ -1760,8 +1760,7 @@ static void
 gst_value_free_int64_range (GValue * value)
 {
   g_return_if_fail (GST_VALUE_HOLDS_INT64_RANGE (value));
-  g_free (value->data[0].v_pointer);
-  value->data[0].v_pointer = NULL;
+  g_clear_pointer (&value->data[0].v_pointer, g_free);
 }
 
 static void
@@ -2600,7 +2599,7 @@ _priv_gst_value_gtype_from_abbr (const char *type_name)
   abbrs = _priv_gst_value_get_abbrs (&n_abbrs);
 
   for (i = 0; i < n_abbrs; i++) {
-    if (strcmp (type_name, abbrs[i].type_name) == 0) {
+    if (g_strcmp0 (type_name, abbrs[i].type_name) == 0) {
       return abbrs[i].type;
     }
   }
@@ -3641,7 +3640,7 @@ gst_value_deserialize_buffer (GValue * dest, const gchar * s)
   data = info.data;
 
   for (i = 0; i < len / 2; i++) {
-    if (!isxdigit ((int) s[i * 2]) || !isxdigit ((int) s[i * 2 + 1]))
+    if (!g_ascii_isxdigit ((int) s[i * 2]) || !isxdigit ((int) s[i * 2 + 1]))
       goto wrong_char;
 
     ts[0] = s[i * 2 + 0];
@@ -3780,7 +3779,7 @@ gst_value_deserialize_sample (GValue * dest, const gchar * s)
   if (!gst_value_deserialize_buffer (&bval, fields[0]))
     goto fail;
 
-  if (strcmp (fields[1], "None") != 0) {
+  if (g_strcmp0 (fields[1], "None") != 0) {
     g_strdelimit (fields[1], "_", '=');
     g_base64_decode_inplace (fields[1], &outlen);
     GST_TRACE ("caps    : %s", fields[1]);
@@ -3789,7 +3788,7 @@ gst_value_deserialize_sample (GValue * dest, const gchar * s)
       goto fail;
   }
 
-  if (strcmp (fields[2], "None") != 0) {
+  if (g_strcmp0 (fields[2], "None") != 0) {
     g_strdelimit (fields[2], "_", '=');
     g_base64_decode_inplace (fields[2], &outlen);
     GST_TRACE ("segment : %s", fields[2]);
@@ -3797,7 +3796,7 @@ gst_value_deserialize_sample (GValue * dest, const gchar * s)
       goto fail;
   }
 
-  if (strcmp (fields[3], "None") != 0) {
+  if (g_strcmp0 (fields[3], "None") != 0) {
     g_strdelimit (fields[3], "_", '=');
     g_base64_decode_inplace (fields[3], &outlen);
     GST_TRACE ("info    : %s", fields[3]);
@@ -3856,12 +3855,12 @@ gst_value_deserialize_boolean (GValue * dest, const gchar * s)
 
   if (g_ascii_strcasecmp (s, "true") == 0 ||
       g_ascii_strcasecmp (s, "yes") == 0 ||
-      g_ascii_strcasecmp (s, "t") == 0 || strcmp (s, "1") == 0) {
+      g_ascii_strcasecmp (s, "t") == 0 || g_strcmp0 (s, "1") == 0) {
     g_value_set_boolean (dest, TRUE);
     ret = TRUE;
   } else if (g_ascii_strcasecmp (s, "false") == 0 ||
       g_ascii_strcasecmp (s, "no") == 0 ||
-      g_ascii_strcasecmp (s, "f") == 0 || strcmp (s, "0") == 0) {
+      g_ascii_strcasecmp (s, "f") == 0 || g_strcmp0 (s, "0") == 0) {
     g_value_set_boolean (dest, FALSE);
     ret = TRUE;
   }
@@ -4148,7 +4147,7 @@ gst_value_compare_string (const GValue * value1, const GValue * value2)
     if (value1->data[0].v_pointer != value2->data[0].v_pointer)
       return GST_VALUE_UNORDERED;
   } else {
-    gint x = strcmp (value1->data[0].v_pointer, value2->data[0].v_pointer);
+    gint x = g_strcmp0 (value1->data[0].v_pointer, value2->data[0].v_pointer);
 
     if (x < 0)
       return GST_VALUE_LESS_THAN;
@@ -4169,7 +4168,7 @@ gst_string_measure_wrapping (const gchar * s)
     return -1;
 
   /* Special case: the actual string NULL needs wrapping */
-  if (G_UNLIKELY (strcmp (s, "NULL") == 0))
+  if (G_UNLIKELY (g_strcmp0 (s, "NULL") == 0))
     return 4;
 
   len = 0;
@@ -4341,7 +4340,7 @@ gst_value_serialize_string (const GValue * value)
 static gboolean
 gst_value_deserialize_string (GValue * dest, const gchar * s)
 {
-  if (G_UNLIKELY (strcmp (s, "NULL") == 0)) {
+  if (G_UNLIKELY (g_strcmp0 (s, "NULL") == 0)) {
     g_value_set_string (dest, NULL);
     return TRUE;
   } else if (G_LIKELY (*s != '"' || s[strlen (s) - 1] != '"')) {
@@ -8070,7 +8069,7 @@ gst_value_deserialize_date_time (GValue * dest, const gchar * s)
 {
   GstDateTime *datetime;
 
-  if (!s || strcmp (s, "null") == 0) {
+  if (!s || g_strcmp0 (s, "null") == 0) {
     return FALSE;
   }
 
@@ -8135,7 +8134,7 @@ gst_value_deserialize_g_date_time (GValue * dest, const gchar * s)
   GstDateTime *gst_datetime;
   GDateTime *datetime;
 
-  if (!s || strcmp (s, "null") == 0) {
+  if (!s || g_strcmp0 (s, "null") == 0) {
     return FALSE;
   }
 

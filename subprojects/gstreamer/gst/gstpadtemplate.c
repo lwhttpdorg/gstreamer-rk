@@ -107,7 +107,10 @@ enum
   PROP_PRESENCE,
   PROP_CAPS,
   PROP_GTYPE,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -158,43 +161,40 @@ gst_pad_template_class_init (GstPadTemplateClass * klass)
    *
    * The name template of the pad template.
    */
-  g_object_class_install_property (gobject_class, PROP_NAME_TEMPLATE,
+  props[PROP_NAME_TEMPLATE] =
       g_param_spec_string ("name-template", "Name template",
-          "The name template of the pad template", NULL,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+      "The name template of the pad template", NULL,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPadTemplate:direction:
    *
    * The direction of the pad described by the pad template.
    */
-  g_object_class_install_property (gobject_class, PROP_DIRECTION,
-      g_param_spec_enum ("direction", "Direction",
-          "The direction of the pad described by the pad template",
-          GST_TYPE_PAD_DIRECTION, GST_PAD_UNKNOWN,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+  props[PROP_DIRECTION] = g_param_spec_enum ("direction", "Direction",
+      "The direction of the pad described by the pad template",
+      GST_TYPE_PAD_DIRECTION, GST_PAD_UNKNOWN,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPadTemplate:presence:
    *
    * When the pad described by the pad template will become available.
    */
-  g_object_class_install_property (gobject_class, PROP_PRESENCE,
-      g_param_spec_enum ("presence", "Presence",
-          "When the pad described by the pad template will become available",
-          GST_TYPE_PAD_PRESENCE, GST_PAD_ALWAYS,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+  props[PROP_PRESENCE] = g_param_spec_enum ("presence", "Presence",
+      "When the pad described by the pad template will become available",
+      GST_TYPE_PAD_PRESENCE, GST_PAD_ALWAYS,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPadTemplate:caps:
    *
    * The capabilities of the pad described by the pad template.
    */
-  g_object_class_install_property (gobject_class, PROP_CAPS,
-      g_param_spec_boxed ("caps", "Caps",
-          "The capabilities of the pad described by the pad template",
-          GST_TYPE_CAPS,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+  props[PROP_CAPS] = g_param_spec_boxed ("caps", "Caps",
+      "The capabilities of the pad described by the pad template",
+      GST_TYPE_CAPS,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstPadTemplate:gtype:
@@ -203,11 +203,12 @@ gst_pad_template_class_init (GstPadTemplateClass * klass)
    *
    * Since: 1.14
    */
-  g_object_class_install_property (gobject_class, PROP_GTYPE,
-      g_param_spec_gtype ("gtype", "GType",
-          "The GType of the pad described by the pad template",
-          G_TYPE_NONE,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+  props[PROP_GTYPE] = g_param_spec_gtype ("gtype", "GType",
+      "The GType of the pad described by the pad template",
+      G_TYPE_NONE,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
 
   gstobject_class->path_string_separator = "*";
 }

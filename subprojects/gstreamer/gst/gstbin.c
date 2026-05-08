@@ -255,6 +255,8 @@ enum
   PROP_LAST
 };
 
+static GParamSpec *props[PROP_LAST] = { NULL, };
+
 static void gst_bin_child_proxy_init (gpointer g_iface, gpointer iface_data);
 
 static guint gst_bin_signals[LAST_SIGNAL] = { 0 };
@@ -353,10 +355,10 @@ gst_bin_class_init (GstBinClass * klass)
    * This should be used only if the bin subclass is modifying the state
    * of its children on its own.
    */
-  g_object_class_install_property (gobject_class, PROP_ASYNC_HANDLING,
+  props[PROP_ASYNC_HANDLING] =
       g_param_spec_boolean ("async-handling", "Async Handling",
-          "The bin will handle Asynchronous state changes",
-          DEFAULT_ASYNC_HANDLING, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+      "The bin will handle Asynchronous state changes", DEFAULT_ASYNC_HANDLING,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstBin::element-added:
@@ -440,10 +442,12 @@ gst_bin_class_init (GstBinClass * klass)
    * source. The structure of the message is named `GstBinForwarded` and contains
    * a field named `message` that contains the original forwarded #GstMessage.
    */
-  g_object_class_install_property (gobject_class, PROP_MESSAGE_FORWARD,
+  props[PROP_MESSAGE_FORWARD] =
       g_param_spec_boolean ("message-forward", "Message Forward",
-          "Forwards all children messages",
-          DEFAULT_MESSAGE_FORWARD, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+      "Forwards all children messages", DEFAULT_MESSAGE_FORWARD,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (gobject_class, PROP_LAST, props);
 
   gobject_class->dispose = gst_bin_dispose;
 
@@ -3619,7 +3623,7 @@ gst_bin_update_context_unlocked (GstBin * bin, GstContext * context)
 
     /* Always store newest context but never replace
      * a persistent one by a non-persistent one */
-    if (strcmp (context_type, tmp_type) == 0 &&
+    if (g_strcmp0 (context_type, tmp_type) == 0 &&
         (gst_context_is_persistent (context) ||
             !gst_context_is_persistent (tmp))) {
       gst_context_replace ((GstContext **) & l->data, context);
@@ -3989,7 +3993,7 @@ gst_bin_handle_message_func (GstBin * bin, GstMessage * message)
           GstContext *tmp = l->data;
           const gchar *tmp_type = gst_context_get_context_type (tmp);
 
-          if (strcmp (context_type, tmp_type) == 0) {
+          if (g_strcmp0 (context_type, tmp_type) == 0) {
             gst_element_set_context (GST_ELEMENT (src), l->data);
             break;
           }
@@ -4358,7 +4362,7 @@ compare_name (const GValue * velement, const gchar * name)
   GstElement *element = g_value_get_object (velement);
 
   GST_OBJECT_LOCK (element);
-  eq = strcmp (GST_ELEMENT_NAME (element), name);
+  eq = g_strcmp0 (GST_ELEMENT_NAME (element), name);
   GST_OBJECT_UNLOCK (element);
 
   return eq;

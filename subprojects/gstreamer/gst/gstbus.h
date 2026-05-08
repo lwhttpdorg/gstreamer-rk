@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_BUS_H__
-#define __GST_BUS_H__
+#pragma once
 
 typedef struct _GstBus GstBus;
 typedef struct _GstBusPrivate GstBusPrivate;
@@ -249,5 +248,3 @@ void                    gst_bus_disable_sync_message_emission (GstBus * bus);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstBus, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_BUS_H__ */

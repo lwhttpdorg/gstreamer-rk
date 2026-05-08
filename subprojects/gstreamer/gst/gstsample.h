@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_SAMPLE_H__
-#define __GST_SAMPLE_H__
+#pragma once
 
 #include <gst/gstbuffer.h>
 #include <gst/gstbufferlist.h>
@@ -176,5 +175,3 @@ gboolean      gst_sample_is_writable (const GstSample * sample);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstSample, gst_sample_unref)
 
 G_END_DECLS
-
-#endif /* __GST_SAMPLE_H__ */

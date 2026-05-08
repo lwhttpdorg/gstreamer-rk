@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_DATE_TIME_H__
-#define __GST_DATE_TIME_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -163,5 +162,3 @@ void            gst_date_time_unref              (GstDateTime * datetime);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstDateTime, gst_date_time_unref)
 
 G_END_DECLS
-
-#endif /* __GST_DATE_TIME_H__ */

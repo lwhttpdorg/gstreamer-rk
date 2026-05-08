@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_BUFFER_POOL_H__
-#define __GST_BUFFER_POOL_H__
+#pragma once
 
 #include <gst/gstminiobject.h>
 #include <gst/gstpad.h>
@@ -349,5 +348,3 @@ GST_API
 void             gst_buffer_pool_release_buffer  (GstBufferPool *pool, GstBuffer *buffer);
 
 G_END_DECLS
-
-#endif /* __GST_BUFFER_POOL_H__ */

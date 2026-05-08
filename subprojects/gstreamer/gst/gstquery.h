@@ -23,8 +23,7 @@
  */
 
 
-#ifndef __GST_QUERY_H__
-#define __GST_QUERY_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -688,6 +687,4 @@ void            gst_query_parse_selectable         (GstQuery *query, gboolean * 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstQuery, gst_query_unref)
 
 G_END_DECLS
-
-#endif /* __GST_QUERY_H__ */
 

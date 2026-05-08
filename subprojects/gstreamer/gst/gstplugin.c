@@ -149,8 +149,7 @@ gst_plugin_finalize (GObject * object)
   g_free (plugin->basename);
 
   g_list_foreach (plugin->priv->deps, (GFunc) gst_plugin_ext_dep_free, NULL);
-  g_list_free (plugin->priv->deps);
-  plugin->priv->deps = NULL;
+  g_clear_list (&plugin->priv->deps, NULL);
 
   if (plugin->priv->cache_data) {
     gst_structure_free (plugin->priv->cache_data);
@@ -370,12 +369,12 @@ gst_plugin_desc_matches_whitelist_entry (const GstPluginDesc * desc,
   GST_LOG ("Whitelist pattern '%s', plugin: %s of %s@%s", pattern, desc->name,
       desc->source, GST_STR_NULL (filename));
 
-  if (strcmp (pattern, "*") == 0)
+  if (g_strcmp0 (pattern, "*") == 0)
     return TRUE;
 
   /* do we have a path prefix? */
   sep = strchr (pattern, '@');
-  if (sep != NULL && strcmp (sep, "@*") != 0 && strcmp (sep, "@") != 0) {
+  if (sep != NULL && g_strcmp0 (sep, "@*") != 0 && strcmp (sep, "@") != 0) {
     /* paths are not canonicalised or treated with realpath() here. This
      * should be good enough for our use case, since we just use the paths
      * autotools uses, and those will be constructed from the same prefix. */
@@ -400,7 +399,8 @@ gst_plugin_desc_matches_whitelist_entry (const GstPluginDesc * desc,
   /* now check plugin names / source package name */
   if (strchr (name, ',') == NULL) {
     /* only a single name: either a plugin name or the source package name */
-    ret = (strcmp (desc->source, name) == 0 || strcmp (desc->name, name) == 0);
+    ret = (g_strcmp0 (desc->source, name) == 0
+        || strcmp (desc->name, name) == 0);
   } else {
     gchar **n, **names;
 
@@ -408,7 +408,7 @@ gst_plugin_desc_matches_whitelist_entry (const GstPluginDesc * desc,
     names = g_strsplit (name, ",", -1);
     for (n = names; n != NULL && *n != NULL; ++n) {
       g_strstrip (*n);
-      if (strcmp (desc->name, *n) == 0) {
+      if (g_strcmp0 (desc->name, *n) == 0) {
         ret = TRUE;
         break;
       }
@@ -476,7 +476,7 @@ gst_plugin_check_license (const gchar * license)
   const gchar *l, *end = known_licenses + sizeof (known_licenses);
 
   for (l = known_licenses; l < end; l += strlen (l) + 1) {
-    if (strcmp (license, l) == 0)
+    if (g_strcmp0 (license, l) == 0)
       return TRUE;
   }
 
@@ -1373,7 +1373,7 @@ gst_plugin_find_feature (GstPlugin * plugin, const gchar * name, GType type)
 static gboolean
 gst_plugin_feature_name_filter (GstPluginFeature * feature, const gchar * name)
 {
-  return !strcmp (name, GST_PLUGIN_FEATURE_NAME (feature));
+  return !g_strcmp0 (name, GST_PLUGIN_FEATURE_NAME (feature));
 }
 #endif
 
@@ -1695,7 +1695,7 @@ gst_plugin_ext_dep_direntry_matches (GstPlugin * plugin, const gchar * entry,
         g_str_has_prefix (entry, *filenames)) {
       return TRUE;
       /* else it's an exact match that's needed */
-    } else if (strcmp (entry, *filenames) == 0) {
+    } else if (g_strcmp0 (entry, *filenames) == 0) {
       return TRUE;
     }
     GST_LOG ("%s does not match %s, flags=0x%04x", entry, *filenames, flags);
@@ -1905,7 +1905,7 @@ gst_plugin_ext_dep_strv_equal (gchar ** arr1, gchar ** arr2)
   if (arr1 == NULL || arr2 == NULL)
     return FALSE;
   for (; *arr1 != NULL && *arr2 != NULL; ++arr1, ++arr2) {
-    if (strcmp (*arr1, *arr2) != 0)
+    if (g_strcmp0 (*arr1, *arr2) != 0)
       return FALSE;
   }
   return (*arr1 == *arr2);

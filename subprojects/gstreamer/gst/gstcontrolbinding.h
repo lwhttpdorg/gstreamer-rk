@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CONTROL_BINDING_H__
-#define __GST_CONTROL_BINDING_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -187,5 +186,3 @@ gboolean            gst_control_binding_is_disabled        (GstControlBinding * 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstControlBinding, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_CONTROL_BINDING_H__ */

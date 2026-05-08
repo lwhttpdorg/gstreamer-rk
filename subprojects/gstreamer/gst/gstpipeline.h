@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_PIPELINE_H__
-#define __GST_PIPELINE_H__
+#pragma once
 
 #include <gst/gstbin.h>
 
@@ -139,6 +138,4 @@ GstClockTime    gst_pipeline_get_configured_latency    (GstPipeline * pipeline);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPipeline, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_PIPELINE_H__ */
 

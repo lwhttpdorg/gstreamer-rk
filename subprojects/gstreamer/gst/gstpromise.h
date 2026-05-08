@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PROMISE_H__
-#define __GST_PROMISE_H__
+#pragma once
 
 #include <gst/gst.h>
 
@@ -126,5 +125,3 @@ void          gst_clear_promise (GstPromise ** promise_ptr);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPromise, gst_promise_unref)
 
 G_END_DECLS
-
-#endif /* __GST_PROMISE_H__ */

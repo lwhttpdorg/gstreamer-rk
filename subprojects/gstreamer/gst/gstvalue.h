@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_VALUE_H__
-#define __GST_VALUE_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/gstcaps.h>
@@ -896,7 +895,5 @@ GST_API
 GType		gst_flagset_register (GType flags_type);
 
 G_END_DECLS
-
-#endif
 
 

@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PARSE_H__
-#define __GST_PARSE_H__
+#pragma once
 
 #include <gst/gstelement.h>
 
@@ -134,5 +133,3 @@ GstElement      * gst_parse_launchv_full (const gchar     ** argv,
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstParseContext, gst_parse_context_free)
 
 G_END_DECLS
-
-#endif /* __GST_PARSE_H__ */

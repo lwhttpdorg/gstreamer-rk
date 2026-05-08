@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_CAPS_H__
-#define __GST_CAPS_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/gstminiobject.h>
@@ -572,5 +571,3 @@ GstCaps *         gst_caps_from_string             (const gchar   *string) G_GNU
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstCaps, gst_caps_unref)
 
 G_END_DECLS
-
-#endif /* __GST_CAPS_H__ */

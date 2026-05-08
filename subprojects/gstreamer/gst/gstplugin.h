@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_PLUGIN_H__
-#define __GST_PLUGIN_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -416,5 +415,3 @@ void                    gst_plugin_list_free (GList *list);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPlugin, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_PLUGIN_H__ */

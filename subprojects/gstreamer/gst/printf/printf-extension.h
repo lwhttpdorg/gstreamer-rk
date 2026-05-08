@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PRINTF_EXTENSION_H_INCLUDED__
-#define __GST_PRINTF_EXTENSION_H_INCLUDED__
+#pragma once
 
 typedef char * (*PrintfPointerExtensionFunc) (const char * format, void * ptr);
 
@@ -27,5 +26,3 @@ void   __gst_printf_pointer_extension_set_func  (PrintfPointerExtensionFunc func
 
 /* functions for internal printf implementation to handle the extensions */
 char * __gst_printf_pointer_extension_serialize (const char * format, void * ptr);
-
-#endif /* __GST_PRINTF_EXTENSION_H_INCLUDED__ */

@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GLIB_COMPAT_PRIVATE_H__
-#define __GLIB_COMPAT_PRIVATE_H__
+#pragma once
 
 #include <glib.h>
 
@@ -55,5 +54,3 @@ gst_g_sort_array (const void       *array,
 #endif
 
 G_END_DECLS
-
-#endif

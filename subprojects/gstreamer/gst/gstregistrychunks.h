@@ -20,8 +20,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
-#ifndef __GST_REGISTRYCHUNKS_H__
-#define __GST_REGISTRYCHUNKS_H__
+#pragma once
 
 #include <gst/gstpad.h>
 #include <gst/gstregistry.h>
@@ -185,5 +184,3 @@ void
 _priv_gst_registry_chunk_free (GstRegistryChunk *chunk);
 
 G_END_DECLS
-
-#endif /* __GST_REGISTRYCHUNKS_H__ */

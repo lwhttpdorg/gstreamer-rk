@@ -22,8 +22,7 @@
  */
 
 
-#ifndef __GST_GHOST_PAD_H__
-#define __GST_GHOST_PAD_H__
+#pragma once
 
 
 #include <gst/gstpad.h>
@@ -147,5 +146,3 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstGhostPad, gst_object_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstProxyPad, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_GHOST_PAD_H__ */

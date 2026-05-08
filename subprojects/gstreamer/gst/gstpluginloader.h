@@ -18,8 +18,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
-#ifndef __GST_PLUGINLOADER_H__
-#define __GST_PLUGINLOADER_H__
+#pragma once
 
 #include <glib.h>
 #include <gst/gstregistry.h>
@@ -38,5 +37,3 @@ typedef struct _GstPluginLoaderFuncs {
 extern const GstPluginLoaderFuncs _priv_gst_plugin_loader_funcs;
 
 G_END_DECLS
-
-#endif /* __GST_PLUGINLOADER_H__ */

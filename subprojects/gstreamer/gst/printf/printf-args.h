@@ -16,8 +16,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
    USA.  */
 
-#ifndef _PRINTF_ARGS_H
-#define _PRINTF_ARGS_H
+#pragma once
 
 /* Get wchar_t.  */
 #ifdef HAVE_WCHAR_T
@@ -147,5 +146,3 @@ STATIC
 extern
 #endif
 int printf_fetchargs (va_list args, arguments *a);
-
-#endif /* _PRINTF_ARGS_H */

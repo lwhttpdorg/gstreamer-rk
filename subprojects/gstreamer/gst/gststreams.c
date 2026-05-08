@@ -80,6 +80,8 @@ enum
   PROP_LAST
 };
 
+static GParamSpec *props[PROP_LAST] = { NULL, };
+
 static GParamSpec *gst_stream_pspecs[PROP_LAST] = { 0 };
 
 #if 0
@@ -120,11 +122,10 @@ gst_stream_class_init (GstStreamClass * klass)
    * The unique identifier of the #GstStream. Can only be set at construction
    * time.
    */
-  g_object_class_install_property (gobject_class, PROP_STREAM_ID,
-      g_param_spec_string ("stream-id", "Stream ID",
-          "The stream ID of the stream",
-          NULL,
-          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+  props[PROP_STREAM_ID] = g_param_spec_string ("stream-id", "Stream ID",
+      "The stream ID of the stream",
+      NULL,
+      G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /**
    * GstStream:flags:
@@ -135,8 +136,7 @@ gst_stream_class_init (GstStreamClass * klass)
       g_param_spec_flags ("stream-flags", "Stream Flags", "The stream flags",
       GST_TYPE_STREAM_FLAGS, GST_STREAM_FLAG_NONE,
       G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property (gobject_class, PROP_STREAM_FLAGS,
-      gst_stream_pspecs[PROP_STREAM_FLAGS]);
+  props[PROP_STREAM_FLAGS] = gst_stream_pspecs[PROP_STREAM_FLAGS];
 
   /**
    * GstStream:stream-type:
@@ -147,8 +147,7 @@ gst_stream_class_init (GstStreamClass * klass)
       g_param_spec_flags ("stream-type", "Stream Type", "The type of stream",
       GST_TYPE_STREAM_TYPE, GST_STREAM_TYPE_UNKNOWN,
       G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property (gobject_class, PROP_STREAM_TYPE,
-      gst_stream_pspecs[PROP_STREAM_TYPE]);
+  props[PROP_STREAM_TYPE] = gst_stream_pspecs[PROP_STREAM_TYPE];
 
   /**
    * GstStream:caps:
@@ -158,8 +157,7 @@ gst_stream_class_init (GstStreamClass * klass)
   gst_stream_pspecs[PROP_CAPS] =
       g_param_spec_boxed ("caps", "Caps", "The caps of the stream",
       GST_TYPE_CAPS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property (gobject_class, PROP_CAPS,
-      gst_stream_pspecs[PROP_CAPS]);
+  props[PROP_CAPS] = gst_stream_pspecs[PROP_CAPS];
 
   /**
    * GstStream:tags:
@@ -169,8 +167,9 @@ gst_stream_class_init (GstStreamClass * klass)
   gst_stream_pspecs[PROP_TAGS] =
       g_param_spec_boxed ("tags", "Tags", "The tags of the stream",
       GST_TYPE_TAG_LIST, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property (gobject_class, PROP_TAGS,
-      gst_stream_pspecs[PROP_TAGS]);
+  props[PROP_TAGS] = gst_stream_pspecs[PROP_TAGS];
+
+  g_object_class_install_properties (gobject_class, PROP_LAST, props);
 
   gobject_class->finalize = gst_stream_finalize;
 }

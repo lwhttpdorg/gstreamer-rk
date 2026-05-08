@@ -168,7 +168,7 @@ glib_log_handler (const gchar * log_domain, GLogLevelFlags log_level,
   domains = g_getenv ("G_MESSAGES_DEBUG");
   if (((log_level & INFO_LEVELS) == 0) ||
       domains == NULL ||
-      (strcmp (domains, "all") != 0 && (!log_domain
+      (g_strcmp0 (domains, "all") != 0 && (!log_domain
               || !strstr (domains, log_domain))))
     return;
 
@@ -538,6 +538,7 @@ gst_android_init (JNIEnv * env, jobject context)
     __android_log_print (ANDROID_LOG_ERROR, "GStreamer", "%s", message);
     (*env)->ThrowNew (env, exception_class, message);
     g_free (message);
+    g_clear_error (&error);
     return;
   }
   __android_log_print (ANDROID_LOG_INFO, "GStreamer",

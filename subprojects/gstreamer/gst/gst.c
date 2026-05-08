@@ -508,8 +508,7 @@ split_and_iterate (const gchar * stringlist, const gchar * separator,
 
   while (lastlist) {
     strings = g_strsplit (lastlist, separator, MAX_PATH_SPLIT);
-    g_free (lastlist);
-    lastlist = NULL;
+    g_clear_pointer (&lastlist, g_free);
 
     while (strings[j]) {
       iterator (strings[j], user_data);
@@ -579,7 +578,7 @@ init_pre (GOptionContext * context, GOptionGroup * group, gpointer data,
   {
     const gchar *disable_registry;
     if ((disable_registry = g_getenv ("GST_REGISTRY_DISABLE"))) {
-      _priv_gst_disable_registry = (strcmp (disable_registry, "yes") == 0);
+      _priv_gst_disable_registry = (g_strcmp0 (disable_registry, "yes") == 0);
     }
   }
 #endif
@@ -837,7 +836,7 @@ select_all (GstPlugin * plugin, gpointer user_data)
 static gint
 sort_by_category_name (gconstpointer a, gconstpointer b)
 {
-  return strcmp (gst_debug_category_get_name ((GstDebugCategory *) a),
+  return g_strcmp0 (gst_debug_category_get_name ((GstDebugCategory *) a),
       gst_debug_category_get_name ((GstDebugCategory *) b));
 }
 
@@ -1059,7 +1058,7 @@ parse_goption_arg (const gchar * opt,
   gint val = 0, n;
 
   for (n = 0; options[n].opt; n++) {
-    if (!strcmp (opt, options[n].opt)) {
+    if (!g_strcmp0 (opt, options[n].opt)) {
       val = options[n].val;
       break;
     }
@@ -1108,19 +1107,14 @@ gst_deinit (void)
   gst_task_cleanup_all ();
 
   g_slist_foreach (_priv_gst_preload_plugins, (GFunc) g_free, NULL);
-  g_slist_free (_priv_gst_preload_plugins);
-  _priv_gst_preload_plugins = NULL;
+  g_clear_slist (&_priv_gst_preload_plugins, NULL);
 
 #ifndef GST_DISABLE_REGISTRY
   g_list_foreach (_priv_gst_plugin_paths, (GFunc) g_free, NULL);
-  g_list_free (_priv_gst_plugin_paths);
-  _priv_gst_plugin_paths = NULL;
+  g_clear_list (&_priv_gst_plugin_paths, NULL);
 #endif
 
-  if (_gst_executable_path) {
-    g_free (_gst_executable_path);
-    _gst_executable_path = NULL;
-  }
+  g_clear_pointer (&_gst_executable_path, g_free);
 
   GstClock *clock = gst_system_clock_obtain ();
   gst_object_unref (clock);

@@ -84,8 +84,7 @@ default_cleanup (GstTaskPool * pool)
   GThreadPool *pool_;
 
   GST_OBJECT_LOCK (pool);
-  pool_ = pool->pool;
-  pool->pool = NULL;
+  pool_ = g_steal_pointer (&pool->pool);
   GST_OBJECT_UNLOCK (pool);
 
   if (pool_) {

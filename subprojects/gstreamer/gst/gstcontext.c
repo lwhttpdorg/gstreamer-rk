@@ -221,7 +221,7 @@ gst_context_has_context_type (const GstContext * context,
   g_return_val_if_fail (GST_IS_CONTEXT (context), FALSE);
   g_return_val_if_fail (context_type != NULL, FALSE);
 
-  return strcmp (context->context_type, context_type) == 0;
+  return g_strcmp0 (context->context_type, context_type) == 0;
 }
 
 /**

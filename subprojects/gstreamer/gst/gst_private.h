@@ -20,8 +20,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PRIVATE_H__
-#define __GST_PRIVATE_H__
+#pragma once
 
 #ifdef HAVE_CONFIG_H
 # ifndef GST_LICENSE   /* don't include config.h twice, it has no guards */
@@ -545,4 +544,3 @@ GstClockTime priv_gst_get_real_time (void);
 G_GNUC_INTERNAL const GstStructure * _gst_tag_list_structure (const GstTagList * list);
 
 G_END_DECLS
-#endif /* __GST_PRIVATE_H__ */

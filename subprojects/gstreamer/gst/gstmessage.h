@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_MESSAGE_H__
-#define __GST_MESSAGE_H__
+#pragma once
 
 #include <glib.h>
 
@@ -876,5 +875,3 @@ void            gst_message_parse_instant_rate_request (GstMessage * message, gd
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstMessage, gst_message_unref)
 
 G_END_DECLS
-
-#endif /* __GST_MESSAGE_H__ */

@@ -23,8 +23,7 @@
 
 
 
-#ifndef __GST_DEVICE_PROVIDER_FACTORY_H__
-#define __GST_DEVICE_PROVIDER_FACTORY_H__
+#pragma once
 
 /**
  * GstDeviceProviderFactory:
@@ -98,5 +97,3 @@ GList *       gst_device_provider_factory_list_get_device_providers (
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstDeviceProviderFactory, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_DEVICE_PROVIDER_FACTORY_H__ */

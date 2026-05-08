@@ -19,8 +19,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_DEVICE_PROVIDER_H__
-#define __GST_DEVICE_PROVIDER_H__
+#pragma once
 
 #include <gst/gstelement.h>
 
@@ -262,5 +261,3 @@ GstDeviceProviderFactory * gst_device_provider_get_factory (GstDeviceProvider * 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstDeviceProvider, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_DEVICE_PROVIDER_H__ */

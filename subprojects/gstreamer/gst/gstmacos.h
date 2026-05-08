@@ -1,5 +1,4 @@
-#ifndef __GST_MACOS_H__
-#define __GST_MACOS_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/glib-compat.h>
@@ -74,5 +73,3 @@ int              gst_macos_main_simple            (GstMainFuncSimple main_func,
                                                    gpointer user_data);
 
 G_END_DECLS
-
-#endif /* __GST_MACOS_H__ */

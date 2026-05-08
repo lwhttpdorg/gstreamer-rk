@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PROTECTION_H__
-#define __GST_PROTECTION_H__
+#pragma once
 
 #include <gst/gst.h>
 
@@ -97,4 +96,3 @@ gchar ** gst_protection_filter_systems_by_available_decryptors (
     const gchar ** system_identifiers);
 
 G_END_DECLS
-#endif /* __GST_PROTECTION_META_H__ */

@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_REGISTRY_H__
-#define __GST_REGISTRY_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 #include <gst/gstplugin.h>
@@ -127,6 +126,4 @@ gboolean                gst_registry_check_feature_version (GstRegistry *registr
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstRegistry, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_REGISTRY_H__ */
 

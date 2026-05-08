@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_ELEMENT_FACTORY_H__
-#define __GST_ELEMENT_FACTORY_H__
+#pragma once
 
 /**
  * GstElementFactory:
@@ -276,5 +275,3 @@ GList *       gst_element_factory_list_filter       (GList *list, const GstCaps 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstElementFactory, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_ELEMENT_FACTORY_H__ */

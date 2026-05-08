@@ -16,8 +16,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
    USA.  */
 
-#ifndef _PRINTF_PARSE_H
-#define _PRINTF_PARSE_H
+#pragma once
 
 #include "printf-args.h"
 
@@ -80,5 +79,3 @@ STATIC
 extern
 #endif
 int printf_parse (const char *format, char_directives *d, arguments *a);
-
-#endif /* _PRINTF_PARSE_H */

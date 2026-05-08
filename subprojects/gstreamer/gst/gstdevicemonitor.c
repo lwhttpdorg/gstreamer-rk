@@ -123,7 +123,10 @@ struct _GstDeviceMonitorPrivate
 enum
 {
   PROP_SHOW_ALL = 1,
+  N_PROPS
 };
+
+static GParamSpec *props[N_PROPS] = { NULL, };
 
 G_DEFINE_TYPE_WITH_PRIVATE (GstDeviceMonitor, gst_device_monitor,
     GST_TYPE_OBJECT);
@@ -217,10 +220,11 @@ gst_device_monitor_class_init (GstDeviceMonitorClass * klass)
 
   GST_DEBUG_CATEGORY_INIT (devicemonitor_debug, "devicemonitor", 0,
       "debugging info for the device monitor");
-  g_object_class_install_property (object_class, PROP_SHOW_ALL,
-      g_param_spec_boolean ("show-all", "Show All",
-          "Show all devices, even those from hidden providers",
-          DEFAULT_SHOW_ALL, G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE));
+  props[PROP_SHOW_ALL] = g_param_spec_boolean ("show-all", "Show All",
+      "Show all devices, even those from hidden providers",
+      DEFAULT_SHOW_ALL, G_PARAM_STATIC_STRINGS | G_PARAM_READWRITE);
+
+  g_object_class_install_properties (object_class, N_PROPS, props);
 }
 
 /* must be called with monitor lock */
@@ -541,8 +545,7 @@ monitor_thread_func (gpointer data)
        * list, which is monitor->priv->started_providers. This is safe because
        * this is a singly-linked list. */
       started->next = NULL;
-      g_slist_free (started);
-      started = NULL;
+      g_clear_slist (&started, NULL);
 
       goto done;
     }
@@ -662,13 +665,11 @@ gst_device_monitor_stop (GstDeviceMonitor * monitor)
     return;
   }
 
-  started = monitor->priv->started_providers;
-  monitor->priv->started_providers = NULL;
+  started = g_steal_pointer (&monitor->priv->started_providers);
   /* This will cancel monitor_thread_func() if it is running */
   monitor->priv->started = FALSE;
   /* Steal GThread reference from the monitor */
-  thread = monitor->priv->start_thread;
-  monitor->priv->start_thread = NULL;
+  thread = g_steal_pointer (&monitor->priv->start_thread);
   GST_OBJECT_UNLOCK (monitor);
 
   if (thread != NULL) {

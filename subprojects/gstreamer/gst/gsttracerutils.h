@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_TRACER_UTILS_H__
-#define __GST_TRACER_UTILS_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -1145,5 +1144,3 @@ _priv_gst_tracing_deinit (void)
 #endif /* GST_DISABLE_GST_TRACER_HOOKS */
 
 G_END_DECLS
-
-#endif /* __GST_TRACER_UTILS_H__ */

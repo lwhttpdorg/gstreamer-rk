@@ -19,8 +19,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_PRESET_H__
-#define __GST_PRESET_H__
+#pragma once
 
 #include <glib-object.h>
 #include <gst/gstconfig.h>
@@ -160,5 +159,3 @@ GST_API
 gboolean     gst_preset_is_editable        (GstPreset *preset);
 
 G_END_DECLS
-
-#endif /* __GST_PRESET_H__ */

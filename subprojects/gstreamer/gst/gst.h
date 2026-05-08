@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_H__
-#define __GST_H__
+#pragma once
 
 #include <glib.h>
 
@@ -152,5 +151,3 @@ GST_API
 const gchar *   gst_get_main_executable_path    (void);
 
 G_END_DECLS
-
-#endif /* __GST_H__ */

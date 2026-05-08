@@ -867,13 +867,13 @@ gst_file_utils_canonicalise_path (const gchar * path)
 
   p = parts;
   while (*p != NULL) {
-    if (strcmp (*p, ".") == 0) {
+    if (g_strcmp0 (*p, ".") == 0) {
       /* just move all following parts on top of this, incl. NUL terminator */
       g_free (*p);
       memmove (p, p + 1, (g_strv_length (p + 1) + 1) * sizeof (gchar *));
       /* re-check the new current part again in the next iteration */
       continue;
-    } else if (strcmp (*p, "..") == 0 && p > parts) {
+    } else if (g_strcmp0 (*p, "..") == 0 && p > parts) {
       /* just move all following parts on top of the previous part, incl.
        * NUL terminator */
       g_free (*(p - 1));
@@ -2028,7 +2028,7 @@ gst_uri_to_string_with_keys (const GstUri * uri, const GList * keys)
     g_string_append_printf (uri_str, "%s:", uri->scheme);
 
   if (uri->userinfo != NULL || uri->host != NULL ||
-      uri->port != GST_URI_NO_PORT || !g_strcmp0 (uri->scheme, "file")) {
+      uri->port != GST_URI_NO_PORT || g_strcmp0 (uri->scheme, "file") == 0) {
     g_string_append (uri_str, "//");
   }
 
@@ -2852,8 +2852,7 @@ gst_uri_remove_query_key (GstUri * uri, const gchar * query_key)
   result = g_hash_table_remove (uri->query, query_key);
   /* if this was the last query entry, remove the query string completely */
   if (result && g_hash_table_size (uri->query) == 0) {
-    g_hash_table_unref (uri->query);
-    uri->query = NULL;
+    g_clear_pointer (&uri->query, g_hash_table_unref);
   }
   return result;
 }

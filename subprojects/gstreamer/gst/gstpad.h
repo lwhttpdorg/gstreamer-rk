@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_PAD_H__
-#define __GST_PAD_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -1631,5 +1630,3 @@ gboolean		gst_pad_forward                         (GstPad *pad, GstPadForwardFun
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPad, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_PAD_H__ */

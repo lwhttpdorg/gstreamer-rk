@@ -21,8 +21,7 @@
  */
 
 /* API compatibility stuff */
-#ifndef __GSTCOMPAT_H__
-#define __GSTCOMPAT_H__
+#pragma once
 /**
  * SECTION:gstcompat
  * @title: GstCompat
@@ -99,5 +98,3 @@ G_STMT_START { \
 #endif /* not GST_DISABLE_DEPRECATED */
 
 G_END_DECLS
-
-#endif /* __GSTCOMPAT_H__ */

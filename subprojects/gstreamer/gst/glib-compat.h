@@ -27,13 +27,10 @@
  * at ftp://ftp.gtk.org/pub/gtk/.
  */
 
-#ifndef __GST_GLIB_COMPAT_H__
-#define __GST_GLIB_COMPAT_H__
+#pragma once
 
 #include <glib.h>
 
 G_BEGIN_DECLS
 
 G_END_DECLS
-
-#endif /* __GST_GLIB_COMPAT_H__ */

@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_MEMORY_H__
-#define __GST_MEMORY_H__
+#pragma once
 
 #include <gst/gstconfig.h>
 
@@ -484,5 +483,3 @@ typedef GstMapInfo GstMemoryMapInfo GST_DEPRECATED_TYPE_FOR(GstMapInfo);
 G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(GstMemoryMapInfo, gst_map_info_clear)
 
 G_END_DECLS
-
-#endif /* __GST_MEMORY_H__ */

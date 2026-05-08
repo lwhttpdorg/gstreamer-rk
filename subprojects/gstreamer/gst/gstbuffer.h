@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_BUFFER_H__
-#define __GST_BUFFER_H__
+#pragma once
 
 #include <gst/gstminiobject.h>
 #include <gst/gstclock.h>
@@ -847,5 +846,3 @@ typedef GstMapInfo GstBufferMapInfo GST_DEPRECATED_TYPE_FOR(GstMapInfo);
 G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC(GstBufferMapInfo, gst_map_info_clear)
 
 G_END_DECLS
-
-#endif /* __GST_BUFFER_H__ */

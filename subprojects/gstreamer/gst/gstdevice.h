@@ -20,8 +20,7 @@
  */
 
 
-#ifndef __GST_DEVICE_H__
-#define __GST_DEVICE_H__
+#pragma once
 
 typedef struct _GstDevice GstDevice;
 typedef struct _GstDeviceClass GstDeviceClass;
@@ -116,5 +115,3 @@ gboolean        gst_device_has_classes        (GstDevice * device,
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstDevice, gst_object_unref)
 
 G_END_DECLS
-
-#endif /* __GST_DEVICE_H__ */

@@ -16,8 +16,7 @@
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
    USA.  */
 
-#ifndef _VASNPRINTF_H
-#define _VASNPRINTF_H
+#pragma once
 
 /* Get va_list.  */
 #include <stdarg.h>
@@ -57,5 +56,3 @@ extern char * vasnprintf (char *resultbuf, size_t *lengthp, const char *format, 
 #ifdef	__cplusplus
 }
 #endif
-
-#endif /* _VASNPRINTF_H */

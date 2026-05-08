@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_MATH_COMPAT_H__
-#define __GST_MATH_COMPAT_H__
+#pragma once
 
 #ifndef __GI_SCANNER__
 
@@ -112,5 +111,3 @@ static union {
 G_END_DECLS
 
 #endif /* !__GI_SCANNER__ */
-
-#endif /* __GST_MATH_COMPAT_H__ */

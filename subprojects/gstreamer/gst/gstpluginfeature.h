@@ -21,8 +21,7 @@
  */
 
 
-#ifndef __GST_PLUGIN_FEATURE_H__
-#define __GST_PLUGIN_FEATURE_H__
+#pragma once
 
 #include <glib-object.h>
 #include <gst/gstobject.h>
@@ -159,6 +158,4 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstPluginFeature, gst_object_unref)
 
 G_END_DECLS
 
-
-#endif /* __GST_PLUGIN_FEATURE_H__ */
 

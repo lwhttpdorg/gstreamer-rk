@@ -23,8 +23,7 @@
  */
 
 
-#ifndef __GST_URI_H__
-#define __GST_URI_H__
+#pragma once
 
 #include <glib.h>
 #include <glib-object.h>
@@ -398,5 +397,3 @@ void     gst_clear_uri (GstUri ** uri_ptr);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstUri, gst_uri_unref)
 
 G_END_DECLS
-
-#endif /* __GST_URI_H__ */
