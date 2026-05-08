@@ -8,46 +8,62 @@ broken, and is now deprecated since '1.3.0': str.format: Value other
 than strings, integers, bools, options, dictionaries and lists
 thereof..
 ---
- gir/meson.build | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ gir/meson.build | 24 ++++++++++++++++++++----
+ 1 file changed, 20 insertions(+), 4 deletions(-)
 
 diff --git a/gir/meson.build b/gir/meson.build
-index 600746f7..8168824c 100644
+index 600746f..9def443 100644
 --- a/gir/meson.build
 +++ b/gir/meson.build
-@@ -230,7 +230,7 @@ else
+@@ -230,7 +230,11 @@ else
  endif
  
  foreach h : glib_headers
 -  hstr = '@0@'.format(h)
-+  hstr = h.full_path()
++  if dep_type == 'internal'
++    hstr = h.full_path()
++  else
++    hstr = h
++  endif
    if not hstr.endswith('autocleanups.h')
      glib_files += h
    endif
-@@ -306,7 +306,7 @@ else
+@@ -306,7 +310,11 @@ else
  endif
  
  foreach h : gobject_headers
 -  hstr = '@0@'.format(h)
-+  hstr = h.full_path()
++  if dep_type == 'internal'
++    hstr = h.full_path()
++  else
++    hstr = h
++  endif
    if not hstr.endswith('autocleanups.h') and not hstr.endswith('glib-types.h') and not hstr.endswith('gvaluecollector.h') and not hstr.endswith('glib-enumtypes.h')
      gobject_files += h
    endif
-@@ -427,7 +427,7 @@ else
+@@ -427,7 +435,11 @@ else
  endif
  
  foreach h : gio_headers
 -  hstr = '@0@'.format(h)
-+  hstr = h.full_path()
++  if dep_type == 'internal'
++    hstr = h.full_path()
++  else
++    hstr = h
++  endif
    if not hstr.endswith('autocleanups.h')
      gio_files += h
    endif
-@@ -453,7 +453,7 @@ if giounix_dep.found()
+@@ -453,7 +465,11 @@ if giounix_dep.found()
    # GIO Unix headers must be included explicitly since there is no catch-all
    # header that includes all of them unlike gio/gio.h above
    foreach header : giounix_headers
 -    hstr = '@0@'.format(header)
-+    hstr = h.full_path()
++    if dep_type == 'internal'
++      hstr = h.full_path()
++    else
++      hstr = h
++    endif
      hbase = hstr.split('/')[-1]
      gio_command += '--c-include=gio/@0@'.format(hbase)
    endforeach
