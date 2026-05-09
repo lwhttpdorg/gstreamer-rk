@@ -28,7 +28,7 @@
  *
  * ## Example launch line
  * |[
- * gst-launch-1.0 -v filesrc location=transparency.webm ! matroskademux ! 
+ * gst-launch-1.0 -v filesrc location=transparency.webm ! matroskademux !
  *     codecalphademux name=d
  *     d.video ! queue ! vp9dec ! autovideosink
  *     d.alpha ! queue ! vp9dec ! autovideosink
@@ -59,6 +59,8 @@ struct _GstCodecAlphaDemux
   GstPad *alpha_pad;
 
   GstFlowCombiner *flow_combiner;
+
+  gboolean multilayer_chain;
 };
 
 #define gst_codec_alpha_demux_parent_class parent_class
@@ -92,7 +94,27 @@ GST_STATIC_PAD_TEMPLATE ("alpha",
     );
 
 static GstFlowReturn
-gst_codec_alpha_demux_chain (GstPad * pad, GstObject * object,
+gst_codec_alpha_demux_chain_multilayer (GstPad * pad, GstObject * object,
+    GstBuffer * buffer)
+{
+  GstFlowReturn ret = GST_FLOW_EOS;
+
+  GstCodecAlphaDemux *self = GST_CODEC_ALPHA_DEMUX (object);
+  GstVideoCodecAlphaMeta *alpha_meta =
+      gst_buffer_get_video_codec_alpha_meta (buffer);
+
+  if (alpha_meta) {
+    ret = gst_pad_push (self->alpha_pad, buffer);
+  } else {
+    ret = gst_pad_push (self->src_pad, buffer);
+  }
+  ret = gst_flow_combiner_update_flow (self->flow_combiner, ret);
+
+  return ret;
+}
+
+static GstFlowReturn
+gst_codec_alpha_demux_chain_default (GstPad * pad, GstObject * object,
     GstBuffer * buffer)
 {
   GstCodecAlphaDemux *self = GST_CODEC_ALPHA_DEMUX (object);
@@ -124,6 +146,17 @@ gst_codec_alpha_demux_chain (GstPad * pad, GstObject * object,
   return ret;
 }
 
+static GstFlowReturn
+gst_codec_alpha_demux_chain (GstPad * pad, GstObject * object,
+    GstBuffer * buffer)
+{
+  GstCodecAlphaDemux *self = GST_CODEC_ALPHA_DEMUX (object);
+  if (self->multilayer_chain)
+    return gst_codec_alpha_demux_chain_multilayer (pad, object, buffer);
+  else
+    return gst_codec_alpha_demux_chain_default (pad, object, buffer);
+}
+
 static GstCaps *
 gst_codec_alpha_demux_transform_caps (GstCaps * caps, gboolean codec_alpha)
 {
@@ -137,12 +170,21 @@ gst_codec_alpha_demux_transform_caps (GstCaps * caps, gboolean codec_alpha)
 }
 
 static GstEvent *
-gst_codec_alpha_demux_transform_caps_event (GstEvent * src_event)
+gst_codec_alpha_demux_transform_caps_event (GstCodecAlphaDemux * self,
+    GstEvent * src_event)
 {
   GstEvent *dst_event;
   GstCaps *caps;
 
   gst_event_parse_caps (src_event, &caps);
+
+  if (gst_caps_get_size (caps) > 0) {
+    GstStructure *s = gst_caps_get_structure (caps, 0);
+    const char *str_name = gst_structure_get_name (s);
+    if (!g_strcmp0 ("video/x-h266", str_name)) {
+      self->multilayer_chain = TRUE;
+    }
+  }
 
   caps = gst_codec_alpha_demux_transform_caps (caps, FALSE);
   dst_event = gst_event_new_caps (caps);
@@ -164,7 +206,7 @@ gst_codec_alpha_demux_sink_event (GstPad * sink_pad, GstObject * parent,
       gst_flow_combiner_reset (self->flow_combiner);
       break;
     case GST_EVENT_CAPS:
-      event = gst_codec_alpha_demux_transform_caps_event (event);
+      event = gst_codec_alpha_demux_transform_caps_event (self, event);
       break;
     default:
       break;
@@ -296,6 +338,7 @@ gst_codec_alpha_demux_init (GstCodecAlphaDemux * self)
   self->sink_pad = gst_element_get_static_pad (GST_ELEMENT (self), "sink");
   self->src_pad = gst_element_get_static_pad (GST_ELEMENT (self), "src");
   self->alpha_pad = gst_element_get_static_pad (GST_ELEMENT (self), "alpha");
+  self->multilayer_chain = FALSE;
 
   self->flow_combiner = gst_flow_combiner_new ();
   gst_flow_combiner_add_pad (self->flow_combiner, self->src_pad);

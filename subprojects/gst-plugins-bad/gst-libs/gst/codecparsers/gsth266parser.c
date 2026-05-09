@@ -1701,6 +1701,70 @@ error:
 }
 
 static GstH266ParserResult
+    gst_h266_parser_parse_scalability_dimension_info
+    (GstH266ScalabilityDimensionInfo * sdi, NalReader * nr)
+{
+  guint i, j;
+  GST_LOG ("parsing \"Scalability Dimension info\"");
+
+  READ_UINT8 (nr, sdi->max_layers_minus1, 6);
+  READ_UINT8 (nr, sdi->multiview_info_flag, 1);
+  READ_UINT8 (nr, sdi->auxiliary_info_flag, 1);
+  if (sdi->multiview_info_flag || sdi->auxiliary_info_flag) {
+    if (sdi->multiview_info_flag) {
+      READ_UINT8 (nr, sdi->view_id_len_minus1, 4);
+    }
+    for (i = 0; i <= sdi->max_layers_minus1; i++) {
+      READ_UINT8 (nr, sdi->layer_id[i], 6);
+      if (sdi->multiview_info_flag) {
+        READ_UINT8 (nr, sdi->view_id_val[i], sdi->view_id_len_minus1 + 1);
+      }
+      if (sdi->auxiliary_info_flag) {
+        READ_UINT8 (nr, sdi->aux_id[i], 8);
+        if (sdi->aux_id[i] > 0) {
+          READ_UINT8 (nr, sdi->num_associated_primary_layers_minus1[i], 6);
+          for (j = 0; j <= sdi->max_layers_minus1; j++) {
+            READ_UINT8 (nr, sdi->associated_primary_layer_id[i][j], 6);
+          }
+        }
+      }
+    }
+  }
+
+  return GST_H266_PARSER_OK;
+
+error:
+  GST_WARNING ("error parsing \"Scalability Dimension info\"");
+  return GST_H266_PARSER_ERROR;
+}
+
+static GstH266ParserResult
+gst_h266_parser_parse_alpha_channel_info (GstH266AlphaChannelInfo * aci,
+    NalReader * nr)
+{
+  GST_LOG ("parsing \"Alpha Channel info\"");
+
+  READ_UINT8 (nr, aci->cancel_flag, 1);
+  if (!aci->cancel_flag) {
+    READ_UINT8 (nr, aci->use_idc, 3);
+    READ_UINT8 (nr, aci->bit_depth_minus8, 3);
+    READ_UINT8 (nr, aci->transparent_value, aci->bit_depth_minus8 + 9);
+    READ_UINT8 (nr, aci->opaque_value, aci->bit_depth_minus8 + 9);
+    READ_UINT8 (nr, aci->incr_flag, 1);
+    READ_UINT8 (nr, aci->clip_flag, 1);
+    if (aci->clip_flag) {
+      READ_UINT8 (nr, aci->clip_type_flag, 1);
+    }
+  }
+
+  return GST_H266_PARSER_OK;
+
+error:
+  GST_WARNING ("error parsing \"Alpha Channel info\"");
+  return GST_H266_PARSER_ERROR;
+}
+
+static GstH266ParserResult
 gst_h266_parser_parse_frame_field_info (GstH266FrameFieldInfo * ffi,
     NalReader * nr)
 {
@@ -6075,6 +6139,14 @@ gst_h266_parser_parse_sei_message (GstH266SEIMessage * sei, NalReader * nr,
       case GST_H266_SEI_SUBPIC_LEVEL_INFO:
         res = gst_h266_parser_parse_subpic_level_info
             (&sei->payload.subpic_level_info, nr);
+        break;
+      case GST_H266_SEI_SCALABILITY_DIMENSION_INFO:
+        res = gst_h266_parser_parse_scalability_dimension_info
+            (&sei->payload.scalability_dimension_info, nr);
+        break;
+      case GST_H266_SEI_ALPHA_CHANNEL_INFO:
+        res = gst_h266_parser_parse_alpha_channel_info
+            (&sei->payload.alpha_channel_info, nr);
         break;
       default:
         /* Just consume payloadSize bytes, which does not account for

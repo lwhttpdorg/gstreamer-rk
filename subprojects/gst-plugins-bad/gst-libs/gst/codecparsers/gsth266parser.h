@@ -375,6 +375,22 @@ typedef enum
   GST_H266_SEI_SCALABLE_NESTING = 133,
   GST_H266_SEI_FRAME_FIELD_INFO = 168,
   GST_H266_SEI_SUBPIC_LEVEL_INFO = 203,
+  /**
+   * GST_H266_SEI_SCALABILITY_DIMENSION_INFO:
+   * 
+   * Scalability Dimension Information SEI.
+   *
+   * Since: 1.28
+   */
+  GST_H266_SEI_SCALABILITY_DIMENSION_INFO = 208,
+  /**
+   * GST_H266_SEI_ALPHA_CHANNEL_INFO: 
+   * 
+   * Alpha Channel Information SEI
+   *
+   * Since: 1.28
+   */
+  GST_H266_SEI_ALPHA_CHANNEL_INFO = 165,
   /* and more...  */
 } GstH266SEIPayloadType;
 
@@ -452,6 +468,8 @@ typedef struct _GstH266DUInfo                   GstH266DUInfo;
 typedef struct _GstH266ScalableNesting          GstH266ScalableNesting;
 typedef struct _GstH266SubPicLevelInfo          GstH266SubPicLevelInfo;
 typedef struct _GstH266FrameFieldInfo           GstH266FrameFieldInfo;
+typedef struct _GstH266ScalabilityDimensionInfo GstH266ScalabilityDimensionInfo;
+typedef struct _GstH266AlphaChannelInfo         GstH266AlphaChannelInfo;
 typedef struct _GstH266SEIMessage               GstH266SEIMessage;
 typedef struct _GstH266DecoderConfigRecordNalUnitArray GstH266DecoderConfigRecordNalUnitArray;
 typedef struct _GstH266PTLRecord                GstH266PTLRecord;
@@ -3212,6 +3230,82 @@ struct _GstH266FrameFieldInfo {
 };
 
 /**
+ * GstH266ScalabilityDimensionInfo:
+ *
+ * Structure defining the H266 scalability dimension information.
+ * Rec.ITU-T H.274 8.19 | ISO/IEC 23002-7
+ *
+ * @max_layers_minus1: plus 1 indicates the maximum number of layers in the
+ *  current CVS.
+ * @multiview_info_flag: equal to 1 indicates that the current CVS may have
+ *  multiple views and the sdi_view_id_val
+ * @auxiliary_info_flag: equal to 1 indicates that one or more layers in the
+ *  current CVS may be auxiliary layers
+ * @view_id_len_minus1: plus 1 specifies the length, in bits, of the
+ *  sdi_view_id_val[ i ] syntax element.
+ * @layer_id: specifies the layer identifier of the i-th layer that may be
+ *  present in the current CVS.
+ * @view_id_val: specifies the view identifier of the i-th layer in the current CVS
+ * @aux_id: equal to 0 indicates that the i-th layer in the current CVS does not
+ *  contain auxiliary pictures. Greater than zero indicates the type of the layer
+ * @num_associated_primary_layers_minus1:  plus 1 specifies the number of
+ *  associated primary layers of i-th layer, which is an auxiliary layer.
+ * @associated_primary_layer_id: specifies the layer index of the j-th associated
+ *  primary layer of the i-th layer,
+ *
+ * Since: 1.28
+ */
+struct _GstH266ScalabilityDimensionInfo {
+  guint8 max_layers_minus1;
+  guint8 multiview_info_flag;
+  guint8 auxiliary_info_flag;
+  guint8 view_id_len_minus1;
+  guint8 layer_id[GST_H266_MAX_LAYERS];
+  guint8 view_id_val[GST_H266_MAX_LAYERS];
+  guint8 aux_id[GST_H266_MAX_LAYERS];
+  guint8 num_associated_primary_layers_minus1[GST_H266_MAX_LAYERS];
+  guint8 associated_primary_layer_id[GST_H266_MAX_LAYERS][GST_H266_MAX_LAYERS];
+};
+
+/**
+ * GstH266AlphaChannelInfo:
+ *
+ * Structure defining the H266 alpha channel information.
+ * Rec.ITU-T H.274 8.23 | ISO/IEC 23002-7
+ *
+ * @cancel_flag: ndicates that the SEI message cancels the persistence of any
+ *  previous ACI SEI.
+ * @use_idc: Indicates that for alpha blending purposes the decoded samples of
+ *  the associated primary picture.
+ * @bit_depth_minus8: specifies the bit depth of the samples of the luma sample
+ *  array of the auxiliary picture.
+ * @transparent_value: specifies the interpretation sample value of a decoded
+ *  auxiliary picture luma sample
+ * @opaque_value: specifies the interpretation sample value of a decoded auxiliary
+ *  picture luma sample
+ * @incr_flag: ndicates that the interpretation sample value for each decoded
+ *  auxiliary picture luma sample value is equal to the decoded auxiliary picture
+ *  sample value for purposes of alpha blending.
+ * @clip_flag: indicates that no clipping operation is applied to obtain the
+ *  interpretation sample values.
+ * @clip_type_flag: indicates that, for purposes of alpha blending, is set equal
+ *  to Max( alpha_transparent_value, alpha_opaque_value ) to obtain the
+ *  interpretation sample.
+ *
+ * Since: 1.28
+ */
+struct _GstH266AlphaChannelInfo {
+  guint8 cancel_flag;
+  guint8 use_idc;
+  guint8 bit_depth_minus8;
+  guint8 transparent_value;
+  guint8 opaque_value;
+  guint8 incr_flag;
+  guint8 clip_flag;
+  guint8 clip_type_flag;
+};
+
+/**
  * GstH266SEIMessage:
  * @payloadType: the payload type of #GstH266SEIPayloadType.
  * @buffering_period: buffering period sei of #GstH266BufferingPeriod.
@@ -3237,6 +3331,8 @@ struct _GstH266SEIMessage
     GstH266ScalableNesting scalable_nesting;
     GstH266SubPicLevelInfo subpic_level_info;
     GstH266FrameFieldInfo frame_field_info;
+    GstH266ScalabilityDimensionInfo scalability_dimension_info;
+    GstH266AlphaChannelInfo alpha_channel_info;
 
     /**
      * GstH266SEIMessage.registered_user_data:

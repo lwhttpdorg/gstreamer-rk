@@ -43,6 +43,7 @@
 #include "gstvah266dec.h"
 
 #include "gstvabasedec.h"
+#include "gstvacodecalphadecodebin.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_va_h266dec_debug);
 #ifndef GST_DISABLE_GST_DEBUG
@@ -82,6 +83,12 @@ static const gchar *src_caps_str =
 /* *INDENT-ON* */
 
 static const gchar *sink_caps_str = "video/x-h266";
+
+static GstStaticPadTemplate alpha_template = GST_STATIC_PAD_TEMPLATE ("sink",
+    GST_PAD_SINK, GST_PAD_ALWAYS,
+    GST_STATIC_CAPS ("video/x-h266, codec-alpha = (boolean) true, "
+        "alignment = frame")
+    );
 
 /* *INDENT-OFF* */
 static const struct
@@ -1264,6 +1271,36 @@ gst_va_h266_dec_class_init (gpointer g_class, gpointer class_data)
   g_free (cdata);
 }
 
+/**
+ * SECTION:element-vah266alphadecodebin
+ * @title: vah266alphadecodebin
+ * @short_description: A VA-API based h266 video decoder
+ *
+ * Wraps two copies vah266enc to decode a h266 video with an alpha layer
+ *
+ * ## Example launch line
+ * ```
+ * gst-launch-1.0 filesrc location=sample.h264 ! parsebin ! vah266alphadecodebin ! autovideosink
+ * ```
+ *
+ * Since: 1.28
+ */
+
+static void
+gst_va_codec_h266_alpha_decode_bin_class_init (GstVaCodecAlphaDecodeBinClass
+    * klass, gchar * decoder_name)
+{
+  GstElementClass *element_class = (GstElementClass *) klass;
+
+  klass->decoder_name = decoder_name;
+  gst_element_class_add_static_pad_template (element_class, &alpha_template);
+
+  gst_element_class_set_static_metadata (element_class,
+      "VA-API h266 Alpha Decoder", "Codec/Decoder/Video/Hardware",
+      "Wrapper bin to decode h266 with alpha stream.",
+      "Diego Nieto <dnieto@fluendo.com>");
+}
+
 gboolean
 gst_va_h266_dec_register (GstPlugin * plugin, GstVaDevice * device,
     GstCaps * sink_caps, GstCaps * src_caps, guint rank)
@@ -1308,6 +1345,14 @@ gst_va_h266_dec_register (GstPlugin * plugin, GstVaDevice * device,
       type_name, &type_info, 0);
 
   ret = gst_element_register (plugin, feature_name, rank, type);
+
+  if (ret) {
+    ret = gst_va_codec_alpha_decode_bin_register (plugin,
+        (GClassInitFunc) gst_va_codec_h266_alpha_decode_bin_class_init,
+        g_strdup (feature_name), "GstVah266AlphaDecodeBin",
+        "GstVah266%sAlphaDecodeBin", "vah266alphadecodebin",
+        "vah266%salphadecodebin", device, rank);
+  }
 
   g_free (type_name);
   g_free (feature_name);

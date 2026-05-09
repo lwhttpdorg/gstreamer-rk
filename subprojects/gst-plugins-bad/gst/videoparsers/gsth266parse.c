@@ -289,6 +289,11 @@ gst_h266_parse_reset_stream_info (GstH266Parse * h266parse)
   h266parse->first_frame = TRUE;
   memset (&h266parse->sei_frame_field, 0, sizeof (GstH266FrameFieldInfo));
   h266parse->interlaced_mode = GST_H266_PARSE_PROGRESSIVE_ONLY;
+  memset (&h266parse->sei_sdi, 0, sizeof (GstH266ScalabilityDimensionInfo));
+  h266parse->sei_sdi_alpha_present = FALSE;
+  h266parse->sei_aci_present = FALSE;
+  h266parse->codec_alpha = FALSE;
+  h266parse->codec_alpha_decoder = FALSE;
 
   gst_buffer_replace (&h266parse->codec_data, NULL);
   gst_buffer_replace (&h266parse->codec_data_in, NULL);
@@ -420,6 +425,18 @@ gst_h266_parse_format_from_caps (GstH266Parse * parse, GstCaps * caps,
   }
 }
 
+/* implement custom semantic for codec-alpha */
+static gboolean
+gst_h266_parse_check_codec_alpha (GstStructure * s, GstH266Parse * h266parse)
+{
+  if (gst_structure_get_boolean (s, "codec-alpha",
+          &h266parse->codec_alpha_decoder)) {
+    return h266parse->codec_alpha_decoder == h266parse->codec_alpha;
+  }
+
+  return h266parse->codec_alpha == FALSE;
+}
+
 /* check downstream caps to configure format and alignment */
 static void
 gst_h266_parse_negotiate (GstH266Parse * h266parse, gint in_format,
@@ -437,6 +454,24 @@ gst_h266_parse_negotiate (GstH266Parse * h266parse, gint in_format,
   /* concentrate on leading structure, since decodebin parser
    * capsfilter always includes parser template caps */
   if (caps) {
+    caps = gst_caps_make_writable (caps);
+    while (gst_caps_get_size (caps) > 0) {
+      GstStructure *s = gst_caps_get_structure (caps, 0);
+
+      if (gst_h266_parse_check_codec_alpha (s, h266parse))
+        break;
+
+      gst_caps_remove_structure (caps, 0);
+    }
+
+    /* this may happen if there is simply no codec alpha decoder in the
+     * gstreamer installation, in this case, pick the first non-alpha decoder.
+     */
+    if (gst_caps_is_empty (caps)) {
+      gst_caps_unref (caps);
+      caps = gst_pad_get_allowed_caps (GST_BASE_PARSE_SRC_PAD (h266parse));
+    }
+
     caps = gst_caps_truncate (caps);
     GST_DEBUG_OBJECT (h266parse, "negotiating with caps: %" GST_PTR_FORMAT,
         caps);
@@ -627,6 +662,32 @@ gst_h266_parse_process_sei (GstH266Parse * h266parse, GstH266NalUnit * nalu)
         gst_h266_parse_process_sei_user_data (h266parse,
             &sei.payload.registered_user_data);
         break;
+        /* Check whether alpha layer is present */
+      case GST_H266_SEI_SCALABILITY_DIMENSION_INFO:{
+        guint i;
+        /* Check whether the current layer is an alpha layer */
+        if (sei.payload.scalability_dimension_info.auxiliary_info_flag) {
+          if (sei.payload.scalability_dimension_info.max_layers_minus1 + 1 > 1) {
+            for (i = 0;
+                i <= sei.payload.scalability_dimension_info.max_layers_minus1;
+                i++) {
+              if (sei.payload.scalability_dimension_info.aux_id[i] == 1) {
+                h266parse->sei_sdi_alpha_present = TRUE;
+              }
+            }
+          }
+        }
+        h266parse->sei_sdi = sei.payload.scalability_dimension_info;
+        break;
+      }
+      case GST_H266_SEI_ALPHA_CHANNEL_INFO:
+        /* Check whether alpha SEI is valid */
+        if (!sei.payload.alpha_channel_info.cancel_flag) {
+          h266parse->sei_aci_present = TRUE;
+        } else {
+          h266parse->sei_aci_present = FALSE;
+        }
+        break;
       default:
         break;
     }
@@ -804,6 +865,13 @@ gst_h266_parse_process_nal (GstH266Parse * h266parse, GstH266NalUnit * nalu)
       h266parse->header = TRUE;
       gst_h266_parse_process_sei (h266parse, nalu);
 
+      if (h266parse->sei_sdi_alpha_present
+          && h266parse->sei_aci_present && !h266parse->codec_alpha) {
+        GST_INFO_OBJECT (h266parse, "have Alpha Channel in stream");
+        h266parse->update_caps = TRUE;
+        h266parse->codec_alpha = TRUE;
+      }
+
       /* update idr pos */
       if (nal_type == GST_H266_NAL_PREFIX_SEI)
         update_idr_pos (h266parse, nalu);
@@ -948,6 +1016,19 @@ gst_h266_parse_process_nal (GstH266Parse * h266parse, GstH266NalUnit * nalu)
   }
 
   return TRUE;
+}
+
+static inline void
+gst_h266_parse_handle_alpha_primary_frame (GstH266Parse * h266parse,
+    GstBaseParseFrame * frame)
+{
+  if (!h266parse->codec_alpha || !h266parse->codec_alpha_decoder)
+    return;
+
+  if (h266parse->sei_sdi.aux_id[h266parse->last_nuh_layer_id] == 1) {
+    GstBuffer *alpha_buffer = gst_buffer_new ();
+    gst_buffer_add_video_codec_alpha_meta (frame->out_buffer, alpha_buffer);
+  }
 }
 
 /* Caller guarantees at least 3 bytes of nal payload for each nal returns
@@ -1391,6 +1472,10 @@ end:
   gst_buffer_unmap (buffer, &map);
 
   gst_h266_parse_parse_frame (parse, frame);
+
+  gst_h266_parse_handle_alpha_primary_frame (h266parse, frame);
+
+  h266parse->last_nuh_layer_id = nalu.layer_id;
 
   return gst_base_parse_finish_frame (parse, frame, framesize);
 
@@ -2629,6 +2714,9 @@ gst_h266_parse_update_src_caps (GstH266Parse * h266parse, GstCaps * caps)
       }
     }
 
+    if (h266parse->codec_alpha) {
+      gst_caps_set_simple (caps, "codec-alpha", G_TYPE_BOOLEAN, TRUE, NULL);
+    }
     if (!(src_caps && gst_caps_is_strictly_equal (src_caps, caps))) {
       /* update codec data to new value */
       if (buf) {
