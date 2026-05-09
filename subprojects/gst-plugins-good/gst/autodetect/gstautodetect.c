@@ -260,6 +260,10 @@ gst_auto_detect_find_best (GstAutoDetect * self)
   GstPad *el_pad = NULL;
   GstCaps *el_caps = NULL;
   gboolean no_match = TRUE;
+  GstElement *parent = GST_ELEMENT_CAST (gst_element_get_parent (self));
+
+  GST_DEBUG_OBJECT (self, "Parent of %s: %s", GST_ELEMENT_NAME (self),
+      parent ? GST_ELEMENT_NAME (parent) : "none");
 
   /* We don't treat sound server sinks special. Our policy is that sound
    * server sinks that have a rank must not auto-spawn a daemon under any
@@ -303,7 +307,42 @@ gst_auto_detect_find_best (GstAutoDetect * self)
       }
 
       gst_element_set_bus (el, bus);
+
+      if (parent) {
+        GParamSpec *pspec =
+            g_object_class_find_property (G_OBJECT_GET_CLASS (parent),
+            "video-sink");
+        if (pspec) {
+          GstElement *parent_video_sink = NULL;
+          g_object_get (parent, "video-sink", &parent_video_sink, NULL);
+          if (parent_video_sink) {
+            GstElementFactory *parent_factory =
+                gst_element_get_factory (GST_ELEMENT (parent));
+            if (parent_factory) {
+              const gchar *parent_feature_name =
+                  gst_plugin_feature_get_name (GST_PLUGIN_FEATURE
+                  (parent_factory));
+              const gchar *el_feature_name =
+                  gst_plugin_feature_get_name (GST_PLUGIN_FEATURE (f));
+
+              GST_DEBUG_OBJECT (self, "Parent is %s but candidate is %s",
+                  parent_feature_name, el_feature_name);
+              if (g_strcmp0 (parent_feature_name, el_feature_name) == 0) {
+                GST_DEBUG_OBJECT (self,
+                    "Skip %s because it matches parent's video-sink feature",
+                    el_feature_name);
+                gst_object_unref (parent_video_sink);
+                gst_object_unref (el);
+                continue;
+              }
+            }
+            gst_object_unref (parent_video_sink);
+          }
+        }
+      }
+
       ret = gst_element_set_state (el, GST_STATE_READY);
+
       if (ret == GST_STATE_CHANGE_SUCCESS) {
         GST_DEBUG_OBJECT (self, "This worked!");
         gst_element_set_state (el, GST_STATE_NULL);
@@ -346,6 +385,10 @@ gst_auto_detect_find_best (GstAutoDetect * self)
     choice = gst_auto_detect_create_fake_element (self);
     gst_element_set_state (choice, GST_STATE_READY);
   }
+
+
+  if (parent)
+    gst_object_unref (parent);
   gst_object_unref (bus);
   gst_plugin_feature_list_free (list);
   g_slist_foreach (errors, (GFunc) gst_mini_object_unref, NULL);
