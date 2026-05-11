@@ -1138,7 +1138,8 @@ static const struct
       HEVCProfileMain, "main"}, {
       HEVCProfileMain10, "main-10"}, {
       HEVCProfileMain10HDR10, "main-10"}, {
-      HEVCProfileMain10HDR10Plus, "main-10"}
+      HEVCProfileMain10HDR10Plus, "main-10"}, {
+      HEVCProfileMainStill, "main-still-picture"}
 };
 
 const gchar *
@@ -1250,7 +1251,9 @@ static const struct
       AVCProfileConstrainedHigh, "constrained-high", NULL}, {
       AVCProfileHigh10, "high-10", "high-10-intra"}, {
       AVCProfileHigh422, "high-4:2:2", "high-4:2:2-intra"}, {
-      AVCProfileHigh444, "high-4:4:4", "high-4:4:4-intra"}
+      AVCProfileHigh444, "high-4:4:4", "high-4:4:4-intra"}, {
+      AVCProfileConstrainedBaseline, "constrained-baseline"}, {
+      AVCProfileConstrainedHigh, "constrained-high"}
 };
 
 const gchar *
@@ -1527,7 +1530,10 @@ static const struct
       AACObjectMain, "main"}, {
       AACObjectLC, "lc"}, {
       AACObjectSSR, "ssr"}, {
-      AACObjectLTP, "ltp"}
+      AACObjectLTP, "ltp"}, {
+      AACObjectHE, "he-aac-v1"}, {
+      AACObjectLD, "ld"}, {
+      AACObjectHE_PS, "he-aac-v2"}
 };
 
 const gchar *
