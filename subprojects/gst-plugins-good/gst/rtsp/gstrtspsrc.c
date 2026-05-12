@@ -8775,6 +8775,11 @@ gst_rtspsrc_parse_range (GstRTSPSrc * src, const gchar * range,
 
   segment->position = seconds;
 
+  /* Make time and start/stop consistent for application to calculate correct
+   * seek position */
+  if (src->onvif_mode)
+    segment->time = seconds;
+
   if (therange->max.type == GST_RTSP_TIME_NOW)
     seconds = -1;
   else if (therange->max.type == GST_RTSP_TIME_END)
