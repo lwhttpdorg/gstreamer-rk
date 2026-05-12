@@ -977,6 +977,8 @@ sctpenc_cleanup (GstSctpEnc * self)
   gst_sctp_association_set_on_packet_out (self->sctp_association, NULL, NULL,
       NULL);
 
+  gst_data_queue_set_flushing (self->outbound_sctp_packet_queue, TRUE);
+
   g_signal_handler_disconnect (self->sctp_association,
       self->signal_handler_state_changed);
   gst_sctp_association_force_close (self->sctp_association);
