@@ -568,6 +568,87 @@ gst_codec_utils_aac_caps_set_level_and_profile (GstCaps * caps,
 }
 
 /**
+ * gst_codec_utils_mpegh_caps_set_level_and_profile:
+ * @caps: the #GstCaps to which level and profile fields are to be added
+ * @profile_level_id: profile level id
+ *
+ * Sets the profile and level on @caps if it can be determined from @profile_level_id.
+ * @caps must be audio/x-mpeg-h.
+ *
+ * Returns: %TRUE if the level and profile could be set, %FALSE otherwise.
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_codec_utils_mpegh_caps_set_level_and_profile (GstCaps * caps,
+    const guint64 * profile_level_id)
+{
+
+  g_return_val_if_fail (GST_IS_CAPS (caps), FALSE);
+  g_return_val_if_fail (GST_CAPS_IS_SIMPLE (caps), FALSE);
+  g_return_val_if_fail (GST_SIMPLE_CAPS_HAS_NAME (caps, "audio/x-mpeg-h"),
+      FALSE);
+  g_return_val_if_fail (profile_level_id != NULL, FALSE);
+
+  const gchar *profile, *level;
+
+  switch (*profile_level_id) {
+    case 0x0B:
+      profile = "lc";
+      level = "1";
+      break;
+    case 0x0C:
+      profile = "lc";
+      level = "2";
+      break;
+    case 0x0D:
+      profile = "lc";
+      level = "3";
+      break;
+    case 0x0E:
+      profile = "lc";
+      level = "4";
+      break;
+    case 0x0F:
+      profile = "lc";
+      level = "5";
+      break;
+    case 0x10:
+      profile = "bl";
+      level = "1";
+      break;
+    case 0x11:
+      profile = "bl";
+      level = "2";
+      break;
+    case 0x12:
+      profile = "bl";
+      level = "3";
+      break;
+    case 0x13:
+      profile = "bl";
+      level = "4";
+      break;
+    case 0x14:
+      profile = "bl";
+      level = "5";
+      break;
+    default:
+      GST_WARNING ("Unknown profile level id %lu", *profile_level_id);
+      profile = NULL;
+      level = NULL;
+  }
+
+  gst_caps_set_simple (caps, "profile", G_TYPE_STRING, profile, "level",
+      G_TYPE_STRING, level, NULL);
+
+  GST_LOG ("profile : %s", (profile) ? profile : "---");
+  GST_LOG ("level   : %s", (level) ? level : "---");
+
+  return (level != NULL && profile != NULL);
+}
+
+/**
  * gst_codec_utils_h264_get_profile:
  * @sps: (array length=len): Pointer to the sequence parameter set for the stream.
  * @len: Length of the data available in @sps.
@@ -4410,7 +4491,40 @@ gst_codec_utils_caps_from_mime_codec_single (const gchar * codec)
       caps = gst_caps_new_empty_simple ("audio/x-eac3");
       break;
     case GST_MAKE_FOURCC ('a', 'c', '-', '4'):
+      /* ETSI TS 103 190-1 V1.3.1 Digital Audio Compression (AC-4) Standard; Part 1: Channel based coding, Annex F */
+      /* ETSI TS 103 190-2 V1.2.1 Digital Audio Compression (AC-4) Standard; Part 2: Immersive and personalized audio, Annex E */
       caps = gst_caps_new_empty_simple ("audio/x-ac4");
+      if (!subcodec[1])
+        break;
+
+      gint64 bs_version = g_ascii_strtoull (subcodec[1], NULL, 16);
+      gint64 pres_version = g_ascii_strtoull (subcodec[2], NULL, 16);
+      gint64 mdcompat = g_ascii_strtoull (subcodec[3], NULL, 16);
+
+      gst_caps_set_simple (caps, "bitstream-version", G_TYPE_UINT, bs_version,
+          "presentation-version", G_TYPE_UINT, pres_version, "mdcompat",
+          G_TYPE_UINT, mdcompat, NULL);
+      break;
+    case GST_MAKE_FOURCC ('m', 'h', 'm', '1'):
+      /* DASH-IF IOP-8 V5.1.0 (2024-03), Section: 5.5.3 Element and Attribute Settings */
+      caps = gst_caps_new_empty_simple ("audio/x-mpeg-h");
+      gst_caps_set_simple (caps, "multistream", G_TYPE_BOOLEAN, FALSE, NULL);
+
+      if (!subcodec[1])
+        break;
+      guint64 mhm1_profile_level_id = g_ascii_strtoull (subcodec[1], NULL, 16);
+      gst_codec_utils_mpegh_caps_set_level_and_profile (caps,
+          &mhm1_profile_level_id);
+      break;
+    case GST_MAKE_FOURCC ('m', 'h', 'm', '2'):
+      /* DASH-IF IOP-8 V5.1.0 (2024-03), Section: 5.5.3 Element and Attribute Settings */
+      caps = gst_caps_new_empty_simple ("audio/x-mpeg-h");
+      gst_caps_set_simple (caps, "multistream", G_TYPE_BOOLEAN, FALSE, NULL);
+      if (!subcodec[1])
+        break;
+      guint64 mhm2_profile_level_id = g_ascii_strtoull (subcodec[1], NULL, 16);
+      gst_codec_utils_mpegh_caps_set_level_and_profile (caps,
+          &mhm2_profile_level_id);
       break;
     case GST_MAKE_FOURCC ('s', 't', 'p', 'p'):
       /* IMSC1-conformant TTM XML */

@@ -52,6 +52,11 @@ gboolean      gst_codec_utils_aac_caps_set_level_and_profile (GstCaps      * cap
                                                               const guint8 * audio_config,
                                                               guint          len);
 
+/* MPEGH 3D Audio*/
+
+GST_PBUTILS_API 
+gboolean      gst_codec_utils_mpegh_caps_set_level_and_profile(GstCaps * caps, const guint64 * profile_level_id);
+
 /* H.264 */
 
 /**

@@ -3775,6 +3775,25 @@ object sequence start code. Only the first byte
         </parameter>
       </parameters>
     </function>
+    <function name="codec_utils_mpegh_caps_set_level_and_profile" c:identifier="gst_codec_utils_mpegh_caps_set_level_and_profile" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">Sets the profile and level on @caps if it can be determined from @profile_level_id.
+@caps must be audio/x-mpeg-h.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">%TRUE if the level and profile could be set, %FALSE otherwise.</doc>
+        <type name="gboolean" c:type="gboolean"/>
+      </return-value>
+      <parameters>
+        <parameter name="caps" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">the #GstCaps to which level and profile fields are to be added</doc>
+          <type name="Gst.Caps" c:type="GstCaps*"/>
+        </parameter>
+        <parameter name="profile_level_id" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">profile level id</doc>
+          <type name="guint64" c:type="const guint64*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="codec_utils_opus_create_caps" c:identifier="gst_codec_utils_opus_create_caps" version="1.8">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">Creates Opus caps from the given parameters.</doc>
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.h"/>

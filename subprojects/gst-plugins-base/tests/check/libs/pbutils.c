@@ -2129,6 +2129,30 @@ GST_START_TEST (test_pb_utils_caps_from_mime_codec)
   gst_caps_unref (caps);
   g_free (caps_str);
 
+  /* ac-4 */
+  caps = gst_codec_utils_caps_from_mime_codec ("ac-4.02.01.03");
+  caps_str = gst_caps_to_string (caps);
+  fail_unless_equals_string (caps_str,
+      ("audio/x-ac4, bitstream-version=(uint)2, presentation-version=(uint)1, mdcompat=(uint)3"));
+  gst_caps_unref (caps);
+  g_free (caps_str);
+
+  /* mpeg-h mhm1 */
+  caps = gst_codec_utils_caps_from_mime_codec ("mhm1.0x0B");
+  caps_str = gst_caps_to_string (caps);
+  fail_unless_equals_string (caps_str,
+      ("audio/x-ac4, profile=(string)lc, level=(string)1"));
+  gst_caps_unref (caps);
+  g_free (caps_str);
+
+  /* mpeg-h mhm2 */
+  caps = gst_codec_utils_caps_from_mime_codec ("mhm2.0x10");
+  caps_str = gst_caps_to_string (caps);
+  fail_unless_equals_string (caps_str,
+      ("audio/x-ac4, profile=(string)bl, level=(string)1"));
+  gst_caps_unref (caps);
+  g_free (caps_str);
+
 };
 
 GST_END_TEST;
