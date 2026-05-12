@@ -1,5 +1,6 @@
 subdir('adapter')
 subdir('clocksync')
+subdir('dynamic')
 subdir('controller')
 subdir('helloworld')
 #subdir('manual') # FIXME

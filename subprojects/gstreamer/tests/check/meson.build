@@ -21,6 +21,7 @@ core_tests = [
   [ 'gst/gstcapsfeatures.c' ],
   [ 'gst/gstdatetime.c' ],
   [ 'gst/gstdeinit.c' ],
+  [ 'gst/gstdynamic.c', not gst_registry ],
   [ 'gst/gstdevice.c' ],
   [ 'gst/gstelement.c', not gst_registry or not gst_parse],
   [ 'gst/gstelementfactory.c', not gst_registry ],
