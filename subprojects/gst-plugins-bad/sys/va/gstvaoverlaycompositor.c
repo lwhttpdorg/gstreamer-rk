@@ -52,24 +52,10 @@ struct CData
 
 typedef struct
 {
-  GstBufferPool *pool;
-  GstVideoInfo info;
-} OverlayPool;
-
-static void
-_overlay_pool_free (OverlayPool * overlay_pool)
-{
-  gst_buffer_pool_set_active (overlay_pool->pool, FALSE);
-  gst_clear_object (&overlay_pool->pool);
-  g_clear_pointer (&overlay_pool, g_free);
-}
-
-typedef struct
-{
   GstVideoOverlayRectangle *rectangle;
   GstBuffer *buffer;
-  guint16 width;
-  guint16 height;
+  GstBufferPool *pool;
+  GstVideoInfo info;
   gboolean premultiplied_alpha;
 } OverlayCache;
 
@@ -78,15 +64,9 @@ _overlay_cache_free (OverlayCache * overlay_cache)
 {
   gst_video_overlay_rectangle_unref (overlay_cache->rectangle);
   gst_buffer_unref (overlay_cache->buffer);
+  gst_object_unref (overlay_cache->pool);
   g_free (overlay_cache);
 }
-
-/* To import an overlay rectangle into VA, the element needs a buffer pool that
- * allocates memory of the corresponding size. Since overlay composition meta
- * can include rectangles of various dimensions, new pools are created as needed
- * and kept in a list for reuse. The size of the list is limited by this value.
- * (The least used pool is freed to make space for a new one.) */
-static const guint MAX_OVERLAY_POOLS = 10;
 
 #define GST_VA_OVERLAY_COMPOSITOR(obj) ((GstVaOverlayCompositor *) obj)
 #define GST_VA_OVERLAY_COMPOSITOR_GET_CLASS(obj) \
@@ -101,8 +81,6 @@ typedef struct
 {
   GstVaBaseTransform parent;
 
-  /* Items: OverlayPool */
-  GSList *pools;
   /* Items: OverlayCache */
   GList *overlays;
 } GstVaOverlayCompositor;
@@ -377,20 +355,20 @@ gst_va_overlay_compositor_set_info (GstVaBaseTransform * bt, GstCaps * incaps,
   return TRUE;
 }
 
-static OverlayPool *
+static GstBufferPool *
 gst_va_overlay_compositor_create_pool (GstVaOverlayCompositor * self,
-    GstVideoInfo * info)
+    GstVideoInfo * in_info, GstVideoInfo * out_info)
 {
   GstVaBaseTransform *vabtrans = GST_VA_BASE_TRANSFORM (self);
-
-  OverlayPool *result = NULL;
   GstCaps *caps = NULL;
-  GstBufferPool *vapool;
+  GstBufferPool *vapool = NULL;
   GstAllocator *allocator = NULL;
-  GstAllocationParams params = { 0, };
+  GstAllocationParams params = {
+    0,
+  };
   guint usage_hint;
 
-  caps = gst_video_info_to_caps (info);
+  caps = gst_video_info_to_caps (in_info);
 
   if (!gst_va_base_convert_caps_to_va (caps)) {
     GST_ERROR_OBJECT (self, "Invalid caps %" GST_PTR_FORMAT, caps);
@@ -410,9 +388,7 @@ gst_va_overlay_compositor_create_pool (GstVaOverlayCompositor * self,
   }
 
   if (gst_buffer_pool_set_active (vapool, TRUE)) {
-    result = g_new0 (OverlayPool, 1);
-    result->pool = vapool;
-    gst_va_allocator_get_format (allocator, &result->info, NULL, NULL);
+    gst_va_allocator_get_format (allocator, out_info, NULL, NULL);
   } else {
     GST_WARNING_OBJECT (self, "failed to activate pool %" GST_PTR_FORMAT,
         vapool);
@@ -423,39 +399,7 @@ out:
   gst_clear_caps (&caps);
   gst_clear_object (&allocator);
 
-  return result;
-}
-
-static OverlayPool *
-gst_va_overlay_compositor_get_pool_by_info (GstVaOverlayCompositor * self,
-    GstVideoInfo * info)
-{
-  OverlayPool *result = NULL;
-  GSList *it;
-
-  for (it = self->pools; !result && it; it = g_slist_next (it)) {
-    OverlayPool *pool = it->data;
-
-    if (GST_VIDEO_INFO_WIDTH (info) == GST_VIDEO_INFO_WIDTH (&pool->info) &&
-        GST_VIDEO_INFO_HEIGHT (info) == GST_VIDEO_INFO_HEIGHT (&pool->info)) {
-      result = pool;
-
-      /* Remove the pool from the list. It will later get added to the front as
-       * the most recently used item. */
-      self->pools = g_slist_delete_link (self->pools, it);
-      break;
-    }
-  }
-
-  if (!result) {
-    result = gst_va_overlay_compositor_create_pool (self, info);
-  }
-
-  if (result) {
-    self->pools = g_slist_prepend (self->pools, result);
-  }
-
-  return result;
+  return vapool;
 }
 
 typedef struct
@@ -471,36 +415,66 @@ typedef struct
 } GstVaOverlayCompositorSampleGenerator;
 
 static GstBufferPool *
-_get_pool (GstElement * element, gpointer data)
+_get_pool (GstElement * element, gpointer user_data)
 {
-  GstVaOverlayCompositor *self = GST_VA_OVERLAY_COMPOSITOR (element);
+  return (GstBufferPool *) user_data;
+}
 
-  GstVaBufferImporter *importer = data;
-  OverlayPool *pool = NULL;
-
-  pool = gst_va_overlay_compositor_get_pool_by_info (self, importer->in_info);
-  if (pool) {
-    *importer->sinkpad_info = pool->info;
-    return pool->pool;
+static GstBufferPool *
+_find_cached_pool (GList * overlays, GstVideoInfo * in_info,
+    GstVideoInfo * out_info)
+{
+  for (GList * l = overlays; l; l = l->next) {
+    OverlayCache *cache = l->data;
+    if (GST_VIDEO_INFO_WIDTH (&cache->info) == GST_VIDEO_INFO_WIDTH (in_info) &&
+        GST_VIDEO_INFO_HEIGHT (&cache->info) == GST_VIDEO_INFO_HEIGHT (in_info))
+    {
+      *out_info = cache->info;
+      return gst_object_ref (cache->pool);
+    }
   }
-
   return NULL;
 }
 
-static GstFlowReturn
-gst_va_overlay_compositor_import_rectangle (GstVaOverlayCompositor * self,
-    GstVideoOverlayRectangle * rect, GstBuffer ** outbuf,
-    guint16 * width, guint16 * height, gboolean * premultiplied_alpha)
+static OverlayCache *
+_import_rectangle (GstVaOverlayCompositorSampleGenerator * gen,
+    GstVideoOverlayRectangle * rect)
 {
+  GstVaOverlayCompositor *self = gen->compositor;
   GstVaBaseTransform *vabtrans = GST_VA_BASE_TRANSFORM (self);
-
   GstBuffer *inbuf;
   GstVideoMeta *vmeta;
+  GstBuffer *outbuf;
   GstVideoInfo in_info;
   GstVideoInfo out_info;
   GstVideoOverlayFormatFlags flags;
 
-  /* Already hold GST_OBJECT_LOCK */
+  /* Get overlay buffer */
+  flags = gst_video_overlay_rectangle_get_flags (rect);
+  if (!gst_va_filter_supports_premultiplied_alpha (vabtrans->filter)) {
+    flags &= ~GST_VIDEO_OVERLAY_FORMAT_FLAG_PREMULTIPLIED_ALPHA;
+  }
+  inbuf = gst_video_overlay_rectangle_get_pixels_unscaled_argb (rect, flags);
+
+  /* Get overlay format info */
+  vmeta = gst_buffer_get_video_meta (inbuf);
+  gst_video_info_set_format (&in_info, vmeta->format, vmeta->width,
+      vmeta->height);
+  for (gint i = 0; i < GST_VIDEO_MAX_PLANES; i++) {
+    in_info.stride[i] = vmeta->stride[i];
+  }
+
+  /* Check if an existing overlay has a matching pool. If not, create a new one.
+   * TODO: Consider using a special surface allocator instead of a new pool per
+   * rectangle. */
+  GstBufferPool *pool = _find_cached_pool (gen->overlays, &in_info, &out_info);
+  if (pool == NULL)
+    pool = _find_cached_pool (self->overlays, &in_info, &out_info);
+  if (pool == NULL)
+    pool = gst_va_overlay_compositor_create_pool (self, &in_info, &out_info);
+  if (pool == NULL)
+    return NULL;
+
   GstVaBufferImporter importer = {
     .element = GST_ELEMENT_CAST (self),
 #ifndef GST_DISABLE_GST_DEBUG
@@ -509,29 +483,25 @@ gst_va_overlay_compositor_import_rectangle (GstVaOverlayCompositor * self,
     .display = vabtrans->display,
     .entrypoint = VAEntrypointVideoProc,
     .get_sinkpad_pool = _get_pool,
+    .pool_data = pool,
     .in_info = &in_info,
-    .sinkpad_info = &out_info,  /* Gets filled in _get_pool(). */
+    .sinkpad_info = &out_info,
   };
-  importer.pool_data = &importer;
 
-  flags = gst_video_overlay_rectangle_get_flags (rect);
-  if (!gst_va_filter_supports_premultiplied_alpha (vabtrans->filter)) {
-    flags &= ~GST_VIDEO_OVERLAY_FORMAT_FLAG_PREMULTIPLIED_ALPHA;
-  }
-  inbuf = gst_video_overlay_rectangle_get_pixels_unscaled_argb (rect, flags);
-  vmeta = gst_buffer_get_video_meta (inbuf);
-  gst_video_info_set_format (&in_info, vmeta->format, vmeta->width,
-      vmeta->height);
-  for (gint i = 0; i < GST_VIDEO_MAX_PLANES; i++) {
-    in_info.stride[i] = vmeta->stride[i];
+  GstFlowReturn ret = gst_va_buffer_importer_import (&importer, inbuf, &outbuf);
+  if (ret != GST_FLOW_OK) {
+    gst_object_unref (pool);
+    return NULL;
   }
 
-  *width = vmeta->width;
-  *height = vmeta->height;
-  *premultiplied_alpha =
+  OverlayCache *overlay = g_new0 (OverlayCache, 1);
+  overlay->rectangle = gst_video_overlay_rectangle_ref (rect);
+  overlay->buffer = outbuf;
+  overlay->pool = pool;
+  overlay->info = out_info;
+  overlay->premultiplied_alpha =
       (flags & GST_VIDEO_OVERLAY_FORMAT_FLAG_PREMULTIPLIED_ALPHA) != 0;
-
-  return gst_va_buffer_importer_import (&importer, inbuf, outbuf);
+  return overlay;
 }
 
 /* When first called from gst_va_filter_compose(), _sample_next() generates the
@@ -543,9 +513,7 @@ _sample_next (gpointer data)
   GstVaOverlayCompositorSampleGenerator *gen = data;
   GstVaBaseTransform *vabasetrans = GST_VA_BASE_TRANSFORM (gen->compositor);
   GstVideoOverlayRectangle *rectangle = NULL;
-  GstBuffer *buf = NULL;
   GstVideoRectangle render_rect;
-  gboolean premultiplied_alpha = FALSE;
 
   if (!gen->inbuf_sent) {
     /* First time the generator got called, return the input frame (background
@@ -575,9 +543,8 @@ _sample_next (gpointer data)
   }
 
   /* Find the next rectangle to output. */
-  while (!rectangle) {
-    GstFlowReturn ret;
-
+  OverlayCache *overlay = NULL;
+  while (!overlay) {
     if (!gen->ometa) {
       /* Retrieve the next composition meta attached to the buffer. */
       GstMeta *meta = gst_buffer_iterate_meta_filtered (gen->inbuf, &gen->state,
@@ -610,32 +577,20 @@ _sample_next (gpointer data)
         gen->compositor->overlays =
             g_list_insert_before_link (gen->compositor->overlays,
             gen->compositor->overlays, l);
-        buf = gst_buffer_ref (cache->buffer);
-        gen->sample.input_region.width = cache->width;
-        gen->sample.input_region.height = cache->height;
-        premultiplied_alpha = cache->premultiplied_alpha;
+        overlay = cache;
         break;
       }
     }
 
-    if (buf == NULL) {
-      ret = gst_va_overlay_compositor_import_rectangle (gen->compositor,
-          rectangle, &buf, &gen->sample.input_region.width,
-          &gen->sample.input_region.height, &premultiplied_alpha);
-      if (ret != GST_FLOW_OK) {
+    if (overlay == NULL) {
+      overlay = _import_rectangle (gen, rectangle);
+      if (!overlay) {
         GST_WARNING_OBJECT (gen->compositor, "Failed to import composition "
             "rectangle %d from meta %" GST_PTR_FORMAT, gen->rect, gen->ometa);
-        rectangle = NULL;
       } else {
         /* Cache this rectangle to not re-import next time */
-        OverlayCache *cache = g_new0 (OverlayCache, 1);
-        cache->rectangle = gst_video_overlay_rectangle_ref (rectangle);
-        cache->buffer = gst_buffer_ref (buf);
-        cache->width = gen->sample.input_region.width;
-        cache->height = gen->sample.input_region.height;
-        cache->premultiplied_alpha = premultiplied_alpha;
         gen->compositor->overlays =
-            g_list_prepend (gen->compositor->overlays, cache);
+            g_list_prepend (gen->compositor->overlays, overlay);
       }
     }
 
@@ -645,10 +600,11 @@ _sample_next (gpointer data)
   gst_video_overlay_rectangle_get_render_rectangle (rectangle,
       &render_rect.x, &render_rect.y,
       (guint *) & render_rect.w, (guint *) & render_rect.h);
-
-  gen->sample.buffer = buf;
+  gen->sample.buffer = gst_buffer_ref (overlay->buffer);
   gen->sample.input_region.x = 0;
   gen->sample.input_region.y = 0;
+  gen->sample.input_region.width = overlay->info.width;
+  gen->sample.input_region.height = overlay->info.height;
   /* *INDENT-OFF* */
   gen->sample.output_region = (VARectangle) {
     .x = render_rect.x,
@@ -658,7 +614,7 @@ _sample_next (gpointer data)
   };
   /* *INDENT-ON* */
   gen->sample.alpha = gst_video_overlay_rectangle_get_global_alpha (rectangle);
-  gen->sample.premultiplied_alpha = premultiplied_alpha;
+  gen->sample.premultiplied_alpha = overlay->premultiplied_alpha;
 
   return &gen->sample;
 }
@@ -693,15 +649,6 @@ gst_va_overlay_compositor_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     ret = GST_FLOW_ERROR;
   }
 
-  /* TODO: Consider using a special surface allocator instead of a new pool per
-   * rectangle. */
-  /* Trim the overlay pool list by removing the least used items. */
-  while (g_slist_length (self->pools) > MAX_OVERLAY_POOLS) {
-    GSList *least_used = g_slist_last (self->pools);
-    g_clear_pointer (&least_used->data, _overlay_pool_free);
-    self->pools = g_slist_delete_link (self->pools, least_used);
-  }
-
   /* Free remaining overlays, they are not used anymore */
   g_list_free_full (generator.overlays, (GDestroyNotify) _overlay_cache_free);
 
@@ -713,7 +660,6 @@ gst_va_overlay_compositor_stop (GstBaseTransform * bt)
 {
   GstVaOverlayCompositor *self = GST_VA_OVERLAY_COMPOSITOR (bt);
 
-  g_clear_slist (&self->pools, (GDestroyNotify) _overlay_pool_free);
   g_clear_list (&self->overlays, (GDestroyNotify) _overlay_cache_free);
 
   return TRUE;
