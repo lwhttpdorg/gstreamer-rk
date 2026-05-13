@@ -27,6 +27,7 @@
 #include "config.h"
 #endif
 
+#include <math.h>
 #include <gst/video/video.h>
 #include "gstanalyticskeypointmtd.h"
 
@@ -163,29 +164,38 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
     GstAnalyticsKeypointMtdData *kpdata =
         gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
         transmtd->id);
-
-    /* TODO: Add support for 3d point transformation, meanwhile project
-     * z component on XY plane. */
-    if (kpdata->z != 0) {
-      GST_WARNING ("Only 2d keypoint transformation is supported, z component "
-          "projected on XY plane");
-      kpdata->z = 0;
-      kpdata->dimension = GST_ANALYTICS_KEYPOINT_DIMENSIONS_2D;
-    }
+    const gfloat det =
+        (trans->matrix[0][0] * trans->matrix[1][1]) -
+        (trans->matrix[0][1] * trans->matrix[1][0]);
+    const gfloat z_scale = sqrtf (fabsf (det));
 
     if (!gst_video_meta_transform_matrix_point (trans, &kpdata->x, &kpdata->y))
       return FALSE;
+
+    if (kpdata->dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D)
+      kpdata->z = (gint) lroundf (((gfloat) kpdata->z) * z_scale);
 
   } else if (GST_VIDEO_META_TRANSFORM_IS_SCALE (type)) {
     /* Handle scaling transforms (e.g., videoconvert with different resolution) */
     GstVideoMetaTransform *trans = data;
     GstAnalyticsKeypointMtdData *kpdata;
     gint ow, oh, nw, nh;
+    gfloat x_scale, y_scale, z_scale;
 
     ow = GST_VIDEO_INFO_WIDTH (trans->in_info);
     nw = GST_VIDEO_INFO_WIDTH (trans->out_info);
     oh = GST_VIDEO_INFO_HEIGHT (trans->in_info);
     nh = GST_VIDEO_INFO_HEIGHT (trans->out_info);
+
+    if (G_UNLIKELY (ow == 0 || oh == 0)) {
+      GST_WARNING ("Invalid input resolution for keypoint scale transform: "
+          "(%dx%d)", ow, oh);
+      return FALSE;
+    }
+
+    x_scale = (gfloat) nw / (gfloat) ow;
+    y_scale = (gfloat) nh / (gfloat) oh;
+    z_scale = (x_scale + y_scale) * 0.5f;
 
     kpdata = gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
         transmtd->id);
@@ -198,6 +208,9 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
 
     kpdata->y *= nh;
     kpdata->y /= oh;
+
+    if (kpdata->dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D)
+      kpdata->z = (gint) lroundf (((gfloat) kpdata->z) * z_scale);
 
     GST_DEBUG ("Keypoint scaled: (%d,%d) in frame (%u,%u) -> (%u,%u)",
         kpdata->x, kpdata->y, ow, oh, nw, nh);

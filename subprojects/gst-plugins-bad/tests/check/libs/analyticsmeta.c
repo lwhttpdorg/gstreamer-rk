@@ -22,6 +22,7 @@
 
 #include <gst/check/gstcheck.h>
 #include <gst/analytics/analytics.h>
+#include <gst/video/video.h>
 
 GST_START_TEST (test_add_classification_meta)
 {
@@ -3154,6 +3155,124 @@ GST_START_TEST (test_keypoint_group_2d_vs_3d)
 
 GST_END_TEST;
 
+GST_START_TEST (test_keypoint_mtd_transform_scale_3d)
+{
+  GstBuffer *src_buf, *dst_buf;
+  GstAnalyticsRelationMeta *src_rmeta, *dst_rmeta;
+  GstAnalyticsKeypointMtd src_kp_mtd, dst_kp_mtd;
+  GstVideoInfo in_info, out_info;
+  GstVideoMetaTransform trans;
+  gpointer state = NULL;
+  GstMeta *meta;
+  gboolean ret;
+  gint x, y, z;
+  GstAnalyticsKeypointDimensions dim;
+
+  src_buf = gst_buffer_new ();
+  src_rmeta = gst_buffer_add_analytics_relation_meta (src_buf);
+
+  ret = gst_analytics_relation_meta_add_keypoint_mtd (src_rmeta,
+      GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D, 10, 20, 30,
+      GST_ANALYTICS_KEYPOINT_VISIBILITY_UNKNOWN, 0.9f, &src_kp_mtd);
+  fail_unless (ret == TRUE);
+
+  gst_video_info_set_format (&in_info, GST_VIDEO_FORMAT_RGBA, 100, 50);
+  gst_video_info_set_format (&out_info, GST_VIDEO_FORMAT_RGBA, 200, 100);
+  trans.in_info = &in_info;
+  trans.out_info = &out_info;
+
+  dst_buf = gst_buffer_new ();
+
+  meta = gst_buffer_iterate_meta (src_buf, &state);
+  fail_unless (meta != NULL);
+  fail_unless (meta->info->api == GST_ANALYTICS_RELATION_META_API_TYPE);
+  ret = meta->info->transform_func (dst_buf, meta, src_buf,
+      gst_video_meta_transform_scale_get_quark (), &trans);
+  fail_unless (ret == TRUE);
+
+  dst_rmeta = gst_buffer_get_analytics_relation_meta (dst_buf);
+  fail_unless (dst_rmeta != NULL);
+
+  ret = gst_analytics_relation_meta_get_keypoint_mtd (dst_rmeta, src_kp_mtd.id,
+      &dst_kp_mtd);
+  fail_unless (ret == TRUE);
+
+  ret = gst_analytics_keypoint_mtd_get_position (&dst_kp_mtd, &x, &y, &z, &dim);
+  fail_unless (ret == TRUE);
+  fail_unless (dim == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D);
+  fail_unless (x == 20 && y == 40 && z == 60);
+
+  gst_buffer_unref (src_buf);
+  gst_buffer_unref (dst_buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_keypoint_mtd_transform_matrix_3d)
+{
+  GstBuffer *src_buf, *dst_buf;
+  GstAnalyticsRelationMeta *src_rmeta, *dst_rmeta;
+  GstAnalyticsKeypointMtd src_kp_mtd, dst_kp_mtd;
+  GstVideoInfo in_info, out_info;
+  GstVideoRectangle in_rect = { 0, 0, 100, 100 };
+  GstVideoRectangle out_rect = { 0, 0, 100, 100 };
+  GstVideoMetaTransformMatrix trans_matrix;
+  gpointer state = NULL;
+  GstMeta *meta;
+  gboolean ret;
+  gint x, y, z;
+  GstAnalyticsKeypointDimensions dim;
+
+  src_buf = gst_buffer_new ();
+  src_rmeta = gst_buffer_add_analytics_relation_meta (src_buf);
+
+  ret = gst_analytics_relation_meta_add_keypoint_mtd (src_rmeta,
+      GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D, 10, 20, 30,
+      GST_ANALYTICS_KEYPOINT_VISIBILITY_UNKNOWN, 0.9f, &src_kp_mtd);
+  fail_unless (ret == TRUE);
+
+  gst_video_info_set_format (&in_info, GST_VIDEO_FORMAT_RGBA, 100, 100);
+  gst_video_info_set_format (&out_info, GST_VIDEO_FORMAT_RGBA, 100, 100);
+  gst_video_meta_transform_matrix_init (&trans_matrix, &in_info, &in_rect,
+      &out_info, &out_rect);
+
+  trans_matrix.matrix[0][0] = 2.0f;
+  trans_matrix.matrix[0][1] = 0.0f;
+  trans_matrix.matrix[0][2] = 0.0f;
+  trans_matrix.matrix[1][0] = 0.0f;
+  trans_matrix.matrix[1][1] = 2.0f;
+  trans_matrix.matrix[1][2] = 0.0f;
+  trans_matrix.matrix[2][0] = 0.0f;
+  trans_matrix.matrix[2][1] = 0.0f;
+  trans_matrix.matrix[2][2] = 1.0f;
+
+  dst_buf = gst_buffer_new ();
+
+  meta = gst_buffer_iterate_meta (src_buf, &state);
+  fail_unless (meta != NULL);
+  fail_unless (meta->info->api == GST_ANALYTICS_RELATION_META_API_TYPE);
+  ret = meta->info->transform_func (dst_buf, meta, src_buf,
+      gst_video_meta_transform_matrix_get_quark (), &trans_matrix);
+  fail_unless (ret == TRUE);
+
+  dst_rmeta = gst_buffer_get_analytics_relation_meta (dst_buf);
+  fail_unless (dst_rmeta != NULL);
+
+  ret = gst_analytics_relation_meta_get_keypoint_mtd (dst_rmeta, src_kp_mtd.id,
+      &dst_kp_mtd);
+  fail_unless (ret == TRUE);
+
+  ret = gst_analytics_keypoint_mtd_get_position (&dst_kp_mtd, &x, &y, &z, &dim);
+  fail_unless (ret == TRUE);
+  fail_unless (dim == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D);
+  fail_unless (x == 20 && y == 40 && z == 60);
+
+  gst_buffer_unref (src_buf);
+  gst_buffer_unref (dst_buf);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_mtd_semantic_tag_on_od)
 {
   /* Verify generic semantic tag works on object detection metadata */
@@ -3502,6 +3621,8 @@ analyticmeta_suite (void)
   tcase_add_test (tc_chain_keypoint, test_keypoints_group_with_confidences);
   tcase_add_test (tc_chain_keypoint, test_keypoints_group_without_confidences);
   tcase_add_test (tc_chain_keypoint, test_keypoint_group_2d_vs_3d);
+  tcase_add_test (tc_chain_keypoint, test_keypoint_mtd_transform_scale_3d);
+  tcase_add_test (tc_chain_keypoint, test_keypoint_mtd_transform_matrix_3d);
 
   tc_chain_semantic_tag = tcase_create ("Semantic Tag");
   suite_add_tcase (s, tc_chain_semantic_tag);
