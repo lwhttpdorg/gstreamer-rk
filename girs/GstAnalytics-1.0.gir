@@ -547,6 +547,37 @@ See #gst_analytics_relation_meta_add_keypoint_mtd for more details</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="get_position_f" c:identifier="gst_analytics_keypoint_mtd_get_position_f" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Get keypoint position and dimension using floating point coordinates.
+See #gst_analytics_relation_meta_add_keypoint_mtd_f for more details</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">TRUE if successful, FALSE otherwise</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="handle" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">handle</doc>
+            <type name="KeypointMtd" c:type="const GstAnalyticsKeypointMtd*"/>
+          </instance-parameter>
+          <parameter name="x" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">X coordinate</doc>
+            <type name="gfloat" c:type="gfloat*"/>
+          </parameter>
+          <parameter name="y" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Y coordinate</doc>
+            <type name="gfloat" c:type="gfloat*"/>
+          </parameter>
+          <parameter name="z" direction="out" caller-allocates="0" transfer-ownership="full" nullable="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Z coordinate, or %NULL to ignore. Always 0 for 2D keypoints.</doc>
+            <type name="gfloat" c:type="gfloat*"/>
+          </parameter>
+          <parameter name="dimension" direction="out" caller-allocates="0" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Keypoint dimension (2D or 3D)</doc>
+            <type name="KeypointDimensions" c:type="GstAnalyticsKeypointDimensions*"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="get_visibility_flags" c:identifier="gst_analytics_keypoint_mtd_get_visibility_flags" version="1.30">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Get keypoint visibility flags.</doc>
         <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.h"/>
@@ -1462,6 +1493,51 @@ in Euclidean space.</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="add_keypoint_mtd_f" c:identifier="gst_analytics_relation_meta_add_keypoint_mtd_f" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Add individual keypoint metadata to @instance. The point represents a location
+in Euclidean space.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">TRUE if added successfully, FALSE otherwise</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="instance" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Instance of #GstAnalyticsRelationMeta where to add keypoint</doc>
+            <type name="RelationMeta" c:type="GstAnalyticsRelationMeta*"/>
+          </instance-parameter>
+          <parameter name="dimension" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">2D or 3D keypoint dimension</doc>
+            <type name="KeypointDimensions" c:type="GstAnalyticsKeypointDimensions"/>
+          </parameter>
+          <parameter name="x" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">X coordinate, increases toward the right</doc>
+            <type name="gfloat" c:type="gfloat"/>
+          </parameter>
+          <parameter name="y" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Y coordinate, increases toward the bottom</doc>
+            <type name="gfloat" c:type="gfloat"/>
+          </parameter>
+          <parameter name="z" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Z coordinate, increases along the axis defined by a right-hand coordinate
+  system with respect to X and Y, that is out of the XY plane. z=0 is on
+  the XY plane.</doc>
+            <type name="gfloat" c:type="gfloat"/>
+          </parameter>
+          <parameter name="visibility_flags" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Visibility flags, a combination of #GstAnalyticsKeypointVisibility values</doc>
+            <type name="guint8" c:type="guint8"/>
+          </parameter>
+          <parameter name="confidence" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Confidence score</doc>
+            <type name="gfloat" c:type="gfloat"/>
+          </parameter>
+          <parameter name="keypoint_mtd" direction="out" caller-allocates="1" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Handle updated to newly added keypoint</doc>
+            <type name="KeypointMtd" c:type="GstAnalyticsKeypointMtd*"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="add_keypoints_group" c:identifier="gst_analytics_relation_meta_add_keypoints_group" version="1.30">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Creates a group of keypoints with optional skeleton structure.
 Individual keypoints are created as #GstAnalyticsMtd.
@@ -1497,6 +1573,75 @@ See #gst_analytics_relation_meta_add_keypoint_mtd for more details</doc>
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Array of positions [x0, y0, [z0], x1, y1, [z1], ...]</doc>
             <array length="2" zero-terminated="0" c:type="const gint*">
               <type name="gint" c:type="gint"/>
+            </array>
+          </parameter>
+          <parameter name="keypoint_count" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Number of keypoints</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+          <parameter name="confidences" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Array of confidence scores [c0, c1, ...] or NULL</doc>
+            <array length="4" zero-terminated="0" c:type="const gfloat*">
+              <type name="gfloat" c:type="gfloat"/>
+            </array>
+          </parameter>
+          <parameter name="visibilities" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Array of #GstAnalyticsKeypointVisibility flags [v0, v1, ...] or NULL</doc>
+            <array length="4" zero-terminated="0" c:type="const guint8*">
+              <type name="guint8" c:type="guint8"/>
+            </array>
+          </parameter>
+          <parameter name="skeleton_pairs_len" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Length of @skeleton_pairs array (must be even, representing pairs of keypoint indices)</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+          <parameter name="skeleton_pairs" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Array of keypoint index pairs [kp1_idx, kp2_idx, kp1_idx, kp2_idx, ...] or NULL</doc>
+            <array length="7" zero-terminated="0" c:type="const gint*">
+              <type name="gint" c:type="gint"/>
+            </array>
+          </parameter>
+          <parameter name="group_mtd" direction="out" caller-allocates="1" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Handle to newly created group</doc>
+            <type name="GroupMtd" c:type="GstAnalyticsGroupMtd*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="add_keypoints_group_f" c:identifier="gst_analytics_relation_meta_add_keypoints_group_f" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Creates a group of keypoints with optional skeleton structure.
+Individual keypoints are created as #GstAnalyticsMtd.
+Skeleton links are represented as RELATE_TO relations between keypoints.
+
+The @skeleton_pairs array contains pairs of keypoint indices that are connected.
+For example, [0, 1, 1, 2, 2, 3] creates links: 0&lt;-&gt;1, 1&lt;-&gt;2, 2&lt;-&gt;3.
+
+See #gst_analytics_relation_meta_add_keypoint_mtd_f for more details</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">TRUE if successful, FALSE otherwise</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="instance" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Instance of #GstAnalyticsRelationMeta</doc>
+            <type name="RelationMeta" c:type="GstAnalyticsRelationMeta*"/>
+          </instance-parameter>
+          <parameter name="semantic_tag" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Semantic tag for the group (e.g., "hand-21-kp", "pose-17-kp")</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="dimension" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">2D or 3D keypoints</doc>
+            <type name="KeypointDimensions" c:type="GstAnalyticsKeypointDimensions"/>
+          </parameter>
+          <parameter name="positions_len" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">length of @positions array.</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+          <parameter name="positions" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticskeypointmtd.c">Array of positions [x0, y0, [z0], x1, y1, [z1], ...]</doc>
+            <array length="2" zero-terminated="0" c:type="const gfloat*">
+              <type name="gfloat" c:type="gfloat"/>
             </array>
           </parameter>
           <parameter name="keypoint_count" transfer-ownership="none">

@@ -2726,6 +2726,46 @@ GST_START_TEST (test_add_keypoint_mtd_3d)
 
 GST_END_TEST;
 
+GST_START_TEST (test_add_keypoint_mtd_float_roundtrip)
+{
+  GstBuffer *buf;
+  GstAnalyticsRelationMeta *rmeta;
+  GstAnalyticsKeypointMtd kp_mtd;
+  gfloat x, y, z;
+  gint xi, yi, zi;
+  gfloat conf;
+  GstAnalyticsKeypointDimensions dim;
+  gboolean ret;
+
+  buf = gst_buffer_new ();
+  rmeta = gst_buffer_add_analytics_relation_meta (buf);
+
+  ret = gst_analytics_relation_meta_add_keypoint_mtd_f (rmeta,
+      GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D, 100.25f, 200.5f, 300.75f,
+      GST_ANALYTICS_KEYPOINT_VISIBILITY_UNKNOWN, 0.85f, &kp_mtd);
+  fail_unless (ret == TRUE);
+
+  ret = gst_analytics_keypoint_mtd_get_position_f (&kp_mtd, &x, &y, &z, &dim);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_float (x, 100.25f);
+  fail_unless_equals_float (y, 200.5f);
+  fail_unless_equals_float (z, 300.75f);
+  fail_unless (dim == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D);
+
+  ret = gst_analytics_keypoint_mtd_get_position (&kp_mtd, &xi, &yi, &zi, &dim);
+  fail_unless (ret == TRUE);
+  fail_unless (xi == 100 && yi == 201 && zi == 301);
+  fail_unless (dim == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D);
+
+  ret = gst_analytics_keypoint_mtd_get_confidence (&kp_mtd, &conf);
+  fail_unless (ret == TRUE);
+  fail_unless_equals_float (conf, 0.85f);
+
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_keypoint_mtd_retrieval)
 {
   /* Verify we can retrieve keypoint metadata by ID */
@@ -3613,6 +3653,7 @@ analyticmeta_suite (void)
   suite_add_tcase (s, tc_chain_keypoint);
   tcase_add_test (tc_chain_keypoint, test_add_keypoint_mtd_2d);
   tcase_add_test (tc_chain_keypoint, test_add_keypoint_mtd_3d);
+  tcase_add_test (tc_chain_keypoint, test_add_keypoint_mtd_float_roundtrip);
   tcase_add_test (tc_chain_keypoint, test_keypoint_mtd_retrieval);
   tcase_add_test (tc_chain_keypoint, test_add_keypoints_group_without_skeleton);
   tcase_add_test (tc_chain_keypoint, test_add_keypoints_group_with_skeleton);
