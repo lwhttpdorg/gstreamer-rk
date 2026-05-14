@@ -96,6 +96,16 @@ G_STMT_START {                                   \
 } G_STMT_END
 
 
+#define AES_128_KEY_LEN 16
+#define AES_256_KEY_LEN 32
+
+#define HMAC_KEY_LEN 20
+#define HMAC_32_TAG_LEN 4
+#define HMAC_80_TAG_LEN 10
+
+#define AES_GCM_TAG_LEN 16
+
+
 /* Key data transport payload (KEMAC) */
 static guint
 get_mac_len (GstMIKEYMacAlg mac_alg)
@@ -107,7 +117,7 @@ get_mac_len (GstMIKEYMacAlg mac_alg)
       len = 0;                  /* no MAC key */
       break;
     case GST_MIKEY_MAC_HMAC_SHA_1_160:
-      len = 20;                 /* 160 bits key */
+      len = HMAC_KEY_LEN;       /* 160 bits key */
       break;
     default:
       len = -1;
@@ -2079,7 +2089,7 @@ payloads_from_bytes (ParseState state, GArray * payloads, const guint8 * d,
             ver_len = 0;
             break;
           case GST_MIKEY_MAC_HMAC_SHA_1_160:
-            ver_len = 160 / 8;
+            ver_len = HMAC_KEY_LEN;
             break;
           default:
             goto invalid_data;
@@ -2413,21 +2423,14 @@ parse_error:
   }
 }
 
-#define AES_128_KEY_LEN 16
-#define AES_256_KEY_LEN 32
-#define HMAC_32_KEY_LEN 4
-#define HMAC_80_KEY_LEN 10
-
 static gboolean
 auth_alg_from_cipher_name (const gchar * cipher, guint8 * auth_alg)
 {
-  if (g_strcmp0 (cipher, "aes-128-icm") == 0)
+  if (g_strcmp0 (cipher, "aes-128-icm") == 0
+      || g_strcmp0 (cipher, "aes-256-icm") == 0)
     *auth_alg = GST_MIKEY_MAC_HMAC_SHA_1_160;
-  else if (g_strcmp0 (cipher, "aes-256-icm") == 0)
-    *auth_alg = GST_MIKEY_MAC_HMAC_SHA_1_160;
-  else if (g_strcmp0 (cipher, "aes-128-gcm") == 0)
-    *auth_alg = GST_MIKEY_MAC_NULL;
-  else if (g_strcmp0 (cipher, "aes-256-gcm") == 0)
+  else if (g_strcmp0 (cipher, "aes-128-gcm") == 0
+      || g_strcmp0 (cipher, "aes-256-gcm") == 0)
     *auth_alg = GST_MIKEY_MAC_NULL;
   else {
     GST_ERROR ("encryption algorithm '%s' not supported", cipher);
@@ -2482,15 +2485,30 @@ auth_key_length_from_auth_cipher_name (const gchar * auth, const gchar * cipher,
     *length = 0;
   } else if (g_strcmp0 (auth, "null") == 0) {
     *length = 0;
+  } else if (g_strcmp0 (auth, "hmac-sha1-32") == 0
+      || g_strcmp0 (auth, "hmac-sha1-80") == 0) {
+    *length = HMAC_KEY_LEN;
   } else {
-    if (g_strcmp0 (auth, "hmac-sha1-32") == 0) {
-      *length = HMAC_32_KEY_LEN;
-    } else if (g_strcmp0 (auth, "hmac-sha1-80") == 0) {
-      *length = HMAC_80_KEY_LEN;
-    } else {
-      GST_ERROR ("authentication algorithm '%s' not supported", auth);
-      return FALSE;
-    }
+    GST_ERROR ("authentication algorithm '%s' not supported", auth);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean
+auth_tag_length_from_auth_cipher_name (const gchar * auth, const gchar * cipher,
+    guint8 * length)
+{
+  if (g_strcmp0 (cipher, "aes-128-gcm") == 0
+      || g_strcmp0 (cipher, "aes-256-gcm") == 0) {
+    *length = AES_GCM_TAG_LEN;
+  } else if (g_strcmp0 (auth, "hmac-sha1-32") == 0) {
+    *length = HMAC_32_TAG_LEN;
+  } else if (g_strcmp0 (auth, "hmac-sha1-80") == 0) {
+    *length = HMAC_80_TAG_LEN;
+  } else {
+    GST_ERROR ("authentication algorithm '%s' not supported", auth);
+    return FALSE;
   }
   return TRUE;
 }
@@ -2519,6 +2537,7 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
   guint8 auth_alg;
   guint8 enc_key_length;
   guint8 auth_key_length;
+  guint8 auth_tag_length;
   GstStructure *s;
   GstMapInfo info;
   GstBuffer *srtpkey;
@@ -2563,7 +2582,10 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
           !enc_key_length_from_cipher_name (cipher, &enc_key_length) ||
           (auth
               && !auth_key_length_from_auth_cipher_name (auth, cipher,
-                  &auth_key_length)))) {
+                  &auth_key_length)) ||
+          (auth
+              && !auth_tag_length_from_auth_cipher_name (auth, cipher,
+                  &auth_tag_length)))) {
     return NULL;
   }
 
@@ -2597,6 +2619,9 @@ gst_mikey_message_new_from_caps (GstCaps * caps)
       /* authentication key length */
       gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_KEY_LEN,
           1, &auth_key_length);
+      /* authentication tag length */
+      gst_mikey_payload_sp_add_param (payload, GST_MIKEY_SP_SRTP_AUTH_TAG_LEN,
+          1, &auth_tag_length);
     }
     /* we enable encryption on RTP and RTCP */
     byte = 1;
@@ -2649,11 +2674,6 @@ no_key:
   return NULL;
 }
 
-#define AES_128_KEY_LEN 16
-#define AES_256_KEY_LEN 32
-#define HMAC_32_KEY_LEN 4
-#define HMAC_80_KEY_LEN 10
-
 /**
  * gst_mikey_message_to_caps:
  * @msg: a #GstMIKEYMessage
@@ -2670,14 +2690,18 @@ gst_mikey_message_to_caps (const GstMIKEYMessage * msg, GstCaps * caps)
   const GstMIKEYMapSRTP *srtp;
   const GstMIKEYPayload *payload;
   const gchar *srtp_cipher;
-  const gchar *srtp_auth;
+  gboolean srtp_auth_alg_is_hmac_sha1;
+  guint srtp_auth_tag_length_bits;
   const gchar *srtcp_cipher;
-  const gchar *srtcp_auth;
+  gboolean srtcp_auth_alg_is_hmac_sha1;
+  guint srtcp_auth_tag_length_bits;
 
   srtp_cipher = "aes-128-icm";
-  srtp_auth = "hmac-sha1-80";
-  srtcp_cipher = "aes-128-icm";
-  srtcp_auth = "hmac-sha1-80";
+  srtp_auth_alg_is_hmac_sha1 = TRUE;
+  srtp_auth_tag_length_bits = (HMAC_80_TAG_LEN * 8);
+  srtcp_cipher = srtp_cipher;
+  srtcp_auth_alg_is_hmac_sha1 = srtp_auth_alg_is_hmac_sha1;
+  srtcp_auth_tag_length_bits = srtp_auth_tag_length_bits;
 
   /* Look for first crypto session */
   if (!(srtp = gst_mikey_message_get_cs_srtp (msg, 0))) {
@@ -2747,22 +2771,24 @@ gst_mikey_message_to_caps (const GstMIKEYMessage * msg, GstCaps * caps)
         case GST_MIKEY_SP_SRTP_AUTH_ALG:
           switch (param->val[0]) {
             case GST_MIKEY_MAC_NULL:
-              srtp_auth = "null";
+              srtp_auth_alg_is_hmac_sha1 = FALSE;
               break;
             case GST_MIKEY_MAC_HMAC_SHA_1_160:
-              srtp_auth = "hmac-sha1-80";
+              srtp_auth_alg_is_hmac_sha1 = TRUE;
               break;
             default:
               break;
           }
           break;
         case GST_MIKEY_SP_SRTP_AUTH_KEY_LEN:
+          // the Authentication Key length will be determined by the value of [srtp_auth_alg]
+          break;
+        case GST_MIKEY_SP_SRTP_AUTH_TAG_LEN:
           switch (param->val[0]) {
-            case HMAC_32_KEY_LEN:
-              srtp_auth = "hmac-sha1-32";
-              break;
-            case HMAC_80_KEY_LEN:
-              srtp_auth = "hmac-sha1-80";
+            case HMAC_32_TAG_LEN:
+            case HMAC_80_TAG_LEN:
+            case AES_GCM_TAG_LEN:      // the Authentication Tag length for AES-128/256-GCM cannot be transported through GstCaps
+              srtp_auth_tag_length_bits = param->val[0] * 8;
               break;
             default:
               break;
@@ -2783,13 +2809,19 @@ gst_mikey_message_to_caps (const GstMIKEYMessage * msg, GstCaps * caps)
     }
 
     srtcp_cipher = srtp_cipher;
-    srtcp_auth = srtp_auth;
+    srtcp_auth_alg_is_hmac_sha1 = srtp_auth_alg_is_hmac_sha1;
+    srtcp_auth_tag_length_bits = srtp_auth_tag_length_bits;
     if (srtp_enc_on == 0)
       srtp_cipher = "null";
     if (srtcp_enc_on == 0)
       srtcp_cipher = "null";
     if (srtp_auth_on == 0)
-      srtp_auth = "null";
+      srtp_auth_alg_is_hmac_sha1 = FALSE;
+
+    if (!srtp_auth_alg_is_hmac_sha1)
+      srtp_auth_tag_length_bits = 0;
+    if (!srtcp_auth_alg_is_hmac_sha1)
+      srtcp_auth_tag_length_bits = 0;
   }
 
   if (!(payload = gst_mikey_message_find_payload (msg, GST_MIKEY_PT_KEMAC, 0)))
@@ -2831,11 +2863,27 @@ gst_mikey_message_to_caps (const GstMIKEYMessage * msg, GstCaps * caps)
     }
   }
 
+  const gchar *srtp_auth_final;
+  if (!srtp_auth_alg_is_hmac_sha1)
+    srtp_auth_final = "null";
+  else if (srtp_auth_tag_length_bits == (HMAC_32_TAG_LEN * 8))
+    srtp_auth_final = "hmac-sha1-32";
+  else
+    srtp_auth_final = "hmac-sha1-80";
+
+  const gchar *srtcp_auth_final;
+  if (!srtcp_auth_alg_is_hmac_sha1)
+    srtcp_auth_final = "null";
+  else if (srtcp_auth_tag_length_bits == (HMAC_32_TAG_LEN * 8))
+    srtcp_auth_final = "hmac-sha1-32";
+  else
+    srtcp_auth_final = "hmac-sha1-80";
+
   gst_caps_set_simple (caps,
       "srtp-cipher", G_TYPE_STRING, srtp_cipher,
-      "srtp-auth", G_TYPE_STRING, srtp_auth,
+      "srtp-auth", G_TYPE_STRING, srtp_auth_final,
       "srtcp-cipher", G_TYPE_STRING, srtcp_cipher,
-      "srtcp-auth", G_TYPE_STRING, srtcp_auth, NULL);
+      "srtcp-auth", G_TYPE_STRING, srtcp_auth_final, NULL);
 
   res = TRUE;
 
