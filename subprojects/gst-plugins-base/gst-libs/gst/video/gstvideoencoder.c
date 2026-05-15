@@ -2981,7 +2981,7 @@ gst_video_encoder_finish_frame (GstVideoEncoder * encoder,
     gst_video_encoder_send_key_unit_unlocked (encoder, frame, &send_headers);
 
   if (GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame)
-      && frame->abidata.ABI.num_subframes == 0) {
+      && frame->abidata.ABI.num_keyunits == 0) {
     priv->distance_from_sync = 0;
     key_unit = TRUE;
     /* For keyframes, DTS = PTS, if encoder doesn't decide otherwise */
@@ -3133,7 +3133,7 @@ gst_video_encoder_finish_subframe (GstVideoEncoder * encoder,
     gst_video_encoder_push_pending_unlocked (encoder, frame, FALSE);
 
   if (GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT (frame)
-      && frame->abidata.ABI.num_subframes == 0) {
+      && frame->abidata.ABI.num_keyunits == 0) {
     priv->distance_from_sync = 0;
     key_unit = TRUE;
     /* For keyframes, DTS = PTS, if encoder doesn't decide otherwise */
@@ -3191,6 +3191,8 @@ gst_video_encoder_finish_subframe (GstVideoEncoder * encoder,
 
 done:
   frame->abidata.ABI.num_subframes++;
+  if (key_unit)
+    frame->abidata.ABI.num_keyunits++;
   if (subframe_buffer)
     gst_buffer_unref (subframe_buffer);
   frame->output_buffer = NULL;
