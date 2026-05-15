@@ -52,6 +52,7 @@ struct _shader_info
   gsize uniform_size;
   GDestroyNotify notify;
   gpointer user_data;
+  gboolean native_yuv;
 };
 
 struct _GstVulkanColorConvert
@@ -59,6 +60,7 @@ struct _GstVulkanColorConvert
   GstVulkanVideoFilter              parent;
 
   GstVulkanFullScreenQuad          *quad;
+  GstVulkanHandle                  *ycbcr;
 
   shader_info                      *current_shader;
 };

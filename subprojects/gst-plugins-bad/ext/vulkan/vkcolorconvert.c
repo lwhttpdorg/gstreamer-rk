@@ -48,7 +48,7 @@
 GST_DEBUG_CATEGORY (gst_debug_vulkan_color_convert);
 #define GST_CAT_DEFAULT gst_debug_vulkan_color_convert
 
-#define N_SHADER_INFO (8*8 + 8*3*2)
+#define N_SHADER_INFO (8*8 + 8*3*2 + 8*1)
 static shader_info shader_infos[N_SHADER_INFO];
 
 static void
@@ -559,26 +559,35 @@ finfo_get_plane_n_components (const GstVideoFormatInfo * finfo, guint plane)
 static void
 get_vulkan_format_swizzle_order (GstVideoFormat v_format,
     VkFormat vk_format[GST_VIDEO_MAX_PLANES],
-    gint swizzle[GST_VIDEO_MAX_COMPONENTS])
+    gint swizzle[GST_VIDEO_MAX_COMPONENTS],
+    gboolean native_yuv)
 {
   const GstVideoFormatInfo *finfo;
   int i, prev_in_i = 0;
 
   finfo = gst_video_format_get_info (v_format);
-  for (i = 0; i < finfo->n_planes; i++) {
-    guint plane_components = finfo_get_plane_n_components (finfo, i);
-    get_vulkan_rgb_format_swizzle_order (vk_format[i],
-        &swizzle[prev_in_i], plane_components, prev_in_i);
-    prev_in_i += plane_components;
-  }
 
-  if (v_format == GST_VIDEO_FORMAT_YUY2 || v_format == GST_VIDEO_FORMAT_UYVY) {
-    /* Fixup these packed YUV formats as we use a two component format for
-     * a 4-component pixel and access two samples in the shader */
-    g_assert (swizzle[0] == 0);
-    g_assert (swizzle[1] == 1);
+  if (native_yuv) {
+    swizzle[0] = 0;
+    swizzle[1] = 1;
     swizzle[2] = 2;
     swizzle[3] = 3;
+  } else {
+    for (i = 0; i < finfo->n_planes; i++) {
+      guint plane_components = finfo_get_plane_n_components (finfo, i);
+      get_vulkan_rgb_format_swizzle_order (vk_format[i],
+          &swizzle[prev_in_i], plane_components, prev_in_i);
+      prev_in_i += plane_components;
+    }
+
+    if (v_format == GST_VIDEO_FORMAT_YUY2 || v_format == GST_VIDEO_FORMAT_UYVY) {
+      /* Fixup these packed YUV formats as we use a two component format for
+       * a 4-component pixel and access two samples in the shader */
+      g_assert (swizzle[0] == 0);
+      g_assert (swizzle[1] == 1);
+      swizzle[2] = 2;
+      swizzle[3] = 3;
+    }
   }
 
   GST_TRACE ("%s: %i, %i, %i, %i", finfo->name, swizzle[0], swizzle[1],
@@ -590,7 +599,8 @@ calculate_reorder_indexes (GstVideoFormat in_format,
     GstVulkanImageView * in_views[GST_VIDEO_MAX_COMPONENTS],
     GstVideoFormat out_format,
     GstVulkanImageView * out_views[GST_VIDEO_MAX_COMPONENTS],
-    int ret_in[GST_VIDEO_MAX_COMPONENTS], int ret_out[GST_VIDEO_MAX_COMPONENTS])
+    int ret_in[GST_VIDEO_MAX_COMPONENTS], int ret_out[GST_VIDEO_MAX_COMPONENTS],
+    gboolean native_yuv)
 {
   const GstVideoFormatInfo *in_finfo, *out_finfo;
   VkFormat in_vk_formats[GST_VIDEO_MAX_COMPONENTS];
@@ -605,16 +615,20 @@ calculate_reorder_indexes (GstVideoFormat in_format,
   in_finfo = gst_video_format_get_info (in_format);
   out_finfo = gst_video_format_get_info (out_format);
 
-  for (i = 0; i < in_finfo->n_planes; i++)
-    in_vk_formats[i] = in_views[i]->image->create_info.format;
+  /* Special handling for native YUV formats */
+  if (native_yuv)
+    in_vk_formats[0] = in_views[0]->image->create_info.format;
+  else
+    for (i = 0; i < in_finfo->n_planes; i++)
+      in_vk_formats[i] = in_views[i]->image->create_info.format;
   for (i = 0; i < out_finfo->n_planes; i++)
     out_vk_formats[i] = out_views[i]->image->create_info.format;
 
-  get_vulkan_format_swizzle_order (in_format, in_vk_formats, in_vk_order);
+  get_vulkan_format_swizzle_order (in_format, in_vk_formats, in_vk_order, native_yuv);
   video_format_to_reorder (in_format, in_reorder, TRUE);
 
   video_format_to_reorder (out_format, out_reorder, FALSE);
-  get_vulkan_format_swizzle_order (out_format, out_vk_formats, out_vk_order);
+  get_vulkan_format_swizzle_order (out_format, out_vk_formats, out_vk_order, FALSE);
 
   for (i = 0; i < GST_VIDEO_MAX_COMPONENTS; i++)
     tmp[i] = out_vk_order[out_reorder[i]];
@@ -665,7 +679,7 @@ swizzle_rgb_create_uniform_memory (GstVulkanColorConvert * conv,
 
     calculate_reorder_indexes (GST_VIDEO_INFO_FORMAT (&conv->quad->in_info),
         in_views, GST_VIDEO_INFO_FORMAT (&conv->quad->out_info),
-        out_views, data.in_reorder, data.out_reorder);
+        out_views, data.in_reorder, data.out_reorder, sinfo->native_yuv);
 
     if (!gst_memory_map (uniforms, &map_info, GST_MAP_WRITE)) {
       gst_memory_unref (uniforms);
@@ -720,7 +734,7 @@ yuv_to_rgb_create_uniform_memory (GstVulkanColorConvert * conv,
 
     calculate_reorder_indexes (GST_VIDEO_INFO_FORMAT (&conv->quad->in_info),
         in_views, GST_VIDEO_INFO_FORMAT (&conv->quad->out_info),
-        out_views, data.in_reorder, data.out_reorder);
+        out_views, data.in_reorder, data.out_reorder, sinfo->native_yuv);
 
     conv_info = convert_info_new (&conv->quad->in_info, &conv->quad->out_info);
     matrix_to_float (&conv_info->to_RGB_matrix, data.matrices.to_RGB);
@@ -855,6 +869,7 @@ fill_shader_info (void)
           .uniform_size = sizeof (struct RGBUpdateData),
           .notify = (GDestroyNotify) unref_memory_if_set,
           .user_data = NULL,
+          .native_yuv = FALSE,
       };
     }
 
@@ -870,6 +885,7 @@ fill_shader_info (void)
           .uniform_size = sizeof(struct YUVUpdateData),
           .notify = (GDestroyNotify) unref_memory_if_set,
           .user_data = NULL,
+          .native_yuv = FALSE,
       };
       GST_TRACE ("Initializing info for %s -> %s", to_finfo->name, from_finfo->name);
       shader_infos[info_i++] = (shader_info) {
@@ -881,8 +897,21 @@ fill_shader_info (void)
           .uniform_size = sizeof(struct YUVUpdateData),
           .notify = (GDestroyNotify) unref_memory_if_set,
           .user_data = NULL,
+          .native_yuv = FALSE,
       };
     }
+
+    shader_infos[info_i++] = (shader_info) {
+        .from = GST_VIDEO_FORMAT_NV12,
+        .to = rgbs[i],
+        .cmd_create_uniform = swizzle_rgb_create_uniform_memory,
+        .frag_code = swizzle_and_clobber_alpha_frag,
+        .frag_size = swizzle_and_clobber_alpha_frag_size,
+        .uniform_size = sizeof (struct RGBUpdateData),
+        .notify = (GDestroyNotify) unref_memory_if_set,
+        .user_data = NULL,
+        .native_yuv = TRUE,
+    };
   }
   /* *INDENT-ON* */
   GST_TRACE ("initialized %u formats", info_i);
@@ -1144,49 +1173,26 @@ vulkan_color_convert_can_passthrough_info (const GstVideoInfo * in,
 }
 
 static gboolean
-gst_vulkan_color_convert_set_caps (GstBaseTransform * bt, GstCaps * in_caps,
-    GstCaps * out_caps)
+gst_vulkan_color_convert_create_shaders (GstVulkanColorConvert * conv,
+    gboolean native_yuv)
 {
-  GstVulkanVideoFilter *vfilter = GST_VULKAN_VIDEO_FILTER (bt);
-  GstVulkanColorConvert *conv = GST_VULKAN_COLOR_CONVERT (bt);
+  GstVulkanVideoFilter *vfilter = GST_VULKAN_VIDEO_FILTER (conv);
   GstVulkanHandle *vert, *frag;
-  gboolean passthrough;
   int i;
-
-  if (!GST_BASE_TRANSFORM_CLASS (parent_class)->set_caps (bt, in_caps,
-          out_caps))
-    return FALSE;
-
-  passthrough =
-      vulkan_color_convert_can_passthrough_info (&vfilter->in_info,
-      &vfilter->out_info);
-  gst_base_transform_set_passthrough (bt, passthrough);
-
-  if (!gst_vulkan_full_screen_quad_set_info (conv->quad, &vfilter->in_info,
-          &vfilter->out_info))
-    return FALSE;
-
-  if (conv->current_shader) {
-    conv->current_shader->notify (conv->current_shader);
-    conv->current_shader = NULL;
-  }
-
-  if (passthrough) {
-    conv->current_shader = NULL;
-    return TRUE;
-  }
 
   for (i = 0; i < G_N_ELEMENTS (shader_infos); i++) {
     if (shader_infos[i].from != GST_VIDEO_INFO_FORMAT (&vfilter->in_info))
       continue;
     if (shader_infos[i].to != GST_VIDEO_INFO_FORMAT (&vfilter->out_info))
       continue;
+    if (shader_infos[i].native_yuv != native_yuv)
+      continue;
 
     GST_INFO_OBJECT (conv,
-        "Found compatible conversion information from %s to %s",
+        "Found compatible conversion information from %s to %s%s",
         gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (&vfilter->in_info)),
         gst_video_format_to_string (GST_VIDEO_INFO_FORMAT
-            (&vfilter->out_info)));
+            (&vfilter->out_info)), native_yuv ? " (native YUV)" : "");
     conv->current_shader = &shader_infos[i];
   }
 
@@ -1222,6 +1228,40 @@ gst_vulkan_color_convert_set_caps (GstBaseTransform * bt, GstCaps * in_caps,
 }
 
 static gboolean
+gst_vulkan_color_convert_set_caps (GstBaseTransform * bt, GstCaps * in_caps,
+    GstCaps * out_caps)
+{
+  GstVulkanVideoFilter *vfilter = GST_VULKAN_VIDEO_FILTER (bt);
+  GstVulkanColorConvert *conv = GST_VULKAN_COLOR_CONVERT (bt);
+  gboolean passthrough;
+
+  if (!GST_BASE_TRANSFORM_CLASS (parent_class)->set_caps (bt, in_caps,
+          out_caps))
+    return FALSE;
+
+  passthrough =
+      vulkan_color_convert_can_passthrough_info (&vfilter->in_info,
+      &vfilter->out_info);
+  gst_base_transform_set_passthrough (bt, passthrough);
+
+  if (!gst_vulkan_full_screen_quad_set_info (conv->quad, &vfilter->in_info,
+          &vfilter->out_info))
+    return FALSE;
+
+  if (conv->current_shader) {
+    conv->current_shader->notify (conv->current_shader);
+    conv->current_shader = NULL;
+  }
+
+  if (passthrough) {
+    conv->current_shader = NULL;
+    return TRUE;
+  }
+
+  return gst_vulkan_color_convert_create_shaders (conv, FALSE);
+}
+
+static gboolean
 gst_vulkan_color_convert_stop (GstBaseTransform * bt)
 {
   GstVulkanColorConvert *conv = GST_VULKAN_COLOR_CONVERT (bt);
@@ -1233,7 +1273,138 @@ gst_vulkan_color_convert_stop (GstBaseTransform * bt)
 
   gst_clear_object (&conv->quad);
 
+  if (conv->ycbcr) {
+    gst_vulkan_handle_unref (conv->ycbcr);
+    conv->ycbcr = NULL;
+  }
+
   return GST_BASE_TRANSFORM_CLASS (parent_class)->stop (bt);
+}
+
+static void
+gst_vulkan_handle_free_sampler_ycbcr_conversion (GstVulkanHandle * handle,
+    gpointer data)
+{
+  g_return_if_fail (handle != NULL);
+  g_return_if_fail (handle->handle != VK_NULL_HANDLE);
+  g_return_if_fail (handle->type ==
+      GST_VULKAN_HANDLE_TYPE_SAMPLER_YCBCR_CONVERSION);
+
+  vkDestroySamplerYcbcrConversion (handle->device->device,
+      (VkSamplerYcbcrConversion) handle->handle, NULL);
+}
+
+static gboolean
+create_sampler_ycbcr (GstVulkanColorConvert * self, VkFormat format,
+    VkSamplerYcbcrModelConversion model, VkSamplerYcbcrRange range,
+    VkChromaLocation xloc, VkChromaLocation yloc, GError ** error)
+{
+  GstVulkanDevice *device = self->quad->queue->device;
+  VkSamplerYcbcrConversion ycbcr_conversion;
+  VkSampler sampler;
+  VkResult res;
+
+  if (!gst_vulkan_device_is_extension_enabled
+      (device, VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME)) {
+    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
+        "Sampler Ycbcr conversion not available in API");
+    return FALSE;
+  }
+  /* *INDENT-OFF* */
+  VkSamplerYcbcrConversionCreateInfo create_info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO,
+      .components = (VkComponentMapping) {
+          VK_COMPONENT_SWIZZLE_IDENTITY,
+          VK_COMPONENT_SWIZZLE_IDENTITY,
+          VK_COMPONENT_SWIZZLE_IDENTITY,
+          VK_COMPONENT_SWIZZLE_IDENTITY,
+      },
+      .ycbcrModel = model,
+      .ycbcrRange = range,
+      .xChromaOffset = xloc,
+      .yChromaOffset = yloc,
+      .format = format,
+  };
+
+  res =
+      vkCreateSamplerYcbcrConversion (device->device, &create_info,
+          NULL, &ycbcr_conversion);
+  if (gst_vulkan_error_to_g_error (res, error,
+      "vkCreateSamplerYcbcrConversion") < 0) {
+    return FALSE;
+  }
+
+  gst_clear_vulkan_handle (&self->ycbcr);
+  self->ycbcr = gst_vulkan_handle_new_wrapped (device,
+      GST_VULKAN_HANDLE_TYPE_SAMPLER_YCBCR_CONVERSION,
+      (GstVulkanHandleTypedef) ycbcr_conversion,
+      gst_vulkan_handle_free_sampler_ycbcr_conversion, NULL);
+
+  VkSamplerYcbcrConversionInfo ycbcr_sampler_info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
+      .conversion = self->ycbcr->handle,
+  };
+
+  VkSamplerCreateInfo sampler_info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .pNext = &ycbcr_sampler_info,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .anisotropyEnable = VK_FALSE,
+      .maxAnisotropy = 1,
+      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+      .unnormalizedCoordinates = VK_FALSE,
+      .compareEnable = VK_FALSE,
+      .compareOp = VK_COMPARE_OP_ALWAYS,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .mipLodBias = 0.0f,
+      .minLod = 0.0f,
+      .maxLod = 0.0f
+  };
+  /* *INDENT-ON* */
+
+  res = vkCreateSampler (device->device, &sampler_info, NULL, &sampler);
+  if (gst_vulkan_error_to_g_error (res, error, "vkCreateSampler") < 0) {
+    return FALSE;
+  }
+
+  self->quad->sampler = gst_vulkan_handle_new_wrapped (device,
+      GST_VULKAN_HANDLE_TYPE_SAMPLER, (GstVulkanHandleTypedef) sampler,
+      gst_vulkan_handle_free_sampler, NULL);
+
+  return TRUE;
+}
+
+static VkSamplerYcbcrModelConversion
+gst_vulkan_ycbcr_model_from_color_matrix (GstVideoColorMatrix matrix)
+{
+  switch (matrix) {
+    case GST_VIDEO_COLOR_MATRIX_BT709:
+      return VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
+    case GST_VIDEO_COLOR_MATRIX_BT601:
+      return VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601;
+    case GST_VIDEO_COLOR_MATRIX_BT2020:
+      return VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_2020;
+    default:
+      g_assert_not_reached ();
+  }
+}
+
+static VkSamplerYcbcrRange
+gst_vulkan_ycbcr_range_from_color_range (GstVideoColorRange range)
+{
+  switch (range) {
+    case GST_VIDEO_COLOR_RANGE_UNKNOWN:
+    case GST_VIDEO_COLOR_RANGE_0_255:
+      return VK_SAMPLER_YCBCR_RANGE_ITU_FULL;
+    case GST_VIDEO_COLOR_RANGE_16_235:
+      return VK_SAMPLER_YCBCR_RANGE_ITU_NARROW;
+    default:
+      g_assert_not_reached ();
+  }
 }
 
 static GstFlowReturn
@@ -1253,6 +1424,7 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
   VkResult err;
   int i;
   guint in_n_mems, out_n_mems;
+  gboolean native_yuv;
 
   fence = gst_vulkan_device_create_fence (vfilter->device, &error);
   if (!fence)
@@ -1262,19 +1434,89 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     goto error;
 
   in_n_mems = gst_buffer_n_memory (inbuf);
-  for (i = 0; i < in_n_mems; i++) {
-    GstMemory *img_mem = gst_buffer_peek_memory (inbuf, i);
+
+  native_yuv = in_n_mems == 1
+      && GST_VIDEO_INFO_N_PLANES (&conv->quad->in_info) > 1;
+  if (native_yuv) {
+    GstMemory *img_mem = gst_buffer_peek_memory (inbuf, 0);
     if (!gst_is_vulkan_image_memory (img_mem)) {
       g_set_error_literal (&error, GST_VULKAN_ERROR, GST_VULKAN_FAILED,
           "Input memory must be a GstVulkanImageMemory");
       goto error;
     }
-    in_img_views[i] =
-        gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *) img_mem);
+
+    if (conv->quad->sampler && conv->quad->sampler->type !=
+        GST_VULKAN_HANDLE_TYPE_SAMPLER_YCBCR_CONVERSION) {
+      gst_vulkan_trash_list_add (conv->quad->trash_list,
+          gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
+              gst_vulkan_trash_mini_object_unref,
+              (GstMiniObject *) conv->quad->sampler));
+      conv->quad->sampler = NULL;
+    }
+
+    GstVulkanImageMemory *vkmem = (GstVulkanImageMemory *) img_mem;
+    if (!conv->ycbcr && !create_sampler_ycbcr (conv,
+            vkmem->create_info.format,
+            gst_vulkan_ycbcr_model_from_color_matrix (conv->quad->
+                in_info.colorimetry.matrix),
+            gst_vulkan_ycbcr_range_from_color_range (conv->quad->
+                in_info.colorimetry.range), VK_CHROMA_LOCATION_MIDPOINT,
+            VK_CHROMA_LOCATION_MIDPOINT, &error))
+      goto error;
+
+    /* *INDENT-OFF* */
+    VkSamplerYcbcrConversionInfo ycbcr_sampler_info = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
+        .conversion = conv->ycbcr->handle,
+    };
+
+    VkImageViewCreateInfo view_create_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = &ycbcr_sampler_info,
+        .image = vkmem->image,
+        .format = vkmem->create_info.format,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .flags = 0,
+        .components = (VkComponentMapping) {
+            VK_COMPONENT_SWIZZLE_R,
+            VK_COMPONENT_SWIZZLE_G,
+            VK_COMPONENT_SWIZZLE_B,
+            VK_COMPONENT_SWIZZLE_A,
+        },
+        .subresourceRange = (VkImageSubresourceRange) {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    /* *INDENT-ON* */
+
+    in_img_views[0] =
+        gst_vulkan_get_or_create_image_view_with_info (vkmem,
+        &view_create_info);
+
     gst_vulkan_trash_list_add (conv->quad->trash_list,
         gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
             gst_vulkan_trash_mini_object_unref,
-            (GstMiniObject *) in_img_views[i]));
+            (GstMiniObject *) in_img_views[0]));
+  } else {
+    for (i = 0; i < in_n_mems; i++) {
+      GstMemory *img_mem = gst_buffer_peek_memory (inbuf, i);
+      if (!gst_is_vulkan_image_memory (img_mem)) {
+        g_set_error_literal (&error, GST_VULKAN_ERROR, GST_VULKAN_FAILED,
+            "Input memory must be a GstVulkanImageMemory");
+        goto error;
+      }
+      in_img_views[i] =
+          gst_vulkan_get_or_create_image_view ((GstVulkanImageMemory *)
+          img_mem);
+      gst_vulkan_trash_list_add (conv->quad->trash_list,
+          gst_vulkan_trash_list_acquire (conv->quad->trash_list, fence,
+              gst_vulkan_trash_mini_object_unref,
+              (GstMiniObject *) in_img_views[i]));
+    }
   }
 
   {
@@ -1355,6 +1597,15 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
   if (!gst_vulkan_full_screen_quad_set_output_buffer (conv->quad, render_buf,
           &error))
     goto error;
+
+  if (native_yuv && !conv->current_shader->native_yuv &&
+      !gst_vulkan_color_convert_create_shaders (conv, TRUE))
+    goto error;
+
+  g_assert (native_yuv == conv->current_shader->native_yuv);
+  /* Only support VK_FORMAT_G8_B8R8_2PLANE_420_UNORM for now */
+  g_assert (!native_yuv || GST_VIDEO_INFO_FORMAT (&conv->quad->in_info) ==
+      GST_VIDEO_FORMAT_NV12);
 
   {
     GstMemory *uniforms = conv->current_shader->cmd_create_uniform (conv,

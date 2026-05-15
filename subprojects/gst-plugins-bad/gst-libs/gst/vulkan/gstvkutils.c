@@ -487,6 +487,18 @@ fill_vulkan_image_view_info (VkImage image, VkFormat format,
 }
 
 static gboolean
+compatible_next (const VkImageViewCreateInfo * a,
+    const VkImageViewCreateInfo * b)
+{
+  const VkBaseInStructure *a_next = a->pNext, *b_next = b->pNext;
+  if ((a_next == NULL) != (b_next == NULL))
+    return FALSE;
+  if (a_next == NULL)
+    return TRUE;
+  return a_next->sType == b_next->sType;
+}
+
+static gboolean
 find_compatible_view (GstVulkanImageView * view,
     const VkImageViewCreateInfo * info)
 {
@@ -507,7 +519,8 @@ find_compatible_view (GstVulkanImageView * view,
       && view->create_info.subresourceRange.baseArrayLayer ==
       info->subresourceRange.baseArrayLayer
       && view->create_info.subresourceRange.layerCount ==
-      info->subresourceRange.layerCount;
+      info->subresourceRange.layerCount
+      && compatible_next (&view->create_info, info);
 }
 
 /**
