@@ -34,6 +34,7 @@ plugin_init (GstPlugin * plugin)
 
 #ifdef HAVE_VP8_DECODER
   ret |= GST_ELEMENT_REGISTER (vp8dec, plugin);
+  ret |= GST_ELEMENT_REGISTER (vp8_alpha_decode_bin, plugin);
 #endif
 
 #ifdef HAVE_VP8_ENCODER
@@ -42,6 +43,7 @@ plugin_init (GstPlugin * plugin)
 
 #ifdef HAVE_VP9_DECODER
   ret |= GST_ELEMENT_REGISTER (vp9dec, plugin);
+  ret |= GST_ELEMENT_REGISTER (vp9_alpha_decode_bin, plugin);
 #endif
 
 #ifdef HAVE_VP9_ENCODER
