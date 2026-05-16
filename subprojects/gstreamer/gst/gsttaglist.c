@@ -173,6 +173,10 @@ _priv_gst_tag_initialize (void)
       _("disc count"),
       _("count of discs inside collection this disc belongs to"),
       gst_tag_merge_use_first);
+  gst_tag_register_static (GST_TAG_ALBUM_VOLUME_SUBTITLE, GST_TAG_FLAG_META,
+      G_TYPE_STRING,
+      _("disc subtitle"),
+      _("disc subtitle inside a collection"), gst_tag_merge_strings_with_comma);
   gst_tag_register_static (GST_TAG_LOCATION, GST_TAG_FLAG_META,
       G_TYPE_STRING,
       _("location"), _("Origin of media as a URI (location, where the "

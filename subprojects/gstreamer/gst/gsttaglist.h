@@ -616,6 +616,12 @@ gboolean     gst_tag_list_is_writable   (const GstTagList * taglist);
  */
 #define GST_TAG_ALBUM_VOLUME_COUNT    "album-disc-count"
 /**
+ * GST_TAG_ALBUM_VOLUME_TITLE:
+ *
+ * disc subtitle inside a collection (string)
+ */
+#define GST_TAG_ALBUM_VOLUME_SUBTITLE "album-disc-subtitle"
+/**
  * GST_TAG_LOCATION:
  *
  * Origin of media as a URI (location, where the original of the file or stream
