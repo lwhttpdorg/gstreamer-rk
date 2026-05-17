@@ -11,6 +11,7 @@ repos:
     rev: v0.19.1
     hooks:
     -   id: gitlint-ci
+    -   id: gitlint
 -   repo: local
     hooks:
     # Use dotnet format installed on your machine
@@ -20,6 +21,7 @@ repos:
         files: ^subprojects/gstreamer-sharp/.*
         entry: dotnet format subprojects/gstreamer-sharp/gstreamer-sharp.sln -v normal --include
         types_or: ["c#", "vb"]
+        stages: [pre-commit]
     -   id: gst-indent
         name: gst-indent
         language: python
@@ -27,6 +29,7 @@ repos:
         pass_filenames: false
         types_or: ["c", "c++"]
         additional_dependencies: ["gst-indent==1.0.0"]
+        stages: [pre-commit]
     # The rust hook uses cargo fmt, which requires a Cargo.toml
     # We use a local hook to run rustfmt directly
     -   id: rustfmt
@@ -34,15 +37,18 @@ repos:
         language: system
         entry: rustfmt --verbose --edition 2021
         types_or: ["rust"]
+        stages: [pre-commit]
     -   id: validatetest-fmt
         name: validatetest-fmt
         language: python
         entry: validatetest-fmt -i
         files: '\.validatetest$'
         additional_dependencies: ["validatetest-fmt==0.1.4"]
+        stages: [pre-commit]
     -   id: doc-checks
         name: doc-checks
         language: python
         entry: python ./scripts/git-hooks/pre-commit-python.hook
         pass_filenames: false
         additional_dependencies: ["autopep8==2.3.2", "pycodestyle==2.12.1"]
+        stages: [pre-commit]
