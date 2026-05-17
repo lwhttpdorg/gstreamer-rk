@@ -60,7 +60,7 @@
 void     gst_srtp_init_event_reporter    (void);
 gboolean gst_srtp_get_soft_limit_reached (void);
 
-gboolean rtcp_buffer_get_ssrc (GstBuffer * buf, guint32 * ssrc);
+gboolean rtcp_buffer_get_ssrc (GstElement * filter, GstBuffer * buf, guint32 * ssrc);
 
 const gchar *enum_nick_from_value (GType enum_gtype, gint value);
 gint enum_value_from_nick (GType enum_gtype, const gchar *nick);
