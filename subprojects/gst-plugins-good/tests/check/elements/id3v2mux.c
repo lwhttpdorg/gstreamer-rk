@@ -33,6 +33,7 @@
 #define TEST_TRACK_COUNT      19
 #define TEST_VOLUME_NUMBER    2
 #define TEST_VOLUME_COUNT     3
+#define TEST_VOLUME_SUBTITLE  "Subtitle"
 #define TEST_TRACK_GAIN      1.45
 #define TEST_ALBUM_GAIN      0.78
 #define TEST_TRACK_PEAK      0.83
@@ -122,6 +123,10 @@ test_taglib_id3mux_create_tags (guint32 mask)
         GST_TAG_BEATS_PER_MINUTE, TEST_BPM, NULL);
   }
   if (mask & (1 << 13)) {
+    gst_tag_list_add (tags, GST_TAG_MERGE_KEEP,
+        GST_TAG_ALBUM_VOLUME_SUBTITLE, TEST_VOLUME_SUBTITLE, NULL);
+  }
+  if (mask & (1 << 14)) {
   }
   return tags;
 }
@@ -256,6 +261,14 @@ test_taglib_id3mux_check_tags (GstTagList * tags, guint32 mask)
     fail_unless_sorta_equals_float (bpm, TEST_BPM);
   }
   if (mask & (1 << 13)) {
+    gchar *s = NULL;
+
+    fail_unless (gst_tag_list_get_string (tags, GST_TAG_ALBUM_VOLUME_SUBTITLE,
+            &s));
+    fail_unless (g_str_equal (s, TEST_VOLUME_SUBTITLE));
+    g_free (s);
+  }
+  if (mask & (1 << 14)) {
   }
 }
 
