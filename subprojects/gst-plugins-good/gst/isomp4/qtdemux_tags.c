@@ -726,7 +726,8 @@ qtdemux_tag_add_revdns (GstQTDemux * demux, GstTagList * taglist,
           "MusicBrainz Track Id", GST_TAG_MUSICBRAINZ_TRACKID}, {
           "MusicBrainz Artist Id", GST_TAG_MUSICBRAINZ_ARTISTID}, {
           "MusicBrainz Album Id", GST_TAG_MUSICBRAINZ_ALBUMID}, {
-          "MusicBrainz Album Artist Id", GST_TAG_MUSICBRAINZ_ALBUMARTISTID}
+          "MusicBrainz Album Artist Id", GST_TAG_MUSICBRAINZ_ALBUMARTISTID}, {
+          "DISCSUBTITLE", GST_TAG_ALBUM_VOLUME_SUBTITLE}
     };
     int i;
 
