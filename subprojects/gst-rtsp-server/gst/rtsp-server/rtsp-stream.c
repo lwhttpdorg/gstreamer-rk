@@ -2645,6 +2645,9 @@ check_transport_backlog (GstRTSPStream * stream, GstRTSPStreamTransport * trans)
 {
   GstRTSPStreamPrivate *priv = stream->priv;
   gboolean send_ret = TRUE;
+  gboolean unlock_backlog = TRUE;
+
+  g_object_ref (trans);
 
   gst_rtsp_stream_transport_lock_backlog (trans);
 
@@ -2663,6 +2666,9 @@ check_transport_backlog (GstRTSPStream * stream, GstRTSPStreamTransport * trans)
 
       g_assert (popped == TRUE);
 
+      gst_rtsp_stream_transport_unlock_backlog (trans);
+      unlock_backlog = FALSE;
+
       send_ret = push_data (stream, trans, buffer, buffer_list, is_rtp);
 
       gst_clear_buffer (&buffer);
@@ -2670,7 +2676,8 @@ check_transport_backlog (GstRTSPStream * stream, GstRTSPStreamTransport * trans)
     }
   }
 
-  gst_rtsp_stream_transport_unlock_backlog (trans);
+  if (unlock_backlog)
+    gst_rtsp_stream_transport_unlock_backlog (trans);
 
   if (!send_ret) {
     /* remove transport on send error */
@@ -2678,6 +2685,8 @@ check_transport_backlog (GstRTSPStream * stream, GstRTSPStreamTransport * trans)
     update_transport (stream, trans, FALSE);
     g_mutex_unlock (&priv->lock);
   }
+
+  g_object_unref (trans);
 }
 
 /* Must be called with priv->lock */
