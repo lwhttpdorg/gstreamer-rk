@@ -411,10 +411,21 @@ gst_rtmp_connection_close (GstRtmpConnection * self)
     g_clear_pointer (&self->input_source, g_source_unref);
   }
 
-  if (self->connection) {
-    g_io_stream_close_async (G_IO_STREAM (self->connection),
-        G_PRIORITY_DEFAULT, NULL, NULL, NULL);
+  if (!self->connection)
+    return;
+
+  if (G_IS_TCP_WRAPPER_CONNECTION (self->connection)) {
+    GIOStream *base =
+        g_tcp_wrapper_connection_get_base_io_stream (G_TCP_WRAPPER_CONNECTION
+        (self->connection));
+
+    if (base) {
+      g_io_stream_close (base, self->cancellable, NULL);
+    }
   }
+
+  g_io_stream_close_async (G_IO_STREAM (self->connection),
+      G_PRIORITY_DEFAULT, NULL, NULL, NULL);
 }
 
 void
