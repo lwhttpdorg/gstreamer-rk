@@ -401,7 +401,7 @@ gst_v4l2_codec_vp8_dec_decide_allocation (GstVideoDecoder * decoder,
   }
 
   self->src_allocator = gst_v4l2_codec_allocator_new (self->decoder,
-      GST_PAD_SRC, self->min_pool_size + min + 4);
+      GST_PAD_SRC, self->min_pool_size + min);
   if (!self->src_allocator) {
     GST_ELEMENT_ERROR (self, RESOURCE, NO_SPACE_LEFT,
         ("Not enough memory to allocate source buffers."), (NULL));
@@ -564,6 +564,11 @@ gst_v4l2_codec_vp8_dec_new_sequence (GstVp8Decoder * decoder,
 {
   GstV4l2CodecVp8Dec *self = GST_V4L2_CODEC_VP8_DEC (decoder);
   gboolean negotiation_needed = FALSE;
+
+  if (self->min_pool_size < max_dpb_size) {
+    self->min_pool_size = max_dpb_size;
+    negotiation_needed = TRUE;
+  }
 
   if (self->vinfo_drm.vinfo.finfo->format == GST_VIDEO_FORMAT_UNKNOWN)
     negotiation_needed = TRUE;
