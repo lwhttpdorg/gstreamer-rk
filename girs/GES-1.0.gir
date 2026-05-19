@@ -4099,19 +4099,30 @@ you should implement @set_asset_full instead.</doc>
           </parameter>
         </parameters>
       </virtual-method>
-      <virtual-method name="set_asset_full">
-        <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.h">Like @set_asset, but also allows you to return %FALSE
-to indicate a failure to change the object in response to a change in
-its asset.</doc>
+      <virtual-method name="set_asset_full" invoker="set_asset">
+        <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">Sets the asset for this extractable object.
+
+When an object is extracted from an asset using ges_asset_extract() its
+asset will be automatically set. Note that many classes that implement
+#GESExtractable will automatically create their objects using assets
+when you call their @new methods. However, you can use this method to
+associate an object with a compatible asset if it was created by other
+means and does not yet have an asset. Or, for some implementations of
+#GESExtractable, you can use this to change the asset of the given
+extractable object, which will lead to a change in its state to
+match the new asset #GESAsset:id.</doc>
         <source-position filename="../subprojects/gst-editing-services/ges/ges-extractable.h"/>
         <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">%TRUE if @asset could be successfully set on @self.</doc>
           <type name="gboolean" c:type="gboolean"/>
         </return-value>
         <parameters>
           <instance-parameter name="self" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">A #GESExtractable</doc>
             <type name="Extractable" c:type="GESExtractable*"/>
           </instance-parameter>
           <parameter name="asset" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">The asset to set</doc>
             <type name="Asset" c:type="GESAsset*"/>
           </parameter>
         </parameters>
@@ -4279,13 +4290,16 @@ its asset.</doc>
         <callback name="set_asset_full">
           <source-position filename="../subprojects/gst-editing-services/ges/ges-extractable.h"/>
           <return-value transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">%TRUE if @asset could be successfully set on @self.</doc>
             <type name="gboolean" c:type="gboolean"/>
           </return-value>
           <parameters>
             <parameter name="self" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">A #GESExtractable</doc>
               <type name="Extractable" c:type="GESExtractable*"/>
             </parameter>
             <parameter name="asset" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gst-editing-services/ges/ges-extractable.c">The asset to set</doc>
               <type name="Asset" c:type="GESAsset*"/>
             </parameter>
           </parameters>
