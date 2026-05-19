@@ -945,6 +945,58 @@ fluster v4l2-stateless on visl:
           - "ci/scripts/build-linux.sh"
           - "ci/docker/fedora/*"
 
+# h26forge tests
+h26forge on visl:
+  extends:
+    - '.build fedora fluster x86_64'
+  stage: 'test'
+  variables:
+    BUILD_GST_DEBUG: '-Dgstreamer:gst_debug=false'
+    GST_WERROR: "true"
+    BUILD_TYPE: "--default-library=static"
+    MESON_ARGS: >-
+      -Dvirtme_kernel_image=/opt/linux/bzImage
+      -Dauto_features=disabled
+      -Dgst-full=enabled
+      -Dgstreamer:check=enabled
+      -Ddoc=disabled
+      -Dtests=enabled
+      -Dtools=enabled
+      -Dbase=enabled
+      -Dbad=enabled
+      -Dugly=disabled
+      -Dlibav=disabled
+      -Drtsp_server=disabled
+      -Dges=disabled
+      -Dgst-plugins-bad:debugutils=enabled
+      -Dgst-plugins-bad:ivfparse=enabled
+      -Dgst-plugins-bad:v4l2codecs=enabled
+      -Dgst-plugins-bad:videoparsers=enabled
+      -Dgst-plugins-base:app=enabled
+      -Dgst-plugins-base:videoconvertscale=enabled
+      -Dgst-plugins-base:typefind=enabled
+      -Dgst-plugins-base:playback=enabled
+      -Dgst-plugins-good:matroska=enabled
+    SUBPROJECTS_CACHE_DIR: "/subprojects"
+  script:
+  - export RUSTUP_HOME="/usr/local/rustup"
+  - export PATH="/usr/local/cargo/bin:$PATH"
+  - $CI_PROJECT_DIR/ci/scripts/build.sh build/
+  - $CI_PROJECT_DIR/ci/scripts/build_h26forge.sh build/
+  rules:
+    - changes:
+        compare_to: "$GST_UPSTREAM_BRANCH"
+        paths:
+          - ".gitlab-ci.yml"
+          - ".gitlab-image-tags.yml"
+          - "subprojects/gst-plugins-bad/sys/v4l2codecs/*"
+          - "subprojects/gst-plugins-bad/gst-libs/gst/codecparsers/*"
+          - "subprojects/gst-plugins-bad/gst-libs/gst/codecs/*"
+          - "subprojects/gst-plugins-bad/gst/videoparsers/*"
+          - "tests/virtme/*"
+          - "ci/scripts/build-linux.sh"
+          - "ci/docker/fedora/*"
+
 # Valgrind
 .valgrind fedora x86_64:
   extends: '.test fedora x86_64'
