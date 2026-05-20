@@ -267,6 +267,7 @@ struct _GstValidateScenarioPrivate
   gboolean buffering;
 
   gboolean got_eos;
+  /* Whether we're waiting for ASYNC_DONE for a set-state action to complete. */
   gboolean changing_state;
   gboolean needs_async_done;
   gboolean ignore_eos;
@@ -1548,6 +1549,7 @@ _execute_set_state (GstValidateScenario * scenario, GstValidateAction * action)
   guint state;
   const gchar *str_state;
   GstStateChangeReturn ret;
+  gboolean non_blocking = FALSE;
   GstValidateExecuteActionReturn res = GST_VALIDATE_EXECUTE_ACTION_OK;
 
   DECLARE_AND_GET_PIPELINE (scenario, action);
@@ -1558,6 +1560,9 @@ _execute_set_state (GstValidateScenario * scenario, GstValidateAction * action)
   g_return_val_if_fail (gst_validate_utils_enum_from_str (GST_TYPE_STATE,
           str_state, &state), FALSE);
 
+  non_blocking =
+      gst_structure_get_boolean (action->structure, "non-blocking",
+      &non_blocking);
 
   scenario->priv->target_state = state;
   scenario->priv->changing_state = TRUE;
@@ -1572,7 +1577,7 @@ _execute_set_state (GstValidateScenario * scenario, GstValidateAction * action)
     /* Nothing async on failure, action will be removed automatically */
     res = GST_VALIDATE_EXECUTE_ACTION_ERROR;
     goto done;
-  } else if (ret == GST_STATE_CHANGE_ASYNC) {
+  } else if (ret == GST_STATE_CHANGE_ASYNC && !non_blocking) {
 
     scenario->priv->needs_async_done = TRUE;
     res = GST_VALIDATE_EXECUTE_ACTION_ASYNC;
@@ -8570,6 +8575,14 @@ register_action_types (void)
                          "    * ['null', 'ready', 'paused', 'playing']",
           .mandatory = TRUE,
           .types = "string",
+        },
+        {
+          .name = "non-blocking",
+          .description = "By default this action will wait for an asynchronous"
+                         "state transition to finish. Setting this to true will"
+                         "override that.",
+          .mandatory = FALSE,
+          .types = "boolean"
         },
         {NULL}
       }),
