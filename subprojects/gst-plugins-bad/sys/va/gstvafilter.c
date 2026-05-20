@@ -1901,6 +1901,9 @@ gst_va_filter_compose (GstVaFilter * self, GstVaComposeTransaction * tx)
       params.blend_state = &blend;
     }
 
+    /* Without a blend state, VA drivers will always do a copy operation */
+    params.blend_state = &blend;
+
     status = vaCreateBuffer (dpy, self->context,
         VAProcPipelineParameterBufferType, sizeof (params), 1, &params,
         &buffer);
