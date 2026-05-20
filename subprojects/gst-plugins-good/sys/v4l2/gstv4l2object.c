@@ -5959,7 +5959,7 @@ gst_v4l2_object_decide_allocation (GstV4l2Object * obj, GstQuery * query)
 
     /* If no allocation parameters where provided, allow for a little more
      * buffers and enable copy threshold */
-    if (!update) {
+    if (!update && obj->mode != GST_V4L2_IO_DMABUF) {
       own_min += 2;
       gst_v4l2_buffer_pool_copy_at_threshold (GST_V4L2_BUFFER_POOL (pool),
           TRUE);
