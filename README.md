@@ -609,3 +609,8 @@ gst-launch-1.0.exe videotestsrc ! glimagesink
 A file named `.vscode/launch.json.sample` can be used as a reference to debug and run
 GStreamer applications such as `gst-launch-1.0`. You just have to copy the file to
 `.vscode/launch.json` to enable the debugging session in Visual Studio Code.
+
+> __NOTE__: In order to get the environment file,
+`meson-vscode.env`, for vscode and start to debug,
+you'll need to run
+ `meson devenv -C $BUILDDIR --dump-format vscode --dump $BUILDDIR/meson-vscode.env`
