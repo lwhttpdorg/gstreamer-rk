@@ -129,8 +129,10 @@
  *   * Determines whether a non-writable buffer will be copied before passing
  *     to the transform_ip function.
  *
- *   * Implied %TRUE if no transform function is implemented.
- *   * Implied %FALSE if ONLY transform function is implemented.
+ *   * Implied %TRUE if no transform function is implemented and
+ *     #GstBaseTransformClass.generate_output is not overridden.
+ *   * Implied %FALSE if ONLY transform function is implemented, or if
+ *     #GstBaseTransformClass.generate_output is overridden.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -419,8 +421,10 @@ gst_base_transform_init (GstBaseTransform * trans,
   priv->prefer_passthrough = TRUE;
 
   priv->passthrough = FALSE;
-  if (bclass->transform == NULL) {
-    /* If no transform function, always_in_place is TRUE */
+  if (bclass->transform == NULL
+      && bclass->generate_output == default_generate_output) {
+    /* If no transform function and generate_output is not overridden,
+     * always_in_place is TRUE */
     GST_DEBUG_OBJECT (trans, "setting in_place TRUE");
     priv->always_in_place = TRUE;
 
