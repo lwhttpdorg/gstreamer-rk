@@ -62,10 +62,21 @@ G_BEGIN_DECLS
 
 #define GST_ADAPTIVE_DEMUX_GET_SCHEDULER(d) (GST_ADAPTIVE_DEMUX_CAST(d)->priv->scheduler_task)
 
-#define GST_ADAPTIVE_SCHEDULER_LOCK(d) gst_adaptive_demux_scheduler_lock(demux)
+#define GST_ADAPTIVE_SCHEDULER_LOCK(d) ({				\
+    gboolean _ret;							\
+    GST_TRACE("Locking scheduler from thread %p",    \
+                  g_thread_self());					\
+    _ret = gst_adaptive_demux_loop_pause_and_lock(GST_ADAPTIVE_DEMUX_GET_SCHEDULER((d))); \
+									\
+    GST_TRACE ("%s scheduler from thread %p",	\
+		  _ret? "Locked" : "FAILED to lock", g_thread_self());	\
+    _ret;								\
+    })
+
 #define GST_ADAPTIVE_SCHEDULER_UNLOCK(d) G_STMT_START { \
     GST_TRACE("Unlocking scheduler from thread %p", g_thread_self()); \
     gst_adaptive_demux_loop_unlock_and_unpause (GST_ADAPTIVE_DEMUX_GET_SCHEDULER (d)); \
+    GST_TRACE("Unlocked scheduler from thread %p", g_thread_self()); \
  } G_STMT_END
 
 #define GST_ADAPTIVE_DEMUX_SEGMENT_GET_LOCK(d) (&GST_ADAPTIVE_DEMUX_CAST(d)->priv->segment_lock)
@@ -172,16 +183,6 @@ struct _GstAdaptiveDemuxPrivate
   gdouble retry_backoff_max;
 
 };
-
-static inline gboolean gst_adaptive_demux_scheduler_lock(GstAdaptiveDemux *d)
-{
-    GST_TRACE("Locking scheduler from thread %p", g_thread_self());
-    if (!gst_adaptive_demux_loop_pause_and_lock (GST_ADAPTIVE_DEMUX_GET_SCHEDULER (d)))
-      return FALSE;
-
-    GST_TRACE("Locked scheduler from thread %p", g_thread_self());
-    return TRUE;
-}
 
 void demux_update_buffering_locked (GstAdaptiveDemux * demux);
 void demux_post_buffering_locked (GstAdaptiveDemux * demux);
