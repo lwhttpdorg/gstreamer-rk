@@ -83,6 +83,8 @@ variables:
   # GTK_ARGS: "-Dgtk=enabled"
 
 workflow:
+  auto_cancel:
+    on_new_commit: interruptible
   # https://docs.gitlab.com/ee/ci/yaml/index.html#switch-between-branch-pipelines-and-merge-request-pipelines
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
