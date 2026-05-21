@@ -559,6 +559,12 @@ gst_v4l2_object_install_m2m_properties_helper (GObjectClass * gobject_class)
           GST_PARAM_MUTABLE_PLAYING));
 }
 
+static int
+gst_v4l2_object_dup_cloexec (int fd)
+{
+  return fcntl (fd, F_DUPFD_CLOEXEC, 0);
+}
+
 /* Support for 32bit off_t, this wrapper is casting off_t to gint64 */
 #ifdef HAVE_LIBV4L2
 #if SIZEOF_OFF_T < 8
@@ -653,7 +659,7 @@ gst_v4l2_object_new (GstElement * element,
   {
     v4l2object->fd_open = NULL;
     v4l2object->close = close;
-    v4l2object->dup = dup;
+    v4l2object->dup = gst_v4l2_object_dup_cloexec;
     v4l2object->ioctl = ioctl;
     v4l2object->read = read;
     v4l2object->mmap = mmap;

@@ -101,6 +101,11 @@
 #undef HAVE_POLL
 #endif
 
+/* Only MacOS should need this check... */
+#ifndef SOCK_CLOEXEC
+#  define SOCK_CLOEXEC 0
+#endif
+
 #include "gstpoll.h"
 
 #define GST_CAT_DEFAULT GST_CAT_POLL
@@ -689,7 +694,7 @@ gst_poll_new (gboolean controllable)
   {
     gint control_sock[2];
 
-    if (socketpair (PF_UNIX, SOCK_STREAM, 0, control_sock) < 0)
+    if (socketpair (PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, control_sock) < 0)
       goto no_socket_pair;
 
     nset->control_read_fd.fd = control_sock[0];
