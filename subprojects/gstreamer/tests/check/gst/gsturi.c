@@ -73,6 +73,12 @@ GST_START_TEST (test_uri_get_location)
   fail_unless_equals_string (l, "/path/to/file");
   g_free (l);
 
+  /* file: URI without an explicit authority */
+  l = gst_uri_get_location ("file:/path/to/file");
+  fail_unless (l != NULL);
+  fail_unless_equals_string (l, "/path/to/file");
+  g_free (l);
+
   /* unescaping */
   l = gst_uri_get_location ("file:///path/to/some%20file");
   fail_unless (l != NULL);
