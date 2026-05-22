@@ -47,6 +47,9 @@ G_BEGIN_DECLS
 typedef struct _GstBaseTextOverlay      GstBaseTextOverlay;
 typedef struct _GstBaseTextOverlayClass GstBaseTextOverlayClass;
 
+/* WebVTT attribute and text span types, extracted to separate translation unit */
+#include "gstwebvttoverlay.h"
+
 /**
  * GstBaseTextOverlayVAlign:
  * @GST_BASE_TEXT_OVERLAY_VALIGN_BASELINE: draw text on the baseline
@@ -132,6 +135,8 @@ typedef enum {
     GST_BASE_TEXT_OVERLAY_SCALE_MODE_USER
 } GstBaseTextOverlayScaleMode;
 
+/* WebVTT attribute and span types moved to gstwebvttoverlay.h */
+
 /**
  * GstBaseTextOverlay:
  *
@@ -197,7 +202,11 @@ struct _GstBaseTextOverlay {
     gboolean                 alt_render;
 
     /* text pad format */
-    gboolean                 have_pango_markup;
+    gboolean have_pango_markup;
+    GList* text_spans; /* List of GstBaseTextOverlayTextSpan */
+    GList *prev_text_spans; /* Previous text spans for comparison */
+    GstVideoOverlayComposition *prev_composition; /* Previous composition */
+
 
     /* rendering state */
     gboolean                 need_render;
@@ -231,6 +240,12 @@ struct _GstBaseTextOverlay {
 
     gboolean                    attach_compo_to_buffer;
     GstVideoOverlayComposition *composition;
+    GHashTable              *span_compositions; /* Map of span index to GstVideoOverlayComposition */
+    gdouble scroll_offset_y; /* Current vertical scroll offset in pixels */
+    gdouble scroll_speed; /* Pixels per second for scrolling */
+    GstClockTime last_frame_time; /* Timestamp of last rendered frame */
+    guint span_counter; /* Monotonically increasing span ID counter */
+    gint alt_position_idx; /* Alternating position index for overlapping cues */
 };
 
 struct _GstBaseTextOverlayClass {

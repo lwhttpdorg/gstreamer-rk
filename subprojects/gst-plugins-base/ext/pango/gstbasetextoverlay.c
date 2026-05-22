@@ -114,7 +114,8 @@ enum
   PROP_LAST
 };
 
-GST_DEBUG_CATEGORY_STATIC (base_text_overlay_debug);
+/* Non-static so gstwebvttoverlay.c can reference this category */
+GST_DEBUG_CATEGORY (base_text_overlay_debug);
 #define GST_CAT_DEFAULT base_text_overlay_debug
 
 #define VIDEO_FORMATS GST_VIDEO_OVERLAY_COMPOSITION_BLEND_FORMATS
@@ -679,16 +680,38 @@ gst_base_text_overlay_class_init (GstBaseTextOverlayClass * klass)
   gst_type_mark_as_plugin_api (GST_TYPE_BASE_TEXT_OVERLAY, 0);
 }
 
+
+/* WebVTT attribute and span lifecycle functions moved to gstwebvttoverlay.c:
+ * gst_base_text_overlay_web_vtt_attributes_init
+ * gst_base_text_overlay_web_vtt_attributes_clear
+ * gst_base_text_overlay_text_span_clear
+ * gst_base_text_overlay_parse_vtt_comment
+ */
+
 static void
 gst_base_text_overlay_finalize (GObject * object)
 {
   GstBaseTextOverlay *overlay = GST_BASE_TEXT_OVERLAY (object);
 
   g_free (overlay->default_text);
+  g_list_free_full (overlay->text_spans,
+      (GDestroyNotify) gst_base_text_overlay_text_span_clear);
+  g_list_free_full (overlay->prev_text_spans,
+      (GDestroyNotify) gst_base_text_overlay_text_span_clear);
+
+  if (overlay->span_compositions) {
+    g_hash_table_destroy (overlay->span_compositions);
+    overlay->span_compositions = NULL;
+  }
 
   if (overlay->composition) {
     gst_video_overlay_composition_unref (overlay->composition);
     overlay->composition = NULL;
+  }
+
+  if (overlay->prev_composition) {
+    gst_video_overlay_composition_unref (overlay->prev_composition);
+    overlay->prev_composition = NULL;
   }
 
   if (overlay->text_image) {
@@ -711,12 +734,21 @@ gst_base_text_overlay_finalize (GObject * object)
     overlay->pango_context = NULL;
   }
 
+  overlay->scroll_offset_y = 0.0;
+  overlay->scroll_speed = 0.0;
+  overlay->last_frame_time = GST_CLOCK_TIME_NONE;
+
   g_mutex_clear (&overlay->lock);
   g_cond_clear (&overlay->cond);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+
+/* gst_base_text_overlay_new_text_span, gst_base_text_overlay_merge_old_spans,
+ * gst_base_text_overlay_text_span_copy: moved to gstwebvttoverlay.c */
+
+/* Modified initialization to include new fields */
 static void
 gst_base_text_overlay_init (GstBaseTextOverlay * overlay,
     GstBaseTextOverlayClass * klass)
@@ -816,6 +848,8 @@ gst_base_text_overlay_init (GstBaseTextOverlay * overlay,
   overlay->text_linked = FALSE;
 
   overlay->composition = NULL;
+  overlay->span_compositions = g_hash_table_new_full (g_str_hash, g_str_equal,
+      g_free, (GDestroyNotify) gst_video_overlay_composition_unref);
 
   overlay->width = 1;
   overlay->height = 1;
@@ -836,6 +870,13 @@ gst_base_text_overlay_init (GstBaseTextOverlay * overlay,
   g_mutex_init (&overlay->lock);
   g_cond_init (&overlay->cond);
   gst_segment_init (&overlay->segment, GST_FORMAT_TIME);
+
+  overlay->text_spans = NULL;
+  overlay->prev_text_spans = NULL;
+
+  overlay->scroll_offset_y = 0.0;
+  overlay->scroll_speed = 50.0; /* Default speed: 50 pixels per second */
+  overlay->last_frame_time = GST_CLOCK_TIME_NONE;
 }
 
 static void
@@ -1631,148 +1672,12 @@ gst_base_text_overlay_adjust_values_with_fontdesc (GstBaseTextOverlay * overlay,
     overlay->outline_offset = MINIMUM_OUTLINE_OFFSET;
 }
 
-static void
-gst_base_text_overlay_get_pos (GstBaseTextOverlay * overlay,
-    gint * xpos, gint * ypos)
-{
-  gint width, height;
 
-  width = overlay->logical_rect.width;
-  height = overlay->logical_rect.height;
+/* gst_base_text_overlay_get_pos: moved to gstwebvttoverlay.c */
 
-  *xpos = overlay->ink_rect.x - overlay->logical_rect.x;
-  switch (overlay->halign) {
-    case GST_BASE_TEXT_OVERLAY_HALIGN_LEFT:
-      *xpos += overlay->xpad;
-      *xpos = MAX (0, *xpos);
-      break;
-    case GST_BASE_TEXT_OVERLAY_HALIGN_CENTER:
-      *xpos += (overlay->width - width) / 2;
-      break;
-    case GST_BASE_TEXT_OVERLAY_HALIGN_RIGHT:
-      *xpos += overlay->width - width - overlay->xpad;
-      *xpos = MIN (overlay->width - overlay->ink_rect.width, *xpos);
-      break;
-    case GST_BASE_TEXT_OVERLAY_HALIGN_POS:
-      *xpos += (gint) (overlay->width * overlay->xpos) - width / 2;
-      *xpos = CLAMP (*xpos, 0, overlay->width - overlay->ink_rect.width);
-      if (*xpos < 0)
-        *xpos = 0;
-      break;
-    case GST_BASE_TEXT_OVERLAY_HALIGN_ABSOLUTE:
-      *xpos = (overlay->width - overlay->text_width) * overlay->xpos;
-      break;
-    default:
-      *xpos = 0;
-  }
-  *xpos += overlay->deltax;
 
-  *ypos = overlay->ink_rect.y - overlay->logical_rect.y;
-  switch (overlay->valign) {
-    case GST_BASE_TEXT_OVERLAY_VALIGN_BOTTOM:
-      /* This will be the same as baseline, if there is enough padding,
-       * otherwise it will avoid clipping the text */
-      *ypos += overlay->height - height - overlay->ypad;
-      *ypos = MIN (overlay->height - overlay->ink_rect.height, *ypos);
-      break;
-    case GST_BASE_TEXT_OVERLAY_VALIGN_BASELINE:
-      *ypos += overlay->height - height - overlay->ypad;
-      /* Don't clip, this would not respect the base line */
-      break;
-    case GST_BASE_TEXT_OVERLAY_VALIGN_TOP:
-      *ypos += overlay->ypad;
-      *ypos = MAX (0.0, *ypos);
-      break;
-    case GST_BASE_TEXT_OVERLAY_VALIGN_POS:
-      *ypos = (gint) (overlay->height * overlay->ypos) - height / 2;
-      *ypos = CLAMP (*ypos, 0, overlay->height - overlay->ink_rect.height);
-      break;
-    case GST_BASE_TEXT_OVERLAY_VALIGN_ABSOLUTE:
-      *ypos = (overlay->height - overlay->text_height) * overlay->ypos;
-      break;
-    case GST_BASE_TEXT_OVERLAY_VALIGN_CENTER:
-      *ypos = (overlay->height - height) / 2;
-      break;
-    default:
-      *ypos = overlay->ypad;
-      break;
-  }
-  *ypos += overlay->deltay;
+/* gst_base_text_overlay_set_composition: moved to gstwebvttoverlay.c */
 
-  overlay->text_x = *xpos;
-  overlay->text_y = *ypos;
-
-  GST_DEBUG_OBJECT (overlay, "Placing overlay at (%d, %d)", *xpos, *ypos);
-}
-
-static inline void
-gst_base_text_overlay_set_composition (GstBaseTextOverlay * overlay)
-{
-  static gint alt_idx;
-  gint xpos, ypos, alt_xpos, alt_ypos;
-  GstVideoOverlayRectangle *rectangle, *alt_rect = NULL;
-
-  if (overlay->text_image) {
-    gint render_width, render_height;
-
-    gst_base_text_overlay_get_pos (overlay, &xpos, &ypos);
-
-    render_width = overlay->ink_rect.width;
-    render_height = overlay->ink_rect.height;
-
-    GST_DEBUG_OBJECT (overlay,
-        "updating composition for '%s' with window size %dx%d, "
-        "buffer size %dx%d, render size %dx%d and position (%d, %d)",
-        overlay->default_text, overlay->window_width, overlay->window_height,
-        overlay->text_width, overlay->text_height, render_width, render_height,
-        xpos, ypos);
-
-    gst_buffer_add_video_meta (overlay->text_image, GST_VIDEO_FRAME_FLAG_NONE,
-        GST_VIDEO_OVERLAY_COMPOSITION_FORMAT_RGB,
-        overlay->text_width, overlay->text_height);
-
-    rectangle = gst_video_overlay_rectangle_new_raw (overlay->text_image,
-        xpos, ypos, render_width, render_height,
-        GST_VIDEO_OVERLAY_FORMAT_FLAG_PREMULTIPLIED_ALPHA);
-
-    if (overlay->alt_render) {
-      gint num_x = (overlay->window_width - xpos) / render_width;
-      gint num_y = (overlay->window_height - ypos) / render_height;
-
-      if (num_x < 2 && num_y < 2) {
-        GST_ERROR ("Not enough space on the frame for an alternate position");
-      } else {
-        /* Find the next available slot in sequence for the secondary/alt
-         * display of the text overlay rectangle. We want to go up to down,
-         * left to right, all wrapping. */
-        alt_xpos = xpos + (alt_idx / num_y) * render_width;
-        alt_ypos = ypos + (alt_idx % num_y) * render_height;
-        alt_rect = gst_video_overlay_rectangle_new_raw (overlay->text_image,
-            alt_xpos, alt_ypos, render_width, render_height,
-            GST_VIDEO_OVERLAY_FORMAT_FLAG_PREMULTIPLIED_ALPHA);
-        /* Increment with wrapping */
-        alt_idx++;
-        alt_idx %= (num_x * num_y);
-      }
-    }
-
-    if (overlay->composition)
-      gst_video_overlay_composition_unref (overlay->composition);
-    overlay->composition = gst_video_overlay_composition_new (rectangle);
-
-    if (alt_rect) {
-      gst_video_overlay_composition_add_rectangle (overlay->composition,
-          alt_rect);
-      gst_video_overlay_rectangle_unref (alt_rect);
-    }
-
-    gst_video_overlay_rectangle_unref (rectangle);
-
-  } else if (overlay->composition) {
-    gst_video_overlay_composition_unref (overlay->composition);
-    overlay->composition = NULL;
-  }
-}
 
 static gboolean
 gst_text_overlay_filter_foreground_attr (PangoAttribute * attr, gpointer data)
@@ -1786,7 +1691,7 @@ gst_text_overlay_filter_foreground_attr (PangoAttribute * attr, gpointer data)
 
 static void
 gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
-    const gchar * string, gint textlen)
+    GstBaseTextOverlayTextSpan * span, const gchar * string, gint textlen)
 {
   cairo_t *cr;
   cairo_surface_t *surface;
@@ -1802,6 +1707,11 @@ gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
   gint xpad = 0, ypad = 0;
   GstBuffer *buffer;
   GstMapInfo map;
+  GstBaseTextOverlayWebVTTAttributes *attrs = &span->attrs;
+
+  if (overlay->use_vertical_render) {
+    pango_context_set_base_gravity (overlay->pango_context, PANGO_GRAVITY_EAST);
+  }
 
   if (overlay->auto_adjust_size) {
     /* 640 pixel is default */
@@ -1872,6 +1782,17 @@ gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
   /* get subtitle image size */
   pango_layout_get_pixel_extents (overlay->layout, &ink_rect, &logical_rect);
 
+  /* Apply WebVTT region width if available */
+  if (attrs->valid) {
+    /* Use region width from WebVTT (e.g., 50.0% of video width) */
+    unscaled_width = overlay->width * (attrs->region_width / 100.0);
+    unscaled_width -= (shadow_offset + outline_offset); /* Account for shadow/outline */
+    gst_base_text_overlay_set_wrap_mode (overlay, unscaled_width);
+    pango_layout_get_pixel_extents (overlay->layout, &ink_rect, &logical_rect);
+    GST_DEBUG_OBJECT (overlay, "Set layout width to WebVTT region width: %dpx",
+        unscaled_width);
+  }
+
   unscaled_width = ink_rect.width + shadow_offset + outline_offset;
   width = ceil (unscaled_width * scalef_x);
 
@@ -1922,39 +1843,38 @@ gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
 
 
   /* Save and scale the rectangles so get_pos() can place the text */
-  overlay->ink_rect.x =
+  span->ink_rect.x =
       ceil ((ink_rect.x - ceil (outline_offset / 2.0l)) * scalef_x);
-  overlay->ink_rect.y =
+  span->ink_rect.y =
       ceil ((ink_rect.y - ceil (outline_offset / 2.0l)) * scalef_y);
-  overlay->ink_rect.width = width;
-  overlay->ink_rect.height = height;
+  span->ink_rect.width = width;
+  span->ink_rect.height = height;
 
-  overlay->logical_rect.x =
+  span->logical_rect.x =
       ceil ((logical_rect.x - ceil (outline_offset / 2.0l)) * scalef_x);
-  overlay->logical_rect.y =
+  span->logical_rect.y =
       ceil ((logical_rect.y - ceil (outline_offset / 2.0l)) * scalef_y);
-  overlay->logical_rect.width =
+  span->logical_rect.width =
       ceil ((logical_rect.width + shadow_offset + outline_offset) * scalef_x);
-  overlay->logical_rect.height =
+  span->logical_rect.height =
       ceil ((logical_rect.height + shadow_offset + outline_offset) * scalef_y);
 
   /* flip the rectangle if doing vertical render */
   if (overlay->use_vertical_render) {
-    PangoRectangle tmp = overlay->ink_rect;
+    PangoRectangle tmp = span->ink_rect;
 
-    overlay->ink_rect.x = tmp.y;
-    overlay->ink_rect.y = tmp.x;
-    overlay->ink_rect.width = tmp.height;
-    overlay->ink_rect.height = tmp.width;
-    /* We want the top left correct, but we now have the top right */
-    overlay->ink_rect.x += overlay->ink_rect.width;
+    span->ink_rect.x = tmp.y;
+    span->ink_rect.y = tmp.x;
+    span->ink_rect.width = tmp.height;
+    span->ink_rect.height = tmp.width;
+    span->ink_rect.x += span->ink_rect.width;
 
-    tmp = overlay->logical_rect;
-    overlay->logical_rect.x = tmp.y;
-    overlay->logical_rect.y = tmp.x;
-    overlay->logical_rect.width = tmp.height;
-    overlay->logical_rect.height = tmp.width;
-    overlay->logical_rect.x += overlay->logical_rect.width;
+    tmp = span->logical_rect;
+    span->logical_rect.x = tmp.y;
+    span->logical_rect.y = tmp.x;
+    span->logical_rect.width = tmp.height;
+    span->logical_rect.height = tmp.width;
+    span->logical_rect.x += span->logical_rect.width;
   }
 
   /* scale to reported window size */
@@ -2013,7 +1933,7 @@ gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
 
   /* reallocate overlay buffer */
   buffer = gst_buffer_new_and_alloc (4 * width * height);
-  gst_buffer_replace (&overlay->text_image, buffer);
+  gst_buffer_replace (&span->text_image, buffer);
   gst_buffer_unref (buffer);
 
   gst_buffer_map (buffer, &map, GST_MAP_READWRITE);
@@ -2098,11 +2018,9 @@ gst_base_text_overlay_render_pangocairo (GstBaseTextOverlay * overlay,
   cairo_surface_destroy (surface);
   gst_buffer_unmap (buffer, &map);
   if (width != 0)
-    overlay->text_width = width;
+    span->text_width = width;
   if (height != 0)
-    overlay->text_height = height;
-
-  gst_base_text_overlay_set_composition (overlay);
+    span->text_height = height;
 }
 
 static inline void
@@ -2273,11 +2191,15 @@ gst_base_text_overlay_render_text (GstBaseTextOverlay * overlay,
     const gchar * text, gint textlen)
 {
   gchar *string;
+  GList *l;
 
-  if (!overlay->need_render) {
-    GST_DEBUG_OBJECT (overlay, "Using previously rendered text.");
-    return;
-  }
+  /* uncommenting will cause final subtitle to not get rendered if it overlaps in time with penultimate subtitile */
+  /*
+     if (!overlay->need_render) {
+     GST_LOG_OBJECT (overlay, "Using previously rendered text.");
+     return;
+     }
+   */
 
   /* -1 is the whole string */
   if (text != NULL && textlen < 0) {
@@ -2295,8 +2217,29 @@ gst_base_text_overlay_render_text (GstBaseTextOverlay * overlay,
   /* FIXME: should we check for UTF-8 here? */
 
   GST_DEBUG_OBJECT (overlay, "Rendering '%s'", string);
-  gst_base_text_overlay_render_pangocairo (overlay, string, textlen);
-
+  for (l = overlay->text_spans; l; l = l->next) {
+    GstBaseTextOverlayTextSpan *span = l->data;
+    /* uncommenting will cause final subtitle to not get rendered if it overlaps in time with penultimate subtitile */
+    /*
+       if (!span->need_render) {
+       GST_LOG_OBJECT (overlay, "Skipping render for unchanged span ID %s",
+       GST_STR_NULL (span->attrs.cue_id));
+       continue;
+       }
+     */
+    if (span->pango_markup && *span->pango_markup != '\0') {
+      gint span_len = strlen (span->pango_markup);
+      while (span_len > 0 && (span->pango_markup[span_len - 1] == '\n' ||
+              span->pango_markup[span_len - 1] == '\r')) {
+        span_len--;
+      }
+      gst_base_text_overlay_render_pangocairo (overlay, span,
+          span->pango_markup, span_len);
+    } else {
+      gst_base_text_overlay_render_pangocairo (overlay, span, " ", 1);
+    }
+    span->need_render = FALSE;  /* Reset after rendering */
+  }
   g_free (string);
 
   overlay->need_render = FALSE;
@@ -2381,9 +2324,21 @@ gst_base_text_overlay_push_frame (GstBaseTextOverlay * overlay,
     GstBuffer * video_frame)
 {
   GstVideoFrame frame;
+  GList *l;
+  GstClockTime current_time = GST_BUFFER_TIMESTAMP (video_frame);       /* Use buffer timestamp */
 
-  if (overlay->composition == NULL)
-    goto done;
+  if (overlay->text_spans == NULL || g_list_length (overlay->text_spans) == 0) {
+    GST_DEBUG_OBJECT (overlay, "No text spans to render, pushing buffer as is");
+    return gst_pad_push (overlay->srcpad, video_frame);
+  }
+
+  /* Update composition for all spans */
+  gst_base_text_overlay_set_composition (overlay);
+
+  if (overlay->prev_composition == NULL) {
+    GST_DEBUG_OBJECT (overlay, "No composition created, pushing buffer as is");
+    return gst_pad_push (overlay->srcpad, video_frame);
+  }
 
   if (gst_pad_check_reconfigure (overlay->srcpad)) {
     if (!gst_base_text_overlay_negotiate (overlay, NULL)) {
@@ -2399,42 +2354,39 @@ gst_base_text_overlay_push_frame (GstBaseTextOverlay * overlay,
   video_frame = gst_buffer_make_writable (video_frame);
 
   if (overlay->attach_compo_to_buffer) {
-    GST_DEBUG_OBJECT (overlay, "Attaching text overlay image to video buffer");
+    GST_DEBUG_OBJECT (overlay,
+        "Attaching text overlay composition to video buffer");
     gst_buffer_add_video_overlay_composition_meta (video_frame,
-        overlay->composition);
-    /* FIXME: emulate shaded background box if want_shading=true */
-    goto done;
+        overlay->prev_composition);
+    return gst_pad_push (overlay->srcpad, video_frame);
   }
 
   if (!gst_video_frame_map (&frame, &overlay->info, video_frame,
-          GST_MAP_READWRITE))
-    goto invalid_frame;
-
-  /* shaded background box */
-  if (overlay->want_shading) {
-    gint xpos, ypos;
-
-    gst_base_text_overlay_get_pos (overlay, &xpos, &ypos);
-
-    gst_base_text_overlay_shade_background (overlay, &frame,
-        xpos, xpos + overlay->text_width, ypos, ypos + overlay->text_height);
+          GST_MAP_READWRITE)) {
+    GST_DEBUG_OBJECT (overlay, "Failed to map video frame");
+    gst_buffer_unref (video_frame);
+    return GST_FLOW_OK;
   }
 
-  gst_video_overlay_composition_blend (overlay->composition, &frame);
+  /* Apply shaded background for each text span */
+  if (overlay->want_shading) {
+    for (l = overlay->text_spans; l; l = l->next) {
+      GstBaseTextOverlayTextSpan *span = l->data;
+      if (span->text_image) {
+        gint xpos, ypos;
+        gst_base_text_overlay_get_pos (overlay, span, &xpos, &ypos,
+            current_time);
+        gst_base_text_overlay_shade_background (overlay, &frame, xpos,
+            xpos + span->text_width, ypos, ypos + span->text_height);
+      }
+    }
+  }
+
+  gst_video_overlay_composition_blend (overlay->prev_composition, &frame);
 
   gst_video_frame_unmap (&frame);
 
-done:
-
   return gst_pad_push (overlay->srcpad, video_frame);
-
-  /* ERRORS */
-invalid_frame:
-  {
-    gst_buffer_unref (video_frame);
-    GST_DEBUG_OBJECT (overlay, "received invalid buffer");
-    return GST_FLOW_OK;
-  }
 }
 
 static GstPadLinkReturn
@@ -2730,12 +2682,9 @@ gst_base_text_overlay_text_chain (GstPad * pad, GstObject * parent,
     GstBuffer * buffer)
 {
   GstFlowReturn ret = GST_FLOW_OK;
-  GstBaseTextOverlay *overlay = NULL;
+  GstBaseTextOverlay *overlay = GST_BASE_TEXT_OVERLAY (parent);
   gboolean in_seg = FALSE;
   guint64 clip_start = 0, clip_stop = 0;
-
-  overlay = GST_BASE_TEXT_OVERLAY (parent);
-
   GST_BASE_TEXT_OVERLAY_LOCK (overlay);
 
   if (overlay->text_flushing) {
@@ -2815,14 +2764,152 @@ gst_base_text_overlay_text_chain (GstPad * pad, GstObject * parent,
             GST_FORMAT_TIME, text_end);
       }
     }
-
-    overlay->text_buffer = buffer;      /* pass ownership of @buffer */
+    if (overlay->have_pango_markup) {
+      GstMapInfo map;
+      gchar *in_text;
+      gsize in_size;
+      GList *new_spans = NULL;
+      GList *old_spans = overlay->text_spans;
+      guint current_span_counter = overlay->span_counter;
+      overlay->text_spans = NULL;
+      gst_buffer_map (buffer, &map, GST_MAP_READ);
+      in_text = (gchar *) map.data;
+      in_size = map.size;
+      if (in_size > 0) {
+        /* Try GstCustomMeta first (new path); fall back to comment parsing */
+        new_spans =
+            gst_base_text_overlay_spans_from_meta (overlay, buffer, in_text,
+            in_size, &current_span_counter, clip_start);
+        if (!new_spans) {
+          /* Fallback: parse <!--vtt ...--> comments in the text */
+          const gchar *ptr = in_text;
+          const gchar *end = in_text + in_size;
+          while (ptr < end) {
+            const gchar *comment_start = strstr (ptr, "<!--vtt");
+            if (!comment_start || comment_start >= end) {
+              /* No WebVTT comment, treat as single SRT subtitle */
+              GstBaseTextOverlayTextSpan *span =
+                  gst_base_text_overlay_new_text_span (g_strndup (ptr,
+                      end - ptr),
+                  current_span_counter, clip_start);
+              new_spans = g_list_prepend (new_spans, span);
+              GST_DEBUG_OBJECT (overlay,
+                  "SRT subtitle, assigned ID: %s, start_time=%"
+                  GST_TIME_FORMAT, span->attrs.cue_id,
+                  GST_TIME_ARGS (span->start_time));
+              current_span_counter++;
+              break;
+            }
+            const gchar *comment_end = strstr (comment_start, "-->");
+            if (!comment_end || comment_end + 3 > end) {
+              GST_WARNING_OBJECT (overlay, "Incomplete VTT comment found");
+              break;
+            }
+            gsize comment_len = comment_end - comment_start + 3;
+            gchar *comment = g_strndup (comment_start, comment_len);
+            GstBaseTextOverlayWebVTTAttributes parsed_attrs;
+            gst_base_text_overlay_web_vtt_attributes_init (&parsed_attrs);
+            if (gst_base_text_overlay_parse_vtt_comment (overlay, comment,
+                    &parsed_attrs)) {
+              ptr = comment_end + 3;
+              const gchar *next_comment = strstr (ptr, "<!--vtt");
+              gsize markup_len = next_comment ? next_comment - ptr : end - ptr;
+              gchar *markup = markup_len > 0
+                  ? g_strndup (ptr, markup_len) : g_strdup (" ");
+              GstBaseTextOverlayTextSpan *span =
+                  gst_base_text_overlay_new_text_span (markup,
+                  current_span_counter, clip_start);
+              gst_base_text_overlay_web_vtt_attributes_clear (&span->attrs);
+              span->attrs = parsed_attrs;
+              span->attrs.cue_id =
+                  g_strdup_printf ("span_%u", current_span_counter);
+              span->attrs.counter = current_span_counter;
+              new_spans = g_list_prepend (new_spans, span);
+              GST_DEBUG_OBJECT (overlay,
+                  "Parsed VTT span, ID: %s, start_time=%" GST_TIME_FORMAT,
+                  span->attrs.cue_id, GST_TIME_ARGS (span->start_time));
+              current_span_counter++;
+              ptr += markup_len;
+            } else {
+              gst_base_text_overlay_web_vtt_attributes_clear (&parsed_attrs);
+            }
+            g_free (comment);
+          }
+        }                       /* end fallback */
+      } else {
+        GstBaseTextOverlayTextSpan *span =
+            gst_base_text_overlay_new_text_span (g_strdup (" "),
+            current_span_counter, clip_start);
+        new_spans = g_list_prepend (new_spans, span);
+        GST_DEBUG_OBJECT (overlay,
+            "Empty buffer, using default space, ID: %s, start_time=%"
+            GST_TIME_FORMAT, span->attrs.cue_id,
+            GST_TIME_ARGS (span->start_time));
+        current_span_counter++;
+      }
+      gst_base_text_overlay_merge_old_spans (old_spans, new_spans);
+      g_list_free (old_spans);
+      overlay->span_counter = current_span_counter;
+      overlay->text_spans = g_list_reverse (new_spans);
+      gst_buffer_unmap (buffer, &map);
+    } else {
+      GstMapInfo map;
+      gchar *in_text;
+      gsize in_size;
+      GList *new_spans = NULL;
+      GList *old_spans = overlay->text_spans;
+      guint current_span_counter = overlay->span_counter;
+      overlay->text_spans = NULL;
+      gst_buffer_map (buffer, &map, GST_MAP_READ);
+      in_text = (gchar *) map.data;
+      in_size = map.size;
+      if (in_size > 0) {
+        if (!g_utf8_validate (in_text, in_size, NULL)) {
+          const gchar *end = NULL;
+          in_text = g_strndup (in_text, in_size);
+          while (!g_utf8_validate (in_text, in_size, &end) && end)
+            *((gchar *) end) = '*';
+        }
+        GstBaseTextOverlayTextSpan *span =
+            gst_base_text_overlay_new_text_span (g_markup_escape_text (in_text,
+                in_size),
+            current_span_counter, clip_start);
+        new_spans = g_list_prepend (new_spans, span);
+        GST_DEBUG_OBJECT (overlay,
+            "Non-Pango markup, assigned ID: %s, start_time=%" GST_TIME_FORMAT,
+            span->attrs.cue_id, GST_TIME_ARGS (span->start_time));
+        current_span_counter++;
+      } else {
+        GstBaseTextOverlayTextSpan *span =
+            gst_base_text_overlay_new_text_span (g_strdup (" "),
+            current_span_counter, clip_start);
+        new_spans = g_list_prepend (new_spans, span);
+        GST_DEBUG_OBJECT (overlay,
+            "Empty non-Pango buffer, using default space, ID: %s, start_time=%"
+            GST_TIME_FORMAT, span->attrs.cue_id,
+            GST_TIME_ARGS (span->start_time));
+        current_span_counter++;
+      }
+      gst_base_text_overlay_merge_old_spans (old_spans, new_spans);
+      g_list_free (old_spans);
+      overlay->span_counter = current_span_counter;
+      if (in_text != (gchar *) map.data)
+        g_free (in_text);
+      gst_buffer_unmap (buffer, &map);
+      overlay->text_spans = g_list_reverse (new_spans);
+    }
+    overlay->text_buffer = buffer;
     buffer = NULL;
-
-    /* That's a new text buffer we need to render */
-    overlay->need_render = TRUE;
-
-    /* in case the video chain is waiting for a text buffer, wake it up */
+    overlay->need_render = FALSE;       /* Rely on per-span need_render */
+    for (GList * l = overlay->text_spans; l; l = l->next) {
+      GstBaseTextOverlayTextSpan *span = l->data;
+      if (span->need_render) {
+        overlay->need_render = TRUE;    /* Set global flag if any span needs rendering */
+        break;
+      }
+    }
+    GST_DEBUG_OBJECT (overlay, "New text buffer received, need_render=%d",
+        overlay->need_render);
     GST_BASE_TEXT_OVERLAY_BROADCAST (overlay);
   }
 
@@ -2843,6 +2930,7 @@ gst_base_text_overlay_video_chain (GstPad * pad, GstObject * parent,
   GstBaseTextOverlay *overlay;
   GstFlowReturn ret = GST_FLOW_OK;
   gboolean in_seg = FALSE;
+  gboolean composition_updated = FALSE;
   guint64 start, stop, clip_start = 0, clip_stop = 0;
   gchar *text = NULL;
 
@@ -2899,6 +2987,9 @@ gst_base_text_overlay_video_chain (GstPad * pad, GstObject * parent,
       stop = start + 1;         /* we need to assume some interval */
     }
   }
+
+  /* Update last frame time for scrolling */
+  overlay->last_frame_time = clip_start;
 
   gst_object_sync_values (GST_OBJECT (overlay), GST_BUFFER_TIMESTAMP (buffer));
 
@@ -2982,6 +3073,7 @@ wait_for_text_buf:
         GST_LOG_OBJECT (overlay, "text buffer too old, popping");
         pop_text = FALSE;
         gst_base_text_overlay_pop_text (overlay);
+        composition_updated = TRUE;
         GST_BASE_TEXT_OVERLAY_UNLOCK (overlay);
         goto wait_for_text_buf;
       } else if (valid_text_time && vid_running_time_end <= text_running_time) {
@@ -3040,6 +3132,7 @@ wait_for_text_buf:
 
         gst_buffer_unmap (overlay->text_buffer, &map);
 
+        composition_updated = TRUE;
         GST_BASE_TEXT_OVERLAY_UNLOCK (overlay);
         ret = gst_base_text_overlay_push_frame (overlay, buffer);
 
@@ -3051,6 +3144,7 @@ wait_for_text_buf:
       if (pop_text) {
         GST_BASE_TEXT_OVERLAY_LOCK (overlay);
         gst_base_text_overlay_pop_text (overlay);
+        composition_updated = TRUE;
         GST_BASE_TEXT_OVERLAY_UNLOCK (overlay);
       }
     } else {
@@ -3092,9 +3186,19 @@ wait_for_text_buf:
         GST_BASE_TEXT_OVERLAY_UNLOCK (overlay);
         goto wait_for_text_buf;
       } else {
+        GST_DEBUG_OBJECT (overlay,
+            "no need to wait for a text buffer, using last composition");
         GST_BASE_TEXT_OVERLAY_UNLOCK (overlay);
-        GST_LOG_OBJECT (overlay, "no need to wait for a text buffer");
-        ret = gst_pad_push (overlay->srcpad, buffer);
+        if (overlay->prev_composition
+            && g_list_length (overlay->text_spans) > 0) {
+          GST_DEBUG_OBJECT (overlay, "Using cached composition with %d spans",
+              g_list_length (overlay->text_spans));
+          ret = gst_base_text_overlay_push_frame (overlay, buffer);
+        } else {
+          GST_LOG_OBJECT (overlay,
+              "No valid composition or spans, pushing video buffer");
+          ret = gst_pad_push (overlay->srcpad, buffer);
+        }
       }
     }
   }
@@ -3103,6 +3207,21 @@ wait_for_text_buf:
 
   /* Update position */
   overlay->segment.position = clip_start;
+
+  /* Only attach composition if it was updated */
+  if (composition_updated && overlay->prev_composition
+      && overlay->attach_compo_to_buffer) {
+    GstVideoOverlayComposition *comp = overlay->prev_composition;
+    if (comp) {
+      gst_buffer_add_video_overlay_composition_meta (buffer, comp);
+    }
+  }
+  /* Update last_frame_time after processing the frame */
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer)) {
+    overlay->last_frame_time = clip_start;
+    GST_DEBUG_OBJECT (overlay, "Updated last_frame_time to %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (overlay->last_frame_time));
+  }
 
   return ret;
 
