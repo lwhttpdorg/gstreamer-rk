@@ -177,6 +177,7 @@ struct _GstCompositorPad
     guint bottom_left;
     gboolean has_rounded_corners;
   } border_radius;
+  GArray *box_shadows;
 
   GstCompositorOperator op;
 
