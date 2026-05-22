@@ -189,7 +189,8 @@ static GstCaps *gst_bayer2rgb_transform_caps (GstBaseTransform * base,
     GstPadDirection direction, GstCaps * caps, GstCaps * filter);
 static gboolean gst_bayer2rgb_get_unit_size (GstBaseTransform * base,
     GstCaps * caps, gsize * size);
-
+static gboolean gst_bayer2rgb_transform_meta (GstBaseTransform * trans,
+    GstBuffer * outbuf, GstMeta * meta, GstBuffer * inbuf);
 
 static void
 gst_bayer2rgb_class_init (GstBayer2RGBClass * klass)
@@ -223,6 +224,8 @@ gst_bayer2rgb_class_init (GstBayer2RGBClass * klass)
       GST_DEBUG_FUNCPTR (gst_bayer2rgb_set_caps);
   GST_BASE_TRANSFORM_CLASS (klass)->transform =
       GST_DEBUG_FUNCPTR (gst_bayer2rgb_transform);
+  GST_BASE_TRANSFORM_CLASS (klass)->transform_meta =
+      GST_DEBUG_FUNCPTR (gst_bayer2rgb_transform_meta);
 
   GST_DEBUG_CATEGORY_INIT (gst_bayer2rgb_debug, "bayer2rgb", 0,
       "bayer2rgb element");
@@ -755,8 +758,22 @@ gst_bayer2rgb_process (GstBayer2RGB * bayer2rgb, uint8_t * dest,
   g_free (tmp);
 }
 
+static gboolean
+gst_bayer2rgb_transform_meta (GstBaseTransform * trans, GstBuffer * outbuf,
+    GstMeta * meta, GstBuffer * inbuf)
+{
+  const GstMetaInfo *info = meta->info;
+  const gchar *const *tags;
 
+  tags = gst_meta_api_type_get_tags (info->api);
 
+  if (!tags || (g_strv_length ((gchar **) tags) == 1
+          && gst_meta_api_type_has_tag (info->api, META_TAG_VIDEO)))
+    return TRUE;
+
+  return GST_BASE_TRANSFORM_CLASS (parent_class)->transform_meta (trans, outbuf,
+      meta, inbuf);
+}
 
 static GstFlowReturn
 gst_bayer2rgb_transform (GstBaseTransform * base, GstBuffer * inbuf,

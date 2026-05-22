@@ -22,13 +22,19 @@
 #endif
 
 #include <gst/gst.h>
+#include <gst/video/video.h>
 
+#include "gstbayer.h"
 #include "gstbayerelements.h"
+
+GQuark meta_tag_video_quark;
 
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
   gboolean ret = FALSE;
+
+  meta_tag_video_quark = g_quark_from_static_string (GST_META_TAG_VIDEO_STR);
 
   ret |= GST_ELEMENT_REGISTER (bayer2rgb, plugin);
   ret |= GST_ELEMENT_REGISTER (rgb2bayer, plugin);

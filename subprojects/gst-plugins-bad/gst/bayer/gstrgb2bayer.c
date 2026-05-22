@@ -25,6 +25,7 @@
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
 #include <gst/video/video.h>
+#include "gstbayer.h"
 #include "gstbayerelements.h"
 #include "gstrgb2bayer.h"
 
@@ -45,6 +46,8 @@ gst_rgb2bayer_set_caps (GstBaseTransform * trans, GstCaps * incaps,
     GstCaps * outcaps);
 static GstFlowReturn gst_rgb2bayer_transform (GstBaseTransform * trans,
     GstBuffer * inbuf, GstBuffer * outbuf);
+static gboolean gst_rgb2bayer_transform_meta (GstBaseTransform * trans,
+    GstBuffer * outbuf, GstMeta * meta, GstBuffer * inbuf);
 
 static GstStaticPadTemplate gst_rgb2bayer_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
@@ -129,6 +132,8 @@ gst_rgb2bayer_class_init (GstRGB2BayerClass * klass)
       GST_DEBUG_FUNCPTR (gst_rgb2bayer_get_unit_size);
   base_transform_class->set_caps = GST_DEBUG_FUNCPTR (gst_rgb2bayer_set_caps);
   base_transform_class->transform = GST_DEBUG_FUNCPTR (gst_rgb2bayer_transform);
+  base_transform_class->transform_meta =
+      GST_DEBUG_FUNCPTR (gst_rgb2bayer_transform_meta);
 
   GST_DEBUG_CATEGORY_INIT (gst_rgb2bayer_debug, "rgb2bayer", 0,
       "rgb2bayer element");
@@ -353,4 +358,21 @@ gst_rgb2bayer_transform (GstBaseTransform * trans, GstBuffer * inbuf,
 map_failed:
   GST_WARNING_OBJECT (trans, "Could not map buffer, skipping");
   return GST_FLOW_OK;
+}
+
+static gboolean
+gst_rgb2bayer_transform_meta (GstBaseTransform * trans, GstBuffer * outbuf,
+    GstMeta * meta, GstBuffer * inbuf)
+{
+  const GstMetaInfo *info = meta->info;
+  const gchar *const *tags;
+
+  tags = gst_meta_api_type_get_tags (info->api);
+
+  if (!tags || (g_strv_length ((gchar **) tags) == 1
+          && gst_meta_api_type_has_tag (info->api, META_TAG_VIDEO)))
+    return TRUE;
+
+  return GST_BASE_TRANSFORM_CLASS (parent_class)->transform_meta (trans, outbuf,
+      meta, inbuf);
 }
