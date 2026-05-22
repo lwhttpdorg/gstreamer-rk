@@ -3289,7 +3289,7 @@ struct _GstH266SEIMessage
     GstH266FrameFieldInfo frame_field_info;
 
     /**
-     * GstH266SEIMessage.registered_user_data:
+     * GstH266SEIMessage.payload.registered_user_data:
      *
      * Registered user data sei of #GstH274RegisteredUserData.
      *
