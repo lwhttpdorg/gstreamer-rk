@@ -261,7 +261,8 @@ SwapChainProxy::handle_key_event (UINT msg, WPARAM wparam, LPARAM lparam)
 }
 
 void
-SwapChainProxy::handle_mouse_event (UINT msg, WPARAM wparam, LPARAM lparam)
+SwapChainProxy::handle_mouse_event (HWND hwnd, UINT msg, WPARAM wparam,
+    LPARAM lparam)
 {
   if (!gst_d3d12_window_get_navigation_events_enabled (window_))
     return;
@@ -271,6 +272,8 @@ SwapChainProxy::handle_mouse_event (UINT msg, WPARAM wparam, LPARAM lparam)
   guint modifier = 0;
   gint delta_x = 0;
   gint delta_y = 0;
+  double final_x = 0;
+  double final_y = 0;
 
   auto xpos = GET_X_LPARAM (lparam);
   auto ypos = GET_Y_LPARAM (lparam);
@@ -348,6 +351,10 @@ SwapChainProxy::handle_mouse_event (UINT msg, WPARAM wparam, LPARAM lparam)
       button = 3;
       event = "mouse-double-click";
       break;
+    case WM_MOUSELEAVE:
+      event = "mouse-leave";
+      mouse_tracking_ = false;
+      break;
     case WM_MOUSEHWHEEL:
       delta_x = GET_WHEEL_DELTA_WPARAM (wparam);
       break;
@@ -358,92 +365,104 @@ SwapChainProxy::handle_mouse_event (UINT msg, WPARAM wparam, LPARAM lparam)
       return;
   }
 
-  if ((wparam & MK_CONTROL) != 0)
-    modifier |= GST_NAVIGATION_MODIFIER_CONTROL_MASK;
-  if ((wparam & MK_LBUTTON) != 0)
-    modifier |= GST_NAVIGATION_MODIFIER_BUTTON1_MASK;
-  if ((wparam & MK_RBUTTON) != 0)
-    modifier |= GST_NAVIGATION_MODIFIER_BUTTON2_MASK;
-  if ((wparam & MK_MBUTTON) != 0)
-    modifier |= GST_NAVIGATION_MODIFIER_BUTTON3_MASK;
-  if ((wparam & MK_SHIFT) != 0)
-    modifier |= GST_NAVIGATION_MODIFIER_SHIFT_MASK;
+  if (msg != WM_MOUSELEAVE) {
+    if ((wparam & MK_CONTROL) != 0)
+      modifier |= GST_NAVIGATION_MODIFIER_CONTROL_MASK;
+    if ((wparam & MK_LBUTTON) != 0)
+      modifier |= GST_NAVIGATION_MODIFIER_BUTTON1_MASK;
+    if ((wparam & MK_RBUTTON) != 0)
+      modifier |= GST_NAVIGATION_MODIFIER_BUTTON2_MASK;
+    if ((wparam & MK_MBUTTON) != 0)
+      modifier |= GST_NAVIGATION_MODIFIER_BUTTON3_MASK;
+    if ((wparam & MK_SHIFT) != 0)
+      modifier |= GST_NAVIGATION_MODIFIER_SHIFT_MASK;
 
-  GstVideoRectangle output_rect = { };
-  GstVideoOrientationMethod orientation;
-  gint in_w, in_h;
-  gst_d3d12_window_get_mouse_pos_info (window_, &output_rect,
-      in_w, in_h, orientation);
+    GstVideoRectangle output_rect = { };
+    GstVideoOrientationMethod orientation;
+    gint in_w, in_h;
+    gst_d3d12_window_get_mouse_pos_info (window_, &output_rect,
+        in_w, in_h, orientation);
 
-  if (in_w <= 0 || in_h <= 0 || xpos < output_rect.x ||
-      xpos >= output_rect.x + output_rect.w || ypos < output_rect.y ||
-      ypos >= output_rect.y + output_rect.h) {
-    return;
-  }
+    if (in_w <= 0 || in_h <= 0 || xpos < output_rect.x ||
+        xpos >= output_rect.x + output_rect.w || ypos < output_rect.y ||
+        ypos >= output_rect.y + output_rect.h) {
+      return;
+    }
 
-  gint src_w, src_h;
-  switch (orientation) {
-    case GST_VIDEO_ORIENTATION_90R:
-    case GST_VIDEO_ORIENTATION_90L:
-    case GST_VIDEO_ORIENTATION_UL_LR:
-    case GST_VIDEO_ORIENTATION_UR_LL:
-      src_w = in_h;
-      src_h = in_w;
-      break;
-    default:
-      src_w = in_w;
-      src_h = in_h;
-      break;
-  }
+    gint src_w, src_h;
+    switch (orientation) {
+      case GST_VIDEO_ORIENTATION_90R:
+      case GST_VIDEO_ORIENTATION_90L:
+      case GST_VIDEO_ORIENTATION_UL_LR:
+      case GST_VIDEO_ORIENTATION_UR_LL:
+        src_w = in_h;
+        src_h = in_w;
+        break;
+      default:
+        src_w = in_w;
+        src_h = in_h;
+        break;
+    }
 
-  xpos = ((xpos - output_rect.x) / (double) output_rect.w) * src_w;
-  ypos = ((ypos - output_rect.y) / (double) output_rect.h) * src_h;
+    xpos = ((xpos - output_rect.x) / (double) output_rect.w) * src_w;
+    ypos = ((ypos - output_rect.y) / (double) output_rect.h) * src_h;
 
-  xpos = CLAMP (xpos, 0, (LONG) (src_w - 1));
-  ypos = CLAMP (ypos, 0, (LONG) (src_h - 1));
+    xpos = CLAMP (xpos, 0, (LONG) (src_w - 1));
+    ypos = CLAMP (ypos, 0, (LONG) (src_h - 1));
 
-  double final_x = 0;
-  double final_y = 0;
-
-  switch (orientation) {
-    case GST_VIDEO_ORIENTATION_90R:
-      final_x = ypos;
-      final_y = src_w - xpos;
-      break;
-    case GST_VIDEO_ORIENTATION_90L:
-      final_x = src_h - ypos;
-      final_y = xpos;
-      break;
-    case GST_VIDEO_ORIENTATION_UR_LL:
-      final_x = src_h - ypos;
-      final_y = src_w - xpos;
-      break;
-    case GST_VIDEO_ORIENTATION_UL_LR:
-      final_x = ypos;
-      final_y = xpos;
-      break;
-    case GST_VIDEO_ORIENTATION_180:
-      final_x = src_w - xpos;
-      final_y = src_h - ypos;
-      break;
-    case GST_VIDEO_ORIENTATION_HORIZ:
-      final_x = src_w - xpos;
-      final_y = ypos;
-      break;
-    case GST_VIDEO_ORIENTATION_VERT:
-      final_x = xpos;
-      final_y = src_h - ypos;
-      break;
-    default:
-      final_x = xpos;
-      final_y = ypos;
-      break;
+    switch (orientation) {
+      case GST_VIDEO_ORIENTATION_90R:
+        final_x = ypos;
+        final_y = src_w - xpos;
+        break;
+      case GST_VIDEO_ORIENTATION_90L:
+        final_x = src_h - ypos;
+        final_y = xpos;
+        break;
+      case GST_VIDEO_ORIENTATION_UR_LL:
+        final_x = src_h - ypos;
+        final_y = src_w - xpos;
+        break;
+      case GST_VIDEO_ORIENTATION_UL_LR:
+        final_x = ypos;
+        final_y = xpos;
+        break;
+      case GST_VIDEO_ORIENTATION_180:
+        final_x = src_w - xpos;
+        final_y = src_h - ypos;
+        break;
+      case GST_VIDEO_ORIENTATION_HORIZ:
+        final_x = src_w - xpos;
+        final_y = ypos;
+        break;
+      case GST_VIDEO_ORIENTATION_VERT:
+        final_x = xpos;
+        final_y = src_h - ypos;
+        break;
+      default:
+        final_x = xpos;
+        final_y = ypos;
+        break;
+    }
   }
 
   if (msg == WM_MOUSEHWHEEL || msg == WM_MOUSEWHEEL) {
     gst_d3d12_window_on_scroll_event (window_, delta_x, delta_y, final_x,
         final_y, modifier);
   } else {
+    if (msg == WM_MOUSEMOVE && !mouse_tracking_) {
+      TRACKMOUSEEVENT tme = { };
+      tme.cbSize = sizeof (TRACKMOUSEEVENT);
+      tme.dwFlags = TME_LEAVE;
+      tme.hwndTrack = hwnd;
+      if (!TrackMouseEvent (&tme))
+        GST_WARNING_OBJECT (window_, "Couldn't track mouse event");
+      mouse_tracking_ = true;
+
+      gst_d3d12_window_on_mouse_event (window_,
+          "mouse-enter", button, final_x, final_y, modifier);
+    }
+
     gst_d3d12_window_on_mouse_event (window_,
         event, button, final_x, final_y, modifier);
   }
@@ -699,10 +718,11 @@ parent_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     case WM_MBUTTONDBLCLK:
     case WM_MOUSEHWHEEL:
     case WM_MOUSEWHEEL:
+    case WM_MOUSELEAVE:
     {
       auto proxy = server->get_direct_proxy (hwnd);
       if (proxy)
-        proxy->handle_mouse_event (msg, wparam, lparam);
+        proxy->handle_mouse_event (hwnd, msg, wparam, lparam);
       break;
     }
     default:
@@ -814,10 +834,11 @@ internal_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     case WM_MBUTTONDBLCLK:
     case WM_MOUSEHWHEEL:
     case WM_MOUSEWHEEL:
+    case WM_MOUSELEAVE:
     {
       auto proxy = server->get_proxy (window, id);
       if (proxy)
-        proxy->handle_mouse_event (msg, wparam, lparam);
+        proxy->handle_mouse_event (hwnd, msg, wparam, lparam);
       break;
     }
     case WM_NCHITTEST:

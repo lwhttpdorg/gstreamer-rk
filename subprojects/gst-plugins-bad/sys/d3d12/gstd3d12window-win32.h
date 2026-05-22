@@ -59,7 +59,7 @@ public:
   void handle_syskey_down ();
   void handle_update_render_rect ();
   void handle_key_event (UINT msg, WPARAM wparam, LPARAM lparam);
-  void handle_mouse_event (UINT msg, WPARAM wparam, LPARAM lparam);
+  void handle_mouse_event (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
   void handle_swapchain_created ();
   void handle_position_changed (INT width, INT height);
   void release_swapchin ();
@@ -84,6 +84,7 @@ private:
   std::shared_ptr<SwapChain> swapchain_;
   INT width_ = 0;
   INT height_ = 0;
+  bool mouse_tracking_ = false;
 
   std::recursive_mutex lock_;
 };

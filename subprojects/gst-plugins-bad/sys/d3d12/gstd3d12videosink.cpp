@@ -1183,7 +1183,8 @@ static void
 gst_d3d12_video_sink_mouse_event (GstD3D12Window * window, const gchar * event,
     gint button, gdouble x, gdouble y, guint modifier, GstD3D12VideoSink * self)
 {
-  GstEvent *mouse_event;
+  GstEvent *mouse_event = nullptr;
+  GstMessage *msg = nullptr;
 
   GST_LOG_OBJECT (self,
       "send mouse event %s, button %d (%.1f, %.1f)", event, button, x, y);
@@ -1199,11 +1200,19 @@ gst_d3d12_video_sink_mouse_event (GstD3D12Window * window, const gchar * event,
   } else if (g_strcmp0 ("mouse-double-click", event) == 0) {
     mouse_event = gst_navigation_event_new_mouse_double_click (button, x, y,
         (GstNavigationModifierType) modifier);
+  } else if (g_strcmp0 ("mouse-enter", event) == 0) {
+    msg = gst_navigation_message_new_mouse_over (GST_OBJECT (self), TRUE);
+  } else if (g_strcmp0 ("mouse-leave", event) == 0) {
+    msg = gst_navigation_message_new_mouse_over (GST_OBJECT (self), FALSE);
   } else {
     return;
   }
 
-  gst_navigation_send_event_simple (GST_NAVIGATION (self), mouse_event);
+  if (mouse_event)
+    gst_navigation_send_event_simple (GST_NAVIGATION (self), mouse_event);
+
+  if (msg)
+    gst_element_post_message (GST_ELEMENT (self), msg);
 }
 
 static void
