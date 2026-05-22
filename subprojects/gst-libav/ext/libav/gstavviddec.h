@@ -95,6 +95,8 @@ struct _GstFFMpegVidDec
   GstVideoInfo pool_info;
 
   gboolean needs_renegotation;
+
+  gboolean allow_unaligned;
 };
 
 typedef struct _GstFFMpegVidDecClass GstFFMpegVidDecClass;

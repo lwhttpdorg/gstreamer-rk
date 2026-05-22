@@ -53,6 +53,7 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_PERFORMANCE);
 #define DEFAULT_ALLOC_PARAM             { 0, DEFAULT_STRIDE_ALIGN, 0, 0, }
 #define DEFAULT_THREAD_TYPE             0
 #define DEFAULT_STD_COMPLIANCE   GST_AV_CODEC_COMPLIANCE_AUTO
+#define DEFAULT_ALLOW_UNALIGNED         FALSE
 
 enum
 {
@@ -65,6 +66,7 @@ enum
   PROP_OUTPUT_CORRUPT,
   PROP_THREAD_TYPE,
   PROP_STD_COMPLIANCE,
+  PROP_ALLOW_UNALIGNED,
   PROP_LAST
 };
 
@@ -260,6 +262,19 @@ gst_ffmpegviddec_class_init (GstFFMpegVidDecClass * klass)
       g_param_spec_enum ("std-compliance", "Standard Compliance",
           "Standard compliance mode to use", GST_TYPE_AV_CODEC_COMPLIANCE,
           DEFAULT_STD_COMPLIANCE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+    * GstFFMpegVidDec:allow-unaligned:
+    *
+    * Allow decoder to produce frames with data planes that are not aligned to CPU requirements, e.g. due to cropping.
+    *
+    * Since: 1.28
+    */
+  g_object_class_install_property (gobject_class, PROP_ALLOW_UNALIGNED,
+      g_param_spec_boolean ("allow-unaligned",
+          "Allow unaligned",
+          "Allow decoders to produce frames with data planes that are not aligned",
+          DEFAULT_ALLOW_UNALIGNED, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -396,6 +411,7 @@ gst_ffmpegviddec_subinit (GstFFMpegVidDec * ffmpegdec)
   ffmpegdec->output_corrupt = DEFAULT_OUTPUT_CORRUPT;
   ffmpegdec->thread_type = DEFAULT_THREAD_TYPE;
   ffmpegdec->std_compliance = DEFAULT_STD_COMPLIANCE;
+  ffmpegdec->allow_unaligned = DEFAULT_ALLOW_UNALIGNED;
 
   GST_PAD_SET_ACCEPT_TEMPLATE (GST_VIDEO_DECODER_SINK_PAD (ffmpegdec));
   gst_video_decoder_set_use_default_pad_acceptcaps (GST_VIDEO_DECODER_CAST
@@ -485,6 +501,8 @@ gst_ffmpegviddec_open (GstFFMpegVidDec * ffmpegdec)
   gst_ffmpegviddec_context_set_flags (ffmpegdec->context,
       AV_CODEC_FLAG_COPY_OPAQUE, TRUE);
 #endif
+  gst_ffmpegviddec_context_set_flags (ffmpegdec->context,
+      AV_CODEC_FLAG_UNALIGNED, ffmpegdec->allow_unaligned);
 
   return TRUE;
 
@@ -2916,6 +2934,9 @@ gst_ffmpegviddec_set_property (GObject * object,
     case PROP_STD_COMPLIANCE:
       ffmpegdec->std_compliance = g_value_get_enum (value);
       break;
+    case PROP_ALLOW_UNALIGNED:
+      ffmpegdec->allow_unaligned = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2954,6 +2975,9 @@ gst_ffmpegviddec_get_property (GObject * object,
       break;
     case PROP_STD_COMPLIANCE:
       g_value_set_enum (value, ffmpegdec->std_compliance);
+      break;
+    case PROP_ALLOW_UNALIGNED:
+      g_value_set_boolean (value, ffmpegdec->allow_unaligned);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
