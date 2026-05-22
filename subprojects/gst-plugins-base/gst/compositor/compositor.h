@@ -170,6 +170,13 @@ struct _GstCompositorPad
   gint width, height;
   gdouble alpha;
   GstCompositorSizingPolicy sizing_policy;
+  struct {
+    guint top_left;
+    guint top_right;
+    guint bottom_right;
+    guint bottom_left;
+    gboolean has_rounded_corners;
+  } border_radius;
 
   GstCompositorOperator op;
 
