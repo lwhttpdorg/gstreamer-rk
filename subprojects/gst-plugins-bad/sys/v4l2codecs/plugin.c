@@ -50,6 +50,7 @@
 #include "gstv4l2codech265dec.h"
 #include "gstv4l2codecmpeg2dec.h"
 #include "gstv4l2codecvp8dec.h"
+#include "gstv4l2codecwebpdec.h"
 #include "gstv4l2codecvp9dec.h"
 #include "gstv4l2decoder.h"
 #include "linux/v4l2-controls.h"
@@ -89,6 +90,12 @@ register_video_decoder (GstPlugin * plugin, GstV4l2CodecDevice * device)
         GST_INFO_OBJECT (decoder, "Registering %s as VP8 Decoder",
             device->name);
         gst_v4l2_codec_vp8_dec_register (plugin, decoder, device,
+            GST_RANK_PRIMARY + 1);
+        break;
+      case V4L2_PIX_FMT_WEBP_FRAME:
+        GST_INFO_OBJECT (decoder, "Registering %s as WEBP Decoder",
+            device->name);
+        gst_v4l2_codec_webp_dec_register (plugin, decoder, device,
             GST_RANK_PRIMARY + 1);
         break;
       case V4L2_PIX_FMT_MPEG2_SLICE:
