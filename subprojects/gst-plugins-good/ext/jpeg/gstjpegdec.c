@@ -664,8 +664,10 @@ gst_jpeg_dec_ensure_buffers (GstJpegDec * dec, guint maxrowbytes)
     dec->idr_y[i] = g_try_realloc (dec->idr_y[i], maxrowbytes);
     dec->idr_u[i] = g_try_realloc (dec->idr_u[i], maxrowbytes);
     dec->idr_v[i] = g_try_realloc (dec->idr_v[i], maxrowbytes);
+    dec->idr_k[i] = g_try_realloc (dec->idr_k[i], maxrowbytes);
 
-    if (G_UNLIKELY (!dec->idr_y[i] || !dec->idr_u[i] || !dec->idr_v[i])) {
+    if (G_UNLIKELY (!dec->idr_y[i] || !dec->idr_u[i] || !dec->idr_v[i]
+            || !dec->idr_k[i])) {
       GST_WARNING_OBJECT (dec, "out of memory, i=%d, bytes=%u", i, maxrowbytes);
       return FALSE;
     }
@@ -776,6 +778,94 @@ gst_jpeg_dec_decode_rgb (GstJpegDec * dec, GstVideoFrame * frame,
         base[0] += rstride;
         base[1] += rstride;
         base[2] += rstride;
+      }
+    } else {
+      GST_INFO_OBJECT (dec, "jpeg_read_raw_data() returned 0");
+    }
+  }
+}
+
+static void
+invert_bytes (guchar * data, int size)
+{
+  for (int i = 0; i < size; i++) {
+    data[i] = ~data[i];
+  }
+}
+
+static void
+gst_jpeg_dec_decode_CMYK (GstJpegDec * dec, GstVideoFrame * frame, gint r_v,
+    gint r_h, gint comp, guint field, guint num_fields)
+{
+  guchar *y_rows[16], *u_rows[16], *v_rows[16], *k_rows[16];
+  guchar **scanarray[4] = { y_rows, u_rows, v_rows, k_rows };
+  gint i, j, k;
+  gint lines;
+  guchar *base[4], *last[4];
+  gint rowsize[4], stride[4];
+  gint width, height;
+
+  width = GST_VIDEO_FRAME_WIDTH (frame);
+  height = GST_VIDEO_FRAME_HEIGHT (frame);
+
+  if (G_UNLIKELY (!gst_jpeg_dec_ensure_buffers (dec, GST_ROUND_UP_32 (width))))
+    return;
+
+  for (i = 0; i < 4; i++) {
+    base[i] = GST_VIDEO_FRAME_COMP_DATA (frame, i);
+    stride[i] = GST_VIDEO_FRAME_COMP_STRIDE (frame, i) * num_fields;
+    rowsize[i] = GST_VIDEO_FRAME_COMP_STRIDE (frame, i);
+    /* make sure we don't make jpeglib write beyond our buffer,
+     * which might happen if (height % (r_v*DCTSIZE)) != 0 */
+    last[i] = base[i] + (GST_VIDEO_FRAME_COMP_STRIDE (frame, i) *
+        (GST_VIDEO_FRAME_COMP_HEIGHT (frame, i) - 1));
+
+    if (field == 2) {
+      base[i] += GST_VIDEO_FRAME_COMP_STRIDE (frame, i);
+    }
+  }
+
+  memcpy (y_rows, dec->idr_y, 16 * sizeof (gpointer));
+  memcpy (u_rows, dec->idr_u, 16 * sizeof (gpointer));
+  memcpy (v_rows, dec->idr_v, 16 * sizeof (gpointer));
+  memcpy (k_rows, dec->idr_k, 16 * sizeof (gpointer));
+
+  for (i = 0; i < height; i += r_v * DCTSIZE) {
+    lines = jpeg_read_raw_data (&dec->cinfo, scanarray, r_v * DCTSIZE);
+    if (G_LIKELY (lines > 0)) {
+      for (j = 0, k = 0; j < (r_v * DCTSIZE); j += r_v, k++) {
+        if (G_LIKELY (base[0] <= last[0])) {
+          memcpy (base[0], y_rows[j], rowsize[0]);
+          invert_bytes (base[0], rowsize[0]);
+          base[0] += stride[0];
+        }
+        if (r_v == 2) {
+          if (G_LIKELY (base[0] <= last[0])) {
+            memcpy (base[0], y_rows[j + 1], rowsize[0]);
+            invert_bytes (base[0], rowsize[0]);
+            base[0] += stride[0];
+          }
+        }
+        if (G_LIKELY (base[1] <= last[1] && base[2] <= last[2])) {
+          if (r_h == 2) {
+            memcpy (base[1], u_rows[k], rowsize[1]);
+            memcpy (base[2], v_rows[k], rowsize[2]);
+            invert_bytes (base[1], rowsize[1]);
+            invert_bytes (base[2], rowsize[2]);
+          } else if (r_h == 1) {
+            hresamplecpy1 (base[1], u_rows[k], rowsize[1]);
+            hresamplecpy1 (base[2], v_rows[k], rowsize[2]);
+            invert_bytes (base[1], rowsize[1]);
+            invert_bytes (base[2], rowsize[2]);
+          } else {
+            /* FIXME: implement (at least we avoid crashing by doing nothing) */
+          }
+        }
+
+        if (r_v == 2 || (k & 1) != 0) {
+          base[1] += stride[1];
+          base[2] += stride[2];
+        }
       }
     } else {
       GST_INFO_OBJECT (dec, "jpeg_read_raw_data() returned 0");
@@ -1176,13 +1266,15 @@ gst_jpeg_dec_prepare_decode (GstJpegDec * dec)
 
   GST_LOG_OBJECT (dec, "r_h = %d, r_v = %d", r_h, r_v);
 
-  if (dec->cinfo.num_components > 3)
+  if (dec->cinfo.num_components > 4)
     goto components_not_supported;
 
   /* verify color space expectation to avoid going *boom* or bogus output */
   if (dec->cinfo.jpeg_color_space != JCS_YCbCr &&
       dec->cinfo.jpeg_color_space != JCS_GRAYSCALE &&
-      dec->cinfo.jpeg_color_space != JCS_RGB)
+      dec->cinfo.jpeg_color_space != JCS_RGB &&
+      dec->cinfo.jpeg_color_space != JCS_CMYK &&
+      dec->cinfo.jpeg_color_space != JCS_YCCK)
     goto unsupported_colorspace;
 
 #ifndef GST_DISABLE_GST_DEBUG
@@ -1239,6 +1331,10 @@ gst_jpeg_dec_prepare_decode (GstJpegDec * dec)
           r_h < dec->cinfo.comp_info[1].h_samp_factor)
         goto invalid_yuvrgbgrayscale;
       break;
+    case JCS_CMYK:
+    case JCS_YCCK:
+      if (dec->cinfo.num_components != 4)
+        goto components_not_supported;
     default:
       g_assert_not_reached ();
       break;
@@ -1311,16 +1407,25 @@ gst_jpeg_dec_decode (GstJpegDec * dec, GstVideoFrame * vframe, guint width,
      * copy over the data into our final picture buffer, otherwise jpeglib might
      * write over the end of a line into the beginning of the next line,
      * resulting in blocky artifacts on the left side of the picture. */
-    if (G_UNLIKELY (width % (dec->cinfo.max_h_samp_factor * DCTSIZE) != 0
-            || dec->cinfo.comp_info[0].h_samp_factor != 2
-            || dec->cinfo.comp_info[1].h_samp_factor != 1
-            || dec->cinfo.comp_info[2].h_samp_factor != 1)) {
+    if (G_UNLIKELY ((width % (dec->cinfo.max_h_samp_factor * DCTSIZE) != 0
+                || dec->cinfo.comp_info[0].h_samp_factor != 2
+                || dec->cinfo.comp_info[1].h_samp_factor != 1
+                || dec->cinfo.comp_info[2].h_samp_factor != 1)
+            && dec->cinfo.num_components < 4)) {
       GST_CAT_LOG_OBJECT (GST_CAT_PERFORMANCE, dec,
           "indirect decoding using extra buffer copy");
       gst_jpeg_dec_decode_indirect (dec, vframe,
           dec->cinfo.comp_info[0].v_samp_factor,
           dec->cinfo.comp_info[0].h_samp_factor, dec->cinfo.num_components,
           field, num_fields);
+    } else if (dec->cinfo.num_components == 4) {
+      if (dec->cinfo.jpeg_color_space == JCS_YCCK
+          || dec->cinfo.jpeg_color_space == JCS_CMYK) {
+        gst_jpeg_dec_decode_CMYK (dec, vframe,
+            dec->cinfo.comp_info[0].v_samp_factor,
+            dec->cinfo.comp_info[0].h_samp_factor, dec->cinfo.num_components,
+            field, num_fields);
+      }
     } else {
       ret = gst_jpeg_dec_decode_direct (dec, vframe, field, num_fields);
     }
