@@ -35,28 +35,39 @@ typedef struct
   GstCaps *rekey_caps;
 } KeyParam;
 
-static KeyParam *
-key_param_new (guint key_size, guint32 mki, const gchar * cipher,
-    const gchar * auth)
+static GstBuffer *
+generate_key (guint key_size)
 {
-  KeyParam *key_param = NULL;
-  guint8 *data, *mki_data;
+  GstBuffer *srtp_key;
+  guint8 *data;
   guint data_size = GST_ROUND_UP_4 (key_size);
-  GstBuffer *srtp_key, *mki_buf;
   guint i;
-
-  key_param = g_malloc0 (sizeof (KeyParam));
-
-  g_mutex_init (&key_param->lock);
-
-  key_param->key_size = data_size;
-  key_param->mki = mki;
 
   data = g_malloc (data_size);
   for (i = 0; i < data_size; i += 4) {
     GST_WRITE_UINT32_BE (data + i, g_random_int ());
   }
   srtp_key = gst_buffer_new_wrapped (data, key_size);
+
+  return srtp_key;
+}
+
+static KeyParam *
+key_param_new (guint key_size, guint32 mki, const gchar * cipher,
+    const gchar * auth)
+{
+  KeyParam *key_param = NULL;
+  guint8 *mki_data;
+  GstBuffer *srtp_key, *mki_buf;
+
+  key_param = g_malloc0 (sizeof (KeyParam));
+
+  g_mutex_init (&key_param->lock);
+
+  key_param->key_size = key_size;
+  key_param->mki = mki;
+
+  srtp_key = generate_key (key_size);
 
   mki_data = g_malloc (sizeof (guint32));
   GST_WRITE_UINT32_BE (mki_data, mki);
@@ -117,12 +128,15 @@ key_param_get_rekey_mikey (KeyParam * key_param)
 }
 
 static void
-key_param_inc_mki (KeyParam * key_param)
+key_param_gen_key_and_inc_mki (KeyParam * key_param)
 {
+  GstBuffer *srtp_key;
   GstBuffer *mki_buf;
   guint8 *mki_data = g_malloc (sizeof (guint32));
 
   g_mutex_lock (&key_param->lock);
+
+  srtp_key = generate_key (key_param->key_size);
 
   key_param->mki += 1;
   GST_INFO ("Incrementing mki to: %u", key_param->mki);
@@ -131,15 +145,20 @@ key_param_inc_mki (KeyParam * key_param)
   mki_buf = gst_buffer_new_wrapped (mki_data, sizeof (guint32));
 
   key_param->key_caps = gst_caps_make_writable (key_param->key_caps);
+  gst_caps_set_simple_static_str (key_param->key_caps, "srtp-key",
+      GST_TYPE_BUFFER, srtp_key, NULL);
   gst_caps_set_simple_static_str (key_param->key_caps, "mki", GST_TYPE_BUFFER,
       mki_buf, NULL);
 
   key_param->rekey_caps = gst_caps_make_writable (key_param->rekey_caps);
+  gst_caps_set_simple_static_str (key_param->rekey_caps, "srtp-key",
+      GST_TYPE_BUFFER, srtp_key, NULL);
   gst_caps_set_simple_static_str (key_param->rekey_caps, "mki", GST_TYPE_BUFFER,
       mki_buf, NULL);
 
   g_mutex_unlock (&key_param->lock);
 
+  gst_buffer_unref (srtp_key);
   gst_buffer_unref (mki_buf);
 }
 
@@ -300,7 +319,7 @@ rekey_all (gpointer user_data)
     goto out;
   }
 
-  key_param_inc_mki (key_param);
+  key_param_gen_key_and_inc_mki (key_param);
 
   /* rtspsrc can only process one SET_PARAMETER at once.
    * We will chain SET_PARAMETER then invalidate-key for each stream.
@@ -331,12 +350,56 @@ on_hard_limit (GstElement * rtspsrc, guint stream_id, gpointer user_data)
 
   GST_INFO ("Reached hard-limit for stream with id %u", stream_id);
 
-  key_param_inc_mki (key_param);
+  key_param_gen_key_and_inc_mki (key_param);
 
   list = g_list_append (list, GUINT_TO_POINTER (stream_id));
   data = rekey_data_new (key_param, list);
 
   g_idle_add (rekey_next_stream, data);
+}
+
+static void
+on_get_parameter_reply (GstPromise * promise, gpointer user_data)
+{
+  const GstStructure *reply;
+  const gchar *body;
+
+  if (gst_promise_wait (promise) != GST_PROMISE_RESULT_REPLIED)
+    return;                     // interrupted or expired value
+
+  reply = gst_promise_get_reply (promise);
+  if (!reply)
+    return;
+
+  body = gst_structure_get_string (reply, "body");
+  if (!body)
+    return;
+
+  /* Prints crypto context in this format:
+   * pt=96;ssrc=3760103009;destination=192.168.0.1;port=50000;key=xyz;
+   *     mki=000004b2;roc=0
+   **/
+  g_print ("Current cryptographic context: %s\n", body);
+}
+
+static gboolean
+get_srtp_stats (gpointer user_data)
+{
+  GstPromise *promise;
+  gboolean res;
+
+  promise = gst_promise_new_with_change_func (on_get_parameter_reply, NULL,
+      NULL);
+
+  g_signal_emit_by_name (rtspsrc, "get-parameter", "srtp-sessions",
+      "text/parameters", promise, &res);
+
+  if (!res) {
+    GST_ERROR ("Failed to emit get-parameter");
+    gst_promise_unref (promise);
+  }
+
+  return G_SOURCE_CONTINUE;
 }
 
 static gboolean
@@ -748,6 +811,7 @@ main (gint argc, gchar ** argv)
   guint32 key_len = 30;
   guint32 mki = 1200;
   guint32 rekey_int = 0;
+  guint32 get_stats_int = 0;
   GError *error = NULL;
   GOptionContext *context = NULL;
   GOptionEntry entries[] = {
@@ -767,6 +831,11 @@ main (gint argc, gchar ** argv)
     {"rekey-interval", 'r', 0, G_OPTION_ARG_INT, &rekey_int,
           "Re-keying interval in seconds (e.g. 10). 0 to disable re-keying. Default: 0",
         "REKEY_INT"},
+    {"get-stats-interval", 's', 0, G_OPTION_ARG_INT, &get_stats_int,
+          "Interval for printing session stats in seconds (e.g. 10). 0 to "
+          "disable. Default: 0. Note: The server must support "
+          "'GET_PARAMETER srtp-sessions'",
+        "STATS_INT"},
     {"location", 'l', 0, G_OPTION_ARG_STRING, &location,
           "RTSP location (e.g. rtsps://user:pass@host:port/resource)",
         "LOCATION"},
@@ -833,6 +902,10 @@ main (gint argc, gchar ** argv)
     g_timeout_add_seconds (rekey_int, rekey_all, key_param);
   } else {
     GST_INFO ("Not using re-keying interval. Will wait for hard-limit");
+  }
+
+  if (get_stats_int) {
+    g_timeout_add_seconds (get_stats_int, get_srtp_stats, NULL);
   }
 
   g_main_loop_run (loop);
