@@ -137,9 +137,9 @@ several overrides and listening to different pads with different settings.
   * `raw-text`: Record raw buffer contents assuming they contain text (e.g. subtitles)
   * *Note*: for backward compatibility reasons, this can be passed as a
             boolean and it will default to 'sha1' if true, 'none' if false.
-* `ignored-fields`: Default: `"stream-start={ stream-id }"` (as they are often
-   non reproducible). Key with a serialized GstValueList(str) of fields to not
-   record.
+* `ignored-fields`: Default: `"stream-start={ stream-id, stream }"` (as they are
+   often non reproducible). Key with a serialized GstValueList(str) of fields to
+   not record.
 * `logged-fields`: Default: `NULL` Key with a serialized GstValueList(str) of
    fields to record, eg. `logged-event-fields="stream-start={flags},
    caps={width, height, framerate}, buffer={pts}"`. Overrides

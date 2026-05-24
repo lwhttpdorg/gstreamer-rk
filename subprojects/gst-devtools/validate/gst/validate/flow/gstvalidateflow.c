@@ -462,17 +462,28 @@ validate_flow_override_new (GstStructure * config)
     flow->ignored_fields = gst_structure_new_from_string (ignored_fields);
     if (!flow->ignored_fields)
       gst_validate_error_structure (config,
-          "Could not parse 'ignored-event-fields' structure: `%s`",
-          ignored_fields);
+          "Could not parse 'ignored-fields' structure: `%s`", ignored_fields);
     g_free (ignored_fields);
   } else {
     flow->ignored_fields =
-        gst_structure_new_from_string ("ignored,stream-start={stream-id}");
+        gst_structure_new_from_string
+        ("ignored,stream-start={stream-id,stream}");
   }
 
-  if (!gst_structure_has_field (flow->ignored_fields, "stream-start"))
-    gst_structure_set (flow->ignored_fields, "stream-start",
-        G_TYPE_STRING, "stream-id", NULL);
+  if (!gst_structure_has_field (flow->ignored_fields, "stream-start")) {
+    GValue ignored_fields = G_VALUE_INIT;
+    g_value_init (&ignored_fields, GST_TYPE_LIST);
+    GValue str = G_VALUE_INIT;
+    g_value_init (&str, G_TYPE_STRING);
+    g_value_set_static_string (&str, "stream-id");
+    gst_value_list_append_and_take_value (&ignored_fields, &str);
+    g_value_init (&str, G_TYPE_STRING);
+    g_value_set_static_string (&str, "stream");
+    gst_value_list_append_and_take_value (&ignored_fields, &str);
+
+    gst_structure_take_value (flow->ignored_fields, "stream-start",
+        &ignored_fields);
+  }
 
   logged_fields = (gchar *) gst_structure_get_string (config, "logged-fields");
   if (logged_fields) {
