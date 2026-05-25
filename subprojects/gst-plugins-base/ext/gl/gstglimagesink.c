@@ -1693,6 +1693,7 @@ gst_glimage_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
   GstGLImageSink *glimage_sink;
   gboolean ok;
   GstVideoInfo vinfo;
+  GstStructure *structure;
 
   GST_DEBUG_OBJECT (bsink, "set caps with %" GST_PTR_FORMAT, caps);
 
@@ -1713,6 +1714,15 @@ gst_glimage_sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
   ok = update_output_format (glimage_sink);
 
   GST_GLIMAGE_SINK_UNLOCK (glimage_sink);
+
+  structure = gst_caps_get_structure (caps, 0);
+  if (gst_structure_has_field_typed
+      (structure, "texture-target", G_TYPE_STRING)) {
+    const gchar *str = gst_structure_get_string (structure, "texture-target");
+
+    if (g_strcmp0 (str, GST_GL_TEXTURE_TARGET_EXTERNAL_OES_STR) == 0)
+      gst_base_sink_set_last_sample_enabled (bsink, FALSE);
+  }
 
   return ok;
 }
