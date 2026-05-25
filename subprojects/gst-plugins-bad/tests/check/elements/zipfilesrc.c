@@ -25,6 +25,7 @@
 
 #include <fcntl.h>
 
+#include <gst/check/gstharness.h>
 #include <gst/check/gstcheck.h>
 #include <glib/gstdio.h>
 
@@ -329,6 +330,154 @@ create_single_member_archive_with_comment (const gchar * name,
   return path;
 }
 
+/* Build a jar: URI for @path and @location. */
+static gchar *
+create_jar_uri (const gchar * path, const gchar * location)
+{
+  GError *error = NULL;
+  gchar *file_uri = g_filename_to_uri (path, NULL, &error);
+  gchar *jar_uri;
+
+  fail_unless (file_uri != NULL);
+  fail_unless (error == NULL, "Unexpected error: %s",
+      error ? error->message : "none");
+
+  jar_uri = g_strdup_printf ("jar:%s!/%s", file_uri, location);
+  g_free (file_uri);
+
+  return jar_uri;
+}
+
+static void
+count_notify (GObject * object, GParamSpec * pspec, gpointer user_data)
+{
+  guint *count = user_data;
+
+  (*count)++;
+}
+
+/* Assert that @buf contains exactly @payload at member-relative offsets. */
+static void
+assert_buffer_matches_payload (GstBuffer * buf, const guint8 * payload,
+    guint payload_size)
+{
+  fail_unless (buf != NULL);
+  fail_unless_equals_uint64 (GST_BUFFER_OFFSET (buf), 0);
+  fail_unless_equals_uint64 (GST_BUFFER_OFFSET_END (buf), payload_size);
+  gst_check_buffer_data (buf, payload, payload_size);
+}
+
+/* Assert that the virtual uri property matches @path and @location. */
+static void
+assert_zipfilesrc_uri_property_matches (GstElement * src, const gchar * path,
+    const gchar * location)
+{
+  gchar *expected_uri = create_jar_uri (path, location);
+  gchar *actual_uri = NULL;
+
+  g_object_get (src, "uri", &actual_uri, NULL);
+  fail_unless (gst_uri_is_valid (actual_uri));
+  fail_unless_equals_string (actual_uri, expected_uri);
+
+  g_free (actual_uri);
+  g_free (expected_uri);
+}
+
+/* Read @path through zipfilesrc using archive/location properties. */
+static void
+assert_zipfilesrc_archive_location_reads_payload (const gchar * path,
+    const guint8 * payload, guint payload_size)
+{
+  GstElement *src = gst_element_factory_make ("zipfilesrc", NULL);
+  GstHarness *h;
+  GstBuffer *buf = NULL;
+
+  fail_unless (src != NULL);
+  g_object_set (src, "archive", path, "location", ZIP_TEST_MEMBER_NAME, NULL);
+  assert_zipfilesrc_uri_property_matches (src, path, ZIP_TEST_MEMBER_NAME);
+
+  h = gst_harness_new_with_element (src, NULL, "src");
+  gst_harness_play (h);
+
+  fail_unless (gst_harness_pull_until_eos (h, &buf));
+  assert_buffer_matches_payload (buf, payload, payload_size);
+  gst_buffer_unref (buf);
+
+  gst_harness_teardown (h);
+  gst_object_unref (src);
+}
+
+/* Assert that zipfilesrc reports member-relative size and seekability. */
+static void
+assert_zipfilesrc_archive_location_reports_size_and_seekable (const gchar *
+    path, guint payload_size)
+{
+  GstElement *src = gst_element_factory_make ("zipfilesrc", NULL);
+  GstHarness *h;
+  GstQuery *query;
+  gint64 duration;
+  gboolean seekable;
+  gint64 start;
+  gint64 end;
+
+  fail_unless (src != NULL);
+  g_object_set (src, "archive", path, "location", ZIP_TEST_MEMBER_NAME, NULL);
+
+  h = gst_harness_new_with_element (src, NULL, "src");
+  gst_harness_play (h);
+
+  fail_unless (gst_element_query_duration (src, GST_FORMAT_BYTES, &duration));
+  fail_unless_equals_int64 (duration, payload_size);
+
+  query = gst_query_new_seeking (GST_FORMAT_BYTES);
+  fail_unless (gst_element_query (src, query));
+  gst_query_parse_seeking (query, NULL, &seekable, &start, &end);
+  fail_unless (seekable);
+  fail_unless_equals_int64 (start, 0);
+  fail_unless_equals_int64 (end, payload_size);
+  gst_query_unref (query);
+
+  gst_harness_teardown (h);
+  gst_object_unref (src);
+}
+
+/* Read @path through zipfilesrc using the jar: URI property. */
+static void
+assert_zipfilesrc_uri_reads_payload (const gchar * path, const guint8 * payload,
+    guint payload_size)
+{
+  GstElement *src = gst_element_factory_make ("zipfilesrc", NULL);
+  gchar *uri = create_jar_uri (path, ZIP_TEST_MEMBER_NAME);
+  gchar *archive = NULL;
+  gchar *location = NULL;
+  GstHarness *h;
+  GstBuffer *buf = NULL;
+  guint uri_notify_count = 0;
+
+  fail_unless (src != NULL);
+  g_signal_connect (src, "notify::uri", G_CALLBACK (count_notify),
+      &uri_notify_count);
+  g_object_set (src, "uri", uri, NULL);
+  fail_unless_equals_int (uri_notify_count, 1);
+  g_object_get (src, "archive", &archive, "location", &location, NULL);
+  fail_unless_equals_string (archive, path);
+  fail_unless_equals_string (location, ZIP_TEST_MEMBER_NAME);
+  assert_zipfilesrc_uri_property_matches (src, path, ZIP_TEST_MEMBER_NAME);
+
+  h = gst_harness_new_with_element (src, NULL, "src");
+  gst_harness_play (h);
+
+  fail_unless (gst_harness_pull_until_eos (h, &buf));
+  assert_buffer_matches_payload (buf, payload, payload_size);
+  gst_buffer_unref (buf);
+
+  gst_harness_teardown (h);
+  gst_object_unref (src);
+  g_free (archive);
+  g_free (location);
+  g_free (uri);
+}
+
 GST_START_TEST (test_stored_member)
 {
   const guint8 payload[] = { 0x00, 0x01, 0x02, 0x03 };
@@ -479,11 +628,77 @@ GST_START_TEST (test_zip64_member_metadata)
 
 GST_END_TEST;
 
+GST_START_TEST (test_element_archive_location_reads_member)
+{
+  const guint8 payload[] = { 0x20, 0x21, 0x22, 0x23, 0x24 };
+  gchar *path = create_single_member_archive (ZIP_TEST_MEMBER_NAME,
+      GST_ZIP_COMPRESSION_METHOD_STORE, payload, sizeof (payload), FALSE);
+
+  assert_zipfilesrc_archive_location_reads_payload (path, payload,
+      sizeof (payload));
+
+  g_remove (path);
+  g_free (path);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_element_archive_location_reports_size_and_seekable)
+{
+  const guint8 payload[] = { 0x25, 0x26, 0x27, 0x28, 0x29 };
+  gchar *path = create_single_member_archive (ZIP_TEST_MEMBER_NAME,
+      GST_ZIP_COMPRESSION_METHOD_STORE, payload, sizeof (payload), FALSE);
+
+  assert_zipfilesrc_archive_location_reports_size_and_seekable (path,
+      sizeof (payload));
+
+  g_remove (path);
+  g_free (path);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_element_uri_reads_member)
+{
+  const guint8 payload[] = { 0x30, 0x31, 0x32, 0x33 };
+  gchar *path = create_single_member_archive (ZIP_TEST_MEMBER_NAME,
+      GST_ZIP_COMPRESSION_METHOD_STORE, payload, sizeof (payload), FALSE);
+
+  assert_zipfilesrc_uri_reads_payload (path, payload, sizeof (payload));
+
+  g_remove (path);
+  g_free (path);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_element_compressed_member_rejected)
+{
+  const guint8 payload[] = { 0x03, 0x00 };
+  gchar *path = create_single_member_archive (ZIP_TEST_MEMBER_NAME,
+      ZIP_COMPRESSION_METHOD_DEFLATE, payload, sizeof (payload), FALSE);
+  GstElement *src = gst_element_factory_make ("zipfilesrc", NULL);
+
+  fail_unless (src != NULL);
+  g_object_set (src, "archive", path, "location", ZIP_TEST_MEMBER_NAME, NULL);
+
+  fail_unless_equals_int (gst_element_set_state (src, GST_STATE_PAUSED),
+      GST_STATE_CHANGE_FAILURE);
+  gst_element_set_state (src, GST_STATE_NULL);
+  gst_object_unref (src);
+
+  g_remove (path);
+  g_free (path);
+}
+
+GST_END_TEST;
+
 static Suite *
 zipfilesrc_suite (void)
 {
   Suite *s = suite_create ("zipfilesrc");
   TCase *tc_parser = tcase_create ("parser");
+  TCase *tc_element = tcase_create ("element");
 
   tcase_add_test (tc_parser, test_stored_member);
   tcase_add_test (tc_parser, test_stored_member_with_archive_comment);
@@ -493,6 +708,13 @@ zipfilesrc_suite (void)
   tcase_add_test (tc_parser, test_local_header_range_rejected);
   tcase_add_test (tc_parser, test_zip64_member_metadata);
   suite_add_tcase (s, tc_parser);
+
+  tcase_add_test (tc_element, test_element_archive_location_reads_member);
+  tcase_add_test (tc_element,
+      test_element_archive_location_reports_size_and_seekable);
+  tcase_add_test (tc_element, test_element_uri_reads_member);
+  tcase_add_test (tc_element, test_element_compressed_member_rejected);
+  suite_add_tcase (s, tc_element);
 
   return s;
 }
