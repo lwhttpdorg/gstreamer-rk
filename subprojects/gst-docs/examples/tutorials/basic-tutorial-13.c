@@ -34,7 +34,7 @@ send_seek_event (CustomData * data)
     seek_event =
         gst_event_new_seek (data->rate, GST_FORMAT_TIME,
         GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE, GST_SEEK_TYPE_SET,
-        position, GST_SEEK_TYPE_END, 0);
+        position, GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE);
   } else {
     seek_event =
         gst_event_new_seek (data->rate, GST_FORMAT_TIME,
@@ -79,6 +79,12 @@ handle_keyboard (GIOChannel * source, GIOCondition cond, CustomData * data)
       }
       send_seek_event (data);
       break;
+      /*
+       * Command 'd'(reverse playback) does not work reliably.
+       * That is because HTTP-streamed method is different from the file-based sources.
+       * With HTTP-streaming method, reverse seek in Matroska/WebM is not currently dispatched correctly by the demuxer.
+       * If you stream the local file, it will likely work.
+       */
     case 'd':
       data->rate *= -1.0;
       send_seek_event (data);
