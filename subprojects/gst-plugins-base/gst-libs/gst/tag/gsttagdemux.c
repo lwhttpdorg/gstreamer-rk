@@ -540,19 +540,23 @@ gst_tag_demux_chain_parse_tag (GstTagDemux * demux)
 
   /* If we receive a buffer that's from the middle of the file,
    * we can't read tags so move to typefinding */
-  if (GST_BUFFER_OFFSET_IS_VALID (collect) && GST_BUFFER_OFFSET (collect) != 0) {
-    GST_DEBUG_OBJECT (demux, "Received buffer from non-zero offset %"
-        G_GINT64_FORMAT ". Can't read tags", GST_BUFFER_OFFSET (collect));
-    demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
-    return;
+  if (demux->priv->state == GST_TAG_DEMUX_READ_START_TAG) {
+    if (GST_BUFFER_OFFSET_IS_VALID (collect) && GST_BUFFER_OFFSET (collect) != 0) {
+      GST_DEBUG_OBJECT (demux, "Received buffer from non-zero offset %"
+          G_GINT64_FORMAT ". Can't read tags", GST_BUFFER_OFFSET (collect));
+      demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
+      return;
+    }
   }
 
   g_assert (klass->identify_tag != NULL);
   g_assert (klass->parse_tag != NULL);
 
   if (!klass->identify_tag (demux, collect, TRUE, &tagsize)) {
-    GST_DEBUG_OBJECT (demux, "Could not identify start tag");
-    demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
+    if (demux->priv->state == GST_TAG_DEMUX_READ_START_TAG) {
+      GST_DEBUG_OBJECT (demux, "Could not identify start tag");
+      demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
+    }
     return;
   }
 
@@ -607,7 +611,9 @@ gst_tag_demux_chain_parse_tag (GstTagDemux * demux)
   } while (parse_ret == GST_TAG_DEMUX_RESULT_AGAIN);
 
   GST_LOG_OBJECT (demux, "Parsed tag. Proceeding to typefinding");
-  demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
+  if (demux->priv->state == GST_TAG_DEMUX_READ_START_TAG) {
+    demux->priv->state = GST_TAG_DEMUX_TYPEFINDING;
+  }
   demux->priv->send_tag_event = TRUE;
 }
 
@@ -702,7 +708,7 @@ gst_tag_demux_chain_buffer (GstTagDemux * demux, GstBuffer * buf,
       GstBuffer *outbuf = NULL;
       gsize outbuf_size;
 
-      update_collected (demux);
+      gst_tag_demux_chain_parse_tag (demux);
 
       /* Trim the buffer and adjust offset */
       if (demux->priv->collect) {
