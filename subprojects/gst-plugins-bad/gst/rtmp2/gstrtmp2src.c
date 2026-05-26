@@ -63,6 +63,7 @@ typedef struct
   GstStructure *stats;
   guint idle_timeout;
   gboolean no_eof_is_error;
+  gboolean error_on_restart;
 
   /* If both self->lock and OBJECT_LOCK are needed,
    * self->lock must be taken first */
@@ -144,6 +145,7 @@ enum
   PROP_IDLE_TIMEOUT,
   PROP_NO_EOF_IS_ERROR,
   PROP_EXTRA_CONNECT_ARGS,
+  PROP_ERROR_ON_TIMESTAMP_RESET,
 };
 
 #define DEFAULT_IDLE_TIMEOUT 0
@@ -259,6 +261,19 @@ gst_rtmp2_src_class_init (GstRtmp2SrcClass * klass)
       g_param_spec_string ("extra-connect-args", "librtmp-style arbitrary data",
           "librtmp-style arbitrary data to be appended to the \"connect\" command",
           NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRtmp2Src:error-on-timestamp-reset:
+   *
+   * When set, an error is raised if the timestamps reset and start from 0 again.
+   *
+   * Since: 1.28
+   */
+  g_object_class_install_property (gobject_class, PROP_ERROR_ON_TIMESTAMP_RESET,
+      g_param_spec_boolean ("error-on-timestamp-reset",
+          "Error on timestamp reset",
+          "When set, an error is raised if timestamps reset and start from 0 again.",
+          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   GST_DEBUG_CATEGORY_INIT (gst_rtmp2_src_debug_category, "rtmp2src", 0,
       "debug category for rtmp2src element");
@@ -383,6 +398,11 @@ gst_rtmp2_src_set_property (GObject * object, guint property_id,
       self->location.extra_connect_args = g_value_dup_string (value);
       GST_OBJECT_UNLOCK (self);
       break;
+    case PROP_ERROR_ON_TIMESTAMP_RESET:
+      GST_OBJECT_LOCK (self);
+      self->error_on_restart = g_value_get_boolean (value);
+      GST_OBJECT_UNLOCK (self);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -483,6 +503,11 @@ gst_rtmp2_src_get_property (GObject * object, guint property_id,
     case PROP_EXTRA_CONNECT_ARGS:
       GST_OBJECT_LOCK (self);
       g_value_set_string (value, self->location.extra_connect_args);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_ERROR_ON_TIMESTAMP_RESET:
+      GST_OBJECT_LOCK (self);
+      g_value_set_boolean (value, self->error_on_restart);
       GST_OBJECT_UNLOCK (self);
       break;
     default:
@@ -1070,6 +1095,8 @@ connect_task_done (GObject * object, GAsyncResult * result, gpointer user_data)
         G_CALLBACK (error_callback), self, 0);
     g_signal_connect_object (self->connection, "stream-control",
         G_CALLBACK (control_callback), self, 0);
+    gst_rtmp_connection_set_error_on_restart (self->connection,
+        self->error_on_restart);
   } else {
     send_connect_error (self, error);
     self->connection_error = TRUE;

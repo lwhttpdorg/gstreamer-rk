@@ -92,6 +92,8 @@ struct _GstRtmpConnection
   guint64 out_bytes_total;
   guint64 in_bytes_acked;
   guint64 out_bytes_acked;
+
+  gboolean error_on_restart;
 };
 
 
@@ -671,6 +673,8 @@ gst_rtmp_connection_do_read (GstRtmpConnection * sc)
 {
   GByteArray *input_bytes = sc->input_bytes;
   gsize needed_bytes = 1;
+  gboolean ts_regression = FALSE;
+  GError *error = NULL;
 
   while (1) {
     GstRtmpChunkStream *cstream;
@@ -687,7 +691,14 @@ gst_rtmp_connection_do_read (GstRtmpConnection * sc)
 
     cstream = gst_rtmp_chunk_streams_get (sc->input_streams, chunk_stream_id);
     header_size = gst_rtmp_chunk_stream_parse_header (cstream,
-        input_bytes->data, input_bytes->len);
+        input_bytes->data, input_bytes->len, &ts_regression);
+
+    if (ts_regression && sc->error_on_restart) {
+      error = g_error_new (G_IO_ERROR, G_IO_ERROR_CONNECTION_CLOSED,
+          "connection restarted remotely");
+      gst_rtmp_connection_emit_error (sc, error);
+      break;
+    }
 
     if (input_bytes->len < header_size) {
       needed_bytes = header_size;
@@ -1319,6 +1330,15 @@ gst_rtmp_connection_set_data_frame (GstRtmpConnection * connection,
 
   gst_buffer_prepend_memory (buffer, gst_memory_ref (set_data_frame_value));
   gst_rtmp_connection_queue_message (connection, buffer);
+}
+
+void
+gst_rtmp_connection_set_error_on_restart (GstRtmpConnection * connection,
+    gboolean error_on_restart)
+{
+  g_return_if_fail (GST_IS_RTMP_CONNECTION (connection));
+
+  connection->error_on_restart = error_on_restart;
 }
 
 static gboolean
