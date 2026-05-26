@@ -377,6 +377,9 @@ gst_v4l2_video_enc_flush (GstVideoEncoder * encoder)
   return TRUE;
 }
 
+static gboolean gst_v4l2_video_enc_set_profile_level (GstVideoEncoder * encoder,
+    GstVideoCodecState * input_state);
+
 static gboolean
 gst_v4l2_video_enc_set_format (GstVideoEncoder * encoder,
     GstVideoCodecState * state)
@@ -411,6 +414,9 @@ gst_v4l2_video_enc_set_format (GstVideoEncoder * encoder,
   gst_video_codec_state_unref (output);
 
   if (!gst_video_encoder_negotiate (encoder))
+    return FALSE;
+
+  if (!gst_v4l2_video_enc_set_profile_level (encoder, state))
     return FALSE;
 
   /* Calculate and set the level based on video parameters if supported.
@@ -617,7 +623,8 @@ gst_v4l2_video_enc_sink_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
 }
 
 static gboolean
-gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
+gst_v4l2_video_enc_set_profile_level (GstVideoEncoder * encoder,
+    GstVideoCodecState * input_state)
 {
   GstV4l2VideoEncClass *klass = GST_V4L2_VIDEO_ENC_GET_CLASS (encoder);
   GstV4l2VideoEnc *self = GST_V4L2_VIDEO_ENC (encoder);
@@ -625,25 +632,24 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
   GstCaps *allowed_caps;
   struct ProfileLevelCtx ctx = { self, NULL, NULL };
   GstVideoCodecState *state;
+  GstCaps *outcaps;
   GstStructure *s;
   const GstV4l2Codec *codec = klass->codec;
 
-  GST_DEBUG_OBJECT (self, "Negotiating %s profile and level.",
-      klass->codec_name);
-
-  /* Only renegotiate on upstream changes */
-  if (self->input_state)
+  if (!codec)
     return TRUE;
 
-  if (!codec)
-    goto done;
+  GST_DEBUG_OBJECT (self, "Negotiating %s profile and level.",
+      klass->codec_name);
 
   allowed_caps = gst_pad_get_allowed_caps (GST_VIDEO_ENCODER_SRC_PAD (encoder));
 
   if (allowed_caps) {
 
-    if (gst_caps_is_empty (allowed_caps))
-      goto not_negotiated;
+    if (gst_caps_is_empty (allowed_caps)) {
+      gst_caps_unref (allowed_caps);
+      return FALSE;
+    }
 
     allowed_caps = gst_caps_make_writable (allowed_caps);
 
@@ -651,7 +657,10 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
      * iterating, if gst_caps_foreach() returns TRUE it means there was no
      * compatible profile and level in any of the structure */
     if (gst_caps_foreach (allowed_caps, negotiate_profile_and_level, &ctx)) {
-      goto no_profile_level;
+      GST_WARNING_OBJECT (self, "No compatible level and profile in caps: %"
+          GST_PTR_FORMAT, allowed_caps);
+      gst_caps_unref (allowed_caps);
+      return FALSE;
     }
 
     gst_caps_unref (allowed_caps);
@@ -663,8 +672,11 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
 
     control.id = codec->profile_cid;
 
-    if (v4l2object->ioctl (v4l2object->video_fd, VIDIOC_G_CTRL, &control) < 0)
-      goto g_ctrl_failed;
+    if (v4l2object->ioctl (v4l2object->video_fd, VIDIOC_G_CTRL, &control) < 0) {
+      GST_WARNING_OBJECT (self, "Failed to get %s profile and level: '%s'",
+          klass->codec_name, g_strerror (errno));
+      return FALSE;
+    }
 
     ctx.profile = codec->profile_to_string (control.value);
     self->v4l2_profile = control.value;
@@ -676,8 +688,11 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
 
     control.id = codec->level_cid;
 
-    if (v4l2object->ioctl (v4l2object->video_fd, VIDIOC_G_CTRL, &control) < 0)
-      goto g_ctrl_failed;
+    if (v4l2object->ioctl (v4l2object->video_fd, VIDIOC_G_CTRL, &control) < 0) {
+      GST_WARNING_OBJECT (self, "Failed to get %s profile and level: '%s'",
+          klass->codec_name, g_strerror (errno));
+      return FALSE;
+    }
 
     ctx.level = codec->level_to_string (control.value);
   }
@@ -686,7 +701,8 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
       klass->codec_name, ctx.profile, ctx.level);
 
   state = gst_video_encoder_get_output_state (encoder);
-  s = gst_caps_get_structure (state->caps, 0);
+  outcaps = gst_caps_copy (state->caps);
+  s = gst_caps_get_structure (outcaps, 0);
 
   if (codec->profile_cid)
     gst_structure_set (s, "profile", G_TYPE_STRING, ctx.profile, NULL);
@@ -695,28 +711,22 @@ gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
     gst_structure_set (s, "level", G_TYPE_STRING, ctx.level, NULL);
 
   gst_video_codec_state_unref (state);
-  state = NULL;
-
-done:
-  if (!GST_VIDEO_ENCODER_CLASS (parent_class)->negotiate (encoder))
-    return FALSE;
+  state = gst_video_encoder_set_output_state (encoder, outcaps, input_state);
+  gst_video_codec_state_unref (state);
 
   return TRUE;
+}
 
-g_ctrl_failed:
-  GST_WARNING_OBJECT (self, "Failed to get %s profile and level: '%s'",
-      klass->codec_name, g_strerror (errno));
-  goto not_negotiated;
+static gboolean
+gst_v4l2_video_enc_negotiate (GstVideoEncoder * encoder)
+{
+  GstV4l2VideoEnc *self = GST_V4L2_VIDEO_ENC (encoder);
 
-no_profile_level:
-  GST_WARNING_OBJECT (self, "No compatible level and profile in caps: %"
-      GST_PTR_FORMAT, allowed_caps);
-  goto not_negotiated;
+  /* Only renegotiate on upstream changes */
+  if (self->input_state)
+    return TRUE;
 
-not_negotiated:
-  if (allowed_caps)
-    gst_caps_unref (allowed_caps);
-  return FALSE;
+  return GST_VIDEO_ENCODER_CLASS (parent_class)->negotiate (encoder);
 }
 
 static gboolean
