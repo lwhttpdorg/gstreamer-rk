@@ -49,8 +49,85 @@ static void gst_aja_sink_combiner_finalize(GObject *object) {
 
   gst_caps_replace(&self->audio_caps, NULL);
   gst_caps_replace(&self->video_caps, NULL);
+  g_object_unref(self->audio_adapter);
 
   G_OBJECT_CLASS(parent_class)->finalize(object);
+}
+
+/* Same as GST_CLOCK_TIME_TO_FRAMES() but with floor rounding. */
+#define CLOCK_TIME_TO_FRAMES_FLOOR(time, rate) \
+  gst_util_uint64_scale(time, rate, GST_SECOND)
+
+static GstBuffer *gst_aja_sink_combiner_clip_audio(GstAjaSinkCombiner *self,
+                                                   GstBuffer *video_buffer,
+                                                   gboolean *need_data) {
+  /* We can produce video alone if audio is EOS. */
+  if (gst_aggregator_pad_is_eos(GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad)))
+    return NULL;
+
+  /* FIXME: If there are gaps should we convert to silence? */
+  GstBuffer *audio_buffer = gst_aggregator_pad_pop_buffer(
+      GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad));
+  if (audio_buffer != NULL) {
+    gst_adapter_push(self->audio_adapter, audio_buffer);
+  }
+
+  /* Calculate PTS of the first audio byte we have in adapter. */
+  gint rate = GST_AUDIO_INFO_RATE(&self->audio_info);
+  gint bpf = GST_AUDIO_INFO_BPF(&self->audio_info);
+  guint64 distance;
+  GstClockTime audio_pts = gst_adapter_prev_pts(self->audio_adapter, &distance);
+  if (!GST_CLOCK_TIME_IS_VALID(audio_pts)) {
+    *need_data = TRUE;
+    return NULL;
+  }
+  g_assert(distance % bpf == 0);
+  audio_pts += GST_FRAMES_TO_CLOCK_TIME(distance / bpf, rate);
+
+  /* Synchronize audio and video PTS by dropping some frames if needed. */
+  GstClockTimeDiff diff =
+      GST_CLOCK_DIFF(GST_BUFFER_PTS(video_buffer), audio_pts);
+  if (diff > 0) {
+    /* Audio starts later than the current video frame.
+     * If we miss 1 or more audio frames, output the video buffer with no
+     * audio and we'll sync on the next one. This happens for example if audio
+     * caps changed mid-frame and we had to clear the adapter. */
+    guint64 diff_frames = CLOCK_TIME_TO_FRAMES_FLOOR(diff, rate);
+    if (diff_frames > 0) {
+      /* FIXME: Insert silence instead ? */
+      GST_WARNING_OBJECT(self, "Audio is %" GST_TIME_FORMAT " in the future",
+                         GST_TIME_ARGS(diff));
+      return NULL;
+    }
+  } else if (diff < 0) {
+    /* Video frame starts later than audio, drop a round number of audio
+     * frames to sync. */
+    guint64 diff_frames = CLOCK_TIME_TO_FRAMES_FLOOR(-diff, rate);
+    if (diff_frames > 0) {
+      GST_WARNING_OBJECT(self,
+                         "Drop %" G_GUINT64_FORMAT
+                         " audio frames because video is %" GST_TIME_FORMAT
+                         " in the future",
+                         diff_frames, GST_TIME_ARGS(-diff));
+      gst_adapter_flush(self->audio_adapter, diff_frames * bpf);
+      audio_pts += GST_FRAMES_TO_CLOCK_TIME(diff_frames, rate);
+    }
+  }
+
+  /* Audio and video PTS are less than 1 audio frame appart now. Calculate how
+   * many audio frames we need for the duration of current video buffer. */
+  GstClockTime next_pts =
+      GST_BUFFER_PTS(video_buffer) + GST_BUFFER_DURATION(video_buffer);
+  guint64 need_audio_size =
+      GST_CLOCK_TIME_TO_FRAMES(next_pts - audio_pts, rate) * bpf;
+
+  audio_buffer = gst_adapter_take_buffer(self->audio_adapter, need_audio_size);
+  if (audio_buffer == NULL) {
+    *need_data = TRUE;
+    return NULL;
+  };
+
+  return audio_buffer;
 }
 
 static GstFlowReturn gst_aja_sink_combiner_aggregate(GstAggregator *aggregator,
@@ -58,44 +135,43 @@ static GstFlowReturn gst_aja_sink_combiner_aggregate(GstAggregator *aggregator,
   GstAjaSinkCombiner *self = GST_AJA_SINK_COMBINER(aggregator);
   GstBuffer *video_buffer, *audio_buffer;
 
-  if (gst_aggregator_pad_is_eos(GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad)) &&
-      gst_aggregator_pad_is_eos(GST_AGGREGATOR_PAD_CAST(self->video_sinkpad))) {
-    GST_DEBUG_OBJECT(self, "All pads EOS");
+  /* We cannot produce audio without video, no need to wait for audio EOS. */
+  if (gst_aggregator_pad_is_eos(GST_AGGREGATOR_PAD_CAST(self->video_sinkpad))) {
+    GST_DEBUG_OBJECT(self, "Video pad is EOS");
     return GST_FLOW_EOS;
   }
-
-  // FIXME: We currently assume that upstream provides
-  // - properly chunked buffers (1 buffer = 1 video frame)
-  // - properly synchronized buffers (audio/video starting at the same time)
-  // - no gaps
-  //
-  // This can be achieved externally with elements like audiobuffersplit and
-  // videorate.
 
   video_buffer = gst_aggregator_pad_peek_buffer(
       GST_AGGREGATOR_PAD_CAST(self->video_sinkpad));
   if (!video_buffer) return GST_AGGREGATOR_FLOW_NEED_DATA;
 
-  audio_buffer = gst_aggregator_pad_peek_buffer(
-      GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad));
-  if (!audio_buffer && !gst_aggregator_pad_is_eos(
-                           GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad))) {
-    gst_buffer_unref(video_buffer);
-    GST_TRACE_OBJECT(self, "Audio not ready yet, waiting");
-    return GST_AGGREGATOR_FLOW_NEED_DATA;
+  if (!GST_BUFFER_DURATION_IS_VALID(video_buffer)) {
+    GST_BUFFER_DURATION(video_buffer) = gst_util_uint64_scale_int(
+        GST_SECOND, self->video_info.fps_d, self->video_info.fps_n);
   }
 
+  /* Clip an audio buffer that matches current video frame pts and duration */
+  gboolean need_data = FALSE;
+  audio_buffer =
+      gst_aja_sink_combiner_clip_audio(self, video_buffer, &need_data);
+  if (need_data) return GST_AGGREGATOR_FLOW_NEED_DATA;
+
   gst_aggregator_pad_drop_buffer(GST_AGGREGATOR_PAD_CAST(self->video_sinkpad));
-  video_buffer = gst_buffer_make_writable(video_buffer);
-  GST_TRACE_OBJECT(self,
-                   "Outputting buffer with video %" GST_PTR_FORMAT
-                   " and audio %" GST_PTR_FORMAT,
-                   video_buffer, audio_buffer);
-  if (audio_buffer) {
+
+  if (audio_buffer != NULL) {
+    /* We have a perfectly matching audio buffer, attach it as meta on its
+     * corresponding video buffer. */
+    video_buffer = gst_buffer_make_writable(video_buffer);
+    GST_TRACE_OBJECT(self,
+                     "Outputting buffer with video %" GST_PTR_FORMAT
+                     " and audio %" GST_PTR_FORMAT,
+                     video_buffer, audio_buffer);
     gst_buffer_add_aja_audio_meta(video_buffer, audio_buffer);
     gst_buffer_unref(audio_buffer);
-    gst_aggregator_pad_drop_buffer(
-        GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad));
+  } else {
+    GST_TRACE_OBJECT(
+        self, "Outputting buffer with video %" GST_PTR_FORMAT " and no audio",
+        video_buffer);
   }
 
   if (!gst_pad_has_current_caps(GST_AGGREGATOR_SRC_PAD(self)) ||
@@ -125,10 +201,7 @@ static GstFlowReturn gst_aja_sink_combiner_aggregate(GstAggregator *aggregator,
 
   // Update the position for synchronization purposes
   GST_AGGREGATOR_PAD_CAST(GST_AGGREGATOR_SRC_PAD(self))->segment.position =
-      GST_BUFFER_PTS(video_buffer);
-  if (GST_BUFFER_DURATION_IS_VALID(video_buffer))
-    GST_AGGREGATOR_PAD_CAST(GST_AGGREGATOR_SRC_PAD(self))->segment.position +=
-        GST_BUFFER_DURATION(video_buffer);
+      GST_BUFFER_PTS(video_buffer) + GST_BUFFER_DURATION(video_buffer);
 
   return gst_aggregator_finish_buffer(GST_AGGREGATOR_CAST(self), video_buffer);
 }
@@ -154,9 +227,16 @@ static gboolean gst_aja_sink_combiner_sink_event(GstAggregator *aggregator,
       gst_event_parse_caps(event, &caps);
 
       if (agg_pad == GST_AGGREGATOR_PAD_CAST(self->audio_sinkpad)) {
+        GstAudioInfo info;
+        gst_audio_info_from_caps(&info, caps);
+        if (!gst_audio_info_is_equal(&info, &self->audio_info)) {
+          gst_adapter_clear(self->audio_adapter);
+          self->audio_info = info;
+        }
         gst_caps_replace(&self->audio_caps, caps);
         self->caps_changed = TRUE;
       } else if (agg_pad == GST_AGGREGATOR_PAD_CAST(self->video_sinkpad)) {
+        gst_video_info_from_caps(&self->video_info, caps);
         gst_caps_replace(&self->video_caps, caps);
         self->caps_changed = TRUE;
       }
@@ -228,6 +308,7 @@ static gboolean gst_aja_sink_combiner_stop(GstAggregator *aggregator) {
 
   gst_caps_replace(&self->audio_caps, NULL);
   gst_caps_replace(&self->video_caps, NULL);
+  gst_adapter_clear(self->audio_adapter);
 
   return TRUE;
 }
@@ -285,4 +366,6 @@ static void gst_aja_sink_combiner_init(GstAjaSinkCombiner *self) {
                            "direction", GST_PAD_SINK, "template", templ, NULL));
   gst_object_unref(templ);
   gst_element_add_pad(GST_ELEMENT_CAST(self), self->audio_sinkpad);
+
+  self->audio_adapter = gst_adapter_new();
 }

@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <gst/audio/audio.h>
 #include <gst/base/base.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -48,6 +49,9 @@ struct _GstAjaSinkCombiner {
   GstPad *audio_sinkpad, *video_sinkpad;
   GstCaps *audio_caps, *video_caps;
   gboolean caps_changed;
+  GstAdapter *audio_adapter;
+  GstAudioInfo audio_info;
+  GstVideoInfo video_info;
 };
 
 struct _GstAjaSinkCombinerClass {
