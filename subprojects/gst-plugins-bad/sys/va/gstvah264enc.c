@@ -717,27 +717,6 @@ _validate_parameters (GstVaH264Enc * self)
       PROP_TRELLIS);
 }
 
-/* Get log2_max_frame_num_minus4, log2_max_pic_order_cnt_lsb_minus4
- * value, shall be in the range of 0 to 12, inclusive. */
-static guint
-_get_log2_max_num (guint num)
-{
-  guint ret = 0;
-
-  while (num) {
-    ++ret;
-    num >>= 1;
-  }
-
-  /* shall be in the range of 0+4 to 12+4, inclusive. */
-  if (ret < 4) {
-    ret = 4;
-  } else if (ret > 16) {
-    ret = 16;
-  }
-  return ret;
-}
-
 static void
 _print_gop_structure (GstVaH264Enc * self)
 {
@@ -1088,7 +1067,8 @@ _generate_gop_structure (GstVaH264Enc * self)
 
 create_poc:
   /* init max_frame_num, max_poc */
-  self->gop.log2_max_frame_num = _get_log2_max_num (self->gop.idr_period);
+  self->gop.log2_max_frame_num =
+      CLAMP (gst_util_ceil_log2 (self->gop.idr_period), 4, 12);
   self->gop.max_frame_num = (1 << self->gop.log2_max_frame_num);
   self->gop.log2_max_pic_order_cnt = self->gop.log2_max_frame_num + 1;
   /* 8.2.1.1 Decoding process for picture order count type 0:

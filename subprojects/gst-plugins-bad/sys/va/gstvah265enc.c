@@ -3774,27 +3774,6 @@ _h265_calculate_coded_size (GstVaH265Enc * self)
   GST_INFO_OBJECT (self, "Calculate codedbuf size: %u", base->codedbuf_size);
 }
 
-/* Get log2_max_frame_num_minus4, log2_max_pic_order_cnt_lsb_minus4
- * value, shall be in the range of 0 to 12, inclusive. */
-static guint
-_get_log2_max_num (guint num)
-{
-  guint ret = 0;
-
-  while (num) {
-    ++ret;
-    num >>= 1;
-  }
-
-  /* shall be in the range of 0+4 to 12+4, inclusive. */
-  if (ret < 4) {
-    ret = 4;
-  } else if (ret > 16) {
-    ret = 16;
-  }
-  return ret;
-}
-
 /* Consider the idr_period, num_bframes, L0/L1 reference number.
  * TODO: Load some preset fixed GOP structure.
  * TODO: Skip this if in lookahead mode. */
@@ -4050,7 +4029,7 @@ _h265_generate_gop_structure (GstVaH265Enc * self)
 
 create_poc:
   /* init max_frame_num, max_poc */
-  log2_max_frame_num = _get_log2_max_num (self->gop.idr_period);
+  log2_max_frame_num = CLAMP (gst_util_ceil_log2 (self->gop.idr_period), 4, 12);
   /* b_pyramid makes B frames as ref and prevPicOrderCntLsb can
      be the B frame POC which is smaller than the P frame. This
      can cause POC diff bigger than MaxPicOrderCntLsb/2 and
