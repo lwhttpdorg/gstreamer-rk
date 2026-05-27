@@ -338,6 +338,10 @@ gstvideo_dep = dependency('gstreamer-video-1.0', version : gst_req,
 gstcheck_dep = dependency('gstreamer-check-1.0', version : gst_req,
     required : get_option('tests'),
     fallback : ['gstreamer', 'gst_check_dep'])
+if get_option('tflite').enabled()
+  tflite_dep = dependency('tensorflow',
+      fallback : ['tensorflow', 'tflite_dep'])
+endif
 
 # GStreamer OpenGL
 gstgl_dep = dependency('gstreamer-gl-1.0', version : gst_req,

@@ -1,0 +1,5 @@
+[wrap-git]
+directory=tensorflow
+url=https://gitlab.freedesktop.org/raghu447/tensorflow.git
+push-url=git@gitlab.freedesktop.org/raghu447/tensorflow.git
+revision=tflite-port-meson
