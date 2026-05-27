@@ -1132,6 +1132,14 @@ gst_app_src_send_event (GstElement * element, GstEvent * event)
         g_object_notify (G_OBJECT (appsrc), "dropped");
       }
       break;
+    case GST_EVENT_CAPS:{
+      GstCaps *caps = NULL;
+      gst_event_parse_caps (event, &caps);
+      if (caps)
+        gst_app_src_set_caps (appsrc, caps);
+      gst_event_unref (event);
+      return TRUE;
+    }
     default:
       if (GST_EVENT_IS_SERIALIZED (event)) {
         GST_DEBUG_OBJECT (appsrc, "queue event: %" GST_PTR_FORMAT, event);
