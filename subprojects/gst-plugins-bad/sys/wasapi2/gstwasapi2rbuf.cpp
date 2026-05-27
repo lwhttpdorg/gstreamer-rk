@@ -71,6 +71,7 @@
 #include <string.h>
 #include <queue>
 #include <avrt.h>
+#include <propkey.h>
 
 #if defined(__SSE2__) || (defined(_MSC_VER) && (defined(_M_X64) || (_M_IX86_FP >= 2)))
 #include <emmintrin.h>
@@ -231,6 +232,7 @@ struct RbufCtx
   bool is_s24in32 = false;
   bool init_done = false;
   bool low_latency = false;
+  bool apo_bypass = false;
   gint64 latency_time = 0;
   gint64 buffer_time = 0;
 };
@@ -313,6 +315,7 @@ struct CommandSetDevice : public CommandData
   guint pid = 0;
   gboolean low_latency = FALSE;
   gboolean exclusive = FALSE;
+  gboolean apo_bypass = FALSE;
 };
 
 struct CommandUpdateDevice : public CommandData
@@ -439,6 +442,7 @@ struct RbufCtxDesc
   WAVEFORMATEX *mix_format = nullptr;
   gboolean low_latency = FALSE;
   gboolean exclusive = FALSE;
+  gboolean apo_bypass = FALSE;
   HANDLE event_handle;
 };
 
@@ -790,6 +794,23 @@ gst_wasapi2_rbuf_ctx_init (RbufCtxPtr & ctx, WAVEFORMATEX * selected_format)
         ctx->mix_format = gst_wasapi2_copy_wfx (selected_format);
         stream_flags = AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
             AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+
+        if (ctx->apo_bypass) {
+          ctx->apo_bypass = false;
+
+          ComPtr<IAudioClient2> client2;
+          hr = ctx->client.As (&client2);
+          if (gst_wasapi2_result (hr)) {
+            AudioClientProperties props = { };
+            props.cbSize = sizeof (AudioClientProperties);
+            props.bIsOffload = FALSE;
+            props.eCategory = AudioCategory_Other;
+            props.Options = AUDCLNT_STREAMOPTIONS_NONE;
+
+            GST_DEBUG ("Need conversion, disable apo-bypass");
+            client2->SetClientProperties (&props);
+          }
+        }
       } else {
         gst_caps_unref (new_caps);
         gst_caps_unref (old_caps);
@@ -1171,27 +1192,85 @@ gst_wasapi2_device_manager_create_ctx (IMMDeviceEnumerator * enumerator,
     }
   }
 
-  if (desc->exclusive) {
-    if (!device) {
-      GST_WARNING ("IMMDevice is unavailable");
-      return;
-    }
+  bool apo_bypass = false;
+  bool is_exclusive = false;
 
-    ComPtr < IPropertyStore > prop;
+  if (device &&
+      !gst_wasapi2_is_loopback_class (endpoint_class) &&
+      !gst_wasapi2_is_process_loopback_class (endpoint_class)) {
+    if (desc->apo_bypass)
+      apo_bypass = true;
+
+    if (desc->exclusive)
+      is_exclusive = true;
+  }
+
+  ComPtr < IPropertyStore > prop;
+  ComPtr<IAudioClient2> client2;
+  if (apo_bypass || is_exclusive) {
     hr = device->OpenPropertyStore (STGM_READ, &prop);
-    if (!gst_wasapi2_result (hr))
-      return;
+    if (SUCCEEDED (hr)) {
+      if (apo_bypass) {
+        PROPVARIANT var;
+        PropVariantInit (&var);
+
+        /* Will try apo bypass if actually supported */
+        apo_bypass = false;
+        hr = prop->GetValue (PKEY_Devices_AudioDevice_RawProcessingSupported,
+            &var);
+
+        if (SUCCEEDED (hr) && var.vt == VT_BOOL && var.boolVal == VARIANT_TRUE) {
+          hr = ctx->client.As (&client2);
+          if (SUCCEEDED (hr))
+            apo_bypass = true;
+        }
+
+        PropVariantClear (&var);
+      }
+    } else {
+      apo_bypass = false;
+      is_exclusive = false;
+    }
+  }
+
+  if (is_exclusive) {
+    g_assert (prop);
 
     g_ptr_array_set_size (ctx->formats, 0);
     gst_wasapi2_get_exclusive_mode_formats (ctx->client.Get (), prop.Get (),
         ctx->formats);
     if (ctx->formats->len == 0) {
       GST_WARNING ("Couldn't get exclusive mode formats");
-      desc->exclusive = false;
+      is_exclusive = false;
     }
   }
 
-  if (!desc->exclusive) {
+  if (!is_exclusive) {
+    if (apo_bypass) {
+      /* SetClientProperties() may change mix format. Set the property
+       * first */
+      AudioClientProperties props = { };
+      props.cbSize = sizeof (AudioClientProperties);
+      props.bIsOffload = FALSE;
+      /* TODO: make controllable? */
+      props.eCategory = desc->low_latency ? AudioCategory_Communications :
+          AudioCategory_Other;
+      props.Options = AUDCLNT_STREAMOPTIONS_RAW;
+
+      hr = client2->SetClientProperties (&props);
+      if (SUCCEEDED (hr)) {
+        GST_DEBUG ("AUDCLNT_STREAMOPTIONS_RAW is applied with category %d",
+            props.eCategory);
+      } else {
+        GST_WARNING ("SetClientProperties failed, hr: 0x%x", (guint) hr);
+        /* Revert client prop */
+        props.eCategory = AudioCategory_Other;
+        props.Options = AUDCLNT_STREAMOPTIONS_NONE;
+        client2->SetClientProperties (&props);
+        apo_bypass = false;
+      }
+    }
+
     gst_wasapi2_get_shared_mode_formats (ctx->client.Get (), ctx->formats);
     if (ctx->formats->len == 0) {
       if (gst_wasapi2_is_process_loopback_class (endpoint_class)) {
@@ -1211,7 +1290,8 @@ gst_wasapi2_device_manager_create_ctx (IMMDeviceEnumerator * enumerator,
 
   ctx->is_default = is_default;
   ctx->endpoint_class = endpoint_class;
-  ctx->is_exclusive = desc->exclusive;
+  ctx->is_exclusive = is_exclusive;
+  ctx->apo_bypass = apo_bypass;
   ctx->device = device;
   ctx->low_latency = desc->low_latency;
   ctx->latency_time = desc->latency_time;
@@ -1260,7 +1340,7 @@ struct Wasapi2DeviceManager
   CreateCtx (const std::string & device_id,
       GstWasapi2EndpointClass endpoint_class, guint pid, gint64 buffer_time,
       gint64 latency_time, gboolean low_latency, gboolean exclusive,
-      WAVEFORMATEX * mix_format)
+      gboolean apo_bypass, WAVEFORMATEX * mix_format)
   {
     auto desc = std::make_shared<RbufCtxDesc> ();
     desc->device_id = device_id;
@@ -1270,6 +1350,7 @@ struct Wasapi2DeviceManager
     desc->latency_time = latency_time;
     desc->low_latency = low_latency;
     desc->exclusive = exclusive;
+    desc->apo_bypass = apo_bypass;
     if (mix_format)
       desc->mix_format = gst_wasapi2_copy_wfx (mix_format);
 
@@ -1288,7 +1369,7 @@ struct Wasapi2DeviceManager
   CreateCtxAsync (GstWasapi2Rbuf * rbuf, const std::string & device_id,
       GstWasapi2EndpointClass endpoint_class, guint pid, gint64 buffer_time,
       gint64 latency_time, gboolean low_latency, gboolean exclusive,
-      WAVEFORMATEX * mix_format)
+      gboolean apo_bypass, WAVEFORMATEX * mix_format)
   {
     auto desc = std::make_shared<RbufCtxDesc> ();
     desc->rbuf = (GstWasapi2Rbuf *) gst_object_ref (rbuf);
@@ -1299,6 +1380,7 @@ struct Wasapi2DeviceManager
     desc->latency_time = latency_time;
     desc->low_latency = low_latency;
     desc->exclusive = exclusive;
+    desc->apo_bypass = apo_bypass;
     if (mix_format)
       desc->mix_format = gst_wasapi2_copy_wfx (mix_format);
 
@@ -1402,6 +1484,7 @@ struct GstWasapi2RbufPrivate
   guint pid;
   gboolean low_latency = FALSE;
   gboolean exclusive = FALSE;
+  gboolean apo_bypass = FALSE;
 
   std::shared_ptr<RbufCtx> ctx;
   std::atomic<bool> monitor_device_mute = { false };
@@ -1615,7 +1698,7 @@ gst_wasapi2_rbuf_create_ctx (GstWasapi2Rbuf * self)
 
   return inst->CreateCtx (priv->device_id, priv->endpoint_class,
       priv->pid, buffer_time, latency_time, priv->low_latency,
-      priv->exclusive, priv->mix_format);
+      priv->exclusive, priv->apo_bypass, priv->mix_format);
 }
 
 static void
@@ -1639,7 +1722,7 @@ gst_wasapi2_rbuf_create_ctx_async (GstWasapi2Rbuf * self)
 
   inst->CreateCtxAsync (self, priv->device_id, priv->endpoint_class,
       priv->pid, buffer_time, latency_time, priv->low_latency,
-      priv->exclusive, priv->mix_format);
+      priv->exclusive, priv->apo_bypass, priv->mix_format);
 }
 
 static gboolean
@@ -2909,6 +2992,7 @@ gst_wasapi2_rbuf_loop_thread (GstWasapi2Rbuf * self)
             priv->pid = scmd->pid;
             priv->low_latency = scmd->low_latency;
             priv->exclusive = scmd->exclusive;
+            priv->apo_bypass = scmd->apo_bypass;
 
             if (priv->opened) {
               GST_DEBUG_OBJECT (self,
@@ -3160,7 +3244,7 @@ gst_wasapi2_rbuf_new (gpointer parent, GstWasapi2RbufCallback callback)
 void
 gst_wasapi2_rbuf_set_device (GstWasapi2Rbuf * rbuf, const gchar * device_id,
     GstWasapi2EndpointClass endpoint_class, guint pid, gboolean low_latency,
-    gboolean exclusive)
+    gboolean exclusive, gboolean apo_bypass)
 {
   auto cmd = std::make_shared < CommandSetDevice > ();
 
@@ -3170,6 +3254,7 @@ gst_wasapi2_rbuf_set_device (GstWasapi2Rbuf * rbuf, const gchar * device_id,
   cmd->pid = pid;
   cmd->low_latency = low_latency;
   cmd->exclusive = exclusive;
+  cmd->apo_bypass = apo_bypass;
 
   GST_DEBUG_OBJECT (rbuf, "device-id: %s, endpoint-class: %d, pid: %u, "
       "low-latency: %d, exclusive: %d", GST_STR_NULL (device_id),
