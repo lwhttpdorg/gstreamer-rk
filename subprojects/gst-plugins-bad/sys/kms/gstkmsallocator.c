@@ -95,6 +95,21 @@ check_fd (GstKMSAllocator * alloc)
   return alloc->priv->fd > -1;
 }
 
+static void
+gst_kms_allocator_fix_format (GstVideoInfo * info, guint32 drmfmt)
+{
+  guint width = GST_VIDEO_INFO_WIDTH (info);
+  guint height = GST_VIDEO_INFO_HEIGHT (info);
+
+  if (drmfmt == DRM_FORMAT_NV15) {
+    info->stride[0] = GST_ROUND_UP_4 (width * 5 / 4);
+    info->stride[1] = info->stride[0];
+    info->offset[0] = 0;
+    info->offset[1] = info->stride[0] * height;
+    info->size = info->offset[1] + info->stride[0] * height / 2;
+  }
+}
+
 static gboolean
 gst_kms_allocator_memory_create (GstKMSAllocator * allocator,
     GstKMSMemory * kmsmem, GstVideoInfo * vinfo)
@@ -357,6 +372,7 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   guint32 w, h, fmt;
   guint32 pitches[4] = { 0, };
   guint32 offsets[4] = { 0, };
+  guint64 modifiers[4] = {DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR, DRM_FORMAT_MOD_LINEAR};
 
   if (kmsmem->fb_id)
     return TRUE;
@@ -365,28 +381,23 @@ gst_kms_allocator_add_fb (GstKMSAllocator * alloc, GstKMSMemory * kmsmem,
   h = GST_VIDEO_INFO_HEIGHT (vinfo);
   fmt = gst_drm_format_from_video (GST_VIDEO_INFO_FORMAT (vinfo));
 
+  gst_kms_allocator_fix_format (vinfo, fmt);
+
   for (i = 0; i < num_planes; i++) {
     pitches[i] = GST_VIDEO_INFO_PLANE_STRIDE (vinfo, i);
     offsets[i] = in_offsets[i];
+    modifiers[i] = modifier;
   }
 
   GST_DEBUG_OBJECT (alloc, "bo handles: %d, %d, %d, %d", bo_handles[0],
       bo_handles[1], bo_handles[2], bo_handles[3]);
+  GST_DEBUG_OBJECT (alloc, "bo pitches: %d, %d, %d, %d", pitches[0],
+      pitches[1], pitches[2], pitches[3]);
+  GST_DEBUG_OBJECT (alloc, "bo modifiers: 0x%lx, 0x%lx, 0x%lx, 0x%lx", modifiers[0],
+      modifiers[1], modifiers[2], modifiers[3]);
 
-  if (modifier != DRM_FORMAT_MOD_LINEAR) {
-    guint64 modifiers[4];
-
-    for (i = 0; i < num_planes; i++)
-      modifiers[i] = modifier;
-    for (; i < 4; i++)
-      modifiers[i] = DRM_FORMAT_MOD_LINEAR;
-
-    ret = drmModeAddFB2WithModifiers (alloc->priv->fd, w, h, fmt, bo_handles,
-        pitches, offsets, modifiers, &kmsmem->fb_id, DRM_MODE_FB_MODIFIERS);
-  } else {
-    ret = drmModeAddFB2 (alloc->priv->fd, w, h, fmt, bo_handles, pitches,
-        offsets, &kmsmem->fb_id, 0);
-  }
+  ret = drmModeAddFB2WithModifiers (alloc->priv->fd, w, h, fmt, bo_handles,
+          pitches, offsets, modifiers, &kmsmem->fb_id, DRM_MODE_FB_MODIFIERS);
 
   if (ret) {
     GST_ERROR_OBJECT (alloc, "Failed to bind to framebuffer: %s (%d)",
@@ -404,6 +415,7 @@ gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
   GstKMSMemory *kmsmem;
   GstMemory *mem;
   guint32 bo_handle[4] = { 0, };
+  guint64 modifier;
   gint i;
 
   kmsmem = g_new0 (GstKMSMemory, 1);
@@ -423,8 +435,10 @@ gst_kms_allocator_bo_alloc (GstAllocator * allocator, GstVideoInfo * vinfo)
   for (i = 0; i < GST_VIDEO_INFO_N_PLANES (vinfo); i++)
     bo_handle[i] = gst_drm_dumb_memory_get_handle (kmsmem->bo);
 
+  gst_video_dma_drm_format_from_gst_format(GST_VIDEO_INFO_FORMAT (vinfo), &modifier);
+
   if (!gst_kms_allocator_add_fb (alloc, kmsmem, vinfo->offset, vinfo,
-          DRM_FORMAT_MOD_LINEAR, bo_handle))
+          modifier, bo_handle))
     goto fail;
 
   return mem;
