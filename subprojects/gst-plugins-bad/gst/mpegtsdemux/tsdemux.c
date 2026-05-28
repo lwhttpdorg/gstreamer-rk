@@ -2725,9 +2725,14 @@ check_pending_buffers (GstTSDemux * demux)
   GST_DEBUG ("New initial pcr_offset %" GST_TIME_FORMAT,
       GST_TIME_ARGS (offset));
 
-  /* 4. Set the offset on the packetizer */
-  mpegts_packetizer_set_current_pcr_offset (MPEG_TS_BASE_PACKETIZER (demux),
-      offset, demux->program->pcr_pid);
+  /* 4. Set the offset on the packetizer.
+   * Only apply in push mode (live/broadcast stream). In pull mode the PCR
+   * groups are built during the initial scan with pcr_offset=0 representing
+   * stream-relative time; calling set_current_pcr_offset would shift every
+   * group by the current playback position, corrupting all subsequent seeks. */
+  if (GST_MPEGTS_BASE (demux)->mode == BASE_MODE_PUSHING)
+    mpegts_packetizer_set_current_pcr_offset (MPEG_TS_BASE_PACKETIZER (demux),
+        offset, demux->program->pcr_pid);
 
   /* 4. Go over all streams */
   for (tmp = demux->program->stream_list; tmp; tmp = tmp->next) {
