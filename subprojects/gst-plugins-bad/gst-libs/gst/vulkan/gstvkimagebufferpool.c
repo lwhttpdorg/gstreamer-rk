@@ -65,6 +65,11 @@ struct _GstVulkanImageBufferPoolPrivate
 #endif
   GstVulkanOperation *exec;
   gboolean add_videometa;
+  /* Set via gst_vulkan_image_buffer_pool_config_set_export_handle_types().
+   * Non-zero value causes the pool to chain VkExternalMemoryImageCreateInfo
+   * into each VkImageCreateInfo and VkExportMemoryAllocateInfo into each
+   * backing VkMemoryAllocateInfo. */
+  VkExternalMemoryHandleTypeFlags export_handle_types;
 };
 
 static void gst_vulkan_image_buffer_pool_finalize (GObject * object);
@@ -147,6 +152,50 @@ gst_vulkan_image_buffer_pool_config_set_encode_caps (GstStructure * config,
   g_return_if_fail (GST_IS_CAPS (caps));
 
   gst_structure_set (config, "encode-caps", GST_TYPE_CAPS, caps, NULL);
+}
+
+/**
+ * gst_vulkan_image_buffer_pool_config_set_export_handle_types:
+ * @config: the #GstStructure with the pool's configuration.
+ * @handle_types: the VkExternalMemoryHandleTypeFlags to request.
+ *
+ * Sets the external memory handle types for exportable-memory mode.
+ * A non-zero value activates the exportable path; the pool will probe driver
+ * support at set config time and wire up VkExternalMemoryImageCreateInfo
+ * and VkExportMemoryAllocateInfo for each allocation.
+ *
+ * Since: 1.30
+ */
+void
+gst_vulkan_image_buffer_pool_config_set_export_handle_types (GstStructure *
+    config, VkExternalMemoryHandleTypeFlags handle_types)
+{
+  g_return_if_fail (GST_IS_STRUCTURE (config));
+
+  gst_structure_set (config, "export-handle-types", G_TYPE_UINT,
+      (guint) handle_types, NULL);
+}
+
+/**
+ * gst_vulkan_image_buffer_pool_config_get_export_handle_types:
+ * @config: the #GstStructure with the pool's configuration.
+ * @handle_types: (out): the VkExternalMemoryHandleTypeFlags value.
+ *
+ * Gets the external memory handle types previously set via
+ * gst_vulkan_image_buffer_pool_config_set_export_handle_types().
+ *
+ * Since: 1.30
+ */
+void
+gst_vulkan_image_buffer_pool_config_get_export_handle_types (GstStructure *
+    config, VkExternalMemoryHandleTypeFlags * handle_types)
+{
+  g_return_if_fail (GST_IS_STRUCTURE (config));
+  g_return_if_fail (handle_types != NULL);
+
+  if (!gst_structure_get_uint (config, "export-handle-types",
+          (guint *) handle_types))
+    *handle_types = 0;
 }
 
 /**
@@ -248,6 +297,80 @@ _is_video_profile_independent (VkImageUsageFlags requested_usage)
   return ((requested_usage & video_dependent) == 0);
 }
 
+/* Verify that the driver actually advertises external-memory export for
+ * the requested format/usage/tiling combination. We test every VkFormat
+ * the pool plans to allocate: per-plane allocation goes through multiple
+ * VkFormats (e.g. R8 + R8G8 for NV12), so all of them have to report
+ * VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT or the import will fail on
+ * the last plane and leave us with half-valid state.
+ *
+ * This probe runs once at set_config() time; failing here gives the
+ * caller a clean early error instead of producing VkImages whose memory
+ * cannot actually be exported. */
+static gboolean
+_check_exportable_support (GstVulkanImageBufferPool * vk_pool,
+    VkImageTiling tiling, VkImageUsageFlags usage,
+    VkExternalMemoryHandleTypeFlags handle_types)
+{
+  GstVulkanImageBufferPoolPrivate *priv = GET_PRIV (vk_pool);
+  VkPhysicalDevice gpu =
+      gst_vulkan_device_get_physical_device (vk_pool->device);
+  int i;
+
+  for (i = 0; i < priv->n_imgs; i++) {
+    VkPhysicalDeviceExternalImageFormatInfo ext_info = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
+      .pNext = NULL,
+      .handleType = (VkExternalMemoryHandleTypeFlagBits) handle_types,
+    };
+    VkPhysicalDeviceImageFormatInfo2 fmt_info = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+      .pNext = &ext_info,
+      .format = priv->vk_fmts[i],
+      .type = VK_IMAGE_TYPE_2D,
+      .tiling = tiling,
+      .usage = usage,
+      .flags = priv->img_flags,
+    };
+    VkExternalImageFormatProperties ext_props = {
+      .sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES,
+      .pNext = NULL,
+    };
+    VkImageFormatProperties2 fmt_props = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+      .pNext = &ext_props,
+    };
+    VkResult err =
+        vkGetPhysicalDeviceImageFormatProperties2 (gpu, &fmt_info, &fmt_props);
+
+    if (err != VK_SUCCESS) {
+      GST_WARNING_OBJECT (vk_pool,
+          "vkGetPhysicalDeviceImageFormatProperties2 failed for "
+          "vk_fmt=%d usage=0x%x flags=0x%x tiling=%d handle=0x%x: %d",
+          (gint) priv->vk_fmts[i], (guint) usage, (guint) priv->img_flags,
+          (gint) tiling, (guint) handle_types, (int) err);
+      return FALSE;
+    }
+
+    if ((ext_props.externalMemoryProperties.externalMemoryFeatures
+            & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) == 0) {
+      GST_WARNING_OBJECT (vk_pool,
+          "driver does not advertise EXPORTABLE for "
+          "vk_fmt=%d usage=0x%x flags=0x%x tiling=%d handle=0x%x "
+          "(features=0x%x compatHandles=0x%x exportFromImportedHandles=0x%x)",
+          (gint) priv->vk_fmts[i], (guint) usage, (guint) priv->img_flags,
+          (gint) tiling, (guint) handle_types,
+          (guint) ext_props.externalMemoryProperties.externalMemoryFeatures,
+          (guint) ext_props.externalMemoryProperties.compatibleHandleTypes,
+          (guint) ext_props.externalMemoryProperties.
+          exportFromImportedHandleTypes);
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
 static gboolean
 gst_vulkan_image_buffer_pool_fill_buffer (GstVulkanImageBufferPool * vk_pool,
     VkImageTiling tiling, gsize offset[GST_VIDEO_MAX_PLANES],
@@ -256,6 +379,11 @@ gst_vulkan_image_buffer_pool_fill_buffer (GstVulkanImageBufferPool * vk_pool,
   GstVulkanImageBufferPoolPrivate *priv = GET_PRIV (vk_pool);
   int i;
   VkImageCreateInfo image_info;
+  VkExternalMemoryImageCreateInfo ext_image_info = {
+    .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+    .pNext = NULL,
+    .handleTypes = priv->export_handle_types,
+  };
 #if GST_VULKAN_HAVE_VIDEO_EXTENSIONS
   VkVideoProfileInfoKHR profiles[2];
   VkVideoProfileListInfoKHR profile_list = {
@@ -301,6 +429,16 @@ gst_vulkan_image_buffer_pool_fill_buffer (GstVulkanImageBufferPool * vk_pool,
       image_info.pNext = &profile_list;
 #endif
     }
+  }
+
+  /* Chain VkExternalMemoryImageCreateInfo on top of whatever pNext was
+   * already set (NULL or the video profile list). The backing allocator
+   * (gstvkimagememory.c) scans this same pNext chain to discover the
+   * requested handle types and mirrors them into a
+   * VkExportMemoryAllocateInfo for vkAllocateMemory. */
+  if (priv->export_handle_types != 0) {
+    ext_image_info.pNext = image_info.pNext;
+    image_info.pNext = &ext_image_info;
   }
 
   priv->v_info.size = 0;
@@ -462,6 +600,26 @@ gst_vulkan_image_buffer_pool_set_config (GstBufferPool * pool,
 
   priv->usage = requested_usage;
 
+  /* Exportable-memory: activated when the caller sets a non-zero handle-types
+   * value via gst_vulkan_image_buffer_pool_config_set_export_handle_types(). */
+  priv->export_handle_types = 0;
+  gst_vulkan_image_buffer_pool_config_get_export_handle_types (config,
+      &priv->export_handle_types);
+  if (priv->export_handle_types != 0) {
+    if (!_check_exportable_support (vk_pool, tiling, requested_usage,
+            priv->export_handle_types))
+      goto exportable_unsupported;
+  }
+
+  GST_DEBUG_OBJECT (pool,
+      "pool config: usage=0x%x img_flags=0x%x n_imgs=%d vk_fmt[0]=%d "
+      "video-usage=%d sampleable=%d export_handle_types=0x%x",
+      (guint) priv->usage, (guint) priv->img_flags, priv->n_imgs,
+      (gint) priv->vk_fmts[0], _is_video_usage (requested_usage),
+      ((requested_usage & (VK_IMAGE_USAGE_SAMPLED_BIT
+                  | VK_IMAGE_USAGE_STORAGE_BIT)) != 0),
+      (guint) priv->export_handle_types);
+
   /* get the size of the buffer to allocate */
   if (!gst_vulkan_image_buffer_pool_fill_buffer (vk_pool, tiling, NULL, NULL))
     goto image_failed;
@@ -511,6 +669,15 @@ missing_profile:
 image_failed:
   {
     GST_WARNING_OBJECT (pool, "Failed to allocate image");
+    return FALSE;
+  }
+exportable_unsupported:
+  {
+    GST_WARNING_OBJECT (pool,
+        "Exportable external memory (handle_types=0x%x) is not advertised as "
+        "exportable by this driver for the requested format/usage/tiling; "
+        "refusing pool config instead of silently producing images that "
+        "cannot be imported.", (guint) priv->export_handle_types);
     return FALSE;
   }
 }
