@@ -9326,6 +9326,7 @@ qtdemux_parse_node (GstQTDemux * qtdemux, GNode * node, const guint8 * buffer,
       case GST_MAKE_FOURCC ('d', 'v', 'c', 'a'):
       case GST_MAKE_FOURCC ('Q', 'c', 'l', 'p'):
       case GST_MAKE_FOURCC ('a', 'c', '-', '4'):
+      case GST_MAKE_FOURCC ('d', 'b', '-', 'e'):
       case FOURCC_enca:
       case FOURCC_mha1:
       case FOURCC_mhm1:
@@ -20358,6 +20359,12 @@ qtdemux_audio_caps (GstQTDemux * qtdemux, QtDemuxStream * stream,
     {
       _codec ("AC4");
       caps = gst_caps_new_empty_simple ("audio/x-ac4");
+      break;
+    }
+    case GST_MAKE_FOURCC ('d', 'b', '-', 'e'):
+    {
+      _codec ("Dolby E");
+      caps = gst_caps_new_empty_simple ("audio/x-dolby-e");
       break;
     }
     case FOURCC_mha1:
