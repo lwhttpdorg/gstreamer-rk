@@ -1858,6 +1858,20 @@ usage.</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="schedule_close" c:identifier="gst_rtsp_client_schedule_close" version="1.25">
+        <doc xml:space="preserve" filename="../subprojects/gst-rtsp-server/gst/rtsp-server/rtsp-client.c">Schedule @client close call into watch context to make it
+safe for concurrent read operations.</doc>
+        <source-position filename="../subprojects/gst-rtsp-server/gst/rtsp-server/rtsp-client.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="client" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-rtsp-server/gst/rtsp-server/rtsp-client.c">a #GstRTSPClient</doc>
+            <type name="RTSPClient" c:type="GstRTSPClient*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
       <method name="send_message" c:identifier="gst_rtsp_client_send_message">
         <doc xml:space="preserve" filename="../subprojects/gst-rtsp-server/gst/rtsp-server/rtsp-client.c">Send a message message to the remote end. @message must be a
 #GST_RTSP_MESSAGE_REQUEST or a #GST_RTSP_MESSAGE_RESPONSE.</doc>
@@ -7720,7 +7734,7 @@ gst_rtsp_server_create_source() and attach it to @context manually.</doc>
       <method name="client_filter" c:identifier="gst_rtsp_server_client_filter">
         <doc xml:space="preserve" filename="../subprojects/gst-rtsp-server/gst/rtsp-server/rtsp-server.c">Call @func for each client managed by @server. The result value of @func
 determines what happens to the client. @func will be called with @server
-locked so no further actions on @server can be performed from @func.
+unlocked so any actions on @server can be performed from @func.
 
 If @func returns #GST_RTSP_FILTER_REMOVE, the client will be removed from
 @server.

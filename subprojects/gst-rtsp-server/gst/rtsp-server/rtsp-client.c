@@ -1227,6 +1227,28 @@ do_close (gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
+/**
+ * gst_rtsp_client_schedule_close:
+ * @client: a #GstRTSPClient
+ *
+ * Schedule @client close call into watch context to make it
+ * safe for concurrent read operations.
+ *
+ * Since: 1.25
+ */
+void
+gst_rtsp_client_schedule_close (GstRTSPClient * client)
+{
+  GstRTSPClientPrivate *priv = client->priv;
+  GSource *idle_src;
+
+  /* close in watch context */
+  idle_src = g_idle_source_new ();
+  g_source_set_callback (idle_src, do_close, client, NULL);
+  g_source_attach (idle_src, priv->watch_context);
+  g_source_unref (idle_src);
+}
+
 static gboolean
 do_send_data (GstBuffer * buffer, guint8 channel, GstRTSPClient * client)
 {
@@ -1255,13 +1277,7 @@ do_send_data (GstBuffer * buffer, guint8 channel, GstRTSPClient * client)
   gst_rtsp_message_unset (&message);
 
   if (!ret) {
-    GSource *idle_src;
-
-    /* close in watch context */
-    idle_src = g_idle_source_new ();
-    g_source_set_callback (idle_src, do_close, client, NULL);
-    g_source_attach (idle_src, priv->watch_context);
-    g_source_unref (idle_src);
+    gst_rtsp_client_schedule_close (client);
   }
 
   return ret;

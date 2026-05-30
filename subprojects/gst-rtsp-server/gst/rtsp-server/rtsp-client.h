@@ -247,6 +247,9 @@ GST_RTSP_SERVER_API
 void                  gst_rtsp_client_close             (GstRTSPClient * client);
 
 GST_RTSP_SERVER_API
+void                  gst_rtsp_client_schedule_close    (GstRTSPClient * client);
+
+GST_RTSP_SERVER_API
 void                  gst_rtsp_client_set_send_func     (GstRTSPClient *client,
                                                          GstRTSPClientSendFunc func,
                                                          gpointer user_data,

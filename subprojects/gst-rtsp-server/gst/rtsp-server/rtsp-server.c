@@ -1432,7 +1432,7 @@ no_source:
  *
  * Call @func for each client managed by @server. The result value of @func
  * determines what happens to the client. @func will be called with @server
- * locked so no further actions on @server can be performed from @func.
+ * unlocked so any actions on @server can be performed from @func.
  *
  * If @func returns #GST_RTSP_FILTER_REMOVE, the client will be removed from
  * @server.
@@ -1455,67 +1455,46 @@ gst_rtsp_server_client_filter (GstRTSPServer * server,
 {
   GstRTSPServerPrivate *priv;
   GList *result, *walk, *next;
-  GHashTable *visited;
-  guint cookie;
 
   g_return_val_if_fail (GST_IS_RTSP_SERVER (server), NULL);
 
   priv = server->priv;
 
   result = NULL;
-  if (func)
-    visited = g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
 
   GST_RTSP_SERVER_LOCK (server);
-restart:
-  cookie = priv->clients_cookie;
-  for (walk = priv->clients; walk; walk = next) {
+  for (walk = priv->clients; walk; walk = g_list_next (walk)) {
     ClientContext *cctx = walk->data;
     GstRTSPClient *client = cctx->client;
-    GstRTSPFilterResult res;
-    gboolean changed;
 
-    next = g_list_next (walk);
-
-    if (func) {
-      /* only visit each media once */
-      if (g_hash_table_contains (visited, client))
-        continue;
-
-      g_hash_table_add (visited, g_object_ref (client));
-      GST_RTSP_SERVER_UNLOCK (server);
-
-      res = func (server, client, user_data);
-
-      GST_RTSP_SERVER_LOCK (server);
-    } else
-      res = GST_RTSP_FILTER_REF;
-
-    changed = (cookie != priv->clients_cookie);
-
-    switch (res) {
-      case GST_RTSP_FILTER_REMOVE:
-        GST_RTSP_SERVER_UNLOCK (server);
-
-        gst_rtsp_client_close (client);
-
-        GST_RTSP_SERVER_LOCK (server);
-        changed |= (cookie != priv->clients_cookie);
-        break;
-      case GST_RTSP_FILTER_REF:
-        result = g_list_prepend (result, g_object_ref (client));
-        break;
-      case GST_RTSP_FILTER_KEEP:
-      default:
-        break;
-    }
-    if (changed)
-      goto restart;
+    result = g_list_append (result, g_object_ref (client));
   }
   GST_RTSP_SERVER_UNLOCK (server);
 
-  if (func)
-    g_hash_table_unref (visited);
+  if (func) {
+    for (walk = result; walk; walk = next) {
+      GstRTSPClient *client = walk->data;
+      GstRTSPFilterResult res;
+
+      next = g_list_next (walk);
+
+      res = func (server, client, user_data);
+
+      switch (res) {
+        case GST_RTSP_FILTER_REF:
+          break;
+        case GST_RTSP_FILTER_REMOVE:
+          gst_rtsp_client_schedule_close (client);
+          /* fall-through */
+        case GST_RTSP_FILTER_KEEP:
+          /* fall-through */
+        default:
+          result = g_list_delete_link (result, walk);
+          g_object_unref (client);
+          break;
+      }
+    }
+  }
 
   return result;
 }
