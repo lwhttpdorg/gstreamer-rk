@@ -10903,7 +10903,7 @@ gst_qtdemux_add_stream (GstQTDemux * qtdemux,
 {
   gboolean ret = TRUE;
 
-  if (stream->subtype == FOURCC_vide) {
+  if (stream->subtype == FOURCC_vide || stream->subtype == FOURCC_pict) {
     gchar *name = g_strdup_printf ("video_%u", qtdemux->n_video_streams);
 
     stream->pad =
