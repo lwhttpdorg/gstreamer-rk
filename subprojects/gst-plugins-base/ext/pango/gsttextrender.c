@@ -67,6 +67,13 @@ GST_DEBUG_CATEGORY_EXTERN (pango_debug);
 
 #define MINIMUM_OUTLINE_OFFSET 1.0
 
+#define DEFAULT_PROP_COLOR      0xffffffff
+#define DEFAULT_PROP_OUTLINE_COLOR 0xff000000
+#define DEFAULT_PROP_BACKGROUND_COLOR 0xff000000
+
+#define DEFAULT_PROP_DRAW_SHADOW FALSE
+#define DEFAULT_PROP_DRAW_OUTLINE TRUE
+#define DEFAULT_PROP_SHADING	FALSE
 #define DEFAULT_PROP_VALIGNMENT GST_TEXT_RENDER_VALIGN_BASELINE
 #define DEFAULT_PROP_HALIGNMENT GST_TEXT_RENDER_HALIGN_CENTER
 #define DEFAULT_PROP_LINE_ALIGNMENT GST_TEXT_RENDER_LINE_ALIGN_CENTER
@@ -76,15 +83,24 @@ GST_DEBUG_CATEGORY_EXTERN (pango_debug);
 #define DEFAULT_RENDER_WIDTH 720
 #define DEFAULT_RENDER_HEIGHT 576
 
+#define DEFAULT_PROP_OUTLINE_OFFSET 4.0
+
 enum
 {
   PROP_0,
+  PROP_DRAW_SHADOW,
+  PROP_DRAW_OUTLINE,
+  PROP_SHADING,
   PROP_HALIGNMENT,
   PROP_VALIGNMENT,
   PROP_LINE_ALIGNMENT,
   PROP_XPAD,
   PROP_YPAD,
-  PROP_FONT_DESC
+  PROP_FONT_DESC,
+  PROP_OUTLINE_OFFSET,
+  PROP_COLOR,
+  PROP_OUTLINE_COLOR,
+  PROP_BACKGROUND_COLOR
 };
 
 #define VIDEO_FORMATS "{ AYUV, ARGB } "
@@ -208,6 +224,36 @@ gst_text_render_class_init (GstTextRenderClass * klass)
           "See documentation of "
           "pango_font_description_from_string"
           " for syntax.", "", G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_COLOR,
+      g_param_spec_uint ("color", "Color",
+          "Color to use for text (big-endian ARGB).", 0, G_MAXUINT32,
+          DEFAULT_PROP_COLOR,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_OUTLINE_COLOR,
+      g_param_spec_uint ("outline-color", "Text Outline Color",
+          "Color to use for outline the text (big-endian ARGB).", 0,
+          G_MAXUINT32, DEFAULT_PROP_OUTLINE_COLOR,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass),
+      PROP_BACKGROUND_COLOR, g_param_spec_uint ("background-color",
+          "Shaded Background Color",
+          "Color to use for background behind the text (big-endian ARGB).", 0,
+          G_MAXUINT32, DEFAULT_PROP_BACKGROUND_COLOR,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_DRAW_SHADOW,
+      g_param_spec_boolean ("draw-shadow", "draw-shadow",
+          "Whether to draw shadow",
+          DEFAULT_PROP_DRAW_SHADOW,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_DRAW_OUTLINE,
+      g_param_spec_boolean ("draw-outline", "draw-outline",
+          "Whether to draw outline",
+          DEFAULT_PROP_DRAW_OUTLINE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_SHADING,
+      g_param_spec_boolean ("shaded-background", "shaded background",
+          "Whether to shade the background under the text area",
+          DEFAULT_PROP_SHADING, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_VALIGNMENT,
       g_param_spec_enum ("valignment", "vertical alignment",
           "Vertical alignment of the text", GST_TYPE_TEXT_RENDER_VALIGN,
@@ -229,6 +275,11 @@ gst_text_render_class_init (GstTextRenderClass * klass)
           "Alignment of text lines relative to each other.",
           GST_TYPE_TEXT_RENDER_LINE_ALIGN, DEFAULT_PROP_LINE_ALIGNMENT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), PROP_OUTLINE_OFFSET,
+      g_param_spec_double ("outline-offset", "Outline Offset",
+          "Offset for the outline text", 0.0, G_MAXDOUBLE,
+          DEFAULT_PROP_OUTLINE_OFFSET,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_type_mark_as_plugin_api (GST_TYPE_TEXT_RENDER_HALIGN, 0);
   gst_type_mark_as_plugin_api (GST_TYPE_TEXT_RENDER_VALIGN, 0);
@@ -242,9 +293,19 @@ gst_text_render_adjust_values_with_fontdesc (GstTextRender * render,
   gint font_size = pango_font_description_get_size (desc) / PANGO_SCALE;
 
   render->shadow_offset = (double) (font_size) / 13.0;
-  render->outline_offset = (double) (font_size) / 15.0;
+
   if (render->outline_offset < MINIMUM_OUTLINE_OFFSET)
     render->outline_offset = MINIMUM_OUTLINE_OFFSET;
+}
+
+static gboolean
+gst_text_render_filter_foreground_attr (PangoAttribute * attr, gpointer data)
+{
+  if (attr->klass->type == PANGO_ATTR_FOREGROUND) {
+    return FALSE;
+  } else {
+    return TRUE;
+  }
 }
 
 static void
@@ -252,65 +313,105 @@ gst_text_render_render_pangocairo (GstTextRender * render)
 {
   cairo_t *cr;
   cairo_surface_t *surface;
-  cairo_t *cr_shadow;
-  cairo_surface_t *surface_shadow;
   PangoRectangle ink_rect, logical_rect;
   gint width, height;
+  double a, r, g, b;
+  double shadow_offset, outline_offset;
 
   pango_layout_get_pixel_extents (render->layout, &ink_rect, &logical_rect);
 
-  width = logical_rect.width + render->shadow_offset;
-  height = logical_rect.height + logical_rect.y + render->shadow_offset;
-
-  surface_shadow = cairo_image_surface_create (CAIRO_FORMAT_A8, width, height);
-  cr_shadow = cairo_create (surface_shadow);
-
-  /* clear shadow surface */
-  cairo_set_operator (cr_shadow, CAIRO_OPERATOR_CLEAR);
-  cairo_paint (cr_shadow);
-  cairo_set_operator (cr_shadow, CAIRO_OPERATOR_OVER);
-
-  /* draw shadow text */
-  cairo_save (cr_shadow);
-  cairo_set_source_rgba (cr_shadow, 0.0, 0.0, 0.0, 0.5);
-  cairo_translate (cr_shadow, render->shadow_offset, render->shadow_offset);
-  pango_cairo_show_layout (cr_shadow, render->layout);
-  cairo_restore (cr_shadow);
-
-  /* draw outline text */
-  cairo_save (cr_shadow);
-  cairo_set_source_rgb (cr_shadow, 0.0, 0.0, 0.0);
-  cairo_set_line_width (cr_shadow, render->outline_offset);
-  pango_cairo_layout_path (cr_shadow, render->layout);
-  cairo_stroke (cr_shadow);
-  cairo_restore (cr_shadow);
-
-  cairo_destroy (cr_shadow);
+  shadow_offset = render->draw_shadow ? render->shadow_offset : 0.0;
+  outline_offset = render->draw_outline ? render->outline_offset : 0.0;
+  width = logical_rect.width + shadow_offset + outline_offset;
+  height =
+      logical_rect.height + logical_rect.y + shadow_offset + outline_offset;
 
   render->text_image = g_realloc (render->text_image, 4 * width * height);
 
   surface = cairo_image_surface_create_for_data (render->text_image,
       CAIRO_FORMAT_ARGB32, width, height, width * 4);
   cr = cairo_create (surface);
-  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-  cairo_paint (cr);
+
+  if (render->want_shading) {
+    cairo_save (cr);
+    a = (render->background_color >> 24) & 0xff;
+    r = (render->background_color >> 16) & 0xff;
+    g = (render->background_color >> 8) & 0xff;
+    b = (render->background_color >> 0) & 0xff;
+    cairo_set_source_rgba (cr, r / 255.0, g / 255.0, b / 255.0, a / 255.0);
+    cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint (cr);
+    cairo_restore (cr);
+  } else {
+    cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint (cr);
+  }
+
   cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
 
+  /* draw shadow text */
+  if (render->draw_shadow) {
+    PangoAttrList *origin_attr, *filtered_attr, *temp_attr;
+
+    /* Store a ref on the original attributes for later restoration */
+    origin_attr =
+        pango_attr_list_ref (pango_layout_get_attributes (render->layout));
+    /* Take a copy of the original attributes, because pango_attr_list_filter
+     * modifies the passed list */
+    temp_attr = pango_attr_list_copy (origin_attr);
+    filtered_attr =
+        pango_attr_list_filter (temp_attr,
+        gst_text_render_filter_foreground_attr, NULL);
+    pango_attr_list_unref (temp_attr);
+
+    cairo_save (cr);
+    if (render->draw_outline) {
+      cairo_translate (cr, render->outline_offset + render->shadow_offset,
+          render->outline_offset + render->shadow_offset);
+    } else {
+      cairo_translate (cr, render->shadow_offset, render->shadow_offset);
+    }
+    cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.5);
+    pango_layout_set_attributes (render->layout, filtered_attr);
+    pango_cairo_show_layout (cr, render->layout);
+    pango_layout_set_attributes (render->layout, origin_attr);
+    pango_attr_list_unref (filtered_attr);
+    pango_attr_list_unref (origin_attr);
+    cairo_restore (cr);
+  }
+
+  /* draw outline text */
+  if (render->draw_outline) {
+    a = (render->outline_color >> 24) & 0xff;
+    r = (render->outline_color >> 16) & 0xff;
+    g = (render->outline_color >> 8) & 0xff;
+    b = (render->outline_color >> 0) & 0xff;
+
+    cairo_save (cr);
+    cairo_translate (cr, render->outline_offset, render->outline_offset);
+    cairo_set_source_rgba (cr, r / 255.0, g / 255.0, b / 255.0, a / 255.0);
+    cairo_set_line_width (cr, render->outline_offset);
+    pango_cairo_layout_path (cr, render->layout);
+    cairo_stroke (cr);
+    cairo_restore (cr);
+  }
+
   /* set default color */
-  cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+  a = (render->color >> 24) & 0xff;
+  r = (render->color >> 16) & 0xff;
+  g = (render->color >> 8) & 0xff;
+  b = (render->color >> 0) & 0xff;
 
   cairo_save (cr);
   /* draw text */
+  if (render->draw_outline) {
+    cairo_translate (cr, render->outline_offset, render->outline_offset);
+  }
+  cairo_set_source_rgba (cr, r / 255.0, g / 255.0, b / 255.0, a / 255.0);
   pango_cairo_show_layout (cr, render->layout);
   cairo_restore (cr);
 
-  /* composite shadow with offset */
-  cairo_set_operator (cr, CAIRO_OPERATOR_DEST_OVER);
-  cairo_set_source_surface (cr, surface_shadow, 0.0, 0.0);
-  cairo_paint (cr);
-
   cairo_destroy (cr);
-  cairo_surface_destroy (surface_shadow);
   cairo_surface_destroy (surface);
   render->image_width = width;
   render->image_height = height;
@@ -724,6 +825,14 @@ gst_text_render_init (GstTextRender * render)
       pango_font_map_create_context (PANGO_FONT_MAP (fontmap));
   g_object_unref (fontmap);
 
+  render->color = DEFAULT_PROP_COLOR;
+  render->outline_color = DEFAULT_PROP_OUTLINE_COLOR;
+  render->background_color = DEFAULT_PROP_BACKGROUND_COLOR;
+
+  render->draw_shadow = DEFAULT_PROP_DRAW_SHADOW;
+  render->draw_outline = DEFAULT_PROP_DRAW_OUTLINE;
+  render->want_shading = DEFAULT_PROP_SHADING;
+
   render->line_align = DEFAULT_PROP_LINE_ALIGNMENT;
   render->layout = pango_layout_new (render->pango_context);
   pango_layout_set_alignment (render->layout,
@@ -747,6 +856,15 @@ gst_text_render_set_property (GObject * object, guint prop_id,
   GstTextRender *render = GST_TEXT_RENDER (object);
 
   switch (prop_id) {
+    case PROP_DRAW_SHADOW:
+      render->draw_shadow = g_value_get_boolean (value);
+      break;
+    case PROP_DRAW_OUTLINE:
+      render->draw_outline = g_value_get_boolean (value);
+      break;
+    case PROP_SHADING:
+      render->want_shading = g_value_get_boolean (value);
+      break;
     case PROP_VALIGNMENT:
       render->valign = g_value_get_enum (value);
       break;
@@ -783,6 +901,18 @@ gst_text_render_set_property (GObject * object, guint prop_id,
       }
       break;
     }
+    case PROP_COLOR:
+      render->color = g_value_get_uint (value);
+      break;
+    case PROP_OUTLINE_COLOR:
+      render->outline_color = g_value_get_uint (value);
+      break;
+    case PROP_BACKGROUND_COLOR:
+      render->background_color = g_value_get_uint (value);
+      break;
+    case PROP_OUTLINE_OFFSET:
+      render->outline_offset = g_value_get_double (value);
+      break;
 
     default:
       break;
@@ -796,6 +926,15 @@ gst_text_render_get_property (GObject * object, guint prop_id,
   GstTextRender *render = GST_TEXT_RENDER (object);
 
   switch (prop_id) {
+    case PROP_DRAW_SHADOW:
+      g_value_set_boolean (value, render->draw_shadow);
+      break;
+    case PROP_DRAW_OUTLINE:
+      g_value_set_boolean (value, render->draw_outline);
+      break;
+    case PROP_SHADING:
+      g_value_set_boolean (value, render->want_shading);
+      break;
     case PROP_VALIGNMENT:
       g_value_set_enum (value, render->valign);
       break;
@@ -810,6 +949,18 @@ gst_text_render_get_property (GObject * object, guint prop_id,
       break;
     case PROP_YPAD:
       g_value_set_int (value, render->ypad);
+      break;
+    case PROP_COLOR:
+      g_value_set_uint (value, render->color);
+      break;
+    case PROP_OUTLINE_COLOR:
+      g_value_set_uint (value, render->outline_color);
+      break;
+    case PROP_BACKGROUND_COLOR:
+      g_value_set_uint (value, render->background_color);
+      break;
+    case PROP_OUTLINE_OFFSET:
+      g_value_set_double (value, render->outline_offset);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

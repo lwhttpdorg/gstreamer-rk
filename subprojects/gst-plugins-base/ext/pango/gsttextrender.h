@@ -72,9 +72,19 @@ struct _GstTextRender {
     GstElement            element;
 
     GstPad               *sinkpad, *srcpad;
+
     gint                  width;
     gint                  height;
     PangoLayout          *layout;
+
+    gboolean              draw_shadow;
+    gboolean              draw_outline;
+    gboolean              want_shading;
+
+    guint                 color;
+    guint                 outline_color;
+    guint                 background_color;
+
     gdouble               shadow_offset;
     gdouble               outline_offset;
     guchar               *text_image;
