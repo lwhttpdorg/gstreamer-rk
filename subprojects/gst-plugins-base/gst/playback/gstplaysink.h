@@ -103,6 +103,10 @@ gboolean         gst_play_sink_reconfigure    (GstPlaySink * playsink);
 
 GstPlaySinkType  gst_play_sink_type_from_stream_type (GstStreamType stream_type);
 
+GstElement *     gst_play_sink_get_or_create_sink (GstPlaySink * playsink, GstPlaySinkType type);
+
+GstCaps *        gst_play_sink_get_sink_caps (GstPlaySink * playsink, GstPlaySinkType type);
+
 G_END_DECLS
 
 #endif /* __GST_PLAY_SINK_H__ */

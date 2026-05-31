@@ -1488,18 +1488,15 @@ try_element (GstPlaySink * playsink, GstElement * element, gboolean unref)
 {
   GstStateChangeReturn ret;
 
-  if (element) {
-#ifndef G_DISABLE_ASSERT
+  if (element && GST_STATE (element) != GST_STATE_READY) {
     GstBus *element_bus = gst_element_get_bus (element);
-    g_assert (!element_bus);
-#endif
     gst_element_set_bus (element, GST_BIN_CAST (playsink)->child_bus);
 
     ret = gst_element_set_state (element, GST_STATE_READY);
 
     if (ret == GST_STATE_CHANGE_FAILURE) {
       GST_DEBUG_OBJECT (playsink, "failed state change..");
-      gst_element_set_bus (element, NULL);
+      gst_element_set_bus (element, element_bus);
       gst_element_set_state (element, GST_STATE_NULL);
       if (unref)
         gst_object_unref (element);
@@ -1756,6 +1753,74 @@ update_colorbalance (GstPlaySink * playsink)
   gst_object_unref (balance);
 }
 
+/* if the element is created by playsink a reference is returned */
+static GstElement *
+gst_play_sink_create_audio_sink (GstPlaySink * playsink)
+{
+  GstElement *elem = playsink->audio_sink;
+
+  if (elem) {
+    GST_DEBUG_OBJECT (playsink, "trying configured audiosink %" GST_PTR_FORMAT,
+        elem);
+    return try_element (playsink, elem, FALSE);
+  }
+
+  GST_DEBUG_OBJECT (playsink, "trying autoaudiosink");
+  elem = gst_element_factory_make ("autoaudiosink", "audiosink");
+  if (try_element (playsink, elem, TRUE))
+    return playsink->audio_sink = gst_object_ref (elem);
+
+  if (elem)
+    gst_object_unref (elem);
+
+  /* if default sink from config.h is different then try it too */
+  if (strcmp (DEFAULT_AUDIOSINK, "autoaudiosink") == 0)
+    return NULL;
+
+  GST_DEBUG_OBJECT (playsink, "trying " DEFAULT_AUDIOSINK);
+  elem = gst_element_factory_make (DEFAULT_AUDIOSINK, "audiosink");
+  if (try_element (playsink, elem, TRUE))
+    return playsink->audio_sink = gst_object_ref (elem);
+
+  if (elem)
+    gst_object_unref (elem);
+
+  return NULL;
+}
+
+/* if the element is created by playsink a reference is returned */
+static GstElement *
+gst_play_sink_create_video_sink (GstPlaySink * playsink)
+{
+  GstElement *elem = playsink->video_sink;
+
+  if (elem) {
+    GST_DEBUG_OBJECT (playsink, "trying configured videosink");
+    return try_element (playsink, playsink->video_sink, FALSE);
+  }
+
+  /* only try fallback if no specific sink was chosen */
+  GST_DEBUG_OBJECT (playsink, "trying autovideosink");
+  elem = gst_element_factory_make ("autovideosink", "videosink");
+  if (try_element (playsink, elem, TRUE))
+    return playsink->video_sink = gst_object_ref (elem);
+
+  if (elem)
+    gst_object_unref (elem);
+
+  /* if default sink from config.h is different then try it too */
+  if (strcmp (DEFAULT_VIDEOSINK, "autovideosink")) {
+    GST_DEBUG_OBJECT (playsink, "trying " DEFAULT_VIDEOSINK);
+    elem = gst_element_factory_make (DEFAULT_VIDEOSINK, "videosink");
+    if (try_element (playsink, elem, TRUE))
+      return playsink->video_sink = gst_object_ref (elem);
+    if (elem)
+      gst_object_unref (elem);
+  }
+
+  return NULL;
+}
+
 /* make the element (bin) that contains the elements needed to perform
  * video display.
  *
@@ -1783,29 +1848,11 @@ gen_video_chain (GstPlaySink * playsink, gboolean raw, gboolean async)
 
   GST_DEBUG_OBJECT (playsink, "making video chain %p", chain);
 
-  if (playsink->video_sink) {
-    GST_DEBUG_OBJECT (playsink, "trying configured videosink");
-    chain->sink = try_element (playsink, playsink->video_sink, FALSE);
-  } else {
-    /* only try fallback if no specific sink was chosen */
-    if (chain->sink == NULL) {
-      GST_DEBUG_OBJECT (playsink, "trying autovideosink");
-      elem = gst_element_factory_make ("autovideosink", "videosink");
-      chain->sink = try_element (playsink, elem, TRUE);
-    }
-    if (chain->sink == NULL) {
-      /* if default sink from config.h is different then try it too */
-      if (strcmp (DEFAULT_VIDEOSINK, "autovideosink")) {
-        GST_DEBUG_OBJECT (playsink, "trying " DEFAULT_VIDEOSINK);
-        elem = gst_element_factory_make (DEFAULT_VIDEOSINK, "videosink");
-        chain->sink = try_element (playsink, elem, TRUE);
-      }
-    }
-    if (chain->sink)
-      playsink->video_sink = gst_object_ref (chain->sink);
-  }
-  if (chain->sink == NULL)
+  elem = gst_play_sink_create_video_sink (playsink);
+  if (elem == NULL)
     goto no_sinks;
+
+  chain->sink = elem;
   head = chain->sink;
 
   /* if we can disable async behaviour of the sink, we can avoid adding a
@@ -2695,6 +2742,48 @@ notify_mute_cb (GObject * object, GParamSpec * pspec, GstPlaySink * playsink)
   g_object_notify (G_OBJECT (playsink), "mute");
 }
 
+/* Allow early sink creation outside playsink in order to be able to query its
+ * caps which is useful to setup passthrough for encoded data */
+GstElement *
+gst_play_sink_get_or_create_sink (GstPlaySink * playsink, GstPlaySinkType type)
+{
+  GstElement *sink;
+
+  sink = gst_play_sink_get_sink (playsink, type);
+  if (!sink) {
+    if (type == GST_PLAY_SINK_TYPE_AUDIO)
+      sink = gst_play_sink_create_audio_sink (playsink);
+    else if (type == GST_PLAY_SINK_TYPE_VIDEO)
+      sink = gst_play_sink_create_video_sink (playsink);
+    if (!sink)
+      return NULL;
+  } else if (GST_STATE (sink) < GST_STATE_READY) {
+    gst_element_set_state (sink, GST_STATE_READY);
+  }
+
+  return sink;
+}
+
+GstCaps *
+gst_play_sink_get_sink_caps (GstPlaySink * playsink, GstPlaySinkType type)
+{
+  GstCaps *sink_caps;
+  GstElement *sink;
+  GstPad *pad;
+
+  sink = gst_play_sink_get_or_create_sink (playsink, type);
+  if (!sink)
+    return NULL;
+
+  pad = gst_element_get_static_pad (sink, "sink");
+  if (!pad)
+    return NULL;
+
+  sink_caps = gst_pad_query_caps (pad, NULL);
+  gst_object_unref (pad);
+  return sink_caps;
+}
+
 /* make the chain that contains the elements needed to perform
  * audio playback.
  *
@@ -2725,30 +2814,11 @@ gen_audio_chain (GstPlaySink * playsink, gboolean raw)
 
   GST_DEBUG_OBJECT (playsink, "making audio chain %p", chain);
 
-  if (playsink->audio_sink) {
-    GST_DEBUG_OBJECT (playsink, "trying configured audiosink %" GST_PTR_FORMAT,
-        playsink->audio_sink);
-    chain->sink = try_element (playsink, playsink->audio_sink, FALSE);
-  } else {
-    /* only try fallback if no specific sink was chosen */
-    if (chain->sink == NULL) {
-      GST_DEBUG_OBJECT (playsink, "trying autoaudiosink");
-      elem = gst_element_factory_make ("autoaudiosink", "audiosink");
-      chain->sink = try_element (playsink, elem, TRUE);
-    }
-    if (chain->sink == NULL) {
-      /* if default sink from config.h is different then try it too */
-      if (strcmp (DEFAULT_AUDIOSINK, "autoaudiosink")) {
-        GST_DEBUG_OBJECT (playsink, "trying " DEFAULT_AUDIOSINK);
-        elem = gst_element_factory_make (DEFAULT_AUDIOSINK, "audiosink");
-        chain->sink = try_element (playsink, elem, TRUE);
-      }
-    }
-    if (chain->sink)
-      playsink->audio_sink = gst_object_ref (chain->sink);
-  }
-  if (chain->sink == NULL)
+  elem = gst_play_sink_create_audio_sink (playsink);
+  if (elem == NULL)
     goto no_sinks;
+
+  chain->sink = elem;
 
   chain->chain.bin = gst_bin_new ("abin");
   bin = GST_BIN_CAST (chain->chain.bin);

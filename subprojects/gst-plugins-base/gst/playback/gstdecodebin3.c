@@ -599,7 +599,7 @@ static void gst_decodebin_input_unblock_streams (DecodebinInput * input,
 static void gst_decodebin_input_link_to_slot (DecodebinInputStream * input);
 
 static gboolean db_output_stream_reconfigure (DecodebinOutputStream * output,
-    GstMessage ** msg);
+    GstMessage ** msg, gboolean checking_reconfiguration);
 static void db_output_stream_reset (DecodebinOutputStream * output);
 static void db_output_stream_free (DecodebinOutputStream * output);
 static DecodebinOutputStream *db_output_stream_new (GstDecodebin3 * dbin,
@@ -3236,7 +3236,7 @@ mq_slot_check_reconfiguration (MultiQueueSlot * slot)
     return;
   }
 
-  if (!db_output_stream_reconfigure (output, &msg)) {
+  if (!db_output_stream_reconfigure (output, &msg, FALSE)) {
     GST_DEBUG_OBJECT (dbin,
         "Removing failing stream from selection: %" GST_PTR_FORMAT,
         slot->active_stream);
@@ -3780,6 +3780,23 @@ decode_pad_set_target (GstGhostPad * pad, GstPad * target)
   return res;
 }
 
+static GstPadProbeReturn
+check_downstream_reconfigure (GstPad * pad, GstPadProbeInfo * info,
+    DecodebinOutputStream * output)
+{
+  GstCaps *src_caps = gst_pad_get_current_caps (output->src_pad);
+
+  if (!src_caps)
+    return GST_PAD_PROBE_REMOVE;
+
+  GST_DEBUG_OBJECT (output->dbin, "reconfiguration is needed");
+  SELECTION_LOCK (output->dbin);
+  db_output_stream_reconfigure (output, NULL, TRUE);
+  SELECTION_UNLOCK (output->dbin);
+  gst_caps_unref (src_caps);
+  return GST_PAD_PROBE_REMOVE;
+}
+
 static void
 db_output_stream_expose_src_pad (DecodebinOutputStream * output)
 {
@@ -4004,7 +4021,8 @@ cleanup:
  * a message to be posted on the bus.
  */
 static gboolean
-db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg)
+db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg,
+    gboolean checking_reconfiguration)
 {
   MultiQueueSlot *slot = output->slot;
   GstDecodebin3 *dbin = output->dbin;
@@ -4030,8 +4048,10 @@ db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg)
     GST_DEBUG_OBJECT (dbin,
         "Reusing existing decoder '%" GST_PTR_FORMAT "' for slot %p",
         output->decoder, slot);
-    /* Re-add the keyframe-waiter probe */
-    if (output->type & GST_STREAM_TYPE_VIDEO && slot->drop_probe_id == 0) {
+    /* Re-add the keyframe-waiter probe, but avoid doing it multiple times in a
+     * row (due to reconfigure events) */
+    if (!checking_reconfiguration && output->type & GST_STREAM_TYPE_VIDEO &&
+        slot->drop_probe_id == 0) {
       GST_DEBUG_OBJECT (dbin, "Adding keyframe-waiter probe");
       slot->drop_probe_id =
           gst_pad_add_probe (slot->src_pad, GST_PAD_PROBE_TYPE_BUFFER,
@@ -4042,12 +4062,17 @@ db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg)
           GST_PAD_LINK_CHECK_NOTHING);
       output->linked = TRUE;
     }
-  } else {
+  } else if (needs_decoder) {
     /* We need to reset the output and set it up again */
     db_output_stream_reset (output);
 
     /* Setup the decoder */
     ret = db_output_stream_setup_decoder (output, new_caps, msg);
+  } else {
+    GST_DEBUG_OBJECT (dbin, "no decoder needed");
+    db_output_stream_reset (output);
+    decode_pad_set_target ((GstGhostPad *) output->src_pad, slot->src_pad);
+    db_output_stream_expose_src_pad (output);
   }
 
   gst_caps_unref (new_caps);
@@ -4459,6 +4484,13 @@ ghost_pad_event_probe (GstPad * pad, GstPadProbeInfo * info,
       if (handle_select_streams (dbin, event))
         ret = GST_PAD_PROBE_HANDLED;
     }
+      break;
+    case GST_EVENT_RECONFIGURE:
+      GST_DEBUG_OBJECT (output->src_pad, "got a reconfigure from downstream");
+
+      gst_pad_add_probe (output->slot->src_pad,
+          GST_PAD_PROBE_TYPE_DATA_DOWNSTREAM,
+          (GstPadProbeCallback) check_downstream_reconfigure, output, NULL);
       break;
     default:
       break;

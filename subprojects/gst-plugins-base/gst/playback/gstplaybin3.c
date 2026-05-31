@@ -227,6 +227,7 @@
 #include "gstplaysink.h"
 #include "gstsubtitleoverlay.h"
 #include "gstplaybackutils.h"
+#include "gstrawcaps.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_play_bin3_debug);
 #define GST_CAT_DEFAULT gst_play_bin3_debug
@@ -374,6 +375,9 @@ struct _GstPlayBin3
   GstElement *text_stream_combiner;     /* configured text stream combiner, or NULL */
 
   gboolean is_live;             /* Whether we are live */
+
+  gulong audio_reconf_probe_id;
+  gulong video_reconf_probe_id;
 };
 
 struct _GstPlayBin3Class
@@ -2675,12 +2679,114 @@ source_setup_cb (GstElement * element, GstElement * source,
       source);
 }
 
+static GstStaticCaps default_raw_caps = GST_STATIC_CAPS (DEFAULT_RAW_CAPS);
+
+static void
+gst_play_bin3_update_decode_caps (GstPlayBin3 * playbin)
+{
+  GstPlayFlags flags = gst_play_sink_get_flags (playbin->playsink);
+  GstCaps *audio_caps = NULL, *video_caps = NULL, *ret = NULL;
+
+  if (flags & GST_PLAY_FLAG_AUDIO) {
+    audio_caps = gst_play_sink_get_sink_caps (playbin->playsink,
+        GST_PLAY_SINK_TYPE_AUDIO);
+    if (audio_caps) {
+      if (gst_caps_is_any (audio_caps)) {
+        gst_caps_unref (audio_caps);
+        audio_caps = NULL;
+      } else {
+        ret = audio_caps;
+      }
+    }
+  }
+
+  if (flags & GST_PLAY_FLAG_VIDEO) {
+    video_caps = gst_play_sink_get_sink_caps (playbin->playsink,
+        GST_PLAY_SINK_TYPE_VIDEO);
+    if (video_caps) {
+      if (gst_caps_is_any (video_caps)) {
+        gst_caps_unref (video_caps);
+        video_caps = NULL;
+      } else {
+        ret = video_caps;
+      }
+    }
+  }
+
+  if (!audio_caps && !video_caps)
+    return;
+
+  if (video_caps && audio_caps) {
+    ret = gst_caps_make_writable (ret);
+    gst_caps_append (ret, audio_caps);
+  }
+
+  ret = gst_caps_merge (gst_static_caps_get (&default_raw_caps), ret);
+  GST_INFO_OBJECT (playbin, "setting uridecodbin3 caps %" GST_PTR_FORMAT, ret);
+  g_object_set (playbin->uridecodebin, "caps", ret, NULL);
+  gst_caps_unref (ret);
+}
+
+static GstPadProbeReturn
+gst_play_bin3_reconf_probe (GstPad * pad, GstPadProbeInfo * info,
+    GstPlayBin3 * playbin)
+{
+  GstEvent *event = GST_PAD_PROBE_INFO_DATA (info);
+
+  if (GST_EVENT_TYPE (event) != GST_EVENT_RECONFIGURE)
+    return GST_PAD_PROBE_OK;
+
+  GST_INFO_OBJECT (pad, "got reconfigure, update decode caps");
+  gst_play_bin3_update_decode_caps (playbin);
+
+  return GST_PAD_PROBE_OK;
+}
+
+static void
+gst_play_bin3_install_reconf_probe (GstPlayBin3 * playbin, GstPlaySinkType type)
+{
+  gulong *id = NULL;
+  GstElement *sink;
+  GstPad *pad;
+
+  if ((type == GST_PLAY_SINK_TYPE_AUDIO && playbin->audio_reconf_probe_id) ||
+      (type == GST_PLAY_SINK_TYPE_VIDEO && playbin->video_reconf_probe_id))
+    return;
+
+  sink = gst_play_sink_get_or_create_sink (playbin->playsink, type);
+  if (!sink)
+    return;
+  pad = gst_element_get_static_pad (sink, "sink");
+  if (!pad) {
+    gst_object_unref (sink);
+    return;
+  }
+  gst_object_unref (sink);
+  if (type == GST_PLAY_SINK_TYPE_AUDIO)
+    id = &playbin->audio_reconf_probe_id;
+  else if (type == GST_PLAY_SINK_TYPE_VIDEO)
+    id = &playbin->video_reconf_probe_id;
+
+  if (G_UNLIKELY (!id)) {
+    GST_WARNING_OBJECT (playbin, "can only create audio or video sink");
+    gst_object_unref (pad);
+    return;
+  }
+
+  *id = gst_pad_add_probe (pad, GST_PAD_PROBE_TYPE_EVENT_UPSTREAM,
+      (GstPadProbeCallback) gst_play_bin3_reconf_probe, playbin, NULL);
+  gst_object_unref (pad);
+}
+
 static gboolean
 gst_play_bin3_start (GstPlayBin3 * playbin)
 {
   GST_DEBUG_OBJECT (playbin, "starting");
 
   GST_PLAY_BIN3_LOCK (playbin);
+  gst_play_bin3_install_reconf_probe (playbin, GST_PLAY_SINK_TYPE_AUDIO);
+  gst_play_bin3_install_reconf_probe (playbin, GST_PLAY_SINK_TYPE_VIDEO);
+  gst_play_bin3_update_decode_caps (playbin);
   playbin->active_stream_types = 0;
   playbin->selected_stream_types = 0;
   do_async_start (playbin);
