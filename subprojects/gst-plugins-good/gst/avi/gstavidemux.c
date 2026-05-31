@@ -5595,8 +5595,6 @@ gst_avi_demux_stream_data (GstAviDemux * avi)
         gst_avi_demux_add_assoc (avi, stream, next_ts, offset, FALSE);
 #endif
 
-        /* increment our positions */
-        stream->current_entry++;
         /* as in pull mode, 'total' is either bytes (CBR) or frames (VBR) */
         if (stream->strh->type == GST_RIFF_FCC_auds && stream->is_vbr) {
           gint blockalign = stream->strf.auds->blockalign;
@@ -5616,6 +5614,8 @@ gst_avi_demux_stream_data (GstAviDemux * avi)
         if (saw_desired_kf && buf) {
           GstClockTime dur_ts = 0;
 
+          /* increment our positions */
+          stream->current_entry++;
           /* invert the picture if needed, and append palette for RGB8P */
           buf = gst_avi_demux_invert (stream, buf);
 
