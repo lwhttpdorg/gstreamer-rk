@@ -60,6 +60,8 @@ struct _GstVulkanWindowXCBPrivate
 
   gint preferred_width;
   gint preferred_height;
+  gint current_width;
+  gint current_height;
 
   xcb_intern_atom_reply_t *atom_wm_delete_window;
   gboolean handle_events;
@@ -84,6 +86,44 @@ static gboolean gst_vulkan_window_xcb_open (GstVulkanWindow * window,
 static void gst_vulkan_window_xcb_close (GstVulkanWindow * window);
 static void gst_vulkan_window_xcb_handle_events (GstVulkanWindow * window,
     gboolean handle_events);
+
+static void
+gst_vulkan_window_xcb_resize_window (GstVulkanWindowXCB * window_xcb,
+    guint width, guint height)
+{
+  GstVulkanDisplayXCB *display_xcb =
+      GST_VULKAN_DISPLAY_XCB (GST_VULKAN_WINDOW (window_xcb)->display);
+  xcb_connection_t *connection =
+      GST_VULKAN_DISPLAY_XCB_CONNECTION (display_xcb);
+  uint32_t values[2];
+  uint16_t mask;
+
+  if (!window_xcb->win_id || !connection)
+    return;
+
+  values[0] = width;
+  values[1] = height;
+  mask = XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT;
+  xcb_configure_window (connection, window_xcb->win_id, mask, values);
+  xcb_flush (connection);
+}
+
+static void
+gst_vulkan_window_xcb_on_resize (GstVulkanWindow * window, guint width,
+    guint height, gpointer user_data)
+{
+  GstVulkanWindowXCB *window_xcb = GST_VULKAN_WINDOW_XCB (window);
+  GstVulkanWindowXCBPrivate *priv = GET_PRIV (window_xcb);
+
+  priv->preferred_width = (gint) width;
+  priv->preferred_height = (gint) height;
+
+  if (priv->current_width == (gint) width
+      && priv->current_height == (gint) height)
+    return;
+
+  gst_vulkan_window_xcb_resize_window (window_xcb, width, height);
+}
 
 static void
 gst_vulkan_window_xcb_finalize (GObject * object)
@@ -113,6 +153,8 @@ gst_vulkan_window_xcb_init (GstVulkanWindowXCB * window)
   GstVulkanWindowXCBPrivate *priv = GET_PRIV (window);
 
   priv->handle_events = TRUE;
+  g_signal_connect (window, "resize",
+      G_CALLBACK (gst_vulkan_window_xcb_on_resize), NULL);
 }
 
 /* Must be called in the gl thread */
@@ -216,6 +258,7 @@ gst_vulkan_window_xcb_create_window (GstVulkanWindowXCB * window_xcb)
   xcb_intern_atom_cookie_t cookie, cookie2;
   xcb_intern_atom_reply_t *reply, *reply2;
 //  const gchar *title = "OpenGL renderer";
+  guint configured_width = 0, configured_height = 0;
   gint x = 0, y = 0, width = 320, height = 240;
 
   display_xcb =
@@ -223,6 +266,16 @@ gst_vulkan_window_xcb_create_window (GstVulkanWindowXCB * window_xcb)
   connection = GST_VULKAN_DISPLAY_XCB_CONNECTION (display_xcb);
   root_window = GST_VULKAN_DISPLAY_XCB_ROOT_WINDOW (display_xcb);
   screen = GST_VULKAN_DISPLAY_XCB_SCREEN (display_xcb);
+
+  gst_vulkan_window_get_surface_dimensions (GST_VULKAN_WINDOW (window_xcb),
+      &configured_width, &configured_height);
+  if (configured_width > 0 && configured_height > 0) {
+    width = (gint) configured_width;
+    height = (gint) configured_height;
+  }
+
+  priv->current_width = width;
+  priv->current_height = height;
 
   window_xcb->win_id = xcb_generate_id (connection);
 
@@ -426,6 +479,8 @@ gst_vulkan_window_xcb_handle_event (GstVulkanWindowXCB * window_xcb,
       xcb_configure_notify_event_t *configure_event;
 
       configure_event = (xcb_configure_notify_event_t *) event;
+      priv->current_width = configure_event->width;
+      priv->current_height = configure_event->height;
 
       gst_vulkan_window_resize (GST_VULKAN_WINDOW (window_xcb),
           configure_event->width, configure_event->height);

@@ -29,6 +29,8 @@
 #include <gst/gst.h>
 #include <gst/check/gstcheck.h>
 #include <gst/vulkan/vulkan.h>
+#include <gst/vulkan/xcb/gstvkdisplay_xcb.h>
+#include "../../gst-libs/gst/vulkan/xcb/gstvkwindow_xcb.h"
 
 static GstVulkanDisplay *display;
 static GstVulkanInstance *instance;
@@ -62,6 +64,42 @@ GST_START_TEST (test_window_new)
 
 GST_END_TEST;
 
+GST_START_TEST (test_window_xcb_initial_size)
+{
+#if GST_VULKAN_HAVE_WINDOW_XCB
+  GstVulkanDisplayXCB *xcb_display;
+  GstVulkanWindow *window;
+  xcb_get_geometry_cookie_t cookie;
+  xcb_get_geometry_reply_t *reply;
+
+  xcb_display = gst_vulkan_display_xcb_new (NULL);
+  if (!xcb_display)
+    return;
+
+  window = gst_vulkan_display_create_window (GST_VULKAN_DISPLAY (xcb_display));
+  fail_unless (window != NULL);
+  gst_vulkan_window_resize (window, 1920, 1080);
+  fail_unless (gst_vulkan_window_open (window, NULL));
+
+  cookie = xcb_get_geometry (GST_VULKAN_DISPLAY_XCB_CONNECTION (xcb_display),
+      ((GstVulkanWindowXCB *) window)->win_id);
+  reply =
+      xcb_get_geometry_reply (GST_VULKAN_DISPLAY_XCB_CONNECTION (xcb_display),
+      cookie, NULL);
+
+  fail_unless (reply != NULL);
+  fail_unless_equals_int (reply->width, 1920);
+  fail_unless_equals_int (reply->height, 1080);
+
+  free (reply);
+  gst_vulkan_window_close (window);
+  gst_object_unref (window);
+  gst_object_unref (xcb_display);
+#endif
+}
+
+GST_END_TEST;
+
 static Suite *
 vkwindow_suite (void)
 {
@@ -77,6 +115,7 @@ vkwindow_suite (void)
   gst_object_unref (instance);
   if (have_instance) {
     tcase_add_test (tc_basic, test_window_new);
+    tcase_add_test (tc_basic, test_window_xcb_initial_size);
   }
 
   return s;
