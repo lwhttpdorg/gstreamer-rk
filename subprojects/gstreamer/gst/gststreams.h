@@ -81,8 +81,10 @@ typedef struct _GstStreamPrivate GstStreamPrivate;
  * GstStream:
  * @stream_id: The Stream Identifier for this #GstStream
  *
- * A high-level object representing a single stream. It might be backed, or
- * not, by an actual flow of data in a pipeline (#GstPad).
+ * A high-level object representing a single stream (or "logical content") that
+ * can be present in a #GstPipeline. It might be backed by an actual flow of data
+ * on a #GstPad, or it may be a virtual/abstract stream not yet materialized as
+ * a pad (e.g. DASH/HLS variants awaiting selection).
  *
  * A #GstStream does not care about data changes (such as decoding, encoding,
  * parsing,...) as long as the underlying data flow corresponds to the same
@@ -93,6 +95,21 @@ typedef struct _GstStreamPrivate GstStreamPrivate;
  *
  * Elements can subclass a #GstStream for internal usage (to contain information
  * pertinent to streams of data).
+ *
+ * ## Variants
+ *
+ * A #GstStream can have zero or more **variant** streams attached via
+ * `gst_stream_add_variant()`. Variants represent the same logical content at
+ * different qualities (bitrates, resolutions, languages) and are used for
+ * example for adaptive streaming (HLS/DASH). Variant stream-ids follow the
+ * convention "<parent-stream-id>:<suffix>" (e.g. "video" → "video:320",
+ * "video:1080"), mirroring demuxer elementary stream naming ("input" →
+ * "input:0", "input:1").
+ *
+ * Variants are independent #GstStream objects — they do NOT depend on the parent
+ * for decoding. Automatic systems (playbin3, decodebin3) use the **parent**
+ * stream-id in %GST_EVENT_STREAM_START and %GST_MESSAGE_SELECTED_STREAMS until
+ * a specific variant is explicitly selected by the application.
  *
  * Since: 1.10
  */
@@ -161,6 +178,22 @@ GstCaps *      gst_stream_get_caps (GstStream *stream) G_GNUC_WARN_UNUSED_RESULT
 
 GST_API
 const gchar *  gst_stream_type_get_name (GstStreamType stype);
+
+GST_API
+gboolean       gst_stream_has_variants (GstStream *stream);
+
+GST_API
+guint          gst_stream_get_nb_variants (GstStream *stream);
+
+GST_API
+GstStream *    gst_stream_get_nth_variant (GstStream *stream, guint nth);
+
+GST_API
+gboolean       gst_stream_id_has_parent (const gchar *stream_id,
+					 const gchar *parent_stream_id);
+
+GST_API
+void           gst_stream_add_variant (GstStream *stream, GstStream *variant);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstStream, gst_object_unref)
 

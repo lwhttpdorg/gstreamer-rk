@@ -284,6 +284,50 @@ GST_START_TEST (test_stream_type_name)
 
 GST_END_TEST;
 
+GST_START_TEST (test_stream_variants)
+{
+  GstCaps *caps;
+
+  /* Test: empty variants */
+  caps = gst_caps_from_string ("video/x-raw");
+  GstStream *base = gst_stream_new ("video", caps, GST_STREAM_TYPE_VIDEO, 0);
+  gst_caps_unref (caps);
+  fail_unless (!gst_stream_has_variants (base));
+  fail_unless_equals_int (gst_stream_get_nb_variants (base), 0);
+
+  /* Test: add one variant */
+  caps = gst_caps_from_string ("video/x-raw,width=320");
+  GstStream *variant1 =
+      gst_stream_new ("video:320", caps, GST_STREAM_TYPE_VIDEO, 0);
+  gst_caps_unref (caps);
+  gst_stream_add_variant (base, variant1);
+  fail_unless (gst_stream_has_variants (base));
+  fail_unless_equals_int (gst_stream_get_nb_variants (base), 1);
+  fail_unless_equals_string (gst_stream_get_stream_id
+      (gst_stream_get_nth_variant (base, 0)), "video:320");
+
+  /* Test: out of range */
+  fail_unless (gst_stream_get_nth_variant (base, 1) == NULL);
+
+  /* Test: add more variants */
+  caps = gst_caps_from_string ("video/x-raw,width=1280");
+  GstStream *variant2 =
+      gst_stream_new ("video:1280", caps, GST_STREAM_TYPE_VIDEO, 0);
+  gst_caps_unref (caps);
+  gst_stream_add_variant (base, variant2);
+
+  fail_unless_equals_int (gst_stream_get_nb_variants (base), 2);
+  fail_unless_equals_string (gst_stream_get_stream_id
+      (gst_stream_get_nth_variant (base, 0)), "video:320");
+  fail_unless_equals_string (gst_stream_get_stream_id
+      (gst_stream_get_nth_variant (base, 1)), "video:1280");
+
+  /* Cleanup - variant_streams array is freed by base's finalize, unref-ing each variant */
+  gst_object_unref (base);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_streams_suite (void)
 {
@@ -295,6 +339,7 @@ gst_streams_suite (void)
   tcase_add_test (tc_chain, test_stream_event);
   tcase_add_test (tc_chain, test_notifies);
   tcase_add_test (tc_chain, test_stream_type_name);
+  tcase_add_test (tc_chain, test_stream_variants);
   return s;
 }
 
