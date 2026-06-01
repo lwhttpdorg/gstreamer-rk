@@ -2631,6 +2631,31 @@ reconfigure_output (GstPlayBin3 * playbin)
                 ("Failed to link combiner to sink. Error %d", res));
           }
 
+        } else {
+          GstPad *srcpad = NULL;
+          GList *tmp;
+
+          for (tmp = playbin->source_pads; tmp; tmp = tmp->next) {
+            SourcePad *source_pad = (SourcePad *) tmp->data;
+            GstPad *pad = source_pad->pad;
+            if (source_pad->stream_type == combine->stream_type &&
+                !gst_pad_is_linked (pad)) {
+              GST_DEBUG_OBJECT (playbin,
+                  "A %s pad (%" GST_PTR_FORMAT
+                  ") for is already available for %" GST_PTR_FORMAT,
+                  gst_stream_type_get_name (combine->stream_type), pad,
+                  combine->sinkpad);
+              srcpad = pad;
+              break;
+            }
+          }
+          if (!srcpad)
+            continue;
+          res = gst_pad_link (srcpad, combine->sinkpad);
+          if (res != GST_PAD_LINK_OK)
+            GST_ELEMENT_ERROR (playbin, CORE, PAD,
+                ("Internal playbin error."),
+                ("Failed to link uridecodebin to sink. Error %d", res));
         }
       }
     }
