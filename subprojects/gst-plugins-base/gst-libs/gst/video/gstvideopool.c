@@ -244,6 +244,7 @@ wrong_size:
 failed_to_align:
   {
     GST_WARNING_OBJECT (pool, "Failed to align");
+    priv->need_alignment = FALSE;
     return FALSE;
   }
 }
@@ -266,12 +267,16 @@ video_buffer_pool_alloc (GstBufferPool * pool, GstBuffer ** buffer,
     goto no_memory;
 
   if (priv->add_videometa) {
+    GstVideoMeta *vmeta = NULL;
     GST_DEBUG_OBJECT (pool, "adding GstVideoMeta");
 
-    gst_buffer_add_video_meta_full (*buffer, GST_VIDEO_FRAME_FLAG_NONE,
+    vmeta = gst_buffer_add_video_meta_full (*buffer, GST_VIDEO_FRAME_FLAG_NONE,
         GST_VIDEO_INFO_FORMAT (info),
         GST_VIDEO_INFO_WIDTH (info), GST_VIDEO_INFO_HEIGHT (info),
         GST_VIDEO_INFO_N_PLANES (info), info->offset, info->stride);
+
+    if (priv->need_alignment && vmeta)
+      gst_video_meta_set_alignment (vmeta, priv->video_align);
   }
 
   return GST_FLOW_OK;
