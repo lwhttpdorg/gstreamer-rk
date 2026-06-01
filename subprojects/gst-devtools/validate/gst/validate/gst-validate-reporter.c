@@ -254,15 +254,15 @@ gst_validate_report_valist (GstValidateReporter * reporter,
 
   if (runner && int_ret == GST_VALIDATE_REPORTER_REPORT) {
     gst_validate_runner_add_report (runner, report);
-  }
 
-  if (gst_validate_report_check_abort (report)) {
-    if (runner)
-      gst_validate_runner_printf (runner);
+    if (gst_validate_report_check_abort (report)) {
+      if (runner)
+        gst_validate_runner_printf (runner);
 
-    gst_validate_abort ("Fatal report received: %"
-        GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT,
-        GST_VALIDATE_REPORT_PRINT_ARGS (report));
+      gst_validate_abort ("Fatal report received: %"
+          GST_VALIDATE_ERROR_REPORT_PRINT_FORMAT,
+          GST_VALIDATE_REPORT_PRINT_ARGS (report));
+    }
   }
 
 done:
