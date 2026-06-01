@@ -4738,6 +4738,52 @@ gst_qtmux_pad_collect_traf (GstElement * element, GstPad * pad,
 }
 
 static GstFlowReturn
+gst_qtmux_update_duration (GstQTMux * qtmux, GstQTMuxPad * pad)
+{
+  GList *l;
+  GstClockTime last_dts = GST_CLOCK_TIME_NONE;
+  GstFlowReturn ret = GST_FLOW_OK;
+
+  GST_OBJECT_LOCK (qtmux);
+  /* determine max stream duration */
+  for (l = GST_ELEMENT_CAST (qtmux)->sinkpads; l; l = l->next) {
+    GstQTMuxPad *qtpad = (GstQTMuxPad *) l->data;
+
+    if (!qtpad->fourcc) {
+      GST_DEBUG_OBJECT (qtmux, "Pad %s has never had buffers",
+          GST_PAD_NAME (qtpad));
+      continue;
+    }
+    if (!GST_CLOCK_TIME_IS_VALID (last_dts)
+        || qtpad->last_dts > last_dts) {
+      last_dts = qtpad->last_dts;
+    }
+  }
+  qtmux->last_dts = last_dts;
+  GST_OBJECT_UNLOCK (qtmux);
+
+  if (!GST_CLOCK_TIME_IS_VALID (qtmux->last_dts)) {
+    GST_DEBUG_OBJECT (qtmux, "No valid timestamp to update duration");
+    return ret;
+  } else {
+    GstClockTime duration = gst_util_uint64_scale_round (qtmux->last_dts,
+        qtmux->timescale, GST_SECOND);
+    GST_DEBUG_OBJECT (qtmux,
+        "Updating moov with mvhd/mvex duration %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (qtmux->last_dts));
+
+    qtmux->moov->mvex.mehd.fragment_duration = duration;
+    /* seek and rewrite the header */
+    gst_qt_mux_seek_to (qtmux, qtmux->moov_pos);
+    ret = gst_qt_mux_send_moov (qtmux, NULL, 0, FALSE, FALSE);
+    /* seek back */
+    gst_qt_mux_seek_to (qtmux, qtmux->header_size);
+
+    return ret;
+  }
+}
+
+static GstFlowReturn
 gst_qt_mux_pad_fragment_add_buffer (GstQTMux * qtmux, GstQTMuxPad * pad,
     GstBuffer * buf, gboolean force, guint32 nsamples, gint64 dts,
     guint32 delta, guint32 size, guint64 chunk_offset, gboolean sync,
@@ -4898,6 +4944,13 @@ flush:
       GstBuffer *moof_buffer;
       guint i, total_size;
       AtomTRUN *first_trun;
+
+      /* There is no mfra box in the recorded file if there is a power failure
+       * while recording. Update duration in moov box to have the valid value
+       */
+      ret = gst_qtmux_update_duration (qtmux, pad);
+      if (ret != GST_FLOW_OK)
+        goto moov_send_error;
 
       total_size = 0;
       for (i = 0; i < atom_array_get_len (&pad->fragment_buffers); i++) {
@@ -5090,6 +5143,19 @@ fragment_buf_send_error:
     for (i = index + 1; i < atom_array_get_len (&pad->fragment_buffers); i++) {
       gst_buffer_unref (atom_array_index (&pad->fragment_buffers, i));
     }
+    atom_array_clear (&pad->fragment_buffers);
+    gst_clear_buffer (&buf);
+
+    return ret;
+  }
+
+moov_send_error:
+  {
+    guint i;
+
+    GST_ERROR_OBJECT (qtmux, "Failed to send moov buffer");
+    for (i = 0; i < atom_array_get_len (&pad->fragment_buffers); i++)
+      gst_buffer_unref (atom_array_index (&pad->fragment_buffers, i));
     atom_array_clear (&pad->fragment_buffers);
     gst_clear_buffer (&buf);
 
