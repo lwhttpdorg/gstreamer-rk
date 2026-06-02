@@ -3,7 +3,7 @@
 set -eux
 
 # Install Rust
-RUSTUP_VERSION=1.28.1
+RUSTUP_VERSION=1.29.0
 RUST_VERSION=1.96.0
 RUST_ARCH="x86_64-unknown-linux-gnu"
 
