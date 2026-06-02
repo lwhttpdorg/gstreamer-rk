@@ -1875,6 +1875,7 @@ print_element_info (GstPluginFeature * feature, gboolean print_names)
 
   if (plugin) {
     print_plugin_info (plugin);
+    print_plugin_status (plugin);
     gst_object_unref (plugin);
   }
 
@@ -1946,6 +1947,7 @@ print_typefind_info (GstPluginFeature * feature, gboolean print_names)
   plugin = gst_plugin_feature_get_plugin (GST_PLUGIN_FEATURE (factory));
   if (plugin) {
     print_plugin_info (plugin);
+    print_plugin_status (plugin);
     gst_object_unref (plugin);
   }
 
@@ -1991,6 +1993,7 @@ print_tracer_info (GstPluginFeature * feature, gboolean print_names)
   plugin = gst_plugin_feature_get_plugin (GST_PLUGIN_FEATURE (factory));
   if (plugin) {
     print_plugin_info (plugin);
+    print_plugin_status (plugin);
     gst_object_unref (plugin);
   }
 
