@@ -52,7 +52,7 @@ public:
   /* IUnknown */
   HRESULT STDMETHODCALLTYPE QueryInterface (REFIID riid, void **object)
   {
-    if (riid == IID_IDeckLinkInputCallback) {
+    if (riid == IID_IDeckLinkMemoryAllocator) {
       *object = static_cast < IDeckLinkMemoryAllocator * >(this);
     } else {
       *object = NULL;
