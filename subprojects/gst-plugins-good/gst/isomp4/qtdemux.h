@@ -227,6 +227,9 @@ struct _GstQTDemux {
    * add/remove streams at any point in time */
   gboolean streams_aware;
 
+  /* Inband events */
+  GSList *inband_events; /* GSList<QtDemuxInbandEvent> */
+
   /*
    * ALL VARIABLES BELOW ARE ONLY USED IN PUSH-BASED MODE
    */

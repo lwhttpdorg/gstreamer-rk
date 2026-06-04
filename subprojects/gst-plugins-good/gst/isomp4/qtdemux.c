@@ -259,6 +259,18 @@ struct _QtDemuxAavdEncryptionInfo
   GstStructure *default_properties;
 };
 
+/* See section 5.10.3.3 in ISO/IEC 23009-1 */
+typedef struct _QtDemuxInbandEvent
+{
+  gchar *scheme_id_uri;
+  gchar *value;
+  guint32 timescale;
+  guint64 presentation_time_delta;
+  guint32 event_duration;
+  guint32 id;
+  GstBuffer *message_data;
+} QtDemuxInbandEvent;
+
 static const gchar *
 qt_demux_state_string (enum QtDemuxState state)
 {
@@ -414,6 +426,13 @@ static void qtdemux_gst_structure_free (GstStructure * gststructure);
 static void gst_qtdemux_reset (GstQTDemux * qtdemux, gboolean hard);
 static void qtdemux_clear_protection_events_on_all_streams (GstQTDemux *
     qtdemux);
+static QtDemuxInbandEvent *qtdemux_inband_event_new (const gchar *
+    scheme_id_uri, const gchar * value, guint32 timescale,
+    guint64 presentation_time_delta, guint32 event_duration, guint32 id,
+    guint32 message_data_length, const guint8 * message_data);
+static void qtdemux_inband_event_send (GstQTDemux * qtdemux,
+    QtDemuxInbandEvent * event);
+static void qtdemux_inband_event_free (QtDemuxInbandEvent * event);
 
 static GstFlowReturn gst_qtdemux_combine_flows (GstQTDemux * demux,
     QtDemuxStream * stream, GstFlowReturn ret);
@@ -529,6 +548,7 @@ gst_qtdemux_init (GstQTDemux * qtdemux)
   g_queue_init (&qtdemux->protection_event_queue);
   qtdemux->flowcombiner = gst_flow_combiner_new ();
   g_mutex_init (&qtdemux->expose_lock);
+  qtdemux->inband_events = NULL;
 
   qtdemux->active_streams = g_ptr_array_new_with_free_func
       ((GDestroyNotify) gst_qtdemux_stream_unref);
@@ -568,6 +588,9 @@ gst_qtdemux_dispose (GObject * object)
 
   g_queue_clear_full (&qtdemux->protection_event_queue,
       (GDestroyNotify) gst_event_unref);
+
+  g_slist_free_full (qtdemux->inband_events,
+      (GDestroyNotify) qtdemux_inband_event_free);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -4487,6 +4510,101 @@ qtdemux_parse_pssh (GstQTDemux * qtdemux, GNode * node)
 }
 
 static gboolean
+qtdemux_parse_emsg (GstQTDemux * demux, const guint8 * buffer, gint length)
+{
+  guint32 version;
+  const gchar *scheme_id_uri;
+  const gchar *value;
+  guint32 timescale;
+  guint64 presentation_time_delta;
+  guint32 event_duration;
+  guint32 id;
+  const guint8 *message_data = NULL;
+  guint32 message_data_length = 0;
+  GstByteReader br;
+  QtDemuxInbandEvent *ev;
+
+  GST_MEMDUMP_OBJECT (demux, "DASH Event Message Box:", buffer, length);
+  if (length < 30) {
+    GST_WARNING_OBJECT (demux, "emsg box too smal");
+    return FALSE;
+  }
+  gst_byte_reader_init (&br, buffer, length);
+  /* Skip size+emsg */
+  gst_byte_reader_skip_unchecked (&br, 8);
+  version = gst_byte_reader_get_uint8_unchecked (&br);
+  /* Skip flags */
+  gst_byte_reader_skip_unchecked (&br, 3);
+
+  if (version == 0) {
+    if (!gst_byte_reader_get_string_utf8 (&br, &scheme_id_uri)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse scheme URI");
+      return FALSE;
+    }
+    if (!gst_byte_reader_get_string_utf8 (&br, &value)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse value");
+      return FALSE;
+    }
+  }
+  if (!gst_byte_reader_get_uint32_be (&br, &timescale)) {
+    GST_WARNING_OBJECT (demux, "Failed to parse timescale");
+    return FALSE;
+  }
+  if (version == 0) {
+    guint32 tmp;
+    if (!gst_byte_reader_get_uint32_be (&br, &tmp)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse presentation_time_delta");
+      return FALSE;
+    }
+    presentation_time_delta = tmp;
+  } else {
+    if (!gst_byte_reader_get_uint64_be (&br, &presentation_time_delta)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse presentation_time_delta");
+      return FALSE;
+    }
+  }
+  if (!gst_byte_reader_get_uint32_be (&br, &event_duration)) {
+    GST_WARNING_OBJECT (demux, "Failed to parse event duration");
+    return FALSE;
+  }
+  if (!gst_byte_reader_get_uint32_be (&br, &id)) {
+    GST_WARNING_OBJECT (demux, "Failed to parse ID");
+    return FALSE;
+  }
+  if (version == 1) {
+    if (!gst_byte_reader_get_string_utf8 (&br, &scheme_id_uri)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse scheme URI");
+      return FALSE;
+    }
+    if (!gst_byte_reader_get_string_utf8 (&br, &value)) {
+      GST_WARNING_OBJECT (demux, "Failed to parse value");
+      return FALSE;
+    }
+  }
+
+  if (gst_byte_reader_get_remaining (&br) > 0) {
+    message_data_length = gst_byte_reader_get_remaining (&br);
+    message_data =
+        gst_byte_reader_get_data_unchecked (&br, message_data_length);
+  }
+
+  GST_DEBUG_OBJECT (demux,
+      "scheme_id_uri: '%s' timescale:%" G_GUINT32_FORMAT
+      " presentation_time_delta:%" G_GUINT64_FORMAT " event_duration:%"
+      G_GUINT32_FORMAT " id:%" G_GUINT32_FORMAT, scheme_id_uri, timescale,
+      presentation_time_delta, event_duration, id);
+
+  GST_DEBUG_OBJECT (demux, "value: '%s'", value);
+
+  ev = qtdemux_inband_event_new (scheme_id_uri, value, timescale,
+      presentation_time_delta, event_duration,
+      id, message_data_length, message_data);
+
+  demux->inband_events = g_slist_append (demux->inband_events, ev);
+  return TRUE;
+}
+
+static gboolean
 qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
     guint64 moof_offset, QtDemuxStream * stream)
 {
@@ -4754,6 +4872,18 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
     GST_LOG_OBJECT (qtdemux, "Parsing pssh box.");
     qtdemux_parse_pssh (qtdemux, pssh_node);
     pssh_node = qtdemux_tree_get_sibling_by_type (pssh_node, FOURCC_pssh);
+  }
+  /* We have to wait until the MOOF/TRAF/TFDT is parsed to send DASH
+     events, because the presentation_time_delta in the EMSG
+     is relative to this segment, but the baseMediaDecodeTime
+     is not known until the MOOF has been parsed */
+  while (qtdemux->inband_events) {
+    QtDemuxInbandEvent *dash_ev =
+        (QtDemuxInbandEvent *) qtdemux->inband_events->data;
+    qtdemux_inband_event_send (qtdemux, dash_ev);
+    qtdemux_inband_event_free (dash_ev);
+    qtdemux->inband_events =
+        g_slist_delete_link (qtdemux->inband_events, qtdemux->inband_events);
   }
 
   if (!qtdemux->upstream_format_is_time
@@ -8635,6 +8765,9 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
           }
 
           g_node_destroy (node);
+        } else if (fourcc == FOURCC_emsg) {
+          GST_DEBUG_OBJECT (demux, "Parsing [emsg]");
+          qtdemux_parse_emsg (demux, data, demux->neededbytes);
         } else {
           switch (fourcc) {
             case FOURCC_styp:
@@ -20575,4 +20708,119 @@ gst_qtdemux_append_protection_system_id (GstQTDemux * qtdemux,
   GST_DEBUG_OBJECT (qtdemux, "Adding cenc protection system ID %s", system_id);
   g_ptr_array_add (qtdemux->protection_system_ids, g_ascii_strdown (system_id,
           -1));
+}
+
+static QtDemuxInbandEvent *
+qtdemux_inband_event_new (const gchar * scheme_id_uri,
+    const gchar * value,
+    guint32 timescale,
+    guint64 presentation_time_delta,
+    guint32 duration,
+    guint32 id, guint32 message_data_length, const guint8 * message_data)
+{
+  QtDemuxInbandEvent *event;
+
+  event = g_slice_new0 (QtDemuxInbandEvent);
+  event->scheme_id_uri = g_strdup (scheme_id_uri);
+  event->value = g_strdup (value);
+  event->timescale = timescale;
+  event->presentation_time_delta = presentation_time_delta;
+  event->event_duration = duration;
+  event->id = id;
+  if (message_data_length) {
+    event->message_data = gst_buffer_new_and_alloc (message_data_length);
+    gst_buffer_fill (event->message_data, 0, message_data, message_data_length);
+  }
+  return event;
+}
+
+static void
+qtdemux_inband_event_free (QtDemuxInbandEvent * event)
+{
+  g_return_if_fail (event != NULL);
+  g_free (event->scheme_id_uri);
+  g_free (event->value);
+  if (event->message_data) {
+    gst_buffer_unref (event->message_data);
+  }
+  g_slice_free (QtDemuxInbandEvent, event);
+}
+
+static void
+qtdemux_inband_event_send (GstQTDemux * demux, QtDemuxInbandEvent * dash_ev)
+{
+  GstStructure *s;
+  QtDemuxStream *stream;
+  GstClockTime presentation_time;
+  GstEvent *pad_ev;
+  GstMessage *msg;
+  GstClockTime duration = 0;
+  GstTagList *tags = NULL;
+  guint i;
+
+  if (dash_ev->event_duration && dash_ev->timescale) {
+    duration = gst_util_uint64_scale (dash_ev->event_duration,
+        GST_SECOND, dash_ev->timescale);
+  }
+
+  s = gst_structure_new ("application/x-inband-event",
+      "scheme", G_TYPE_STRING, dash_ev->scheme_id_uri,
+      "value", G_TYPE_STRING, dash_ev->value,
+      "timescale", G_TYPE_UINT, dash_ev->timescale,
+      "presentation_time_delta", G_TYPE_UINT, dash_ev->presentation_time_delta,
+      "duration", GST_TYPE_CLOCK_TIME, duration,
+      "id", G_TYPE_UINT, dash_ev->id, NULL);
+  if (dash_ev->message_data) {
+    gst_structure_set (s, "message_data", GST_TYPE_BUFFER,
+        dash_ev->message_data, NULL);
+  }
+  if (!g_strcmp0 (dash_ev->scheme_id_uri, "https://aomedia.org/emsg/ID3") ||
+      !g_strcmp0 (dash_ev->scheme_id_uri,
+          "https://developer.apple.com/streaming/emsg-id3")) {
+    tags = gst_tag_list_from_id3v2_tag (dash_ev->message_data);
+  }
+  for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
+    stream = QTDEMUX_NTH_STREAM (demux, i);
+    if (!stream->pad) {
+      continue;
+    }
+    /* presentation_time_delta provides the Media Presentation time delta
+       of the media presentation time of the event and the earliest
+       presentation time in this segment. */
+    presentation_time = stream->segment.start;
+    if (stream->n_samples) {
+      presentation_time =
+          QTSTREAMTIME_TO_GSTTIME (stream, stream->samples[0].timestamp);
+    }
+    if (dash_ev->timescale) {
+      presentation_time +=
+          gst_util_uint64_scale (dash_ev->presentation_time_delta,
+          GST_SECOND, dash_ev->timescale);
+    }
+    GST_DEBUG_OBJECT (demux, "presentation_time = %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (presentation_time));
+    gst_structure_set (s, "presentation_time", GST_TYPE_CLOCK_TIME,
+        presentation_time, NULL);
+    pad_ev = gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM,
+        gst_structure_copy (s));
+    GST_DEBUG_OBJECT (demux, "Sending downstream event %" GST_PTR_FORMAT,
+        pad_ev);
+    gst_pad_push_event (stream->pad, pad_ev);
+    if (tags) {
+      pad_ev = gst_event_new_tag (gst_tag_list_ref (tags));
+      gst_pad_push_event (stream->pad, pad_ev);
+    }
+  }
+  pad_ev = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+      gst_structure_copy (s));
+  GST_DEBUG_OBJECT (demux, "Sending upstream event %" GST_PTR_FORMAT, pad_ev);
+  gst_pad_push_event (demux->sinkpad, pad_ev);
+  msg = gst_message_new_custom (GST_MESSAGE_ELEMENT, GST_OBJECT (demux), s);
+  GST_DEBUG_OBJECT (demux, "Posting custom message %" GST_PTR_FORMAT, msg);
+  gst_element_post_message (GST_ELEMENT_CAST (demux), msg);
+  if (tags) {
+    /* Takes taglist */
+    msg = gst_message_new_tag (GST_OBJECT (demux), tags);
+    gst_element_post_message (GST_ELEMENT_CAST (demux), msg);
+  }
 }
