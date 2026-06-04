@@ -1287,6 +1287,7 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
   VkResult err;
   int i;
   guint in_n_mems, out_n_mems;
+  guint n_planes;
 
   fence = gst_vulkan_device_create_fence (vfilter->device, &error);
   if (!fence)
@@ -1296,8 +1297,10 @@ gst_vulkan_color_convert_transform (GstBaseTransform * bt, GstBuffer * inbuf,
     goto error;
 
   in_n_mems = gst_buffer_n_memory (inbuf);
-  for (i = 0; i < in_n_mems; i++) {
-    GstMemory *img_mem = gst_buffer_peek_memory (inbuf, i);
+  n_planes = GST_VIDEO_INFO_N_PLANES (&conv->quad->in_info);
+  for (i = 0; i < n_planes; i++) {
+    gint idx = MIN (i, in_n_mems - 1);
+    GstMemory *img_mem = gst_buffer_peek_memory (inbuf, idx);
     if (!gst_is_vulkan_image_memory (img_mem)) {
       g_set_error_literal (&error, GST_VULKAN_ERROR, GST_VULKAN_FAILED,
           "Input memory must be a GstVulkanImageMemory");
