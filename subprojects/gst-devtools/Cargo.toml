@@ -1,0 +1,6 @@
+# Cargo workspace for the Rust tools shipped in gst-devtools. The workspace
+# root keeps the single resolved Cargo.lock that Meson's `rust` module reads
+# (via rust.workspace()) to build the members listed below.
+[workspace]
+resolver = "2"
+members = ["dots-viewer"]

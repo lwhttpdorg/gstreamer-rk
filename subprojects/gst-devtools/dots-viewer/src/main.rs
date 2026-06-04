@@ -21,6 +21,13 @@ use tokio::runtime;
 use tracing::instrument;
 use tracing::{debug, error, info, warn};
 
+// Embedded static web assets, defining `generate()`. Cargo's build.rs writes it
+// to $OUT_DIR; the Meson build generates the identical file next to a copy of
+// this source (so no OUT_DIR / nightly --env-set is needed) and sets
+// --cfg dots_meson_build.
+#[cfg(dots_meson_build)]
+include!("generated.rs");
+#[cfg(not(dots_meson_build))]
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 pub static RUNTIME: Lazy<runtime::Runtime> = Lazy::new(|| {
@@ -31,10 +38,21 @@ pub static RUNTIME: Lazy<runtime::Runtime> = Lazy::new(|| {
         .unwrap()
 });
 
+// cargo sets CARGO_PKG_VERSION; the Meson build instead generates version.rs
+// (a string literal) next to this source from the package version.
+#[cfg(dots_meson_build)]
+const VERSION: &str = include!("version.rs");
+#[cfg(not(dots_meson_build))]
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Simple web server that watches a directory for GStreamer `*.dot` files in a local path and
 /// serves them as a web page allowing you to browse them easily.
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+// clap_derive's bare `version`/`about` read CARGO_PKG_* via std::env at
+// macro-expansion, which the Meson build does not set; use the constant below
+// (option_env! so cargo keeps the real version) and let `about` fall back to
+// this doc comment.
+#[command(version = VERSION)]
 struct Args {
     /// Server address
     #[arg(short, long, default_value = "0.0.0.0", action = ArgAction::Set)]

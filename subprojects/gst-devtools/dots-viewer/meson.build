@@ -1,61 +1,50 @@
-if not add_languages('rust', required: get_option('dots_viewer'), native: false)
+dots_viewer_opt = get_option('dots_viewer')
+
+# rust.workspace() (used below) requires Meson >= 1.11.
+if not meson.version().version_compare('>= 1.11')
+  if dots_viewer_opt.enabled()
+    error('dots-viewer requires Meson >= 1.11 (rust.workspace())')
+  endif
+  warning('dots-viewer disabled: requires Meson >= 1.11 (rust.workspace())')
   subdir_done()
 endif
 
-rustc = meson.get_compiler('rust')
-
-cargo = find_program('cargo', version:'>=1.40', required: get_option('dots_viewer'))
-if not cargo.found()
+if not add_languages('rust', required: dots_viewer_opt, native: false)
   subdir_done()
 endif
 
-cargo_wrapper = find_program('cargo_wrapper.py')
-extra_env = {'RUSTC': ' '.join(rustc.cmd_array())}
+rust = import('rust')
+ws = rust.workspace()
+pkg = ws.package('gst-dots-viewer')
 
-system = host_machine.system()
-exe_suffix = ''
-if system == 'windows'
-  exe_suffix = '.exe'
-endif
+gen_resources = find_program('meson' / 'gen-resources.py')
+generated_rs = custom_target(
+  'generated.rs',
+  output: 'generated.rs',
+  command: [gen_resources, meson.current_source_dir() / 'static', '@OUTPUT@'],
+)
 
-if get_option('debug')
-  target = 'debug'
-else
-  target = 'release'
-endif
+version_rs = configure_file(
+  input: 'meson' / 'version.rs.in',
+  output: 'version.rs',
+  configuration: {'VERSION': pkg.version()},
+)
 
-# Extra env to pass to cargo
-if get_option('default_library') == 'static'
-  extra_env += {
-    # Tell the pkg-config crate to think of all libraries as static
-    'PKG_CONFIG_ALL_STATIC': '1',
-    # Tell the system-deps crate to process linker flag for static deps
-    'SYSTEM_DEPS_LINK': 'static'
-  }
-endif
+# structured_sources lays the crate out for rustc: every file is placed by
+# basename at the root, so main.rs (the entry) finds protocol.rs, generated.rs
+# and version.rs by their relative include!/mod paths. pkg.executable() pulls
+# the dependencies, rust_dependency_map, rustc args and edition (rust_std) from
+# the Cargo manifest; only the meson-build cfg is added on top.
+sources = structured_sources(
+  ['src' / 'main.rs', 'src' / 'protocol.rs', generated_rs, version_rs],
+)
 
-foreach binname: ['gst-dots-viewer']
-  custom_target(binname,
-    build_by_default: true,
-    output: binname + exe_suffix,
-    console: true,
-    install: true,
-    install_dir: get_option('bindir'),
-    depfile: binname + '.dep',
-    env: extra_env,
-    command: [cargo_wrapper,
-      'build',
-      meson.current_build_dir(),
-      meson.current_source_dir(),
-      meson.global_build_root(),
-      target,
-      get_option('prefix'),
-      get_option('libdir'),
-      '--depfile', '@DEPFILE@',
-      '--bin', binname,
-      '--exe-suffix', exe_suffix,
-    ])
-endforeach
+gst_dots_viewer = pkg.executable(
+  'gst-dots-viewer',
+  sources,
+  rust_args: ['--cfg', 'dots_meson_build', '--check-cfg', 'cfg(dots_meson_build)'],
+  install: true,
+)
 
 devenv = environment()
 devenv.append('PATH', meson.current_build_dir())
