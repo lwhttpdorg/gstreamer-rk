@@ -89,6 +89,43 @@ digit_to_string (guint digit)
 }
 
 /**
+ * gst_codec_utils_aac_get_profile_from_audio_object_type:
+ * @audio_object_type: The audio object type value from the AAC stream
+ * 
+ * Converts the audio object type to a profile string.
+ *
+ * Returns: (nullable): The profile as a const string, or NULL if the profile could not be determined.
+ *
+ * Since: 1.28
+ */
+const gchar *
+gst_codec_utils_aac_get_profile_from_audio_object_type (guint8
+    audio_object_type)
+{
+  const gchar *profile = NULL;
+
+  switch (audio_object_type) {
+    case 1:
+      profile = "main";
+      break;
+    case 2:
+      profile = "lc";
+      break;
+    case 3:
+      profile = "ssr";
+      break;
+    case 4:
+      profile = "ltp";
+      break;
+    default:
+      GST_DEBUG ("Invalid profile idx: %u", audio_object_type);
+      break;
+  }
+
+  return profile;
+}
+
+/**
  * gst_codec_utils_aac_get_sample_rate_from_index:
  * @sr_idx: Sample rate index as from the AudioSpecificConfig (MPEG-4
  *          container) or ADTS frame header
@@ -284,7 +321,6 @@ gst_codec_utils_aac_get_channels (const guint8 * audio_config, guint len)
 const gchar *
 gst_codec_utils_aac_get_profile (const guint8 * audio_config, guint len)
 {
-  const gchar *profile = NULL;
   guint sample_rate;
   guint8 audio_object_type, channel_config;
   GstBitReader br = GST_BIT_READER_INIT (audio_config, len);
@@ -299,25 +335,9 @@ gst_codec_utils_aac_get_profile (const guint8 * audio_config, guint len)
     return NULL;
   }
 
-  switch (audio_object_type) {
-    case 1:
-      profile = "main";
-      break;
-    case 2:
-      profile = "lc";
-      break;
-    case 3:
-      profile = "ssr";
-      break;
-    case 4:
-      profile = "ltp";
-      break;
-    default:
-      GST_DEBUG ("Invalid profile idx: %u", audio_object_type);
-      break;
-  }
-
-  return profile;
+  return
+      gst_codec_utils_aac_get_profile_from_audio_object_type
+      (audio_object_type);
 }
 
 /**
@@ -4349,24 +4369,9 @@ gst_codec_utils_caps_from_mime_codec_single (const gchar * codec)
           /* If present, last element is the audio object type */
           audio_oti = g_ascii_strtoull (subcodec[2], NULL, 16);
 
-          switch (audio_oti) {
-            case 1:
-              profile = "main";
-              break;
-            case 2:
-              profile = "lc";
-              break;
-            case 3:
-              profile = "ssr";
-              break;
-            case 4:
-              profile = "ltp";
-              break;
-            default:
-              GST_WARNING ("Unhandled MPEG-4 Audio Object Type: 0x%"
-                  G_GUINT64_FORMAT "x", audio_oti);
-              break;
-          }
+          profile =
+              gst_codec_utils_aac_get_profile_from_audio_object_type
+              (audio_oti);
           if (profile)
             gst_caps_set_simple (caps, "profile", G_TYPE_STRING, profile, NULL);
           break;

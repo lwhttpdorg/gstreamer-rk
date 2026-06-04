@@ -146,6 +146,9 @@ struct _TSDemuxJP2KParsingInfos
 struct _TSDemuxADTSParsingInfos
 {
   guint mpegversion;
+  guint channels;
+  guint rate_idx;
+  guint profile;
 };
 
 struct _TSDemuxStream
@@ -3454,6 +3457,9 @@ parse_aac_adts_frame (TSDemuxStream * stream)
   guint frame_len;
   guint crc_size;
   guint mpegversion = 4;
+  guint channels = 0;
+  guint rate_idx = 0;
+  guint profile = 0;
   gint i;
 
   if (stream->current_size < 6) {
@@ -3492,25 +3498,68 @@ parse_aac_adts_frame (TSDemuxStream * stream)
     goto out;
   }
 
-  /* this seems to be valid adts header, check mpeg version now
-   *
-   * TODO: check channels, rate, and profile and then update caps too?
-   */
+  /* ADTS header format (7 or 9 bytes, depending on CRC):
+   * AAAAAAAA AAAABCCD EEFFFFGH HHIJKLMM MMMMMMMM MMMOOOOO OOOOOOPP [QQQQQQQQ QQQQQQQQ]
+   * A=sync B=MPEG version C=layer D=protection absent
+   * E=profile (audio object type --1) F=sample rate index G=private H=channel config
+   * I=original J=home K=copyright ID L=copyright start M=frame length
+   * O=buffer fullness P=number of AAC frames Q=CRC */
+
+  /* This seems to be valid adts header, parse some interesting fields now. */
+
+  /* MPEG version - bit 3 of byte 1
+   * 0 = MPEG-4, 1 = MPEG-2 */
   mpegversion = (stream->data[data_location + 1] & 0x08) ? 2 : 4;
 
+  /* Profile - bits 6,7 of byte 2 (EE bits) */
+  profile = (stream->data[data_location + 2] >> 6) & 0x03;
+
+  /* Sampling frequency index - bits 2,3,4,5 of byte 2 (FFFF bits) */
+  rate_idx = (stream->data[data_location + 2] >> 2) & 0x0f;
+
+  /* Channel configuration - bit 0 of byte 2 (H bit) and bits 6,7 of byte 3 (HH bits) */
+  channels = ((stream->data[data_location + 2] & 0x01) << 2) |
+      ((stream->data[data_location + 3] >> 6) & 0x03);
+
 out:
-  if (mpegversion != stream->atdsInfos.mpegversion) {
+  if (mpegversion != stream->atdsInfos.mpegversion ||
+      channels != stream->atdsInfos.channels ||
+      rate_idx != stream->atdsInfos.rate_idx ||
+      profile != stream->atdsInfos.profile) {
+    const char *profile_str = NULL;
+    guint rate = 0;
     GstCaps *caps;
     MpegTSBaseStream *bstream = (MpegTSBaseStream *) stream;
 
     GST_DEBUG_OBJECT (stream->pad, "Update mpegversion from %d to %d",
         stream->atdsInfos.mpegversion, mpegversion);
     stream->atdsInfos.mpegversion = mpegversion;
+    stream->atdsInfos.channels = channels;
+    stream->atdsInfos.rate_idx = rate_idx;
+    stream->atdsInfos.profile = profile;
 
     caps = gst_stream_get_caps (bstream->stream_object);
     caps = gst_caps_make_writable (caps);
 
-    gst_caps_set_simple (caps, "mpegversion", G_TYPE_INT, mpegversion, NULL);
+    gst_caps_set_simple (caps,
+        "mpegversion", G_TYPE_INT, mpegversion,
+        "channels", G_TYPE_INT, channels, NULL);
+
+    /* Convert sampling rate index to actual rate */
+    rate = gst_codec_utils_aac_get_sample_rate_from_index (rate_idx);
+
+    /* Convert audio object type to profile */
+    profile_str =
+        gst_codec_utils_aac_get_profile_from_audio_object_type (profile + 1);
+
+    if (rate != 0) {
+      gst_caps_set_simple (caps, "rate", G_TYPE_INT, rate, NULL);
+    }
+
+    if (profile_str) {
+      gst_caps_set_simple (caps, "profile", G_TYPE_STRING, profile_str, NULL);
+    }
+
     gst_stream_set_caps (bstream->stream_object, caps);
     gst_pad_set_caps (stream->pad, caps);
     gst_caps_unref (caps);

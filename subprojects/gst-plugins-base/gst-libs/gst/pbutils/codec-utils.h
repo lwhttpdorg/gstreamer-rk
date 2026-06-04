@@ -52,6 +52,9 @@ gboolean      gst_codec_utils_aac_caps_set_level_and_profile (GstCaps      * cap
                                                               const guint8 * audio_config,
                                                               guint          len);
 
+GST_PBUTILS_API
+const gchar * gst_codec_utils_aac_get_profile_from_audio_object_type (guint8 audio_object_type);
+
 /* H.264 */
 
 /**

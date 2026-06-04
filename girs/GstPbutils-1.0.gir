@@ -4016,6 +4016,20 @@ determined.</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="codec_utils_aac_get_profile_from_audio_object_type" c:identifier="gst_codec_utils_aac_get_profile_from_audio_object_type" version="1.28">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">Converts the audio object type to a profile string.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.h"/>
+      <return-value transfer-ownership="none" nullable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">The profile as a const string, or NULL if the profile could not be determined.</doc>
+        <type name="utf8" c:type="const gchar*"/>
+      </return-value>
+      <parameters>
+        <parameter name="audio_object_type" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">The audio object type value from the AAC stream</doc>
+          <type name="guint8" c:type="guint8"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="codec_utils_aac_get_sample_rate" c:identifier="gst_codec_utils_aac_get_sample_rate" version="1.10">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c">Translates the sample rate index found in AAC headers to the actual sample
 rate.</doc>
