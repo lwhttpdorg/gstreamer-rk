@@ -42,6 +42,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_vpxdec_debug);
 #define DEFAULT_THREADS 0
 #define DEFAULT_VIDEO_CODEC_TAG NULL
 #define DEFAULT_CODEC_ALGO NULL
+#define DEFAULT_STRIDE_ALIGN 32
 
 enum
 {
@@ -756,7 +757,7 @@ gst_vpx_dec_handle_frame (GstVideoDecoder * decoder, GstVideoCodecFrame * frame)
       gst_video_decoder_drop_frame (decoder, frame);
     } else {
       gst_vpx_dec_handle_resolution_change (dec, img, fmt);
-      if (img->fb_priv && dec->have_video_meta) {
+      if (img->fb_priv && dec->direct_rendering) {
         frame->output_buffer = gst_vpx_dec_prepare_image (dec, img);
         ret = gst_video_decoder_finish_frame (decoder, frame);
       } else {
@@ -792,13 +793,50 @@ gst_vpx_dec_decide_allocation (GstVideoDecoder * bdec, GstQuery * query)
   GstVPXDec *dec = GST_VPX_DEC (bdec);
   guint n_pools;
 
-  dec->have_video_meta =
-      gst_query_find_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
-
-  if (!dec->have_video_meta)
+  if (!gst_query_find_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL)) {
+    dec->direct_rendering = FALSE;
     goto out;
+  }
+
+  dec->direct_rendering = TRUE;
+
+  if (gst_query_get_n_allocation_params (query) > 0) {
+    GstAllocator *allocator;
+    GstAllocationParams params;
+
+    gst_query_parse_nth_allocation_param (query, 0, &allocator, &params);
+
+    if (allocator &&
+        GST_OBJECT_FLAG_IS_SET (allocator, GST_ALLOCATOR_FLAG_CUSTOM_ALLOC)) {
+      GST_DEBUG_OBJECT (dec,
+          "Not using direct rendering: allocator %s has CUSTOM_ALLOC flag",
+          g_type_name (G_OBJECT_TYPE (allocator)));
+      dec->direct_rendering = FALSE;
+    } else if ((params.align > 0 &&
+            (DEFAULT_STRIDE_ALIGN % (params.align + 1) != 0)) ||
+        params.flags > 0 || params.prefix > 0 || params.padding > 0) {
+      GST_DEBUG_OBJECT (dec,
+          "Not using direct rendering: allocation params not suitable: "
+          "flags 0x%x align %lu prefix %lu padding %lu",
+          params.flags, params.align, params.prefix, params.padding);
+      dec->direct_rendering = FALSE;
+    }
+    gst_clear_object (&allocator);
+  }
 
   n_pools = gst_query_get_n_allocation_pools (query);
+  if (n_pools > 0 && dec->direct_rendering) {
+    GstBufferPool *pool;
+
+    gst_query_parse_nth_allocation_pool (query, 0, &pool, NULL, NULL, NULL);
+    if (pool && G_OBJECT_TYPE (pool) != GST_TYPE_VIDEO_BUFFER_POOL) {
+      GST_DEBUG_OBJECT (dec,
+          "Not using direct rendering: non-default pool %s",
+          g_type_name (G_OBJECT_TYPE (pool)));
+      dec->direct_rendering = FALSE;
+    }
+  }
+
   if (n_pools == 0) {
     GstBufferPool *pool;
 
