@@ -4602,10 +4602,9 @@ gst_decode_chain_get_topology (GstDecodeChain * chain)
     for (l = chain->active_group->children; l; l = l->next) {
       s = gst_decode_chain_get_topology (l->data);
       if (s) {
-        gst_value_set_structure (&item, s);
+        gst_value_take_structure (&item, s);
         gst_value_list_append_value (&list, &item);
         g_value_reset (&item);
-        gst_structure_free (s);
       }
     }
     gst_structure_set_value (u, "next", &list);
@@ -4810,6 +4809,7 @@ retry:
   /* Don't add pads if we are shutting down */
   DYN_LOCK (dbin);
   if (G_UNLIKELY (dbin->shutdown)) {
+    g_list_free_full (endpads, gst_object_unref);
     GST_WARNING_OBJECT (dbin, "Currently, shutting down, aborting exposing");
     DYN_UNLOCK (dbin);
     return FALSE;

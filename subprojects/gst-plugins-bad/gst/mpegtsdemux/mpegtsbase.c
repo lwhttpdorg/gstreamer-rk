@@ -663,9 +663,13 @@ find_registration_in_descriptors (GPtrArray * descriptors,
   for (i = 0; i < nb_desc; i++) {
     GstMpegtsDescriptor *desc = g_ptr_array_index (descriptors, i);
     if (desc->tag == GST_MTS_DESC_REGISTRATION) {
-      guint32 reg_desc = GST_READ_UINT32_BE (desc->data + 2);
-      if (reg_desc == registration_id)
-        return TRUE;
+      if (G_UNLIKELY (desc->length < 4)) {
+        GST_WARNING ("Registration descriptor with length < 4. (Corrupted ?)");
+      } else {
+        guint32 reg_desc = GST_READ_UINT32_BE (desc->data + 2);
+        if (reg_desc == registration_id)
+          return TRUE;
+      }
     }
   }
   return FALSE;
@@ -2012,10 +2016,8 @@ mpegts_base_handle_seek_event (MpegTSBase * base, GstPad * pad,
     flush_event = NULL;
   }
 
-  if (flush_event)
-    gst_event_unref (flush_event);
-  gst_pad_start_task (base->sinkpad, (GstTaskFunction) mpegts_base_loop, base,
-      NULL);
+  gst_pad_start_task (base->sinkpad, (GstTaskFunction) mpegts_base_loop,
+      gst_object_ref (base), gst_object_unref);
 
   GST_PAD_STREAM_UNLOCK (base->sinkpad);
   return ret == GST_FLOW_OK;
@@ -2072,8 +2074,8 @@ mpegts_base_sink_activate_mode (GstPad * pad, GstObject * parent,
         base->packetizer->calculate_skew = FALSE;
         gst_segment_init (&base->segment, GST_FORMAT_BYTES);
         res =
-            gst_pad_start_task (pad, (GstTaskFunction) mpegts_base_loop, base,
-            NULL);
+            gst_pad_start_task (pad, (GstTaskFunction) mpegts_base_loop,
+            gst_object_ref (base), gst_object_unref);
       } else
         res = gst_pad_stop_task (pad);
       break;

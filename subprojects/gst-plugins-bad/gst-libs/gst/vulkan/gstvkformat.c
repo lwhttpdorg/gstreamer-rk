@@ -480,6 +480,7 @@ const static GstVulkanFormatMap vk_formats_map[] = {
   /* 2-planes 420 */
   { GST_VIDEO_FORMAT_NV21,                 VK_FORMAT_UNDEFINED,                                 { VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM } },
   { GST_VIDEO_FORMAT_NV12,                 VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,                  { VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM } },
+  { GST_VIDEO_FORMAT_AV12,                 VK_FORMAT_UNDEFINED,                                  { VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8_UNORM } },
   { GST_VIDEO_FORMAT_ENDIANNESS (P010_10), VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16, { VK_FORMAT_R10X6_UNORM_PACK16, VK_FORMAT_R10X6G10X6_UNORM_2PACK16 } },
   { GST_VIDEO_FORMAT_ENDIANNESS (P012_),   VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16, { VK_FORMAT_R12X4_UNORM_PACK16, VK_FORMAT_R12X4G12X4_UNORM_2PACK16 } },
   { GST_VIDEO_FORMAT_ENDIANNESS (P016_),   VK_FORMAT_G16_B16R16_2PLANE_420_UNORM,               { VK_FORMAT_R16_UNORM, VK_FORMAT_R16G16_UNORM } },
@@ -667,6 +668,8 @@ gst_vulkan_format_from_video_info_2 (GstVulkanDevice * device,
           vk_formats_map[i].vkfrmts[0], &props);
       feats_secondary = (tiling == VK_IMAGE_TILING_LINEAR) ?
           props.linear_tiling_feat : props.optimal_tiling_feat;
+    } else {
+      feats_secondary = feats_primary;
     }
 
     if (GST_VIDEO_INFO_IS_RGB (info)) {

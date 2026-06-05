@@ -383,7 +383,7 @@ static gboolean
 gst_wavpack_enc_set_format (GstAudioEncoder * benc, GstAudioInfo * info)
 {
   GstWavpackEnc *enc = GST_WAVPACK_ENC (benc);
-  GstAudioChannelPosition *pos;
+  const GstAudioChannelPosition *pos;
   GstAudioChannelPosition opos[64] = { GST_AUDIO_CHANNEL_POSITION_INVALID, };
   GstCaps *caps;
   guint64 mask = 0;
@@ -398,21 +398,24 @@ gst_wavpack_enc_set_format (GstAudioEncoder * benc, GstAudioInfo * info)
   enc->float_mode = GST_AUDIO_INFO_FORMAT (info) == GST_AUDIO_FORMAT_F32;
 
   pos = info->position;
-  g_assert (pos);
 
-  /* If one channel is NONE they'll be all undefined */
-  if (pos != NULL && pos[0] == GST_AUDIO_CHANNEL_POSITION_NONE) {
-    goto invalid_channels;
+  if (pos[0] == GST_AUDIO_CHANNEL_POSITION_NONE) {
+    enc->channel_mask = 0;
+    enc->need_channel_remap = FALSE;
+  } else {
+    enc->channel_mask =
+        gst_wavpack_get_channel_mask_from_positions (pos, enc->channels);
+    if (enc->channel_mask == 0)
+      GST_WARNING_OBJECT (enc,
+          "Unsupported channel layout -- mapping to unpositioned channels");
+
+    enc->need_channel_remap =
+        gst_wavpack_set_channel_mapping (pos, enc->channels,
+        enc->channel_mapping);
+
+    /* wavpack caps hold gst mask, not wavpack mask */
+    gst_audio_channel_positions_to_mask (opos, enc->channels, FALSE, &mask);
   }
-
-  enc->channel_mask =
-      gst_wavpack_get_channel_mask_from_positions (pos, enc->channels);
-  enc->need_channel_remap =
-      gst_wavpack_set_channel_mapping (pos, enc->channels,
-      enc->channel_mapping);
-
-  /* wavpack caps hold gst mask, not wavpack mask */
-  gst_audio_channel_positions_to_mask (opos, enc->channels, FALSE, &mask);
 
   /* set fixed src pad caps now that we know what we will get */
   caps = gst_caps_new_simple ("audio/x-wavpack",
@@ -441,11 +444,6 @@ setting_src_caps_failed:
     GST_DEBUG_OBJECT (enc,
         "Couldn't set caps on source pad: %" GST_PTR_FORMAT, caps);
     gst_caps_unref (caps);
-    return FALSE;
-  }
-invalid_channels:
-  {
-    GST_DEBUG_OBJECT (enc, "input has invalid channel layout");
     return FALSE;
   }
 }
@@ -673,7 +671,7 @@ gst_wavpack_enc_fix_channel_order (GstWavpackEnc * enc, gint32 * data,
     gint nsamples)
 {
   gint i, j;
-  gint32 tmp[8];
+  gint32 *tmp = g_newa (gint32, enc->channels);
 
   for (i = 0; i < nsamples / enc->channels; i++) {
     for (j = 0; j < enc->channels; j++) {

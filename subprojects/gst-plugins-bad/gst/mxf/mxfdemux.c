@@ -5592,7 +5592,7 @@ collect_index_table_segments (GstMXFDemux * demux)
         MXFIndexEntry *entry = &s->index_entries[entidx];
         gint8 offs = -entry->temporal_offset;
         /* Check we don't exceed boundaries */
-        if (start + entidx + entry->temporal_offset >
+        if (start + entidx + entry->temporal_offset >=
             table->reverse_temporal_offsets->len) {
           GST_ERROR_OBJECT (demux,
               "Temporal offset exceeds boundaries. entry:%d offset:%d max:%d",
@@ -5872,7 +5872,8 @@ gst_mxf_demux_seek_pull (GstMXFDemux * demux, GstEvent * event)
   demux->seqnum = seqnum;
 
   gst_pad_start_task (demux->sinkpad,
-      (GstTaskFunction) gst_mxf_demux_loop, demux->sinkpad, NULL);
+      (GstTaskFunction) gst_mxf_demux_loop, gst_object_ref (demux->sinkpad),
+      gst_object_unref);
 
   GST_PAD_STREAM_UNLOCK (demux->sinkpad);
 
@@ -5887,7 +5888,8 @@ wrong_format:
 unresolved_metadata:
   {
     gst_pad_start_task (demux->sinkpad,
-        (GstTaskFunction) gst_mxf_demux_loop, demux->sinkpad, NULL);
+        (GstTaskFunction) gst_mxf_demux_loop, gst_object_ref (demux->sinkpad),
+        gst_object_unref);
     GST_PAD_STREAM_UNLOCK (demux->sinkpad);
     GST_WARNING_OBJECT (demux, "metadata can't be resolved");
     return FALSE;
@@ -5904,7 +5906,8 @@ invalid_position:
       gst_mxf_demux_push_src_event (demux, e);
     }
     gst_pad_start_task (demux->sinkpad,
-        (GstTaskFunction) gst_mxf_demux_loop, demux->sinkpad, NULL);
+        (GstTaskFunction) gst_mxf_demux_loop, gst_object_ref (demux->sinkpad),
+        gst_object_unref);
     GST_PAD_STREAM_UNLOCK (demux->sinkpad);
     GST_WARNING_OBJECT (demux, "Requested seek position is not valid");
     return FALSE;
@@ -6114,7 +6117,7 @@ gst_mxf_demux_sink_activate_mode (GstPad * sinkpad, GstObject * parent,
     if (active) {
       demux->random_access = TRUE;
       return gst_pad_start_task (sinkpad, (GstTaskFunction) gst_mxf_demux_loop,
-          sinkpad, NULL);
+          gst_object_ref (sinkpad), gst_object_unref);
     } else {
       demux->random_access = FALSE;
       return gst_pad_stop_task (sinkpad);
@@ -6441,20 +6444,17 @@ gst_mxf_demux_get_property (GObject * object, guint prop_id,
       g_value_set_uint64 (value, demux->max_drift);
       break;
     case PROP_STRUCTURE:{
-      GstStructure *s;
 
       g_rw_lock_reader_lock (&demux->metadata_lock);
       if (demux->preface &&
           MXF_METADATA_BASE (demux->preface)->resolved ==
-          MXF_METADATA_BASE_RESOLVE_STATE_SUCCESS)
-        s = mxf_metadata_base_to_structure (MXF_METADATA_BASE (demux->preface));
-      else
-        s = NULL;
-
-      gst_value_set_structure (value, s);
-
-      if (s)
-        gst_structure_free (s);
+          MXF_METADATA_BASE_RESOLVE_STATE_SUCCESS) {
+        GstStructure *s =
+            mxf_metadata_base_to_structure (MXF_METADATA_BASE (demux->preface));
+        gst_value_take_structure (value, s);
+      } else {
+        gst_value_set_structure (value, NULL);
+      }
 
       g_rw_lock_reader_unlock (&demux->metadata_lock);
       break;

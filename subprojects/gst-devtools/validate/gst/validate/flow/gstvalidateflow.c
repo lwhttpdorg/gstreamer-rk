@@ -109,6 +109,10 @@ struct _ValidateFlowOverride
   gsize expected_line_index;
   gboolean live_mismatch_found;
 
+  /* Tracks async mismatch reports queued via gst_call_async() */
+  GMutex async_report_lock;
+  GCond async_report_cond;
+  gint pending_async_reports;
 };
 
 GList *all_overrides = NULL;
@@ -128,6 +132,8 @@ G_DEFINE_TYPE (ValidateFlowOverride, validate_flow_override,
 void
 validate_flow_override_init (ValidateFlowOverride * self)
 {
+  g_mutex_init (&self->async_report_lock);
+  g_cond_init (&self->async_report_cond);
 }
 
 void
@@ -204,6 +210,51 @@ report_mismatch_diff (ValidateFlowOverride * flow, gsize line_index,
   g_string_free (diff, TRUE);
 }
 
+typedef struct
+{
+  ValidateFlowOverride *flow;
+  gsize line_index;
+  gchar *expected;
+  gchar *actual;
+} FlowMismatchReport;
+
+static void
+flow_mismatch_report_run (gpointer user_data)
+{
+  FlowMismatchReport *r = user_data;
+  ValidateFlowOverride *flow = r->flow;
+
+  report_mismatch_diff (flow, r->line_index, r->expected, r->actual);
+  g_free (r->expected);
+  g_free (r->actual);
+  g_free (r);
+
+  g_mutex_lock (&flow->async_report_lock);
+  flow->pending_async_reports--;
+  g_cond_signal (&flow->async_report_cond);
+  g_mutex_unlock (&flow->async_report_lock);
+
+  gst_object_unref (flow);
+}
+
+static void
+report_mismatch_diff_async (ValidateFlowOverride * flow, gsize line_index,
+    const gchar * expected, const gchar * actual)
+{
+  FlowMismatchReport *r = g_new (FlowMismatchReport, 1);
+
+  r->flow = gst_object_ref (flow);
+  r->line_index = line_index;
+  r->expected = g_strdup (expected);
+  r->actual = g_strdup (actual);
+
+  g_mutex_lock (&flow->async_report_lock);
+  flow->pending_async_reports++;
+  g_mutex_unlock (&flow->async_report_lock);
+
+  gst_call_async (flow_mismatch_report_run, r);
+}
+
 /* *INDENT-OFF* */
 G_GNUC_PRINTF (2, 0)
 /* *INDENT-ON* */
@@ -236,13 +287,13 @@ validate_flow_override_vprintf (ValidateFlowOverride * flow, const char *format,
 
       if (expected == NULL) {
         flow->live_mismatch_found = TRUE;
-        report_mismatch_diff (flow, flow->expected_line_index, "<nothing>",
-            lines[i]);
+        report_mismatch_diff_async (flow, flow->expected_line_index,
+            "<nothing>", lines[i]);
       } else {
         if (g_strcmp0 (lines[i], expected) != 0) {
           flow->live_mismatch_found = TRUE;
-          report_mismatch_diff (flow, flow->expected_line_index, expected,
-              lines[i]);
+          report_mismatch_diff_async (flow, flow->expected_line_index,
+              expected, lines[i]);
         }
         flow->expected_line_index++;
       }
@@ -689,6 +740,18 @@ _line_to_show (gchar ** lines, gsize i)
 static void
 runner_stopping (GstValidateRunner * runner, ValidateFlowOverride * flow)
 {
+  gsize remaining_index = 0;
+  gchar *remaining = NULL;
+
+  /* Wait for all async mismatch reports to complete before proceeding
+   * with shutdown. These run on GStreamer's shared thread pool and access
+   * globals (log_files, newline_regex) that gst_validate_report_deinit()
+   * will free after this signal handler returns. */
+  g_mutex_lock (&flow->async_report_lock);
+  while (flow->pending_async_reports > 0)
+    g_cond_wait (&flow->async_report_cond, &flow->async_report_lock);
+  g_mutex_unlock (&flow->async_report_lock);
+
   g_mutex_lock (&flow->flow_mutex);
   fclose (flow->output_file);
   flow->output_file = NULL;
@@ -711,16 +774,24 @@ runner_stopping (GstValidateRunner * runner, ValidateFlowOverride * flow)
 
   if (flow->expected_lines
       && flow->expected_lines[flow->expected_line_index] != NULL) {
-    const gchar *remaining =
+    const gchar *r =
         _line_to_show (flow->expected_lines, flow->expected_line_index);
 
-    if (remaining && g_strcmp0 (remaining, "<nothing>") != 0) {
+    if (r && g_strcmp0 (r, "<nothing>") != 0) {
       flow->live_mismatch_found = TRUE;
-      report_mismatch_diff (flow, flow->expected_line_index, remaining,
-          "<nothing>");
+      remaining_index = flow->expected_line_index;
+      remaining = g_strdup (r);
     }
   }
   g_mutex_unlock (&flow->flow_mutex);
+
+  /* Report after releasing flow_mutex: GST_VALIDATE_REPORT walks the
+   * pipeline and emits "report-added" synchronously, taking GstObject
+   * locks that can be held by other threads waiting on flow_mutex. */
+  if (remaining) {
+    report_mismatch_diff (flow, remaining_index, remaining, "<nothing>");
+    g_free (remaining);
+  }
 
   if (flow->live_mismatch_found) {
     run_diff (flow->expectations_file_path, flow->actual_results_file_path);
@@ -753,6 +824,8 @@ validate_flow_override_finalize (GObject * object)
   if (flow->ignored_fields)
     gst_structure_free (flow->ignored_fields);
   g_strfreev (flow->expected_lines);
+  g_mutex_clear (&flow->async_report_lock);
+  g_cond_clear (&flow->async_report_cond);
 
   G_OBJECT_CLASS (validate_flow_override_parent_class)->finalize (object);
 }

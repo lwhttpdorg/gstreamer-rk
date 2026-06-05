@@ -179,6 +179,8 @@ static GstStaticPadTemplate audiosink_templ =
         COMMON_AUDIO_CAPS "; "
         "audio/x-eac3, "
         COMMON_AUDIO_CAPS "; "
+        "audio/x-true-hd, "
+        COMMON_AUDIO_CAPS "; "
         "audio/x-dts, "
         COMMON_AUDIO_CAPS "; "
         "audio/x-vorbis, "
@@ -222,7 +224,7 @@ static GstStaticPadTemplate subtitlesink_templ =
     GST_PAD_REQUEST,
     GST_STATIC_CAPS ("subtitle/x-kate; "
         "text/x-raw, format=utf8; application/x-ssa; application/x-ass; "
-        "application/x-usf; subpicture/x-dvd; "
+        "application/x-usf; subpicture/x-dvd; subpicture/x-pgs; "
         "application/x-subtitle-unknown")
     );
 
@@ -510,6 +512,7 @@ gst_matroska_mux_pad_init (GstMatroskaMuxPad * pad)
   pad->frame_duration_user = FALSE;
   pad->start_ts = GST_CLOCK_TIME_NONE;
   pad->end_ts = GST_CLOCK_TIME_NONE;
+  pad->last_keyframe_ts = GST_CLOCK_TIME_NONE;
   pad->tags = gst_tag_list_new_empty ();
   gst_tag_list_set_scope (pad->tags, GST_TAG_SCOPE_STREAM);
 }
@@ -645,6 +648,7 @@ gst_matroska_pad_reset (GstMatroskaMuxPad * pad, gboolean full)
 
   pad->start_ts = GST_CLOCK_TIME_NONE;
   pad->end_ts = GST_CLOCK_TIME_NONE;
+  pad->last_keyframe_ts = GST_CLOCK_TIME_NONE;
   gst_clear_tag_list (&pad->tags);
 
   if (full) {
@@ -2359,6 +2363,8 @@ gst_matroska_mux_audio_pad_setcaps (GstMatroskaMux * mux,
     gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_AUDIO_AC3);
   } else if (!strcmp (mimetype, "audio/x-eac3")) {
     gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_AUDIO_EAC3);
+  } else if (!strcmp (mimetype, "audio/x-true-hd")) {
+    gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_AUDIO_TRUEHD);
   } else if (!strcmp (mimetype, "audio/x-dts")) {
     gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_AUDIO_DTS);
   } else if (!strcmp (mimetype, "audio/x-tta")) {
@@ -2610,6 +2616,9 @@ gst_matroska_mux_subtitle_pad_setcaps (GstMatroskaMux * mux,
     gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_SUBTITLE_ASS);
   } else if (!strcmp (mimetype, "application/x-usf")) {
     gst_matroska_mux_set_codec_id (context, GST_MATROSKA_CODEC_ID_SUBTITLE_USF);
+  } else if (!strcmp (mimetype, "subpicture/x-pgs")) {
+    gst_matroska_mux_set_codec_id (context,
+        GST_MATROSKA_CODEC_ID_SUBTITLE_HDMVPGS);
   } else if (!strcmp (mimetype, "subpicture/x-dvd")) {
     gst_matroska_mux_set_codec_id (context,
         GST_MATROSKA_CODEC_ID_SUBTITLE_VOBSUB);
@@ -4210,6 +4219,7 @@ gst_matroska_mux_write_data (GstMatroskaMux * mux, GstMatroskaMuxPad * mux_pad,
       GST_LOG_OBJECT (mux, "have video keyframe, ts=%" GST_TIME_FORMAT,
           GST_TIME_ARGS (buffer_timestamp));
       is_video_keyframe = TRUE;
+      mux_pad->last_keyframe_ts = buffer_timestamp;
     } else if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DECODE_ONLY) &&
         (!strcmp (mux_pad->track->codec_id, GST_MATROSKA_CODEC_ID_VIDEO_VP8)
             || !strcmp (mux_pad->track->codec_id,
@@ -4417,6 +4427,24 @@ gst_matroska_mux_write_data (GstMatroskaMux * mux, GstMatroskaMuxPad * mux_pad,
         relative_timestamp, flags);
     if (write_duration)
       gst_ebml_write_uint (ebml, GST_MATROSKA_ID_BLOCKDURATION, block_duration);
+
+    /* Mark non-keyframe video blocks with a ReferenceBlock element so that
+     * demuxers can correctly identify them as delta units. The Matroska spec
+     * requires a ReferenceBlock in BlockGroups that are not keyframes.
+     * Note: this always references the previous keyframe, which is an
+     * approximation. For B-frames the actual reference may be a future frame,
+     * and a frame may have multiple reference frames. However, referencing the
+     * previous keyframe is sufficient to signal that decoding can start from
+     * there. */
+    if (mux_pad->track->type == GST_MATROSKA_TRACK_TYPE_VIDEO
+        && !is_video_keyframe) {
+      gint64 reference_offset =
+          gst_util_uint64_scale (mux_pad->last_keyframe_ts, 1,
+          mux->time_scale) - gst_util_uint64_scale (buffer_timestamp, 1,
+          mux->time_scale);
+      gst_ebml_write_sint (ebml, GST_MATROSKA_ID_REFERENCEBLOCK,
+          reference_offset);
+    }
 
     if (!strcmp (mux_pad->track->codec_id, GST_MATROSKA_CODEC_ID_AUDIO_OPUS)
         && cmeta) {

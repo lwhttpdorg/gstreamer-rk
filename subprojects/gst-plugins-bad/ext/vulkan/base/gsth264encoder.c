@@ -32,9 +32,15 @@
  * subclass is expected to implement the rate control algorithms and the
  * specific accelerator logic.
  *
+ * Limitations:
  * + Extended profile isn't supported.
  * + Only progressive frames are supported (not interlaced)
- * * Neither intra profiles are fully supported
+ * + Intra profiles are not fully supported
+ * + Multi-slice encoding is not yet implemented
+ * + Scaling lists, MVC and SVC extensions are not supported
+ * + Timing information (HRD/VUI) is not fully implemented
+ *
+ * Since: 1.30
  */
 
 /* ToDo:
@@ -167,6 +173,7 @@ struct _GstH264EncoderPrivate
   {
     GstH264Profile profile;
     GstH264Level level;
+    GstH264EncoderProfileVariant variant;
   } stream;
 
   struct
@@ -331,25 +338,15 @@ gst_h264_encoder_frame_set_user_data (GstH264EncoderFrame * frame,
  * Returns: (transfer none): The previously set user_data
  */
 
-/*
- * TODO:
- * + Load some preset fixed GOP structure.
- * + Skip this if in lookahead mode.
- */
-static gboolean
-gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
+static inline void
+ensure_and_adjust_gop_parameters (GstH264Encoder * self)
 {
   GstH264EncoderPrivate *priv = _GET_PRIV (self);
-  guint32 list0, list1, gop_ref_num;
-  gint32 p_frames;
-  gboolean ret;
-
-  if (priv->stream.profile == GST_H264_PROFILE_BASELINE)
-    priv->gop.params.num_bframes = 0;
 
   /* If not set, generate a idr every second */
   if (priv->gop.params.idr_period == 0) {
-    priv->gop.params.idr_period = (priv->fps_n + priv->fps_d - 1) / priv->fps_d;
+    priv->gop.params.idr_period =
+        ((guint64) priv->fps_n + (guint64) priv->fps_d - 1) / priv->fps_d;
   }
 
   /* Prefer have more than 1 reference for the GOP which is not very small. */
@@ -371,11 +368,23 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
           priv->gop.params.num_bframes);
     }
   }
+}
 
-  list0 = MIN (priv->config.max_num_reference_list0, priv->gop.num_ref_frames);
-  list1 = MIN (priv->config.max_num_reference_list1, priv->gop.num_ref_frames);
+enum GOPConfigResult {
+  GOPConfigResultIntraOnly,
+  GOPConfigResultClosed,
+};
 
-  if (list0 == 0) {
+static inline enum GOPConfigResult
+configure_reference_counts (GstH264Encoder * self,
+    guint32 * list0, guint32 * list1)
+{
+  GstH264EncoderPrivate *priv = _GET_PRIV (self);
+
+  *list0 = MIN (priv->config.max_num_reference_list0, priv->gop.num_ref_frames);
+  *list1 = MIN (priv->config.max_num_reference_list1, priv->gop.num_ref_frames);
+
+  if (*list0 == 0) {
     GST_INFO_OBJECT (self,
         "No reference support, fallback to intra only stream");
 
@@ -389,14 +398,14 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
     priv->gop.params.num_iframes = priv->gop.params.idr_period - 1; /* The idr */
     priv->gop.ref_num_list0 = 0;
     priv->gop.ref_num_list1 = 0;
-    goto create_poc;
+    return GOPConfigResultIntraOnly;
   }
 
   if (priv->gop.num_ref_frames <= 1) {
     GST_INFO_OBJECT (self, "The number of reference frames is only %d,"
         " no B frame allowed, fallback to I/P mode", priv->gop.num_ref_frames);
     priv->gop.params.num_bframes = 0;
-    list1 = 0;
+    *list1 = 0;
   }
 
   /* b_pyramid needs at least 1 ref for B, besides the I/P */
@@ -406,7 +415,7 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
     priv->gop.params.b_pyramid = FALSE;
   }
 
-  if (list1 == 0 && priv->gop.params.num_bframes > 0) {
+  if (*list1 == 0 && priv->gop.params.num_bframes > 0) {
     GST_INFO_OBJECT (self,
         "No max reference count for list 1, fallback to I/P mode");
     priv->gop.params.num_bframes = 0;
@@ -415,7 +424,7 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
 
   /* I/P mode, no list1 needed. */
   if (priv->gop.params.num_bframes == 0)
-    list1 = 0;
+    *list1 = 0;
 
   /* Not enough B frame, no need for b_pyramid. */
   if (priv->gop.params.num_bframes <= 1)
@@ -423,24 +432,44 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
 
   /* b pyramid has only one backward reference. */
   if (priv->gop.params.b_pyramid)
-    list1 = 1;
+    *list1 = 1;
 
-  if (priv->gop.num_ref_frames > list0 + list1) {
-    priv->gop.num_ref_frames = list0 + list1;
+  if (priv->gop.num_ref_frames > *list0 + *list1) {
+    priv->gop.num_ref_frames = *list0 + *list1;
     GST_WARNING_OBJECT (self, "number of reference frames is bigger than max "
         "reference count. Lowered number of reference frames to %d",
         priv->gop.num_ref_frames);
   }
 
+  return GOPConfigResultClosed;
+}
+
+static inline guint32
+calculate_gop_ref_num (GstH264Encoder * self)
+{
+  GstH264EncoderPrivate *priv = _GET_PRIV (self);
+  guint32 bframes_plus1, total_frames, gop_ref_num;
+
+  bframes_plus1 = priv->gop.params.num_bframes + 1;
+  total_frames = priv->gop.params.idr_period + priv->gop.params.num_bframes;
+
   /* How many possible refs within a GOP. */
-  gop_ref_num = (priv->gop.params.idr_period + priv->gop.params.num_bframes) /
-      (priv->gop.params.num_bframes + 1);
+  gop_ref_num = total_frames / bframes_plus1;
 
   /* The end reference. */
   if (priv->gop.params.num_bframes > 0
       /* frame_num % (priv->gop.num_bframes + 1) happens to be the end P */
-      && (priv->gop.params.idr_period % (priv->gop.params.num_bframes + 1) != 1))
+      && (priv->gop.params.idr_period % bframes_plus1 != 1))
     gop_ref_num++;
+
+  return gop_ref_num;
+}
+
+static inline void
+adjust_reference_distribution (GstH264Encoder * self,
+    guint32 list0, guint32 list1, guint32 gop_ref_num)
+{
+  GstH264EncoderPrivate *priv = _GET_PRIV (self);
 
   /* Adjust reference num based on B frames and B pyramid. */
   if (priv->gop.params.num_bframes == 0) {
@@ -488,30 +517,56 @@ gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
     if (priv->gop.ref_num_list0 > list0)
       priv->gop.ref_num_list0 = list0;
   }
+}
 
-  /* It's OK, keep slots for GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME frame. */
-  if (priv->gop.ref_num_list0 > gop_ref_num) {
-    GST_DEBUG_OBJECT (self, "num_ref_frames %d is bigger than gop_ref_num %d",
-        priv->gop.ref_num_list0, gop_ref_num);
+/*
+ * TODO:
+ * + Load some preset fixed GOP structure.
+ * + Skip this if in lookahead mode.
+ */
+static gboolean
+gst_h264_encoder_generate_gop_structure (GstH264Encoder * self)
+{
+  GstH264EncoderPrivate *priv = _GET_PRIV (self);
+  guint32 list0, list1, gop_ref_num;
+  gint32 p_frames;
+  gboolean ret;
+
+  if (priv->stream.profile == GST_H264_PROFILE_BASELINE
+      || priv->stream.variant == GST_H264_ENCODER_PROFILE_VARIANT_CONSTRAINED)
+    priv->gop.params.num_bframes = 0;
+
+  ensure_and_adjust_gop_parameters (self);
+
+  if (configure_reference_counts (self, &list0, &list1)
+      == GOPConfigResultClosed) {
+    gop_ref_num = calculate_gop_ref_num (self);
+
+    adjust_reference_distribution (self, list0, list1, gop_ref_num);
+
+    /* It's OK, keep slots for GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME frame. */
+    if (priv->gop.ref_num_list0 > gop_ref_num) {
+      GST_DEBUG_OBJECT (self, "num_ref_frames %d is bigger than gop_ref_num %d",
+          priv->gop.ref_num_list0, gop_ref_num);
+    }
+
+    /* Include the reference picture itself. */
+    priv->gop.params.ip_period = 1 + priv->gop.params.num_bframes;
+
+    p_frames = MAX (gop_ref_num - 1 /* IDR */, 0);
+    if (priv->gop.params.num_iframes > p_frames) {
+      priv->gop.params.num_iframes = p_frames;
+      GST_INFO_OBJECT (self, "Too many I frames insertion, lowering it to %d",
+          priv->gop.params.num_iframes);
+    }
+
+    if (priv->gop.params.num_iframes > 0) {
+      guint total_i_frames = priv->gop.params.num_iframes + 1; /* IDR */
+      priv->gop.params.i_period =
+          (gop_ref_num / total_i_frames) * (priv->gop.params.num_bframes + 1);
+    }
   }
 
-  /* Include the reference picture itself. */
-  priv->gop.params.ip_period = 1 + priv->gop.params.num_bframes;
-
-  p_frames = MAX (gop_ref_num - 1 /* IDR */, 0);
-  if (priv->gop.params.num_iframes > p_frames) {
-    priv->gop.params.num_iframes = p_frames;
-    GST_INFO_OBJECT (self, "Too many I frames insertion, lowering it to %d",
-        priv->gop.params.num_iframes);
-  }
-
-  if (priv->gop.params.num_iframes > 0) {
-    guint total_i_frames = priv->gop.params.num_iframes + 1; /* IDR */
-    priv->gop.params.i_period =
-        (gop_ref_num / total_i_frames) * (priv->gop.params.num_bframes + 1);
-  }
-
-create_poc:
   /* initialize max_frame_num and max_poc. */
   priv->gop.log2_max_frame_num = 4;
   while ((1 << priv->gop.log2_max_frame_num) <= priv->gop.params.idr_period)
@@ -658,6 +713,7 @@ gst_h264_encoder_reset (GstH264Encoder * self)
 
   priv->stream.profile = GST_H264_PROFILE_INVALID;
   priv->stream.level = 0;
+  priv->stream.variant = GST_H264_ENCODER_PROFILE_VARIANT_NONE;
 
   priv->gop.params.i_period = 0;
   priv->gop.total_idr_count = 0;
@@ -707,6 +763,9 @@ gst_h264_encoder_set_format (GstVideoEncoder * encoder,
     priv->fps_d = 1;
     priv->fps_n = 30;
   }
+
+  priv->frame_duration =
+      gst_util_uint64_scale (GST_SECOND, priv->fps_d, priv->fps_n);
 
   /* in case live streaming, we should run on low-latency mode */
   priv->is_live = FALSE;
@@ -1567,8 +1626,8 @@ gst_h264_encoder_encode_frame (GstH264Encoder * self,
     }
 
     /* Add it into the reference list. */
-    g_queue_push_tail (&priv->ref_list, gst_video_codec_frame_ref (frame));
-    g_queue_sort (&priv->ref_list, _sort_by_frame_num, NULL);
+    g_queue_insert_sorted (&priv->ref_list, gst_video_codec_frame_ref (frame),
+        _sort_by_frame_num, NULL);
 
     g_assert (g_queue_get_length (&priv->ref_list) <
         priv->gop.max_dec_frame_buffering);
@@ -1598,7 +1657,7 @@ gst_h264_encoder_finish_last_frame (GstH264Encoder * self)
   ret = gst_h264_encoder_finish_frame (self, frame);
 
   if (ret != GST_FLOW_OK) {
-    GST_DEBUG_OBJECT (self, "fails to push one buffer, system_frame_number "
+    GST_INFO_OBJECT (self, "failed to push one buffer, system_frame_number "
         "%d: %s", system_frame_number, gst_flow_get_name (ret));
   }
 
@@ -1694,22 +1753,27 @@ error_and_purge_all:
 
 enum
 {
+  GST_CHROMA_400 = 0,
   GST_CHROMA_420 = 1,
   GST_CHROMA_422 = 2,
   GST_CHROMA_444 = 3,
   GST_CHROMA_INVALID = 0xFF,
 };
 
-static guint8
-_h264_get_chroma_idc (GstVideoInfo * info)
+static inline guint8
+_chroma_from_video_info (const GstVideoFormatInfo * finfo)
 {
   gint w_sub, h_sub;
 
-  if (!GST_VIDEO_FORMAT_INFO_IS_YUV (info->finfo))
+  /* XXX: GRAY isn't supported  */
+  /* if (GST_VIDEO_FORMAT_INFO_IS_GRAY (finfo)) */
+  /*   return GST_CHROMA_400; */
+
+  if (!GST_VIDEO_FORMAT_INFO_IS_YUV (finfo))
     return GST_CHROMA_INVALID;
 
-  w_sub = 1 << GST_VIDEO_FORMAT_INFO_W_SUB (info->finfo, 1);
-  h_sub = 1 << GST_VIDEO_FORMAT_INFO_H_SUB (info->finfo, 1);
+  w_sub = 1 << GST_VIDEO_FORMAT_INFO_W_SUB (finfo, 1);
+  h_sub = 1 << GST_VIDEO_FORMAT_INFO_H_SUB (finfo, 1);
 
   if (w_sub == 2 && h_sub == 2)
     return GST_CHROMA_420;
@@ -1718,6 +1782,12 @@ _h264_get_chroma_idc (GstVideoInfo * info)
   else if (w_sub == 1 && h_sub == 1)
     return GST_CHROMA_444;
   return GST_CHROMA_INVALID;
+}
+
+static guint8
+_h264_get_chroma_idc (GstVideoInfo * info)
+{
+  return _chroma_from_video_info (info->finfo);
 }
 
 static guint8
@@ -1735,24 +1805,62 @@ _h264_get_level_idc (const gchar * level)
 }
 
 static GstH264Profile
-gst_h264_encoder_profile_from_string (const char *profile)
+gst_h264_encoder_profile_from_string (const char *profile,
+    GstH264EncoderProfileVariant * variant)
 {
-  if (g_strcmp0 (profile, "constrained-baseline") == 0)
+  /* constrained-baseline is baseline with sps->constraint_set1_flag == 1 */
+  if (g_strcmp0 (profile, "constrained-baseline") == 0) {
+    *variant = GST_H264_ENCODER_PROFILE_VARIANT_CONSTRAINED;
     return GST_H264_PROFILE_BASELINE;
+  }
+
+  /* constrained-high is high with sps->constraint_set4_flag == 1 and
+     sps->constraint_set5_flag == 1 */
+  if (g_strcmp0 (profile, "constrained-high") == 0) {
+    *variant = GST_H264_ENCODER_PROFILE_VARIANT_CONSTRAINED;
+    return GST_H264_PROFILE_HIGH;
+  }
+
+  /* progressive-high is high with sps->constraint_set4_flag == 1 */
+  if (g_strcmp0 (profile, "progressive-high") == 0) {
+    *variant = GST_H264_ENCODER_PROFILE_VARIANT_PROGRESSIVE;
+    return GST_H264_PROFILE_HIGH;
+  }
+
+  *variant = GST_H264_ENCODER_PROFILE_VARIANT_NONE;
   return gst_h264_profile_from_string (profile);
 }
 
 struct ProfileCandidate
 {
-  const char *profile_name;
+  char *profile_name;
   GstH264Profile profile;
   guint level;
+  GstH264EncoderProfileVariant variant;
 };
+
+static gboolean
+_fill_profile_candidate (const GValue * profile, const GValue * level,
+    struct ProfileCandidate *candidate)
+{
+  const char *profile_name = g_value_get_string (profile);
+  candidate->profile = gst_h264_encoder_profile_from_string (profile_name,
+      &candidate->variant);
+  if (candidate->profile == GST_H264_PROFILE_INVALID)
+    return FALSE;
+
+  candidate->level =
+      level ? _h264_get_level_idc (g_value_get_string (level)) : 0;
+  /* kept profile name for logging purposes */
+  candidate->profile_name = g_strdup (profile_name);
+
+  return TRUE;
+}
 
 static GstFlowReturn
 gst_h264_encoder_negotiate_default (GstH264Encoder * self,
     GstVideoCodecState * in_state, GstH264Profile * profile,
-    GstH264Level * level)
+    GstH264EncoderProfileVariant * variant, GstH264Level * level)
 {
   GstCaps *allowed_caps;
   guint i, num_structures, num_candidates = 0;
@@ -1775,28 +1883,22 @@ gst_h264_encoder_negotiate_default (GstH264Encoder * self,
         *level = gst_structure_get_value (structure, "level");
     struct ProfileCandidate *candidate;
 
-    if (!profile)
+    if (!profiles)
       continue;
 
-    candidate = &candidates[num_candidates];
-
     if (G_VALUE_HOLDS_STRING (profiles)) {
-      candidate->profile_name = g_value_get_string (profiles);
-      candidate->profile =
-          gst_h264_encoder_profile_from_string (candidate->profile_name);
-      candidate->level = level ?
-          _h264_get_level_idc (g_value_get_string (level)) : 0;
-      num_candidates++;
+      candidate = &candidates[num_candidates];
+      if (_fill_profile_candidate (profiles, level, candidate))
+        num_candidates++;
     } else if (GST_VALUE_HOLDS_LIST (profiles)) {
       for (guint j = 0; j < gst_value_list_get_size (profiles); j++) {
         const GValue *profile = gst_value_list_get_value (profiles, j);
 
-        candidate->profile_name = g_value_get_string (profile);
-        candidate->profile =
-            gst_h264_encoder_profile_from_string (candidate->profile_name);
-        candidate->level = level ?
-            _h264_get_level_idc (g_value_get_string (level)) : 0;
-        num_candidates++;
+        candidate = &candidates[num_candidates];
+        if (_fill_profile_candidate (profile, level, candidate))
+          num_candidates++;
+        if (num_candidates == G_N_ELEMENTS (candidates))
+          break;
       }
     }
 
@@ -1840,9 +1942,14 @@ gst_h264_encoder_negotiate_default (GstH264Encoder * self,
       continue;
     }
 
-    *profile = candidates[i].profile;
-    *level = candidates[i].level;
+    *profile = candidate->profile;
+    *level = candidate->level;
+    *variant = candidate->variant;
+    break;
   }
+
+  for (i = 0; i < num_candidates; i++)
+    g_free (candidates[i].profile_name);
 
   if (*profile == GST_H264_PROFILE_INVALID) {
     GST_ERROR_OBJECT (self, "No valid profile found");
@@ -2274,13 +2381,13 @@ gst_h264_encoder_configure (GstH264Encoder * self)
   gst_h264_encoder_reset (self);
 
   ret = klass->negotiate (self, priv->input_state, &priv->stream.profile,
-      &priv->stream.level);
+      &priv->stream.variant, &priv->stream.level);
   if (ret != GST_FLOW_OK)
     return ret;
 
   if (klass->new_sequence) {
     ret = klass->new_sequence (self, priv->input_state, priv->stream.profile,
-        &priv->stream.level);
+        priv->stream.variant, &priv->stream.level);
     if (ret != GST_FLOW_OK)
       return ret;
   }
@@ -2428,12 +2535,12 @@ gst_h264_encoder_handle_frame (GstVideoEncoder * encoder,
         ret = gst_h264_encoder_finish_last_frame (self);
 
       if (ret != GST_FLOW_OK)
-        goto error_push_buffer;
+        return ret;
 
       /* Try to push out all ready frames. */
       ret = gst_h264_encoder_try_to_finish_all_frames (self);
       if (ret != GST_FLOW_OK)
-        goto error_push_buffer;
+        return ret;
 
       frame_encode = NULL;
       if (!gst_h264_encoder_reorder_frame (self, NULL, FALSE, &frame_encode))
@@ -2443,7 +2550,7 @@ gst_h264_encoder_handle_frame (GstVideoEncoder * encoder,
     /* Try to push out all ready frames. */
     ret = gst_h264_encoder_try_to_finish_all_frames (self);
     if (ret != GST_FLOW_OK)
-      goto error_push_buffer;
+      return ret;
   }
 
   return ret;
@@ -2474,12 +2581,6 @@ error_encode:
     gst_video_encoder_finish_frame (encoder, frame_encode);
     return ret;
   }
-error_push_buffer:
-  {
-    GST_ELEMENT_ERROR (encoder, STREAM, ENCODE,
-        ("Failed to finish frame."), (NULL));
-    return ret;
-  }
 }
 
 static gboolean
@@ -2507,6 +2608,271 @@ gst_h264_encoder_finish (GstVideoEncoder * encoder)
   return gst_h264_encoder_drain (GST_H264_ENCODER (encoder));
 }
 
+enum
+{
+  ALLOW_DEPTH_8 = 1 << 0x0,
+  ALLOW_DEPTH_10 = 1 << 0x1,
+  ALLOW_DEPTH_12 = 1 << 0x2,
+  ALLOW_DEPTH_14 = 1 << 0x3,
+  ALLOW_CHROMA_400 = 0x10 << 0x10,
+  ALLOW_CHROMA_420 = 0x10 << 0x11,
+  ALLOW_CHROMA_422 = 0x10 << 0x12,
+  ALLOW_CHROMA_444 = 0x10 << 0x13,
+};
+
+/* A.2* sections */
+/* *INDENT-OFF* */
+static const struct
+{
+  GstH264Profile prfl;
+  const char *profile;
+  guint allowed_chroma;
+} _h264_profile_allowed_chroma[] = {
+  { GST_H264_PROFILE_HIGH_444, "high-4:4:4", ALLOW_DEPTH_14 | ALLOW_CHROMA_444 },
+  { GST_H264_PROFILE_HIGH_422, "high-4:2:2", ALLOW_DEPTH_10 | ALLOW_CHROMA_422 },
+  { GST_H264_PROFILE_HIGH10, "high-10", ALLOW_DEPTH_10 | ALLOW_CHROMA_420 },
+  { GST_H264_PROFILE_HIGH, "high", ALLOW_DEPTH_8 | ALLOW_CHROMA_420 },
+};
+/* *INDENT-ON* */
+
+static inline void
+_accumulate_profile_flags (const gchar * str, guint * flags)
+{
+  for (int i = 0; i < G_N_ELEMENTS (_h264_profile_allowed_chroma); i++) {
+    if (g_strcmp0 (str, _h264_profile_allowed_chroma[i].profile) == 0) {
+      *flags |= _h264_profile_allowed_chroma[i].allowed_chroma;
+      return;
+    }
+  }
+
+  *flags |= ALLOW_DEPTH_8 | ALLOW_CHROMA_420;
+}
+
+static inline gboolean
+_format_is_valid (GstVideoFormat format, guint flags)
+{
+  if (format == GST_VIDEO_FORMAT_UNKNOWN || format == GST_VIDEO_FORMAT_DMA_DRM)
+    return FALSE;
+
+  const GstVideoFormatInfo *info = gst_video_format_get_info (format);
+  if (!info)
+    return FALSE;
+
+  guint8 chroma = _chroma_from_video_info (info);
+  if (chroma == GST_CHROMA_INVALID)
+    return FALSE;
+
+  guint8 depth = GST_VIDEO_FORMAT_INFO_DEPTH (info, 0);
+
+  for (guint i = 0; i < G_N_ELEMENTS (_h264_profile_allowed_chroma); i++) {
+    guint pflags = _h264_profile_allowed_chroma[i].allowed_chroma;
+    if ((flags & pflags) != pflags)
+      continue;
+
+    switch (_h264_profile_allowed_chroma[i].prfl) {
+      case GST_H264_PROFILE_HIGH_444:
+        return (chroma <= GST_CHROMA_444 && depth <= 14);
+      case GST_H264_PROFILE_HIGH_422:
+        return (chroma <= GST_CHROMA_422 && depth <= 10);
+      case GST_H264_PROFILE_HIGH10:
+        return (chroma <= GST_CHROMA_420 && depth <= 10);
+      default:                 /* the rest of profiles */
+        return (chroma <= GST_CHROMA_420 && depth <= 8);
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean
+_value_is_valid (const GValue * val, guint flags)
+{
+  GstVideoFormat format;
+
+  if (!G_VALUE_HOLDS_STRING (val))
+    return FALSE;
+
+  format = gst_video_format_from_string (g_value_get_string (val));
+  return _format_is_valid (format, flags);
+}
+
+static gboolean
+_drm_value_is_valid (const GValue * val, guint flags)
+{
+  if (!G_VALUE_HOLDS_STRING (val))
+    return FALSE;
+
+  guint64 modifier = 0;
+  guint32 fourcc =
+      gst_video_dma_drm_fourcc_from_string (g_value_get_string (val),
+      &modifier);
+
+  /* FIXME: shall we deal with drm_fourcc.h ? */
+  if (fourcc == 0 || modifier == 0xffffffffffffffff)    /* INVALID */
+    return FALSE;
+
+  GstVideoFormat format =
+      gst_video_dma_drm_format_to_gst_format (fourcc, modifier);
+  return _format_is_valid (format, flags);
+}
+
+static gboolean
+update_caps_drm_format (GstStructure * s, guint flags)
+{
+  const GValue *val = gst_structure_get_value (s, "drm-format");
+  if (!val)
+    return FALSE;
+
+  if (G_VALUE_HOLDS_STRING (val)) {
+    return _drm_value_is_valid (val, flags);
+  } else if (GST_VALUE_HOLDS_LIST (val)) {
+    GValue new_list = G_VALUE_INIT;
+
+    guint len = gst_value_list_get_size (val);
+    gst_value_list_init (&new_list, len);
+
+    for (guint i = 0; i < len; i++) {
+      const GValue *lval = gst_value_list_get_value (val, i);
+      if (_drm_value_is_valid (lval, flags))
+        gst_value_list_append_value (&new_list, lval);
+    }
+
+    guint new_len = gst_value_list_get_size (&new_list);
+    if (new_len == 1) {
+      const GValue *new_val = gst_value_list_get_value (&new_list, 0);
+      gst_structure_set_value (s, "drm-format", new_val);
+      g_value_unset (&new_list);
+      return TRUE;
+    } else if (new_len > 0) {
+      gst_structure_set_value (s, "drm-format", &new_list);
+      g_value_unset (&new_list);
+      return TRUE;
+    }
+
+    g_value_unset (&new_list);
+  }
+
+  return FALSE;
+}
+
+static gboolean
+update_caps_format (GstStructure * s, guint flags)
+{
+  const GValue *val;
+  GstVideoFormat format;
+
+  val = gst_structure_get_value (s, "format");
+  if (!val)
+    return FALSE;
+
+  if (G_VALUE_HOLDS_STRING (val)) {
+    format = gst_video_format_from_string (g_value_get_string (val));
+    if (format == GST_VIDEO_FORMAT_DMA_DRM) {
+      return update_caps_drm_format (s, flags);
+    } else if (_format_is_valid (format, flags)) {
+      return TRUE;
+    }
+  } else if (GST_VALUE_HOLDS_LIST (val)) {
+    GValue new_list = G_VALUE_INIT;
+
+    guint len = gst_value_list_get_size (val);
+    gst_value_list_init (&new_list, len);
+
+    for (guint i = 0; i < len; i++) {
+      const GValue *lval = gst_value_list_get_value (val, i);
+      if (_value_is_valid (lval, flags))
+        gst_value_list_append_value (&new_list, lval);
+    }
+
+    guint new_len = gst_value_list_get_size (&new_list);
+    if (new_len == 1) {
+      const GValue *new_val = gst_value_list_get_value (&new_list, 0);
+      gst_structure_set_value (s, "format", new_val);
+      g_value_unset (&new_list);
+      return TRUE;
+    } else if (new_len > 0) {
+      gst_structure_set_value (s, "format", &new_list);
+      g_value_unset (&new_list);
+      return TRUE;
+    }
+
+    g_value_unset (&new_list);
+  }
+
+  return FALSE;
+}
+
+static GstCaps *
+gst_h264_encoder_getcaps (GstVideoEncoder * encoder, GstCaps * filter)
+{
+  GstH264Encoder *self = GST_H264_ENCODER (encoder);
+  GstCaps *templ_caps, *allowed, *supported_incaps, *fcaps;
+  guint flags = 0;
+
+  templ_caps =
+      gst_pad_get_pad_template_caps (GST_VIDEO_ENCODER_SINK_PAD (encoder));
+  allowed = gst_pad_get_allowed_caps (GST_VIDEO_ENCODER_SRC_PAD (encoder));
+
+  if (!allowed) {
+    /* no peer */
+    supported_incaps = templ_caps;
+    goto bail;
+  } else if (gst_caps_is_empty (allowed)) {
+    /* cannot negotiate, return empty caps */
+    gst_caps_unref (templ_caps);
+    return allowed;
+  }
+
+  /* fill format based on requested profile */
+  for (guint i = 0; i < gst_caps_get_size (allowed); i++) {
+    const GstStructure *allowed_s = gst_caps_get_structure (allowed, i);
+    const GValue *val = gst_structure_get_value (allowed_s, "profile");
+
+    if (!val)
+      continue;
+
+    if (G_VALUE_HOLDS_STRING (val)) {
+      _accumulate_profile_flags (g_value_get_string (val), &flags);
+    } else if (GST_VALUE_HOLDS_LIST (val)) {
+      for (guint j = 0; j < gst_value_list_get_size (val); j++) {
+        const GValue *lval = gst_value_list_get_value (val, j);
+
+        if (G_VALUE_HOLDS_STRING (lval)) {
+          _accumulate_profile_flags (g_value_get_string (lval), &flags);
+        }
+      }
+    }
+  }
+
+  if (flags == 0) {
+    /* downstream did not request profile (a valid one?) */
+    supported_incaps = templ_caps;
+    goto bail;
+  }
+
+  supported_incaps = gst_caps_copy (templ_caps);
+
+  for (guint i = 0; i < gst_caps_get_size (supported_incaps); i++) {
+    GstStructure *s = gst_caps_get_structure (supported_incaps, i);
+    if (!update_caps_format (s, flags)) {
+      gst_caps_unref (supported_incaps);
+      supported_incaps = templ_caps;
+      goto bail;
+    }
+  }
+
+  gst_caps_unref (templ_caps);
+
+bail:
+  GST_LOG_OBJECT (self, "supported caps %" GST_PTR_FORMAT, supported_incaps);
+  fcaps = gst_video_encoder_proxy_getcaps (encoder, supported_incaps, filter);
+  gst_clear_caps (&supported_incaps);
+  gst_clear_caps (&allowed);
+
+  GST_LOG_OBJECT (self, "proxy caps %" GST_PTR_FORMAT, fcaps);
+  return fcaps;
+}
+
 static void
 gst_h264_encoder_init (GstH264Encoder * self)
 {
@@ -2517,6 +2883,8 @@ gst_h264_encoder_init (GstH264Encoder * self)
   g_queue_init (&priv->reorder_list);
 
   priv->dts_queue = gst_vec_deque_new_for_struct (sizeof (GstClockTime), 8);
+
+  priv->frame_duration = GST_CLOCK_TIME_NONE;
 
   priv->config.max_num_reference_list0 = 1;
   priv->config.max_num_reference_list1 = 0;
@@ -2629,6 +2997,7 @@ gst_h264_encoder_class_init (GstH264EncoderClass * klass)
       GST_DEBUG_FUNCPTR (gst_h264_encoder_handle_frame);
   encoder_class->flush = GST_DEBUG_FUNCPTR (gst_h264_encoder_flush);
   encoder_class->finish = GST_DEBUG_FUNCPTR (gst_h264_encoder_finish);
+  encoder_class->getcaps = GST_DEBUG_FUNCPTR (gst_h264_encoder_getcaps);
 
   klass->negotiate = GST_DEBUG_FUNCPTR (gst_h264_encoder_negotiate_default);
 
@@ -3028,11 +3397,11 @@ gst_h264_calculate_coded_size (const GstH264SPS * sps, guint num_slices)
      * RawMbBits = 256 * BitDepthY + 2 * MbWidthC * MbHeightC * BitDepthC */
     RawMbBits =
         256 * bit_depth_luma + 2 * MbWidthC * MbHeightC * bit_depth_chroma;
-    codedbuf_size = (mb_width * mb_height) * (128 + RawMbBits) / 8;
+    codedbuf_size = ((guint64) mb_width * mb_height) * (128 + RawMbBits) / 8;
   } else {
     /* The number of bits of macroblock_layer( ) data for any macroblock
      * is not greater than 3200 */
-    codedbuf_size = (mb_width * mb_height) * (3200 / 8);
+    codedbuf_size = ((guint64) mb_width * mb_height) * (3200 / 8);
   }
 
   /* Account for SPS header */
@@ -3046,7 +3415,7 @@ gst_h264_calculate_coded_size (const GstH264SPS * sps, guint num_slices)
   codedbuf_size += 4 + GST_ROUND_UP_8 (GST_H264_MAX_PPS_HDR_SIZE) / 8;
 
   /* Account for slice header */
-  codedbuf_size += num_slices
+  codedbuf_size += (guint64) num_slices
       * (4 + GST_ROUND_UP_8 (GST_H264_MAX_SLICE_HDR_SIZE) / 8);
 
   /* Add ceil 5% for safety */

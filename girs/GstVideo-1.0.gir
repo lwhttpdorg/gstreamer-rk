@@ -1,11 +1,12 @@
 <!-- This file was automatically generated from C sources - DO NOT EDIT!
 To affect the contents of this file, edit the original C definitions,
 and/or use gtk-doc annotations.  -->
-<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
+<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:doc="http://www.gtk.org/introspection/doc/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
   <include name="Gst" version="1.0"/>
   <include name="GstBase" version="1.0"/>
   <package name="gstreamer-video-1.0"/>
   <c:include name="gst/video/video.h"/>
+  <doc:format name="unknown"/>
   <namespace name="GstVideo" version="1.0" shared-library="libgstvideo-1.0.so.0" c:identifier-prefixes="Gst" c:symbol-prefixes="gst">
     <record name="AncillaryMeta" c:type="GstAncillaryMeta" version="1.24">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-anc.h">#GstMeta for carrying SMPTE-291M Ancillary data. Note that all the ADF fields
@@ -620,6 +621,183 @@ preferred.</doc>
         processing.</doc>
       </member>
     </enumeration>
+    <record name="H274DigitallySignedContentInitialization" c:type="GstH274DigitallySignedContentInitialization" version="1.30" glib:type-name="GstH274DigitallySignedContentInitialization" glib:get-type="gst_h274_digitally_signed_content_initialization_get_type" c:symbol-prefix="h274_digitally_signed_content_initialization">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Structure defining the H274 digitally signed content initialization.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <field name="id" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Initialization ID (dsci_id)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="hash_method_type" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Hash method type (dsci_hash_method_type)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="key_retrieval_mode_idc" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Key retrieval mode (dsci_key_retrieval_mode_idc)</doc>
+        <type name="guint32" c:type="guint32"/>
+      </field>
+      <field name="use_key_register_idx_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Whether key register index is used (dsci_use_key_register_idx_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="key_register_idx" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Key register index (dsci_key_register_idx)</doc>
+        <type name="guint32" c:type="guint32"/>
+      </field>
+      <field name="content_uuid_present_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Whether content UUID is present (dsci_content_uuid_present_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="content_uuid" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Content UUID array (dsci_content_uuid)</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint8" c:type="guint8"/>
+        </array>
+      </field>
+      <field name="num_verification_substreams" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Number of verification substreams (dsci_num_verification_substreams_minus1 + 1)</doc>
+        <type name="guint32" c:type="guint32"/>
+      </field>
+      <field name="ref_substream_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Reference substream flags (dsci_ref_substream_flag), flattened 2D array</doc>
+        <array zero-terminated="0" c:type="guint8*">
+          <type name="guint8"/>
+        </array>
+      </field>
+      <field name="ref_substream_flag_len" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Number of entries in @ref_substream_flag
+  (num_verification_substreams * (num_verification_substreams - 1)) / 2</doc>
+        <type name="gsize" c:type="gsize"/>
+      </field>
+      <field name="vss_implicit_association_mode_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">VSS implicit association mode flag (dsci_vss_implicit_association_mode_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="signed_content_start_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Signed content start flag (dsci_signed_content_start_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="sei_signing_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">SEI signing flag (dsci_sei_signing_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="key_source_uri" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Key source URI string (dsci_key_source_uri)</doc>
+        <type name="utf8" c:type="gchar*"/>
+      </field>
+    </record>
+    <record name="H274DigitallySignedContentSelection" c:type="GstH274DigitallySignedContentSelection" version="1.30" glib:type-name="GstH274DigitallySignedContentSelection" glib:get-type="gst_h274_digitally_signed_content_selection_get_type" c:symbol-prefix="h274_digitally_signed_content_selection">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Structure defining the H274 digitally signed content selection.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <field name="id" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Selection ID (dscs_id)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="verification_substream_id" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Verification substream ID (dscs_verification_substream_id)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+    </record>
+    <record name="H274DigitallySignedContentVerification" c:type="GstH274DigitallySignedContentVerification" version="1.30" glib:type-name="GstH274DigitallySignedContentVerification" glib:get-type="gst_h274_digitally_signed_content_verification_get_type" c:symbol-prefix="h274_digitally_signed_content_verification">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Structure defining the H274 digitally signed content verification.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <field name="id" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Verification ID (dscv_id)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="verification_substream_id" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Verification substream ID (dscv_verification_substream_id)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="signature_length_in_octets_minus1" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Length of signature (dscv_signature_length_in_octets_minus1 + 1)</doc>
+        <type name="guint32" c:type="guint32"/>
+      </field>
+      <field name="signature" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Signature data array (dscv_signature)</doc>
+        <array zero-terminated="0" c:type="guint8*">
+          <type name="guint8"/>
+        </array>
+      </field>
+      <field name="signed_content_end_flag" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Signed content end flag (dscv_signed_content_end_flag)</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+    </record>
+    <record name="H274RegisteredUserData" c:type="GstH274RegisteredUserData" version="1.30" glib:type-name="GstH274RegisteredUserData" glib:get-type="gst_h274_registered_user_data_get_type" c:symbol-prefix="h274_registered_user_data">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">The User data registered by Rec. ITU-T T.35 SEI message.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <field name="country_code" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">an itu_t_t35_country_code.</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="country_code_extension" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">an itu_t_t35_country_code_extension_byte.
+  Should be ignored when @country_code is not 0xff</doc>
+        <type name="guint8" c:type="guint8"/>
+      </field>
+      <field name="size" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">the size of @data in bytes</doc>
+        <type name="guint" c:type="guint"/>
+      </field>
+      <field name="data" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">the data of itu_t_t35_payload_byte
+  excluding @country_code and @country_code_extension</doc>
+        <array zero-terminated="0" c:type="const guint8*">
+          <type name="guint8"/>
+        </array>
+      </field>
+    </record>
+    <record name="H274UserDataUnregistered" c:type="GstH274UserDataUnregistered" version="1.30" glib:type-name="GstH274UserDataUnregistered" glib:get-type="gst_h274_user_data_unregistered_get_type" c:symbol-prefix="h274_user_data_unregistered">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">The User data unregistered SEI message syntax.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <field name="uuid" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">an uuid_iso_iec_11578.</doc>
+        <array zero-terminated="0" fixed-size="16">
+          <type name="guint8" c:type="guint8"/>
+        </array>
+      </field>
+      <field name="data" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">the data of user_data_payload_byte</doc>
+        <type name="guint8" c:type="const guint8*"/>
+      </field>
+      <field name="size" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">the size of @data in bytes</doc>
+        <array zero-terminated="0" c:type="guint">
+          <type name="guint8"/>
+        </array>
+      </field>
+      <method name="free" c:identifier="gst_h274_user_data_unregistered_free" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Free resources allocated for user data unregistered SEI message</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="udu" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">#GstH274UserDataUnregistered structure holding unregistered user data to free</doc>
+            <type name="H274UserDataUnregistered" c:type="GstH274UserDataUnregistered*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <function name="copy" c:identifier="gst_h274_user_data_unregistered_copy" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy User Data Unregistered structure</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <parameter name="dst_udu" direction="out" caller-allocates="1" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination User Data Unregistered structure</doc>
+            <type name="H274UserDataUnregistered" c:type="GstH274UserDataUnregistered*"/>
+          </parameter>
+          <parameter name="src_udu" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source User Data Unregistered structure</doc>
+            <type name="H274UserDataUnregistered" c:type="const GstH274UserDataUnregistered*"/>
+          </parameter>
+        </parameters>
+      </function>
+    </record>
     <function-macro name="IS_COLOR_BALANCE" c:identifier="GST_IS_COLOR_BALANCE" introspectable="0">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/colorbalance.h"/>
       <parameters>
@@ -6951,6 +7129,60 @@ Returns (nullable): a #GstVideoConverter or %NULL if conversion is not possible.
         </return-value>
       </function>
     </record>
+    <record name="VideoDSCInitializationMeta" c:type="GstVideoDSCInitializationMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Metadata for Digitally Signed Content Initialization SEI message.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="dsc_initialization" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Initialization data structure</doc>
+        <type name="H274DigitallySignedContentInitialization" c:type="GstH274DigitallySignedContentInitialization"/>
+      </field>
+      <function name="get_info" c:identifier="gst_video_dsc_initialization_meta_get_info" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
+    <record name="VideoDSCSelectionMeta" c:type="GstVideoDSCSelectionMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Metadata for Digitally Signed Content Selection SEI message.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="dsc_selection" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Selection data structure</doc>
+        <type name="H274DigitallySignedContentSelection" c:type="GstH274DigitallySignedContentSelection"/>
+      </field>
+      <function name="get_info" c:identifier="gst_video_dsc_selection_meta_get_info" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
+    <record name="VideoDSCVerificationMeta" c:type="GstVideoDSCVerificationMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Metadata for Digitally Signed Content Verification SEI message.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="dsc_verification" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Verification data structure</doc>
+        <type name="H274DigitallySignedContentVerification" c:type="GstH274DigitallySignedContentVerification"/>
+      </field>
+      <function name="get_info" c:identifier="gst_video_dsc_verification_meta_get_info" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
     <class name="VideoDecoder" c:symbol-prefix="video_decoder" c:type="GstVideoDecoder" parent="Gst.Element" abstract="1" glib:type-name="GstVideoDecoder" glib:get-type="gst_video_decoder_get_type" glib:type-struct="VideoDecoderClass">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.c">This base class is for video decoders turning encoded data into raw video
 frames.
@@ -9039,6 +9271,35 @@ Things that subclass need to take care of:
      @gst_video_encoder_finish_frame.
 
 
+## Adaptive Presets
+
+#GstVideoEncoder supports adaptive presets, where property values in a
+preset file can vary based on the input video resolution and framerate.
+This is done using GKeyFile's locale string syntax to define alternative
+values for properties.
+
+For example, a preset file can specify different bitrates for different
+resolutions:
+
+``` ini
+[Profile YouTube]
+bitrate=2500
+bitrate[1920x1080]=8000
+bitrate[1920x1080@48]=12000
+bitrate[3840x2160]=40000
+bitrate[3840x2160@48]=60000
+```
+
+When a preset with alternatives is loaded, the best matching
+alternative is applied each time the input format changes, before
+the subclass @set_format method runs.
+
+Alternative keys use the format `WxH` (matches when the actual pixel
+count &gt;= W*H) or `WxH@FPS` (additionally requires actual fps &gt;= FPS).
+The most specific match wins (highest pixel count, then highest fps
+threshold). If no alternative matches, the base property value set by
+gst_preset_load_preset() remains.
+
 The #GstVideoEncoder:qos property will enable the Quality-of-Service
 features of the encoder which gather statistics about the real-time
 performance of the downstream elements. If enabled, subclasses can
@@ -9188,6 +9449,26 @@ negotiate fails.</doc>
           </instance-parameter>
           <parameter name="frame" transfer-ownership="none">
             <type name="VideoCodecFrame" c:type="GstVideoCodecFrame*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="prepare_allocator" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">Orchestrates #GstAllocator configuration for the negotiated @caps.
+Default implementation relies on an Allocation #GstQuery &amp;
+calls `decide_allocation()`.</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">whether the #GstAllocator could be configured.</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="encoder" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">the #GstVideoEncoder</doc>
+            <type name="VideoEncoder" c:type="GstVideoEncoder*"/>
+          </instance-parameter>
+          <parameter name="caps" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">the negotiated #GstCaps</doc>
+            <type name="Gst.Caps" c:type="GstCaps*"/>
           </parameter>
         </parameters>
       </virtual-method>
@@ -9751,6 +10032,28 @@ processing. Events from @frame are moved to the pending events list.</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="set_allocator" c:identifier="gst_video_encoder_set_allocator" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c">Allows #GstVideoEncoder sub-classes to set the memory @allocator and
+its @params.</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="encoder" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c">a #GstVideoEncoder</doc>
+            <type name="VideoEncoder" c:type="GstVideoEncoder*"/>
+          </instance-parameter>
+          <parameter name="allocator" transfer-ownership="full" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c">the #GstAllocator</doc>
+            <type name="Gst.Allocator" c:type="GstAllocator*"/>
+          </parameter>
+          <parameter name="params" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c">the #GstAllocationParams of @allocator</doc>
+            <type name="Gst.AllocationParams" c:type="const GstAllocationParams*"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="set_headers" c:identifier="gst_video_encoder_set_headers">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c">Set the codec headers to be sent downstream whenever requested.</doc>
         <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h"/>
@@ -10295,8 +10598,27 @@ and @get_caps are likely needed as well.</doc>
           </parameters>
         </callback>
       </field>
+      <field name="prepare_allocator">
+        <callback name="prepare_allocator">
+          <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h"/>
+          <return-value transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">whether the #GstAllocator could be configured.</doc>
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="encoder" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">the #GstVideoEncoder</doc>
+              <type name="VideoEncoder" c:type="GstVideoEncoder*"/>
+            </parameter>
+            <parameter name="caps" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h">the negotiated #GstCaps</doc>
+              <type name="Gst.Caps" c:type="GstCaps*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
       <field name="_gst_reserved" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="16">
+        <array zero-terminated="0" fixed-size="15">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
@@ -16363,6 +16685,9 @@ For drop frame, only 30000/1001 and 60000/1001 frame rates are supported.</doc>
       <member name="interlaced" value="2" c:identifier="GST_VIDEO_TIME_CODE_FLAGS_INTERLACED" glib:nick="interlaced" glib:name="GST_VIDEO_TIME_CODE_FLAGS_INTERLACED">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.h">Whether we have interlaced video</doc>
       </member>
+      <member name="discont" value="4" c:identifier="GST_VIDEO_TIME_CODE_FLAGS_DISCONT" version="1.30" glib:nick="discont" glib:name="GST_VIDEO_TIME_CODE_FLAGS_DISCONT">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.h">Whether there is a timecode discontinuity</doc>
+      </member>
     </bitfield>
     <record name="VideoTimeCodeInterval" c:type="GstVideoTimeCodeInterval" version="1.12" glib:type-name="GstVideoTimeCodeInterval" glib:get-type="gst_video_time_code_interval_get_type" c:symbol-prefix="video_time_code_interval">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.h">A representation of a difference between two #GstVideoTimeCode instances.
@@ -17081,6 +17406,60 @@ the given alpha buffer.</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <function name="buffer_add_video_dsc_initialization_meta" c:identifier="gst_buffer_add_video_dsc_initialization_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Attaches GstVideoDSCInitializationMeta metadata to @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">the #GstVideoDSCInitializationMeta on @buffer.</doc>
+        <type name="VideoDSCInitializationMeta" c:type="GstVideoDSCInitializationMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="dsc_initialization" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Initialization data</doc>
+          <type name="H274DigitallySignedContentInitialization" c:type="const GstH274DigitallySignedContentInitialization*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="buffer_add_video_dsc_selection_meta" c:identifier="gst_buffer_add_video_dsc_selection_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Attaches GstVideoDSCSelectionMeta metadata to @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">the #GstVideoDSCSelectionMeta on @buffer.</doc>
+        <type name="VideoDSCSelectionMeta" c:type="GstVideoDSCSelectionMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="dsc_selection" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Selection data</doc>
+          <type name="H274DigitallySignedContentSelection" c:type="const GstH274DigitallySignedContentSelection*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="buffer_add_video_dsc_verification_meta" c:identifier="gst_buffer_add_video_dsc_verification_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">Attaches GstVideoDSCVerificationMeta metadata to @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">the #GstVideoDSCVerificationMeta on @buffer.</doc>
+        <type name="VideoDSCVerificationMeta" c:type="GstVideoDSCVerificationMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="dsc_verification" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">DSC Verification data</doc>
+          <type name="H274DigitallySignedContentVerification" c:type="const GstH274DigitallySignedContentVerification*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="buffer_add_video_gl_texture_upload_meta" c:identifier="gst_buffer_add_video_gl_texture_upload_meta">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.c">Attaches GstVideoGLTextureUploadMeta metadata to @buffer with the given
 parameters.</doc>
@@ -17488,6 +17867,30 @@ Note: there may be two #GstVideoAFDMeta structs for interlaced video.</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <function-macro name="buffer_get_video_dsc_initialization_meta" c:identifier="gst_buffer_get_video_dsc_initialization_meta" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <parameters>
+        <parameter name="b">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="buffer_get_video_dsc_selection_meta" c:identifier="gst_buffer_get_video_dsc_selection_meta" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <parameters>
+        <parameter name="b">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
+    <function-macro name="buffer_get_video_dsc_verification_meta" c:identifier="gst_buffer_get_video_dsc_verification_meta" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <parameters>
+        <parameter name="b">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h">a #GstBuffer</doc>
+        </parameter>
+      </parameters>
+    </function-macro>
     <function-macro name="buffer_get_video_gl_texture_upload_meta" c:identifier="gst_buffer_get_video_gl_texture_upload_meta" introspectable="0">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.h"/>
       <parameters>
@@ -17684,6 +18087,26 @@ between #GstVideoChromaSite and string descriptions.
 #GstVideoChromaResample is a utility object for resampling chroma planes
 and converting between different chroma sampling sitings.</doc>
     </docsection>
+    <docsection name="gstvideodscmeta">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.c">This meta carries Digitally Signed Content (DSC) SEI message information
+for video streams. DSC allows the verification of the integrity and authenticity
+of the video content.
+
+The mechanism is realized through three supplemental enhancement information (SEI)
+messages that enable attaching cryptographic signatures to flexible chunks of data
+within a video stream at the Network Abstraction Layer (NAL) unit level.
+
+The current implementation follows the specification defined in
+https://www.jvet-experts.org/doc_end_user/documents/40_Geneva/wg11/JVET-AN1019-v1.zip
+
+The main concepts and mechanisms are also described in the paper:
+https://www.hhi.fraunhofer.de/fileadmin/Events/2025/IBC_2025/IBC2025PaperAuthentication_HHI.pdf
+
+Three types of metadata are provided:
+- Initialization: Contains hash method, key source, and verification settings
+- Selection: Indicates which verification substream to use
+- Verification: Contains the actual signature data for verification</doc>
+    </docsection>
     <docsection name="gstvideopool">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideopool.c">Special GstBufferPool subclass for raw video buffers.
 
@@ -17695,6 +18118,143 @@ to automatically add #GstVideoMeta to the buffers.</doc>
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-sei.c">A collection of objects and methods to assist with SEI User Data Unregistered
 metadata in H.264 and H.265 streams.</doc>
     </docsection>
+    <function name="h274_dsc_initialization_copy" c:identifier="gst_h274_dsc_initialization_copy" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy DSC Initialization structure</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dst_dsc_init" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination DSC Initialization structure</doc>
+          <type name="H274DigitallySignedContentInitialization" c:type="GstH274DigitallySignedContentInitialization*"/>
+        </parameter>
+        <parameter name="src_dsc_init" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source DSC Initialization structure</doc>
+          <type name="H274DigitallySignedContentInitialization" c:type="const GstH274DigitallySignedContentInitialization*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_dsc_initialization_free" c:identifier="gst_h274_dsc_initialization_free" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Free resources allocated for digitally signed content initialization SEI message</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dsci" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">#GstH274DigitallySignedContentInitialization structure holding digitally signed content initialization data to free</doc>
+          <type name="H274DigitallySignedContentInitialization" c:type="GstH274DigitallySignedContentInitialization*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_dsc_selection_copy" c:identifier="gst_h274_dsc_selection_copy" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy DSC Selection structure</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dst_dsc_sel" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination DSC Selection structure</doc>
+          <type name="H274DigitallySignedContentSelection" c:type="GstH274DigitallySignedContentSelection*"/>
+        </parameter>
+        <parameter name="src_dsc_sel" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source DSC Selection structure</doc>
+          <type name="H274DigitallySignedContentSelection" c:type="const GstH274DigitallySignedContentSelection*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_dsc_selection_free" c:identifier="gst_h274_dsc_selection_free" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Free resources allocated for digitally signed content selection SEI message</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dscs" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">#GstH274DigitallySignedContentSelection structure holding digitally signed content selection data to free</doc>
+          <type name="H274DigitallySignedContentSelection" c:type="GstH274DigitallySignedContentSelection*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_dsc_verification_copy" c:identifier="gst_h274_dsc_verification_copy" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy DSC Verification structure</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dst_dsc_ver" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination DSC Verification structure</doc>
+          <type name="H274DigitallySignedContentVerification" c:type="GstH274DigitallySignedContentVerification*"/>
+        </parameter>
+        <parameter name="src_dsc_ver" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source DSC Verification structure</doc>
+          <type name="H274DigitallySignedContentVerification" c:type="const GstH274DigitallySignedContentVerification*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_dsc_verification_free" c:identifier="gst_h274_dsc_verification_free" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Free resources allocated for digitally signed content verification SEI message</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dscv" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">#GstH274DigitallySignedContentVerification structure holding digitally signed content verification data to free</doc>
+          <type name="H274DigitallySignedContentVerification" c:type="GstH274DigitallySignedContentVerification*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_user_data_registered_copy" c:identifier="gst_h274_user_data_registered_copy" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy User Data Registered structure</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dst_rud" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination User Data Registered structure</doc>
+          <type name="H274RegisteredUserData" c:type="GstH274RegisteredUserData*"/>
+        </parameter>
+        <parameter name="src_rud" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source User Data Registered structure</doc>
+          <type name="H274RegisteredUserData" c:type="const GstH274RegisteredUserData*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_user_data_registered_free" c:identifier="gst_h274_user_data_registered_free" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Free resources allocated for registered user data SEI message</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="rud" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">#GstH274RegisteredUserData structure holding registered user data to free</doc>
+          <type name="H274RegisteredUserData" c:type="GstH274RegisteredUserData*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="h274_user_data_unregistered_copy" c:identifier="gst_h274_user_data_unregistered_copy" moved-to="H274UserDataUnregistered.copy" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Copy User Data Unregistered structure</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="dst_udu" direction="out" caller-allocates="1" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Destination User Data Unregistered structure</doc>
+          <type name="H274UserDataUnregistered" c:type="GstH274UserDataUnregistered*"/>
+        </parameter>
+        <parameter name="src_udu" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gsth274.h">Source User Data Unregistered structure</doc>
+          <type name="H274UserDataUnregistered" c:type="const GstH274UserDataUnregistered*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="is_video_overlay_prepare_window_handle_message" c:identifier="gst_is_video_overlay_prepare_window_handle_message">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/videooverlay.c">Convenience function to check if the given message is a
 "prepare-window-handle" message from a #GstVideoOverlay.</doc>
@@ -19479,6 +20039,42 @@ NV12:0x0100000000000002, or NULL otherwise.</doc>
           <type name="guint64" c:type="guint64"/>
         </parameter>
       </parameters>
+    </function>
+    <function name="video_dsc_initialization_meta_api_get_type" c:identifier="gst_video_dsc_initialization_meta_api_get_type" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="video_dsc_initialization_meta_get_info" c:identifier="gst_video_dsc_initialization_meta_get_info" moved-to="VideoDSCInitializationMeta.get_info" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
+    </function>
+    <function name="video_dsc_selection_meta_api_get_type" c:identifier="gst_video_dsc_selection_meta_api_get_type" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="video_dsc_selection_meta_get_info" c:identifier="gst_video_dsc_selection_meta_get_info" moved-to="VideoDSCSelectionMeta.get_info" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
+    </function>
+    <function name="video_dsc_verification_meta_api_get_type" c:identifier="gst_video_dsc_verification_meta_api_get_type" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="video_dsc_verification_meta_get_info" c:identifier="gst_video_dsc_verification_meta_get_info" moved-to="VideoDSCVerificationMeta.get_info" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
     </function>
     <function name="video_event_is_force_key_unit" c:identifier="gst_video_event_is_force_key_unit">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-event.c">Checks if an event is a force key unit event. Returns true for both upstream

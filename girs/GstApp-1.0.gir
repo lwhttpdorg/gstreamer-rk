@@ -1,11 +1,12 @@
 <!-- This file was automatically generated from C sources - DO NOT EDIT!
 To affect the contents of this file, edit the original C definitions,
 and/or use gtk-doc annotations.  -->
-<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
+<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:doc="http://www.gtk.org/introspection/doc/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
   <include name="Gst" version="1.0"/>
   <include name="GstBase" version="1.0"/>
   <package name="gstreamer-app-1.0"/>
   <c:include name="gst/app/app.h"/>
+  <doc:format name="unknown"/>
   <namespace name="GstApp" version="1.0" shared-library="libgstapp-1.0.so.0" c:identifier-prefixes="Gst" c:symbol-prefixes="gst">
     <function-macro name="APP_DEPRECATED_FOR" c:identifier="GST_APP_DEPRECATED_FOR" introspectable="0">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/app/app-prelude.h"/>
@@ -484,7 +485,7 @@ EOS is received.</doc>
           </instance-parameter>
         </parameters>
       </method>
-      <method name="is_eos" c:identifier="gst_app_sink_is_eos">
+      <method name="is_eos" c:identifier="gst_app_sink_is_eos" glib:get-property="eos">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsink.c">Check if @appsink is EOS, which is when no more samples can be pulled because
 an EOS event was received.
 
@@ -623,6 +624,8 @@ reasons.
 Before 1.16.3 it was not possible to change the callbacks in a thread-safe
 way.
 
+Since 1.28.3 it is allowed to set the @callbacks to %NULL to unset them.
+
 Note that gst_app_sink_set_callbacks() and
 gst_app_sink_set_simple_callbacks() are mutually exclusive and setting one
 will unset the other.</doc>
@@ -635,7 +638,7 @@ will unset the other.</doc>
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsink.c">a #GstAppSink</doc>
             <type name="AppSink" c:type="GstAppSink*"/>
           </instance-parameter>
-          <parameter name="callbacks" transfer-ownership="none">
+          <parameter name="callbacks" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsink.c">the callbacks</doc>
             <type name="AppSinkCallbacks" c:type="GstAppSinkCallbacks*"/>
           </parameter>
@@ -967,7 +970,7 @@ condition.</doc>
       <property name="emit-signals" writable="1" transfer-ownership="none" setter="set_emit_signals" getter="get_emit_signals" default-value="FALSE">
         <type name="gboolean" c:type="gboolean"/>
       </property>
-      <property name="eos" transfer-ownership="none" default-value="TRUE">
+      <property name="eos" transfer-ownership="none" getter="is_eos" default-value="TRUE">
         <type name="gboolean" c:type="gboolean"/>
       </property>
       <property name="in" version="1.28" transfer-ownership="none" default-value="0">
@@ -2284,7 +2287,13 @@ If callbacks are installed, no signals will be emitted for performance
 reasons.
 
 Before 1.16.3 it was not possible to change the callbacks in a thread-safe
-way.</doc>
+way.
+
+Since 1.28.3 it is allowed to set the @callbacks to %NULL to unset them.
+
+Note that gst_app_src_set_callbacks() and
+gst_app_src_set_simple_callbacks() are mutually exclusive and setting one
+will unset the other.</doc>
         <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.h"/>
         <return-value transfer-ownership="none">
           <type name="none" c:type="void"/>
@@ -2294,7 +2303,7 @@ way.</doc>
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.c">a #GstAppSrc</doc>
             <type name="AppSrc" c:type="GstAppSrc*"/>
           </instance-parameter>
-          <parameter name="callbacks" transfer-ownership="none">
+          <parameter name="callbacks" transfer-ownership="none" nullable="1" allow-none="1">
             <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.c">the callbacks</doc>
             <type name="AppSrcCallbacks" c:type="GstAppSrcCallbacks*"/>
           </parameter>

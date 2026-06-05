@@ -1182,6 +1182,11 @@ gst_h264_parse_process_nal (GstH264Parse * h264parse, GstH264NalUnit * nalu)
       /* Reset state only on first IDR slice of CVS D.2.29 */
       if (slice.first_mb_in_slice == 0) {
         if (h264parse->mastering_display_info_state ==
+            GST_H264_PARSE_SEI_ACTIVE ||
+            h264parse->content_light_level_state == GST_H264_PARSE_SEI_ACTIVE)
+          h264parse->update_caps = TRUE;
+
+        if (h264parse->mastering_display_info_state ==
             GST_H264_PARSE_SEI_PARSED)
           h264parse->mastering_display_info_state = GST_H264_PARSE_SEI_ACTIVE;
         else if (h264parse->mastering_display_info_state ==
@@ -3270,7 +3275,8 @@ gst_h264_parse_create_pic_timing_sei (GstH264Parse * h264parse,
         tim->counting_type = 6;
     }
 
-    tim->discontinuity_flag = 0;
+    tim->discontinuity_flag =
+        !!(tc->config.flags & GST_VIDEO_TIME_CODE_FLAGS_DISCONT);
     tim->cnt_dropped_flag = 0;
     tim->n_frames = tc->frames;
 
@@ -3576,6 +3582,9 @@ gst_h264_parse_pre_push_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
 
       if (!h264parse->pic_timing_sei.clock_timestamp_flag[i])
         continue;
+
+      if (tim->discontinuity_flag)
+        flags |= GST_VIDEO_TIME_CODE_FLAGS_DISCONT;
 
       /* Table D-1 */
       switch (h264parse->sei_pic_struct) {

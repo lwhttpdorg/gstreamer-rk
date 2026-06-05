@@ -86,14 +86,19 @@ G_STMT_START {                                          \
      g_type_name (type));                               \
 } G_STMT_END;
 
+/* Use public API macros in tests to exercise the same code path as external users */
+#undef _START
+#undef _DURATION
+#undef _INPOINT
+#undef _MAXDURATION
+#undef _PRIORITY
+#undef _END
 #define _START(obj) GES_TIMELINE_ELEMENT_START (obj)
 #define _DURATION(obj) GES_TIMELINE_ELEMENT_DURATION (obj)
 #define _INPOINT(obj) GES_TIMELINE_ELEMENT_INPOINT (obj)
 #define _MAX_DURATION(obj) GES_TIMELINE_ELEMENT_MAX_DURATION (obj)
 #define _PRIORITY(obj) GES_TIMELINE_ELEMENT_PRIORITY (obj)
-#ifndef _END
-#define _END(obj) (_START(obj) + _DURATION(obj))
-#endif
+#define _END(obj) GES_TIMELINE_ELEMENT_END (obj)
 
 #define CHECK_OBJECT_PROPS(obj, start, inpoint, duration) {\
   fail_unless (_START (obj) == start, "%s start is %" GST_TIME_FORMAT " != %" GST_TIME_FORMAT, GES_TIMELINE_ELEMENT_NAME(obj), GST_TIME_ARGS (_START(obj)), GST_TIME_ARGS (start));\
@@ -158,17 +163,19 @@ G_STMT_START {                                          \
 
 #define assert_num_children(clip, cmp) \
 { \
-  guint num_children = g_list_length (GES_CONTAINER_CHILDREN (clip)); \
+  GList *_children = ges_container_get_children (GES_CONTAINER (clip), FALSE); \
+  guint num_children = g_list_length (_children); \
   fail_unless (cmp == num_children, \
       "clip %s contains %u children rather than %u", \
       GES_TIMELINE_ELEMENT_NAME (clip), num_children, cmp); \
+  g_list_free_full (_children, gst_object_unref); \
 }
 
 /* assert that the time property (start, duration or in-point) is the
  * same as @cmp for the clip and all its children */
 #define assert_clip_children_time_val(clip, property, cmp) \
 { \
-  GList *tmp; \
+  GList *tmp, *_children; \
   GstClockTime read_val; \
   gchar *name = GES_TIMELINE_ELEMENT (clip)->name; \
   gboolean is_inpoint = (g_strcmp0 (property, "in-point") == 0); \
@@ -177,8 +184,8 @@ G_STMT_START {                                          \
       GST_TIME_FORMAT ", rather than the expected value of %" \
       GST_TIME_FORMAT, property, name, GST_TIME_ARGS (read_val), \
       GST_TIME_ARGS (cmp)); \
-  for (tmp = GES_CONTAINER_CHILDREN (clip); tmp != NULL; \
-      tmp = tmp->next) { \
+  _children = ges_container_get_children (GES_CONTAINER (clip), FALSE); \
+  for (tmp = _children; tmp != NULL; tmp = tmp->next) { \
     GESTimelineElement *child = tmp->data; \
     g_object_get (child, property, &read_val, NULL); \
     if (!is_inpoint || ges_track_element_has_internal_source ( \
@@ -192,6 +199,7 @@ G_STMT_START {                                          \
           "of clip %s is %" GST_TIME_FORMAT ", rather than 0", \
           property, child->name, name, GST_TIME_ARGS (read_val)); \
   } \
+  g_list_free_full (_children, gst_object_unref); \
 }
 
 #define check_layer(clip, layer_prio) {                                      \

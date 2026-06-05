@@ -673,7 +673,8 @@ _h264_get_chroma_subsampling (GstVideoInfo * info)
 
 static GstFlowReturn
 gst_vulkan_h264_encoder_new_sequence (GstH264Encoder * encoder,
-    GstVideoCodecState * in_state, GstH264Profile profile, GstH264Level * level)
+    GstVideoCodecState * in_state, GstH264Profile profile,
+    GstH264EncoderProfileVariant variant, GstH264Level * level)
 {
   GstVulkanH264Encoder *self = GST_VULKAN_H264_ENCODER (encoder);
   GError *err = NULL;
@@ -1284,7 +1285,7 @@ _write_headers (GstVulkanH264Encoder * self,
     offset += size + 1;
   }
 
-  vk_frame->picture.offset = offset;
+  vk_frame->picture.bitstream_header_size = offset;
 
   ret = TRUE;
 
@@ -1797,10 +1798,16 @@ gst_vulkan_h264_encoder_stop (GstVideoEncoder * encoder)
 }
 
 static gboolean
-_query_context (GstVulkanH264Encoder * self, GstQuery * query)
+_query_context (GstVulkanH264Encoder * self, GstQuery * query,
+    GstPadDirection continue_direction)
 {
   if (!self->encoder)
     return FALSE;
+
+  if (gst_vulkan_requested_extensions_handle_context_query (GST_ELEMENT
+          (self), query, continue_direction, self->instance))
+    return TRUE;
+
   if (gst_vulkan_handle_context_query (GST_ELEMENT (self), query, NULL,
           self->instance, self->device))
     return TRUE;
@@ -1819,7 +1826,9 @@ gst_vulkan_h264_encoder_src_query (GstVideoEncoder * encoder, GstQuery * query)
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONTEXT:
-      ret = _query_context (GST_VULKAN_H264_ENCODER (encoder), query);
+      ret =
+          _query_context (GST_VULKAN_H264_ENCODER (encoder), query,
+          GST_PAD_SINK);
       break;
     default:
       ret = GST_VIDEO_ENCODER_CLASS (parent_class)->src_query (encoder, query);
@@ -1836,7 +1845,9 @@ gst_vulkan_h264_encoder_sink_query (GstVideoEncoder * encoder, GstQuery * query)
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONTEXT:
-      ret = _query_context (GST_VULKAN_H264_ENCODER (encoder), query);
+      ret =
+          _query_context (GST_VULKAN_H264_ENCODER (encoder), query,
+          GST_PAD_SRC);
       break;
     default:
       ret = GST_VIDEO_ENCODER_CLASS (parent_class)->sink_query (encoder, query);

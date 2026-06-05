@@ -626,7 +626,7 @@ gst_wavparse_perform_seek (GstWavParse * wav, GstEvent * event)
   /* and start the streaming task again */
   if (!wav->streaming) {
     gst_pad_start_task (wav->sinkpad, (GstTaskFunction) gst_wavparse_loop,
-        wav->sinkpad, NULL);
+        gst_object_ref (wav->sinkpad), gst_object_unref);
   }
 
   GST_PAD_STREAM_UNLOCK (wav->sinkpad);
@@ -1259,7 +1259,17 @@ gst_wavparse_stream_headers (GstWavParse * wav)
       case GST_RIFF_WAVE_FORMAT_PCM:
         if (wav->blockalign > wav->channels * ((wav->depth + 7) / 8))
           goto invalid_blockalign;
-        /* fall through */
+        /* For PCM, av_bps is fully determined by blockalign * rate. Some
+         * writers produce bogus av_bps values; recompute instead of failing
+         * so playback and seeking work correctly. */
+        if (wav->av_bps != wav->blockalign * wav->rate) {
+          GST_WARNING_OBJECT (wav,
+              "Stream claims av_bps = %u, expected %u for PCM - recomputing",
+              wav->av_bps, wav->blockalign * wav->rate);
+          wav->av_bps = wav->blockalign * wav->rate;
+        }
+        wav->bps = wav->av_bps;
+        break;
       default:
         if (wav->av_bps > wav->blockalign * wav->rate)
           goto invalid_bps;
@@ -1361,11 +1371,14 @@ gst_wavparse_stream_headers (GstWavParse * wav)
     }
 
     /* Clip to upstream size if known */
-    if (upstream_size > 0 && size + 8 + wav->offset > upstream_size) {
-      GST_WARNING_OBJECT (wav, "Clipping chunk size to file size");
-      g_assert (upstream_size >= wav->offset);
-      g_assert (upstream_size - wav->offset >= 8);
-      size = upstream_size - wav->offset - 8;
+    if (upstream_size > 0) {
+      if (upstream_size < wav->offset + 8) {
+        GST_WARNING_OBJECT (wav, "Bogus file size");
+        upstream_size = -1;
+      } else if (size > upstream_size - wav->offset - 8) {
+        GST_WARNING_OBJECT (wav, "Clipping chunk size to file size");
+        size = upstream_size - wav->offset - 8;
+      }
     }
 
     /* wav is a st00pid format, we don't know for sure where data starts.
@@ -1729,12 +1742,13 @@ gst_wavparse_stream_headers (GstWavParse * wav)
         wav->offset += size;
         break;
       }
+      case GST_RIFF_TAG_ID3:
       case GST_RIFF_TAG_id3:
       {
         const guint data_size = size;
         GstTagList *new_tags;
 
-        GST_DEBUG_OBJECT (wav, "Have 'id3 ' TAG, size: %u", data_size);
+        GST_DEBUG_OBJECT (wav, "Have ID3 TAG, size: %u", data_size);
         if (wav->streaming) {
           if (!gst_wavparse_peek_chunk (wav, &tag, &size)) {
             goto exit;
@@ -3074,7 +3088,7 @@ gst_wavparse_sink_activate_mode (GstPad * sinkpad, GstObject * parent,
       if (active) {
         /* if we have a scheduler we can start the task */
         res = gst_pad_start_task (sinkpad, (GstTaskFunction) gst_wavparse_loop,
-            sinkpad, NULL);
+            gst_object_ref (sinkpad), gst_object_unref);
       } else {
         res = gst_pad_stop_task (sinkpad);
       }

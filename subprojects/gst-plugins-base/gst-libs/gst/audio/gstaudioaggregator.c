@@ -632,11 +632,6 @@ gst_audio_aggregator_recalculate_latency (GstAudioAggregator * aagg)
       aagg->priv->output_buffer_duration_d);
 
   gst_aggregator_set_latency (GST_AGGREGATOR (aagg), latency, latency);
-
-  GST_OBJECT_LOCK (aagg);
-  /* Force recalculating in aggregate */
-  aagg->priv->samples_per_buffer = 0;
-  GST_OBJECT_UNLOCK (aagg);
 }
 
 
@@ -811,6 +806,11 @@ gst_audio_aggregator_set_property (GObject * object, guint prop_id,
           g_value_get_uint64 (value));
       g_object_notify (object, "output-buffer-duration-fraction");
       gst_audio_aggregator_recalculate_latency (aagg);
+
+      GST_OBJECT_LOCK (aagg);
+      /* Force recalculating in aggregate */
+      aagg->priv->samples_per_buffer = 0;
+      GST_OBJECT_UNLOCK (aagg);
       break;
     case PROP_ALIGNMENT_THRESHOLD:
       aagg->priv->alignment_threshold = g_value_get_uint64 (value);
@@ -825,6 +825,11 @@ gst_audio_aggregator_set_property (GObject * object, guint prop_id,
           gst_value_get_fraction_denominator (value);
       g_object_notify (object, "output-buffer-duration");
       gst_audio_aggregator_recalculate_latency (aagg);
+
+      GST_OBJECT_LOCK (aagg);
+      /* Force recalculating in aggregate */
+      aagg->priv->samples_per_buffer = 0;
+      GST_OBJECT_UNLOCK (aagg);
       break;
     case PROP_IGNORE_INACTIVE_PADS:
       gst_aggregator_set_ignore_inactive_pads (GST_AGGREGATOR (object),
@@ -1229,12 +1234,20 @@ gst_audio_aggregator_update_converters (GstAudioAggregator * aagg,
     /* If we currently were mixing a buffer, we need to convert it to the new
      * format */
     if (aaggpad->priv->buffer) {
-      GstBuffer *new_converted_buffer =
-          gst_audio_aggregator_convert_buffer (aagg, GST_PAD (aaggpad),
-          old_info, new_info, aaggpad->priv->buffer);
-      gst_buffer_replace (&aaggpad->priv->buffer, new_converted_buffer);
-      if (new_converted_buffer)
-        gst_buffer_unref (new_converted_buffer);
+      if (klass->convert_buffer) {
+        GstBuffer *new_converted_buffer =
+            gst_audio_aggregator_convert_buffer (aagg, GST_PAD (aaggpad),
+            old_info, new_info, aaggpad->priv->buffer);
+        gst_buffer_unref (aaggpad->priv->buffer);
+        aaggpad->priv->buffer = new_converted_buffer;
+        if (!new_converted_buffer) {
+          GST_WARNING_OBJECT (aaggpad,
+              "Caps have changed and have a current buffer but conversion failed -- dropping");
+        }
+      } else {
+        // Otherwise the buffer is simply kept and used for further output. The
+        // subclass must be able to handle it correctly despite srcpad caps changes.
+      }
     }
   }
 
@@ -1267,8 +1280,11 @@ gst_audio_aggregator_negotiated_src_caps (GstAggregator * agg, GstCaps * caps)
     GST_INFO_OBJECT (aagg, "setting caps to %" GST_PTR_FORMAT, caps);
     gst_caps_replace (&aagg->current_caps, caps);
 
-    if (old_info.rate != info.rate)
+    if (old_info.rate != info.rate) {
+      /* Force recalculating in aggregate */
       aagg->priv->offset = -1;
+      aagg->priv->samples_per_buffer = 0;
+    }
 
     memcpy (&srcpad->info, &info, sizeof (info));
 
@@ -1283,22 +1299,27 @@ gst_audio_aggregator_negotiated_src_caps (GstAggregator * agg, GstCaps * caps)
               srcpad));
 
     if (aagg->priv->current_buffer) {
-      GstBuffer *converted;
+      if (srcpad_klass->convert_buffer) {
+        GstBuffer *converted;
 
-      converted =
-          gst_audio_aggregator_convert_buffer (aagg, agg->srcpad, &old_info,
-          &info, aagg->priv->current_buffer);
-      gst_buffer_unref (aagg->priv->current_buffer);
-      aagg->priv->current_buffer = converted;
-      if (!converted) {
-        GST_OBJECT_UNLOCK (aagg);
-        GST_AUDIO_AGGREGATOR_UNLOCK (aagg);
-        return FALSE;
+        converted =
+            gst_audio_aggregator_convert_buffer (aagg, agg->srcpad, &old_info,
+            &info, aagg->priv->current_buffer);
+        gst_buffer_unref (aagg->priv->current_buffer);
+        aagg->priv->current_buffer = converted;
+        if (!converted) {
+          GST_WARNING_OBJECT (aagg,
+              "Caps have changed and have a current buffer but conversion failed -- dropping");
+          GST_OBJECT_UNLOCK (aagg);
+          GST_AUDIO_AGGREGATOR_UNLOCK (aagg);
+          return FALSE;
+        }
+      } else {
+        GST_WARNING_OBJECT (aagg,
+            "Caps have changed and have a current buffer but can't convert -- dropping");
+        gst_clear_buffer (&aagg->priv->current_buffer);
       }
     }
-
-    /* Force recalculating in aggregate */
-    aagg->priv->samples_per_buffer = 0;
   }
 
   GST_OBJECT_UNLOCK (aagg);
@@ -2652,4 +2673,31 @@ not_negotiated:
         ("Unknown data received, not negotiated"));
     return GST_FLOW_NOT_NEGOTIATED;
   }
+}
+
+/**
+ * gst_audio_aggregator_has_current_output_buffer:
+ * @self: A #GstAudioAggregator
+ *
+ * This can be used by subclasses to delay renegotiation until the current
+ * output buffer is finished to avoid dropping/converting it.
+ *
+ * Returns: %TRUE if there's currently a pending output buffer.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_audio_aggregator_has_current_output_buffer (GstAudioAggregator * self)
+{
+  gboolean res;
+
+  GST_AUDIO_AGGREGATOR_LOCK (self);
+  GST_OBJECT_LOCK (self);
+
+  res = self->priv->current_buffer != NULL;
+
+  GST_OBJECT_UNLOCK (self);
+  GST_AUDIO_AGGREGATOR_UNLOCK (self);
+
+  return res;
 }

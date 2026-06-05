@@ -161,7 +161,6 @@ struct _GstOnnxInference
   bool fixedInputImageSize;
   double *scales;
   double *offsets;
-  gsize num_channels;
 };
 
 static const OrtApi *api = NULL;
@@ -236,7 +235,7 @@ gst_onnx_optimization_level_get_type (void)
       {GST_ONNX_OPTIMIZATION_LEVEL_DISABLE_ALL, "Disable all optimization",
           "disable-all"},
       {GST_ONNX_OPTIMIZATION_LEVEL_ENABLE_BASIC,
-            "Enable basic optimizations (redundant node removals))",
+            "Enable basic optimizations (redundant node removals)",
           "enable-basic"},
       {GST_ONNX_OPTIMIZATION_LEVEL_ENABLE_EXTENDED,
             "Enable extended optimizations (redundant node removals + node fusions)",
@@ -274,6 +273,14 @@ gst_onnx_execution_provider_get_type (void)
           "cuda"},
 #endif
 #ifdef HAVE_VSI_NPU
+      /**
+       * GstOnnxExecutionProvider::vsi
+       *
+       * VeriSilicon NPU execution provider
+       *
+       * Since: 1.28
+       */
+
       {GST_ONNX_EXECUTION_PROVIDER_VSI,
             "VeriSilicon NPU execution provider",
           "vsi"},
@@ -390,7 +397,6 @@ gst_onnx_inference_init (GstOnnxInference * self)
 
   self->scales = NULL;
   self->offsets = NULL;
-  self->num_channels = 0;
 
   self->height_dim = -1;
   self->width_dim = -1;
@@ -406,6 +412,7 @@ gst_onnx_inference_finalize (GObject * object)
 {
   GstOnnxInference *self = GST_ONNX_INFERENCE (object);
 
+  g_free (self->dest);
   g_free (self->model_file);
   g_free (self->scales);
   g_free (self->offsets);
@@ -644,8 +651,8 @@ gst_onnx_log_function (void *param, OrtLoggingLevel severity,
       break;
   }
 
-  gst_debug_log (onnx_runtime_debug, level, code_location,
-      "gst_onnx_log_function", 0, obj, "%s", message);
+  GST_CAT_LEVEL_LOG (onnx_runtime_debug, level, obj,
+      "%s: %s", code_location, message);
 }
 
 /* FIXME: This is copied from Gsttfliteinference and we should create something
@@ -761,6 +768,7 @@ gst_onnx_inference_start (GstBaseTransform * trans)
   OrtStatus *status = NULL;
   OrtSessionOptions *session_options = NULL;
   OrtTypeInfo *input_type_info = NULL;
+  size_t input_count = 0;
   const OrtTensorTypeAndShapeInfo *input_tensor_info = NULL;
   GraphOptimizationLevel onnx_optim;
   size_t num_input_dims;
@@ -772,7 +780,8 @@ gst_onnx_inference_start (GstBaseTransform * trans)
   GstAnalyticsModelInfo *modelinfo = NULL;
   const gchar *onnx_input_tensor_name = NULL;
   gchar *tensor_name = NULL;
-
+  gdouble *input_mins;
+  gdouble *input_maxs;
 
   GST_OBJECT_LOCK (self);
   if (self->session) {
@@ -924,6 +933,19 @@ gst_onnx_inference_start (GstBaseTransform * trans)
         api->GetErrorMessage (status));
     goto error;
   }
+  // Get input count
+  status = api->SessionGetInputCount (self->session, &input_count);
+  if (status) {
+    GST_ERROR_OBJECT (self, "Failed to get input count: %s",
+        api->GetErrorMessage (status));
+    goto error;
+  }
+
+  if (input_count != 1) {
+    GST_ERROR_OBJECT (self, "Only models with 1 input tensor are supported,"
+        " but model has %zu inputs", input_count);
+    goto error;
+  }
   // Get input info
   status = api->SessionGetInputTypeInfo (self->session, 0, &input_type_info);
   if (status) {
@@ -1046,58 +1068,27 @@ gst_onnx_inference_start (GstBaseTransform * trans)
 
   /* Get per-channel scales and offsets from modelinfo */
   /* For video input, we assume uint8 pixel values in range [0, 255] */
-  {
-    gdouble *input_mins = NULL;
-    gdouble *input_maxs = NULL;
-    gsize num_target_ranges;
-    gsize j;
-
-    /* First, get the number of target ranges from modelinfo to allocate input ranges */
-    if (!gst_analytics_modelinfo_get_target_ranges (modelinfo, tensor_name,
-            &num_target_ranges, &input_mins, &input_maxs)) {
-      GST_ERROR_OBJECT (self,
-          "Failed to get target ranges from modelinfo for tensor %s",
-          tensor_name);
-      g_free (tensor_name);
-      if (onnx_input_tensor_name)
-        self->allocator->Free (self->allocator,
-            (char *) onnx_input_tensor_name);
-      goto error;
-    }
-
-    /* Free the target ranges - we only needed them to know the count */
-    g_free (input_mins);
-    g_free (input_maxs);
-
-    /* Prepare input ranges - for video uint8 input, range is [0, 255] for all channels */
-    input_mins = g_new (gdouble, num_target_ranges);
-    input_maxs = g_new (gdouble, num_target_ranges);
-    for (j = 0; j < num_target_ranges; j++) {
-      input_mins[j] = 0.0;
-      input_maxs[j] = 255.0;
-    }
-
-    if (!gst_analytics_modelinfo_get_input_scales_offsets (modelinfo,
-            tensor_name, num_target_ranges, input_mins, input_maxs,
-            &self->num_channels, &self->scales, &self->offsets)) {
-      GST_ERROR_OBJECT (self, "Failed to get scales/offsets for tensor %s",
-          tensor_name);
-      g_free (input_mins);
-      g_free (input_maxs);
-      g_free (tensor_name);
-      if (onnx_input_tensor_name)
-        self->allocator->Free (self->allocator,
-            (char *) onnx_input_tensor_name);
-      goto error;
-    }
-
-    g_free (input_mins);
-    g_free (input_maxs);
+  input_mins = g_alloca (sizeof (gdouble) * self->channels);
+  input_maxs = g_alloca (sizeof (gdouble) * self->channels);
+  for (i = 0; i < self->channels; i++) {
+    input_mins[i] = 0.0;
+    input_maxs[i] = 255.0;
   }
 
-  GST_INFO_OBJECT (self, "Input tensor normalization: %zu channel(s)",
-      self->num_channels);
-  for (i = 0; i < self->num_channels; i++) {
+  if (!gst_analytics_modelinfo_get_input_scales_offsets (modelinfo,
+          tensor_name, self->channels, input_mins, input_maxs,
+          NULL, &self->scales, &self->offsets)) {
+    GST_ERROR_OBJECT (self, "Failed to get scales/offsets for tensor %s",
+        tensor_name);
+    g_free (tensor_name);
+    if (onnx_input_tensor_name)
+      self->allocator->Free (self->allocator, (char *) onnx_input_tensor_name);
+    goto error;
+  }
+
+  GST_INFO_OBJECT (self, "Input tensor normalization: %u channel(s)",
+      self->channels);
+  for (i = 0; i < self->channels; i++) {
     GST_DEBUG_OBJECT (self, "  Channel[%zu]: scale=%f, offset=%f", i,
         self->scales[i], self->offsets[i]);
   }
@@ -1115,7 +1106,7 @@ gst_onnx_inference_start (GstBaseTransform * trans)
   /* Check if all channels are passthrough (scale=1.0, offset=0.0) */
   gboolean is_passthrough = TRUE;
   if (self->scales && self->offsets) {
-    for (i = 0; i < self->num_channels; i++) {
+    for (i = 0; i < self->channels; i++) {
       if (self->scales[i] != 1.0 || self->offsets[i] != 0.0) {
         is_passthrough = FALSE;
         break;
@@ -1659,7 +1650,7 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   /* Check if all channels are passthrough (scale=1.0, offset=0.0) */
   gboolean is_passthrough_transform = TRUE;
   if (self->scales && self->offsets) {
-    for (gsize c = 0; c < self->num_channels; c++) {
+    for (gsize c = 0; c < self->channels; c++) {
       if (self->scales[c] != 1.0 || self->offsets[c] != 0.0) {
         is_passthrough_transform = FALSE;
         break;

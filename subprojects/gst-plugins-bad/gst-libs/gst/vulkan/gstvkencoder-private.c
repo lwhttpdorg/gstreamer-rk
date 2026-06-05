@@ -242,7 +242,7 @@ gst_vulkan_encoder_picture_init (GstVulkanEncoderPicture * pic,
     gst_clear_buffer (&pic->dpb_buffer);
     return FALSE;
   }
-  pic->offset = 0;
+  pic->bitstream_header_size = 0;
 
   pic->img_view = gst_vulkan_video_image_create_view (pic->in_buffer,
       priv->layered_dpb, TRUE, NULL);
@@ -529,6 +529,9 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   GArray *fmts;
   GstVideoFormat format;
   GError *query_err = NULL;
+  const VkVideoEncodeFeedbackFlagsKHR feedback_flags =
+      VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BUFFER_OFFSET_BIT_KHR |
+      VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR;
 
   g_return_val_if_fail (GST_IS_VULKAN_ENCODER (self), FALSE);
   g_return_val_if_fail (profile != NULL, FALSE);
@@ -577,16 +580,6 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
     return FALSE;
   }
 
-  if (_vk_codec_extensions[codec_idx].specVersion <
-      priv->caps.caps.stdHeaderVersion.specVersion) {
-    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
-        "The driver needs a newer version [%i.%i.%i] of the current headers"
-        "%d.%d.%d, please update the code to support this driver.",
-        VK_CODEC_VERSION (priv->caps.caps.stdHeaderVersion.specVersion),
-        VK_CODEC_VERSION (_vk_codec_extensions[codec_idx].specVersion));
-    return FALSE;
-  }
-
   priv->profile = *profile;
 
   /* ensure the chain up of structure */
@@ -597,6 +590,24 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   if (!gst_vulkan_video_try_configuration (phy_dev, &priv->profile, &priv->caps,
           &priv->profile_caps, &fmts, error))
     return FALSE;
+
+  if (_vk_codec_extensions[codec_idx].specVersion <
+      priv->caps.caps.stdHeaderVersion.specVersion) {
+    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_INITIALIZATION_FAILED,
+        "The driver needs a newer version [%i.%i.%i] of the current headers"
+        "%d.%d.%d, please update the code to support this driver.",
+        VK_CODEC_VERSION (priv->caps.caps.stdHeaderVersion.specVersion),
+        VK_CODEC_VERSION (_vk_codec_extensions[codec_idx].specVersion));
+    goto failed;
+  }
+
+  if ((priv->caps.encoder.caps.supportedEncodeFeedbackFlags & feedback_flags) !=
+      feedback_flags) {
+    g_set_error (error, GST_VULKAN_ERROR, VK_ERROR_FEATURE_NOT_PRESENT,
+        "Driver does not support required encode feedback flags "
+        "(BUFFER_OFFSET and BYTES_WRITTEN)");
+    goto failed;
+  }
 
   /* Get output format */
   for (i = 0; i < fmts->len; i++) {
@@ -628,13 +639,11 @@ gst_vulkan_encoder_start (GstVulkanEncoder * self,
   priv->exec = gst_vulkan_operation_new (cmd_pool);
   gst_object_unref (cmd_pool);
 
-  /* we don't want overridden parameters in queries */
   /* *INDENT-OFF* */
   query_create = (VkQueryPoolVideoEncodeFeedbackCreateInfoKHR) {
     .sType = VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR,
     .pNext = &profile->profile,
-    .encodeFeedbackFlags = priv->caps.encoder.caps.supportedEncodeFeedbackFlags &
-        (~VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_HAS_OVERRIDES_BIT_KHR),
+    .encodeFeedbackFlags = feedback_flags,
   };
   /* *INDENT-ON* */
 
@@ -1179,7 +1188,7 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
     .pNext = NULL, /* to fill in callback */
     .flags = 0x0,
     .dstBuffer = ((GstVulkanBufferMemory *) mem)->buffer,
-    .dstBufferOffset = pic->offset,
+    .dstBufferOffset = pic->bitstream_header_size,
     .dstBufferRange = gst_memory_get_sizes (mem, NULL, NULL),
     .srcPictureResource = (VkVideoPictureResourceInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_VIDEO_PICTURE_RESOURCE_INFO_KHR,
@@ -1267,9 +1276,13 @@ gst_vulkan_encoder_encode (GstVulkanEncoder * self, GstVideoInfo * info,
     goto bail;
   }
   if (encode_res->status == VK_QUERY_RESULT_STATUS_COMPLETE_KHR) {
+    guint64 buffer_size = encode_res->data_size + pic->bitstream_header_size;
+    /* Per spec, the offset of the bitstream data is always 0 for encode.
+     * See: VK_KHR_video_encode_queue feedback queries */
+    g_assert (encode_res->offset == 0);
     GST_INFO_OBJECT (self, "The frame %p has been encoded with size %"
-        G_GUINT64_FORMAT, pic, encode_res->data_size + pic->offset);
-    gst_buffer_set_size (pic->out_buffer, encode_res->data_size + pic->offset);
+        G_GUINT64_FORMAT, pic, buffer_size);
+    gst_buffer_set_size (pic->out_buffer, buffer_size);
   } else {
     GST_ERROR_OBJECT (self,
         "The operation did not complete properly, query status = %d",

@@ -194,7 +194,14 @@ holds_long_type (const GValue * v)
 static gboolean
 print_field (const GstIdStr * fieldname, const GValue * value, gpointer pfx)
 {
-  const gchar *type_name = g_type_name (G_VALUE_TYPE (value));
+  const gchar *type_name;
+
+  // gchararray -> string for caps fields
+  if (G_VALUE_HOLDS (value, G_TYPE_STRING)) {
+    type_name = "string";
+  } else {
+    type_name = g_type_name (G_VALUE_TYPE (value));
+  }
 
   if (G_VALUE_HOLDS (value, GST_TYPE_UNIQUE_LIST)
       && gst_value_unique_list_get_size (value) > 0) {
@@ -268,7 +275,8 @@ print_caps (const GstCaps * caps, const gchar * pfx, const gchar * fieldname)
           CAPS_FEATURE_COLOR, features_string, RESET_COLOR);
       g_free (features_string);
     } else {
-      n_print ("%s%s%s%s%s%s\n", pfx, FIELD_NAME_COLOR, fieldname,
+      n_print ("%s%s%s%s%s%s%s\n", pfx, FIELD_NAME_COLOR, fieldname,
+          *fieldname ? ": " : "",
           STRUCT_NAME_COLOR, gst_structure_get_name (structure), RESET_COLOR);
     }
     gst_structure_foreach_id_str (structure, print_field, (gpointer) pfx);

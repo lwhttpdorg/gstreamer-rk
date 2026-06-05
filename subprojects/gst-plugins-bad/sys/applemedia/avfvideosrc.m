@@ -59,6 +59,138 @@ get_oriented_dimensions(GstAVFVideoSourceOrientation orientation, CMVideoDimensi
 static CMTime
 find_range_bound_close_enough_to_fps (AVFrameRateRange *range, int fps_n, int fps_d);
 
+static const gchar *
+gst_avf_error_code_name (NSInteger code)
+{
+#define ERROR_CASE(c) case c: return G_STRINGIFY (c)
+
+  switch ((AVError) code) {
+    ERROR_CASE (AVErrorDeviceAlreadyUsedByAnotherSession);
+    ERROR_CASE (AVErrorDeviceInUseByAnotherApplication);
+    ERROR_CASE (AVErrorDeviceLockedForConfigurationByAnotherProcess);
+    ERROR_CASE (AVErrorApplicationIsNotAuthorized);
+    ERROR_CASE (AVErrorApplicationIsNotAuthorizedToUseDevice);
+    ERROR_CASE (AVErrorDeviceNotConnected);
+    ERROR_CASE (AVErrorDeviceWasDisconnected);
+    default:
+      return "unknown";
+  }
+
+#undef ERROR_CASE
+}
+
+static GstResourceError
+gst_avf_resource_error_from_nserror (NSError * err)
+{
+  if (err == nil || ![[err domain] isEqualToString:AVFoundationErrorDomain])
+    return GST_RESOURCE_ERROR_OPEN_READ;
+
+  switch ((AVError) [err code]) {
+    case AVErrorDeviceAlreadyUsedByAnotherSession:
+    case AVErrorDeviceInUseByAnotherApplication:
+    case AVErrorDeviceLockedForConfigurationByAnotherProcess:
+      return GST_RESOURCE_ERROR_BUSY;
+    case AVErrorApplicationIsNotAuthorized:
+    case AVErrorApplicationIsNotAuthorizedToUseDevice:
+      return GST_RESOURCE_ERROR_NOT_AUTHORIZED;
+    case AVErrorDeviceNotConnected:
+    case AVErrorDeviceWasDisconnected:
+      return GST_RESOURCE_ERROR_NOT_FOUND;
+    default:
+      return GST_RESOURCE_ERROR_OPEN_READ;
+  }
+}
+
+static gchar *
+gst_avf_error_debug_string (NSError * err)
+{
+  NSString *domain = err != nil ? [err domain] : nil;
+  NSString *failure_reason = err != nil ? [err localizedFailureReason] : nil;
+  NSString *recovery_suggestion =
+      err != nil ? [err localizedRecoverySuggestion] : nil;
+  id device = err != nil ? [[err userInfo] objectForKey:AVErrorDeviceKey] : nil;
+  id pid = err != nil ? [[err userInfo] objectForKey:AVErrorPIDKey] : nil;
+  NSString *device_description = device != nil ? [device description] : nil;
+  NSString *pid_description = pid != nil ? [pid description] : nil;
+
+  return g_strdup_printf ("AVFoundation error domain=%s code=%ld (%s), "
+      "failure-reason=%s, recovery-suggestion=%s, device=%s, pid=%s",
+      domain != nil ? [domain UTF8String] : "unknown",
+      err != nil ? (long) [err code] : 0,
+      err != nil ? gst_avf_error_code_name ([err code]) : "unknown",
+      failure_reason != nil ? [failure_reason UTF8String] : "none",
+      recovery_suggestion != nil ? [recovery_suggestion UTF8String] : "none",
+      device_description != nil ? [device_description UTF8String] : "none",
+      pid_description != nil ? [pid_description UTF8String] : "none");
+}
+
+static void
+gst_avf_video_src_post_error (GstElement * element, const gchar * message,
+    NSError * err)
+{
+  NSString *description = err != nil ? [err localizedDescription] : nil;
+  GstResourceError code = gst_avf_resource_error_from_nserror (err);
+  gchar *text = g_strdup_printf ("%s: %s", message,
+      description != nil ? [description UTF8String] : "unknown error");
+  gchar *debug = gst_avf_error_debug_string (err);
+
+  GST_WARNING_OBJECT (element, "error: %s", text);
+  GST_WARNING_OBJECT (element, "error: %s", debug);
+  gst_element_message_full (element, GST_MESSAGE_ERROR, GST_RESOURCE_ERROR,
+      code, text, debug, __FILE__, GST_FUNCTION, __LINE__);
+}
+
+#if TARGET_OS_OSX
+static GstCaps * gst_av_capture_screen_rect_get_caps (CGRect rect,
+    gdouble scale, AVCaptureVideoDataOutput *output);
+CGDirectDisplayID
+gst_avf_screen_get_display_id (NSScreen * screen)
+{
+  NSDictionary *description;
+  NSNumber *display_id;
+
+  g_return_val_if_fail (screen != nil, 0);
+
+  description = [screen deviceDescription];
+  display_id = [description objectForKey:@"NSScreenNumber"];
+
+  return (CGDirectDisplayID) [display_id unsignedIntValue];
+}
+
+gchar *
+gst_avf_screen_dup_unique_id (CGDirectDisplayID display_id)
+{
+  CFUUIDRef uuid = CGDisplayCreateUUIDFromDisplayID (display_id);
+  CFStringRef uuid_string;
+  gchar *ret = NULL;
+
+  if (uuid == NULL)
+    return NULL;
+
+  uuid_string = CFUUIDCreateString (kCFAllocatorDefault, uuid);
+  CFRelease (uuid);
+
+  if (uuid_string != NULL) {
+    ret = g_strdup ([(__bridge NSString *) uuid_string UTF8String]);
+    CFRelease (uuid_string);
+  }
+
+  return ret;
+}
+
+gchar *
+gst_avf_screen_dup_name (NSScreen * screen, CGDirectDisplayID display_id)
+{
+  g_return_val_if_fail (screen != nil, NULL);
+
+  if (@available (macos 10.15, *))
+    return g_strdup ([[screen localizedName] UTF8String]);
+
+  return g_strdup_printf ("Display %" G_GUINT32_FORMAT,
+      (guint32) display_id);
+}
+#endif
+
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
@@ -171,8 +303,9 @@ gst_avf_video_source_device_type_get_type (void)
   GstBaseSrc *baseSrc;
   GstPushSrc *pushSrc;
 
-  gint deviceIndex;
-  const gchar *deviceName;
+  gchar *uniqueId;
+  gchar *openedUniqueId;
+  gchar *deviceName;
   GstAVFVideoSourcePosition position;
   GstAVFVideoSourceOrientation orientation;
   GstAVFVideoSourceDeviceType deviceType;
@@ -211,6 +344,9 @@ gst_avf_video_source_device_type_get_type (void)
   guint cropY;
   guint cropWidth;
   guint cropHeight;
+#if TARGET_OS_OSX
+  CGDirectDisplayID openedDisplayId;
+#endif
 
   BOOL useVideoMeta;
   GstGLContextHelper *ctxh;
@@ -221,8 +357,9 @@ gst_avf_video_source_device_type_get_type (void)
 - (id)initWithSrc:(GstPushSrc *)src;
 - (void)finalize;
 
-@property int deviceIndex;
-@property const gchar *deviceName;
+@property gchar *uniqueId;
+@property gchar *openedUniqueId;
+@property gchar *deviceName;
 @property GstAVFVideoSourcePosition position;
 @property GstAVFVideoSourceOrientation orientation;
 @property GstAVFVideoSourceDeviceType deviceType;
@@ -240,10 +377,11 @@ gst_avf_video_source_device_type_get_type (void)
 - (BOOL)openDeviceInput;
 - (BOOL)openDevice;
 - (void)closeDevice;
+- (void)clearOpenedUniqueId;
 - (GstVideoFormat)getGstVideoFormat:(NSNumber *)pixel_format;
 #if TARGET_OS_OSX
-- (CGDirectDisplayID)getDisplayIdFromDeviceIndex;
-- (float)getScaleFactorFromDeviceIndex;
+- (BOOL)getSelectedScreen:(NSScreen **)screen displayId:(CGDirectDisplayID *)displayId;
+- (float)getScaleFactorForDisplayId:(CGDirectDisplayID)displayId;
 #endif
 - (GstCaps *)getDeviceCaps;
 - (BOOL)setDeviceCaps:(const GstVideoInfo *)info;
@@ -324,7 +462,7 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
 
 @implementation GstAVFVideoSrcImpl
 
-@synthesize deviceIndex, deviceName, position, orientation, deviceType, doStats,
+@synthesize uniqueId, openedUniqueId, deviceName, position, orientation, deviceType, doStats,
     fps, captureScreen, captureScreenCursor, captureScreenMouseClicks, cropX, cropY, cropWidth, cropHeight;
 
 - (id)init
@@ -339,7 +477,8 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
     baseSrc = GST_BASE_SRC_CAST (src);
     pushSrc = src;
 
-    deviceIndex = DEFAULT_DEVICE_INDEX;
+    uniqueId = NULL;
+    openedUniqueId = NULL;
     deviceName = NULL;
     position = DEFAULT_POSITION;
     orientation = DEFAULT_ORIENTATION;
@@ -347,6 +486,9 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
     captureScreen = NO;
     captureScreenCursor = NO;
     captureScreenMouseClicks = NO;
+#if TARGET_OS_OSX
+    openedDisplayId = 0;
+#endif
     useVideoMeta = NO;
     textureCache = NULL;
     ctxh = gst_gl_context_helper_new (element);
@@ -366,10 +508,18 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
 
 - (void)finalize
 {
+  g_clear_pointer (&uniqueId, g_free);
+  g_clear_pointer (&openedUniqueId, g_free);
+  g_clear_pointer (&deviceName, g_free);
   mainQueue = NULL;
   workerQueue = NULL;
 
   permissionCond = nil;
+}
+
+- (void)clearOpenedUniqueId
+{
+  g_clear_pointer (&openedUniqueId, g_free);
 }
 
 - (BOOL)openDeviceInput
@@ -423,7 +573,23 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
     }
   }
 
-  if (deviceIndex == DEFAULT_DEVICE_INDEX) {
+  if (uniqueId != NULL && *uniqueId != '\0') {
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    NSArray *devices = [AVCaptureDevice devicesWithMediaType:mediaType];
+G_GNUC_END_IGNORE_DEPRECATIONS
+    for (int i = 0; i < [devices count]; i++) {
+      AVCaptureDevice *candidate = [devices objectAtIndex:i];
+      if (g_strcmp0 ([[candidate uniqueID] UTF8String], uniqueId) == 0) {
+        device = candidate;
+        break;
+      }
+    }
+    if (device == nil) {
+      GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
+          ("No video capture device found with unique ID '%s'", uniqueId), (NULL));
+      return NO;
+    }
+  } else {
 #if TARGET_OS_IOS || TARGET_OS_TV
     // TODO: Also supported on macOS 10.15 and visionOS 2.1+
     if (deviceType != DEFAULT_DEVICE_TYPE && position != DEFAULT_POSITION) {
@@ -442,29 +608,24 @@ static AVCaptureVideoOrientation GstAVFVideoSourceOrientation2AVCaptureVideoOrie
                           ("No video capture devices found"), (NULL));
       return NO;
     }
-  } else { // deviceIndex takes priority over position and deviceType
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-    NSArray *devices = [AVCaptureDevice devicesWithMediaType:mediaType];
-G_GNUC_END_IGNORE_DEPRECATIONS
-    if (deviceIndex >= [devices count]) {
-      GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
-                          ("Invalid video capture device index"), (NULL));
-      return NO;
-    }
-    device = [devices objectAtIndex:deviceIndex];
   }
   g_assert (device != nil);
 
-  deviceName = [[device localizedName] UTF8String];
+  g_free (openedUniqueId);
+  openedUniqueId = g_strdup ([[device uniqueID] UTF8String]);
+
+  g_free (deviceName);
+  deviceName = g_strdup ([[device localizedName] UTF8String]);
+  GST_INFO ("Selected device name='%s' unique-id='%s' from selector { unique-id='%s' }",
+      GST_STR_NULL (deviceName),
+      GST_STR_NULL (openedUniqueId),
+      GST_STR_NULL (uniqueId));
   GST_INFO ("Opening '%s'", deviceName);
 
   input = [AVCaptureDeviceInput deviceInputWithDevice:device
                                                 error:&err];
   if (input == nil) {
-    GST_ELEMENT_ERROR (element, RESOURCE, BUSY,
-        ("Failed to open device: %s",
-        [[err localizedDescription] UTF8String]),
-        (NULL));
+    gst_avf_video_src_post_error (element, "Failed to open device", err);
     device = nil;
     return NO;
   }
@@ -475,12 +636,12 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 {
 #if TARGET_OS_OSX
   CGDirectDisplayID displayId;
+  NSScreen *screen = nil;
   int screenHeight, screenWidth;
 
   GST_DEBUG_OBJECT (element, "Opening screen input");
 
-  displayId = [self getDisplayIdFromDeviceIndex];
-  if (displayId == 0)
+  if (![self getSelectedScreen:&screen displayId:&displayId])
     return NO;
 
   AVCaptureScreenInput *screenInput =
@@ -516,6 +677,15 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   }
 
   screenInput.capturesMouseClicks = captureScreenMouseClicks;
+  openedDisplayId = displayId;
+  g_free (openedUniqueId);
+  openedUniqueId = gst_avf_screen_dup_unique_id (displayId);
+  g_free (deviceName);
+  deviceName = gst_avf_screen_dup_name (screen, displayId);
+  GST_INFO ("Selected screen name='%s' unique-id='%s' from selector { unique-id='%s' }",
+      GST_STR_NULL (deviceName),
+      GST_STR_NULL (openedUniqueId),
+      GST_STR_NULL (uniqueId));
   input = screenInput;
   return YES;
 #else
@@ -594,6 +764,12 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       device = nil;
     }
 
+    g_clear_pointer (&openedUniqueId, g_free);
+    g_clear_pointer (&deviceName, g_free);
+#if TARGET_OS_OSX
+    openedDisplayId = 0;
+#endif
+
     if (caps)
       gst_caps_unref (caps);
     caps = NULL;
@@ -627,36 +803,72 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 }
 
 #if TARGET_OS_OSX
-- (CGDirectDisplayID)getDisplayIdFromDeviceIndex
+- (BOOL)getSelectedScreen:(NSScreen **)screen displayId:(CGDirectDisplayID *)displayId
 {
-  NSDictionary *description;
-  NSNumber *displayId;
   NSArray *screens = [NSScreen screens];
 
-  if (deviceIndex == DEFAULT_DEVICE_INDEX)
-    return kCGDirectMainDisplay;
-  if (deviceIndex >= [screens count]) {
+  if (uniqueId != NULL && *uniqueId != '\0') {
+    for (NSScreen *candidate in screens) {
+      CGDirectDisplayID candidate_display_id =
+          gst_avf_screen_get_display_id (candidate);
+      gchar *candidate_unique_id =
+          gst_avf_screen_dup_unique_id (candidate_display_id);
+      gboolean matches = g_strcmp0 (candidate_unique_id, uniqueId) == 0;
+      g_free (candidate_unique_id);
+
+      if (matches) {
+        if (screen != NULL)
+          *screen = candidate;
+        if (displayId != NULL)
+          *displayId = candidate_display_id;
+        return YES;
+      }
+    }
+
     GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
-                        ("Invalid screen capture device index"), (NULL));
-    return 0;
+        ("No screen capture device found with unique ID '%s'", uniqueId),
+        (NULL));
+    return NO;
   }
-  description = [[screens objectAtIndex:deviceIndex] deviceDescription];
-  displayId = [description objectForKey:@"NSScreenNumber"];
-  return [displayId unsignedIntegerValue];
+
+  if ([NSScreen mainScreen] != nil) {
+    if (screen != NULL)
+      *screen = [NSScreen mainScreen];
+  } else if ([screens count] > 0) {
+    if (screen != NULL)
+      *screen = [screens objectAtIndex:0];
+  } else {
+    GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
+        ("No screen capture devices found"), (NULL));
+    return NO;
+  }
+
+  if (displayId != NULL)
+    *displayId = gst_avf_screen_get_display_id (*screen);
+
+  return YES;
 }
 
-- (float)getScaleFactorFromDeviceIndex
+- (float)getScaleFactorForDisplayId:(CGDirectDisplayID)displayId
 {
-  NSArray *screens = [NSScreen screens];
+  if (displayId == 0) {
+    if ([NSScreen mainScreen] != nil)
+      return [[NSScreen mainScreen] backingScaleFactor];
 
-  if (deviceIndex == DEFAULT_DEVICE_INDEX)
-    return [[NSScreen mainScreen] backingScaleFactor];
-  if (deviceIndex >= [screens count]) {
     GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
-                        ("Invalid screen capture device index"), (NULL));
-    return 1.0;
+        ("No main screen found"), (NULL));
+    return 1.0f;
   }
-  return [[screens objectAtIndex:deviceIndex] backingScaleFactor];
+
+  for (NSScreen *screen in [NSScreen screens]) {
+    if (gst_avf_screen_get_display_id (screen) == displayId)
+      return [screen backingScaleFactor];
+  }
+
+  GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
+      ("Invalid screen capture display id"), (NULL));
+
+  return 1.0f;
 }
 #endif
 
@@ -678,10 +890,11 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 - (BOOL)setDeviceCaps:(const GstVideoInfo *)info
 {
   gboolean found_format = FALSE, found_framerate = FALSE;
+  NSError *err = nil;
 
   GST_DEBUG_OBJECT (element, "Setting device caps");
 
-  if ([device lockForConfiguration:NULL] == YES) {
+  if ([device lockForConfiguration:&err] == YES) {
     for (AVCaptureDeviceFormat *fmt in device.formats.reverseObjectEnumerator) {
       CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions (fmt.formatDescription);
       dimensions = [self orientedDimensions:dimensions];
@@ -712,7 +925,8 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       return NO;
     }
   } else {
-    GST_WARNING ("Couldn't lock device for configuration");
+    gst_avf_video_src_post_error (element,
+        "Couldn't lock device for configuration", err);
     return NO;
   }
   return YES;
@@ -720,43 +934,24 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
 - (GstCaps *)getCaps
 {
-  GstCaps *result;
-  NSArray *pixel_formats;
-
   if (session == nil)
     return NULL; /* BaseSrc will return template caps */
 
-  result = gst_caps_new_empty ();
-  pixel_formats = output.availableVideoCVPixelFormatTypes;
-
   if (captureScreen) {
 #if TARGET_OS_OSX
-    CGRect rect;
     AVCaptureScreenInput *screenInput = (AVCaptureScreenInput *)input;
-    if (CGRectIsEmpty (screenInput.cropRect)) {
-      rect = CGDisplayBounds ([self getDisplayIdFromDeviceIndex]);
-    } else {
-      rect = screenInput.cropRect;
-    }
-
-    float scale = [self getScaleFactorFromDeviceIndex];
-    for (NSNumber *pixel_format in pixel_formats) {
-      GstVideoFormat gst_format = [self getGstVideoFormat:pixel_format];
-      if (gst_format != GST_VIDEO_FORMAT_UNKNOWN)
-        gst_caps_append (result, gst_caps_new_simple ("video/x-raw",
-            "width", G_TYPE_INT, (int)(rect.size.width * scale),
-            "height", G_TYPE_INT, (int)(rect.size.height * scale),
-            "format", G_TYPE_STRING, gst_video_format_to_string (gst_format),
-            NULL));
-    }
+    gdouble scale = [self getScaleFactorForDisplayId:openedDisplayId];
+    return CGRectIsEmpty (screenInput.cropRect)
+        ? gst_av_capture_screen_get_caps (openedDisplayId, scale, output)
+        : gst_av_capture_screen_rect_get_caps (screenInput.cropRect, scale,
+            output);
 #else
-    (void) pixel_formats;
-    GST_WARNING ("Screen capture is not supported by iOS");
+    GST_WARNING ("Screen capture is only supported on macOS");
+    return gst_caps_new_empty ();
 #endif
-    return result;
   }
 
-  return gst_caps_merge (result, [self getDeviceCaps]);
+  return [self getDeviceCaps];
 }
 
 - (BOOL)setCaps:(GstCaps *)new_caps
@@ -786,7 +981,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       AVCaptureScreenInput *screenInput = (AVCaptureScreenInput *)input;
       screenInput.minFrameDuration = CMTimeMake(info.fps_d, info.fps_n);
 #else
-      GST_WARNING ("Screen capture is not supported by iOS");
+      GST_WARNING ("Screen capture is only supported on macOS");
       *successPtr = NO;
       return;
 #endif
@@ -1040,9 +1235,16 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   if (!ret)
     return ret;
 
+  useVideoMeta =
+      gst_query_find_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
+
   gst_query_parse_allocation (query, &alloc_caps, NULL);
+  if (alloc_caps == NULL)
+    return TRUE;
+
   features = gst_caps_get_features (alloc_caps, 0);
-  if (gst_caps_features_contains (features, GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
+  if (features && gst_caps_features_contains (features,
+          GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
     GstVideoTextureCacheGL *cache_gl;
 
     cache_gl = textureCache ? GST_VIDEO_TEXTURE_CACHE_GL (textureCache) : NULL;
@@ -1170,6 +1372,7 @@ enum
 {
   PROP_0,
   PROP_DEVICE_INDEX,
+  PROP_DEVICE_UNIQUE_ID,
   PROP_DEVICE_NAME,
   PROP_POSITION,
   PROP_ORIENTATION,
@@ -1257,11 +1460,29 @@ gst_avf_video_src_class_init (GstAVFVideoSrcClass * klass)
 
   gst_element_class_add_static_pad_template (gstelement_class, &src_template);
 
+  /**
+   * GstAVFVideoSrc:device-index:
+   *
+   * The zero-based device index (deprecated, non-functional).
+   *
+   * Deprecated: 1.30: Use "unique-id" instead.
+   */
   g_object_class_install_property (gobject_class, PROP_DEVICE_INDEX,
       g_param_spec_int ("device-index", "Device Index",
-          "The zero-based device index",
+          "The zero-based device index (deprecated, non-functional)",
           -1, G_MAXINT, DEFAULT_DEVICE_INDEX,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+          G_PARAM_READWRITE | G_PARAM_DEPRECATED | G_PARAM_STATIC_STRINGS));
+  /**
+   * GstAVFVideoSrc:unique-id:
+   *
+   * Stable unique identifier of the capture source to open.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_DEVICE_UNIQUE_ID,
+      g_param_spec_string ("unique-id", "Unique ID",
+          "Stable unique identifier of the capture source to open",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_DEVICE_NAME,
       g_param_spec_string ("device-name", "Device Name",
           "The name of the currently opened capture device",
@@ -1404,7 +1625,10 @@ gst_avf_video_src_get_property (GObject * object, guint prop_id, GValue * value,
       break;
 #endif
     case PROP_DEVICE_INDEX:
-      g_value_set_int (value, impl.deviceIndex);
+      g_value_set_int (value, DEFAULT_DEVICE_INDEX);
+      break;
+    case PROP_DEVICE_UNIQUE_ID:
+      g_value_set_string (value, impl.openedUniqueId ? : impl.uniqueId);
       break;
     case PROP_DEVICE_NAME:
       g_value_set_string (value, impl.deviceName);
@@ -1463,7 +1687,13 @@ gst_avf_video_src_set_property (GObject * object, guint prop_id,
       break;
 #endif
     case PROP_DEVICE_INDEX:
-      impl.deviceIndex = g_value_get_int (value);
+      g_warning ("The \"device-index\" property of avfvideosrc is deprecated "
+          "and non-functional. Use \"unique-id\" instead.");
+      break;
+    case PROP_DEVICE_UNIQUE_ID:
+      g_free (impl.uniqueId);
+      impl.uniqueId = g_value_dup_string (value);
+      [impl clearOpenedUniqueId];
       break;
     case PROP_POSITION:
       impl.position = g_value_get_enum(value);
@@ -1686,6 +1916,44 @@ gst_av_capture_device_get_caps (AVCaptureDevice *device, AVCaptureVideoDataOutpu
 
   return result_gl_caps;
 }
+
+#if TARGET_OS_OSX
+static GstCaps *
+gst_av_capture_screen_rect_get_caps (CGRect rect, gdouble scale,
+    AVCaptureVideoDataOutput *output)
+{
+  GstCaps *result;
+  NSArray *pixel_formats;
+
+  g_return_val_if_fail (output != nil, NULL);
+
+  result = gst_caps_new_empty ();
+  pixel_formats = output.availableVideoCVPixelFormatTypes;
+
+  for (NSNumber *pixel_format in pixel_formats) {
+    GstVideoFormat gst_format =
+        gst_video_format_from_cvpixelformat ([pixel_format integerValue]);
+
+    if (gst_format != GST_VIDEO_FORMAT_UNKNOWN) {
+      gst_caps_append (result, gst_caps_new_simple ("video/x-raw",
+              "width", G_TYPE_INT, (gint) (rect.size.width * scale),
+              "height", G_TYPE_INT, (gint) (rect.size.height * scale),
+              "format", G_TYPE_STRING,
+              gst_video_format_to_string (gst_format), NULL));
+    }
+  }
+
+  return result;
+}
+
+GstCaps *
+gst_av_capture_screen_get_caps (CGDirectDisplayID display_id, gdouble scale,
+    AVCaptureVideoDataOutput *output)
+{
+  return gst_av_capture_screen_rect_get_caps (CGDisplayBounds (display_id),
+      scale, output);
+}
+#endif
 
 static CMVideoDimensions
 get_oriented_dimensions (GstAVFVideoSourceOrientation orientation, CMVideoDimensions dimensions)

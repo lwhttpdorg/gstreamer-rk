@@ -268,6 +268,8 @@ struct _GstRTSPSrc {
   GTlsCertificateFlags tls_validation_flags;
   GTlsDatabase     *tls_database;
   GTlsInteraction  *tls_interaction;
+  gchar            *tls_client_cert_file;
+  gchar            *tls_client_key_file;
   gboolean          do_retransmission;
   gint              ntp_time_source;
   gchar            *user_agent;
@@ -325,6 +327,20 @@ struct _GstRTSPSrc {
   gboolean         use_buffering;
 
   GstRTSPConnInfo  conninfo;
+
+  /* Independent keep-alive timer (non-live + TCP-interleaved only).  When
+   * downstream is paused the streaming loop blocks on data push and cannot
+   * fire the receive-timeout-based keep-alive, so this worker fires from a
+   * separate GMainContext to keep the RTSP session alive. */
+  GMainContext    *keep_alive_context;
+  GMainLoop       *keep_alive_loop;
+  GThread         *keep_alive_thread;
+  GSource         *keep_alive_source;
+  /* Queue of CSeq values of in-flight keep-alive requests.  Receivers look up
+   * incoming response CSeqs here and skip those that match, so a keep-alive
+   * response is never mistaken for the response to a synchronous caller. */
+  GMutex           keep_alive_cseq_lock;
+  GQueue           keep_alive_cseqs;     /* queue of GUINT_TO_POINTER(cseq) */
 
   /* SET/GET PARAMETER requests queue */
   GQueue set_get_param_q;

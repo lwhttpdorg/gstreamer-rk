@@ -764,8 +764,7 @@ frame_redraw_callback (void *data, struct wl_callback *callback, uint32_t time)
 
   GST_DEBUG_OBJECT (self, "frame_redraw_cb");
 
-  wl_callback_destroy (callback);
-  priv->frame_callback = NULL;
+  gst_wl_display_callback_destroy (priv->display, &priv->frame_callback);
 
   g_mutex_lock (&priv->window_lock);
   redraw = (priv->staged_buffer == priv->next_buffer);
@@ -895,8 +894,7 @@ commit_callback (void *data, struct wl_callback *callback, uint32_t serial)
   GstWlWindow *self = data;
   GstWlWindowPrivate *priv = gst_wl_window_get_instance_private (self);
 
-  wl_callback_destroy (callback);
-  priv->commit_callback = NULL;
+  gst_wl_display_callback_destroy (priv->display, &priv->commit_callback);
 
   g_mutex_lock (&priv->window_lock);
   gst_wl_window_commit_buffer (self, priv->next_buffer, FALSE);
@@ -1045,7 +1043,6 @@ gst_wl_window_import_buffer (GstWlWindow * self, GstBuffer * buffer,
 {
   GstWlWindowPrivate *priv = gst_wl_window_get_instance_private (self);
   GstWlBuffer *wlbuffer;
-  GstMemory *mem;
   struct wl_buffer *wbuf = NULL;
   GstFlowReturn ret = GST_FLOW_OK;
 
@@ -1058,8 +1055,6 @@ gst_wl_window_import_buffer (GstWlWindow * self, GstBuffer * buffer,
     *to_render = wlbuffer;
     return GST_FLOW_OK;
   }
-
-  mem = gst_buffer_peek_memory (buffer, 0);
 
   GST_LOG_OBJECT (self,
       "buffer %" GST_PTR_FORMAT " does not have a wl_buffer from our "
@@ -1122,9 +1117,8 @@ gst_wl_window_import_buffer (GstWlWindow * self, GstBuffer * buffer,
 handle_shm:
   if (!wbuf && gst_wl_display_check_format_for_shm (priv->display,
           &priv->src_video_info)) {
-    if (gst_buffer_n_memory (buffer) == 1 && gst_is_fd_memory (mem))
-      wbuf = gst_wl_shm_memory_construct_wl_buffer (mem, priv->display,
-          &priv->src_video_info);
+    wbuf = gst_wl_shm_memory_construct_wl_buffer (buffer, priv->display,
+        &priv->src_video_info);
 
     if (!wbuf) {
       GstBuffer *pool_buf;
@@ -1143,8 +1137,7 @@ handle_shm:
       wlbuffer = gst_buffer_get_wl_buffer (self, pool_buf);
 
       if (G_UNLIKELY (!wlbuffer)) {
-        mem = gst_buffer_peek_memory (pool_buf, 0);
-        wbuf = gst_wl_shm_memory_construct_wl_buffer (mem, priv->display,
+        wbuf = gst_wl_shm_memory_construct_wl_buffer (pool_buf, priv->display,
             &priv->src_video_info);
 
         if (G_UNLIKELY (!wbuf)) {
@@ -1293,8 +1286,8 @@ gst_wl_window_render (GstWlWindow * self, GstBuffer * buffer)
 
   if (!priv->next_buffer) {
     priv->next_buffer = to_render;
-    priv->commit_callback =
-        gst_wl_display_sync (priv->display, &commit_listener, self);
+    gst_wl_display_sync_store (priv->display, &priv->commit_callback,
+        &commit_listener, self);
     wl_display_flush (gst_wl_display_get_display (priv->display));
   } else {
     priv->staged_buffer = to_render;
@@ -1391,9 +1384,7 @@ gst_wl_window_update_borders (GstWlWindow * self)
     buf = gst_buffer_new_allocate (alloc, info.size, NULL);
     gst_buffer_memset (buf, 0, 0, info.size);
 
-    wlbuf =
-        gst_wl_shm_memory_construct_wl_buffer (gst_buffer_peek_memory (buf, 0),
-        priv->display, &info);
+    wlbuf = gst_wl_shm_memory_construct_wl_buffer (buf, priv->display, &info);
 
     g_object_unref (alloc);
   }

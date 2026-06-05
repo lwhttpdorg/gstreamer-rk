@@ -63,6 +63,7 @@
 #define BOXES_WITHOUT_POSTPROC_TENSOR_ID "ultra-lightweight-face-detection-rfb-320-v1-variant-1-out-boxes-without-postproc"
 #define SCORES_TENSOR_ID "ultra-lightweight-face-detection-rfb-320-v1-variant-1-out-scores"
 #define GROUP_ID "ultra-lightweight-face-detection-rfb-320-v1-variant-1-out"
+#define WITHOUT_POSTPROC_GROUP_ID "ultra-lightweight-face-detection-rfb-320-v1-without-postproc-out"
 
 GST_DEBUG_CATEGORY_STATIC (face_detector_tensor_decoder_debug);
 #define GST_CAT_DEFAULT face_detector_tensor_decoder_debug
@@ -113,23 +114,43 @@ GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS ("video/x-raw,"
-      "tensors=(structure)["
-        "tensorgroups,"
-          GROUP_ID"=(/uniquelist){"
-            "(GstCaps)["
-              "tensor/strided,"
-                "tensor-id="BOXES_TENSOR_ID","
-                "dims=<(int)1,(int)[1,max],(int)4>,"
-                "dims-order=(string)row-major,"
-                "type=(string)float32;],"
-            "(GstCaps)["
-              "tensor/strided,"
-                "tensor-id="SCORES_TENSOR_ID","
-                "dims=<(int)1,(int)[1,max],(int)2>,"
-                "dims-order=(string)row-major,"
-                "type=(string)float32;]"
-        "}"
-      "];"
+      "tensors="
+        "(structure)["
+          "tensorgroups,"
+            GROUP_ID"=(/uniquelist){"
+              "(GstCaps)["
+                "tensor/strided,"
+                  "tensor-id="BOXES_TENSOR_ID","
+                  "dims=<(int)1,(int)[1,max],(int)4>,"
+                  "dims-order=(string)row-major,"
+                  "type=(string)float32;],"
+              "(GstCaps)["
+                "tensor/strided,"
+                  "tensor-id="SCORES_TENSOR_ID","
+                  "dims=<(int)1,(int)[1,max],(int)2>,"
+                  "dims-order=(string)row-major,"
+                  "type=(string)float32;]"
+          "}"
+        "];"
+      "video/x-raw,"
+      "tensors="
+        "(structure)["
+          "tensorgroups,"
+            WITHOUT_POSTPROC_GROUP_ID"=(/uniquelist){"
+              "(GstCaps)["
+                "tensor/strided,"
+                  "tensor-id="BOXES_WITHOUT_POSTPROC_TENSOR_ID","
+                  "dims=<(int)1,(int)[1,max],(int)4>,"
+                  "dims-order=(string)row-major,"
+                  "type=(string)float32;],"
+              "(GstCaps)["
+                "tensor/strided,"
+                  "tensor-id="SCORES_TENSOR_ID","
+                  "dims=<(int)1,(int)[1,max],(int)2>,"
+                  "dims-order=(string)row-major,"
+                  "type=(string)float32;]"
+          "}"
+        "];"
     ));
 /* *INDENT-ON* */
 
@@ -795,6 +816,10 @@ gst_face_detector_tensor_decoder_decode_boxes_f32 (GstFaceDetectorTensorDecoder
     gfloat y2 = c->box[3] * frame_height;
     gfloat w_ = x2 - x1;
     gfloat h_ = y2 - y1;
+
+    GST_LOG_OBJECT (self, "Found face at (%d, %d) of size %dx%d with prob: %f",
+        (gint) (x1 + 0.5f), (gint) (y1 + 0.5f),
+        (gint) (w_ + 0.5f), (gint) (h_ + 0.5f), c->score);
 
     /* Add to analytics meta: (x, y, width, height). */
     gst_analytics_relation_meta_add_od_mtd (rmeta, FACE_QUARK,

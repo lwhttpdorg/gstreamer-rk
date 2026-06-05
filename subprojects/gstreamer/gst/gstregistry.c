@@ -1643,9 +1643,22 @@ priv_gst_get_relocated_libgstreamer (void)
         dir = g_path_get_dirname (real_fname);
         GST_DEBUG ("real directory location: %s", dir);
       } else {
+#ifdef __ANDROID__
+        // This is to be expected -- the path may point to inside the APK
+        // See https://android.googlesource.com/platform/bionic/+/main/android-changes-for-ndk-developers.md#opening-shared-libraries-directly-from-an-apk
+        dir = g_path_get_dirname (info.dli_fname);
+        if (strstr (info.dli_fname, ".apk!/") != NULL ||
+            strstr (info.dli_fname, ".zip!/") != NULL) {
+          GST_DEBUG ("libgstreamer-1.0 loaded from within container: %s", dir);
+        } else {
+          GST_LOG ("could not canonicalize path %s: %s", info.dli_fname,
+              g_strerror (errno));
+        }
+#else
         GST_ERROR ("could not canonicalize path %s: %s", info.dli_fname,
             g_strerror (errno));
         dir = g_path_get_dirname (info.dli_fname);
+#endif
       }
       g_free (real_fname);
 
@@ -2076,4 +2089,16 @@ gst_registry_get_feature_list_cookie (GstRegistry * registry)
   g_return_val_if_fail (GST_IS_REGISTRY (registry), 0);
 
   return registry->priv->cookie;
+}
+
+/* Called from gst_plugin_feature_set_rank() so cookie-keyed caches
+ * (decodebin, parsebin, playbin, ...) see runtime rank changes. */
+void
+_priv_gst_registry_bump_feature_list_cookie (GstRegistry * registry)
+{
+  g_return_if_fail (GST_IS_REGISTRY (registry));
+
+  GST_OBJECT_LOCK (registry);
+  registry->priv->cookie++;
+  GST_OBJECT_UNLOCK (registry);
 }

@@ -1,12 +1,13 @@
 <!-- This file was automatically generated from C sources - DO NOT EDIT!
 To affect the contents of this file, edit the original C definitions,
 and/or use gtk-doc annotations.  -->
-<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
+<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" xmlns:doc="http://www.gtk.org/introspection/doc/1.0" xmlns:glib="http://www.gtk.org/introspection/glib/1.0" version="1.2">
   <include name="GLib" version="2.0"/>
   <include name="GModule" version="2.0"/>
   <include name="GObject" version="2.0"/>
   <package name="gstreamer-1.0"/>
   <c:include name="gst/gst.h"/>
+  <doc:format name="unknown"/>
   <namespace name="Gst" version="1.0" shared-library="libgstreamer-1.0.so.0" c:identifier-prefixes="Gst" c:symbol-prefixes="gst">
     <alias name="BufferMapInfo" c:type="GstBufferMapInfo" introspectable="0" deprecated="1" deprecated-version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.h">Alias for #GstMapInfo to be used with g_auto():
@@ -12407,20 +12408,11 @@ character, a newline character will be added automatically.</doc>
     <function-macro name="DEBUG_BIN_TO_DOT_FILE" c:identifier="GST_DEBUG_BIN_TO_DOT_FILE" introspectable="0">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.h">To aid debugging applications one can use this method to write out the whole
 network of gstreamer elements that form the pipeline into a dot file.
-This file can be processed with graphviz to get an image, like this:
 
-``` shell
-dot -Tpng -oimage.png graph_lowlevel.dot
-```
+The macro is only active if the GStreamer debugging subsystem is
+enabled (i.e., no use of `meson setup -Dgst_debug=false`)
 
-There is also a utility called [xdot] which allows you to view the dot file
-directly without converting it first.
-
-The macro is only active if the environment variable `GST_DEBUG_DUMP_DOT_DIR`
-is set to a basepath (e.g. `/tmp`), and the GStreamer debugging subsystem is
-enabled (i.e., no use of `./configure --disable-gst-debug`)
-
-[xdot]: https://pypi.org/project/xdot/</doc>
+See gst_debug_bin_to_dot_file() for more details.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstdebugutils.h"/>
       <parameters>
         <parameter name="bin">
@@ -14257,7 +14249,10 @@ Filters must be added before the #GstDeviceMonitor is started.</doc>
       </method>
       <method name="get_devices" c:identifier="gst_device_monitor_get_devices" version="1.4">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdevicemonitor.c">Gets a list of devices from all of the relevant monitors. This may actually
-probe the hardware if the monitor is not currently started.</doc>
+probe the hardware if the monitor is not currently started.
+
+Since 1.28.3, this function will block until the monitor has finished
+starting if gst_device_monitor_start() has been called.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstdevicemonitor.h"/>
         <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdevicemonitor.c">a #GList of
@@ -37239,7 +37234,7 @@ arguments separated by predefined delimiters (see above).</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
           <parameter name="paths" transfer-ownership="none" nullable="1" allow-none="1">
-            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstplugin.c">one ore more directory paths (separated by ':' or ';' or ','),
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstplugin.c">one or more directory paths (separated by ':' or ';' or ','),
      or %NULL. Example: "/usr/lib/mystuff/plugins"</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
@@ -37818,7 +37813,7 @@ the nano version from the string and do this check that way if needed.</doc>
           </instance-parameter>
         </parameters>
       </method>
-      <method name="get_rank" c:identifier="gst_plugin_feature_get_rank">
+      <method name="get_rank" c:identifier="gst_plugin_feature_get_rank" glib:get-property="rank">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpluginfeature.c">Gets the rank of a plugin feature.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstpluginfeature.h"/>
         <return-value transfer-ownership="none">
@@ -37858,7 +37853,7 @@ feature, or %NULL on error</doc>
           </instance-parameter>
         </parameters>
       </method>
-      <method name="set_rank" c:identifier="gst_plugin_feature_set_rank">
+      <method name="set_rank" c:identifier="gst_plugin_feature_set_rank" glib:set-property="rank">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpluginfeature.c">Specifies a rank for a plugin feature, so that autoplugging uses
 the most appropriate feature.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstpluginfeature.h"/>
@@ -37876,6 +37871,11 @@ the most appropriate feature.</doc>
           </parameter>
         </parameters>
       </method>
+      <property name="rank" version="1.30" writable="1" transfer-ownership="none" setter="set_rank" getter="get_rank" default-value="0">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpluginfeature.c">The rank of the plugin feature, used in autoplugging to select
+the most appropriate feature.</doc>
+        <type name="gint" c:type="gint"/>
+      </property>
     </class>
     <record name="PluginFeatureClass" c:type="GstPluginFeatureClass" disguised="1" opaque="1" glib:is-gtype-struct-for="PluginFeature">
       <source-position filename="../subprojects/gstreamer/gst/gstpluginfeature.h"/>
@@ -38560,6 +38560,71 @@ or no value for the given @tag</doc>
           </instance-parameter>
         </parameters>
       </virtual-method>
+      <virtual-method name="get_property" invoker="get_property" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">Gets the value of a property from a preset.
+
+If @prop contains an alternative suffix in brackets (e.g.
+"bitrate[1920x1080]"), the alternative value is read using
+GKeyFile's locale string mechanism. Otherwise the base property
+value is read.
+
+On success, @value is initialized to the property's type and
+filled with the deserialized value from the preset file. The
+caller must call g_value_unset() on @value when done.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">%TRUE if the property value was retrieved, %FALSE on error</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="preset" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+            <type name="Preset" c:type="GstPreset*"/>
+          </instance-parameter>
+          <parameter name="name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="prop" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">property name, optionally with an alternative suffix
+  (e.g. "bitrate" or "bitrate[1920x1080]")</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="value" direction="out" caller-allocates="1" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.h">#GValue to store the property value</doc>
+            <type name="GObject.Value" c:type="GValue*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
+      <virtual-method name="get_property_alternatives" invoker="get_property_alternatives" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">Gets the list of alternative suffixes defined for a property in a
+preset. These are the bracket-enclosed parts of keys like
+"bitrate[1920x1080]" or "bitrate[3840x2160@48]".</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+        <return-value transfer-ownership="full" nullable="1">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">
+  a %NULL-terminated array of alternative names (e.g.
+  ["1920x1080", "3840x2160@48", ...]), or %NULL if no
+  alternatives exist. Free with g_strfreev().</doc>
+          <array c:type="gchar**">
+            <type name="utf8"/>
+          </array>
+        </return-value>
+        <parameters>
+          <instance-parameter name="preset" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+            <type name="Preset" c:type="GstPreset*"/>
+          </instance-parameter>
+          <parameter name="name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="prop" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">base property name (e.g. "bitrate")</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
       <virtual-method name="get_property_names" invoker="get_property_names">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">Get a the names of the GObject properties that can be used for presets.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
@@ -38726,6 +38791,70 @@ or no value for the given @tag</doc>
             <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
             <type name="Preset" c:type="GstPreset*"/>
           </instance-parameter>
+        </parameters>
+      </method>
+      <method name="get_property" c:identifier="gst_preset_get_property" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">Gets the value of a property from a preset.
+
+If @prop contains an alternative suffix in brackets (e.g.
+"bitrate[1920x1080]"), the alternative value is read using
+GKeyFile's locale string mechanism. Otherwise the base property
+value is read.
+
+On success, @value is initialized to the property's type and
+filled with the deserialized value from the preset file. The
+caller must call g_value_unset() on @value when done.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">%TRUE if the property value was retrieved, %FALSE on error</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="preset" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+            <type name="Preset" c:type="GstPreset*"/>
+          </instance-parameter>
+          <parameter name="name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="prop" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">property name, optionally with an alternative suffix
+  (e.g. "bitrate" or "bitrate[1920x1080]")</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="value" transfer-ownership="none">
+            <type name="GObject.Value" c:type="GValue*"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_property_alternatives" c:identifier="gst_preset_get_property_alternatives" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">Gets the list of alternative suffixes defined for a property in a
+preset. These are the bracket-enclosed parts of keys like
+"bitrate[1920x1080]" or "bitrate[3840x2160@48]".</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+        <return-value transfer-ownership="full" nullable="1">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">
+  a %NULL-terminated array of alternative names (e.g.
+  ["1920x1080", "3840x2160@48", ...]), or %NULL if no
+  alternatives exist. Free with g_strfreev().</doc>
+          <array c:type="gchar**">
+            <type name="utf8"/>
+          </array>
+        </return-value>
+        <parameters>
+          <instance-parameter name="preset" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+            <type name="Preset" c:type="GstPreset*"/>
+          </instance-parameter>
+          <parameter name="name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="prop" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">base property name (e.g. "bitrate")</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
         </parameters>
       </method>
       <method name="get_property_names" c:identifier="gst_preset_get_property_names">
@@ -39034,8 +39163,64 @@ or no value for the given @tag</doc>
           </parameters>
         </callback>
       </field>
+      <field name="get_property">
+        <callback name="get_property">
+          <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+          <return-value transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">%TRUE if the property value was retrieved, %FALSE on error</doc>
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="preset" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+              <type name="Preset" c:type="GstPreset*"/>
+            </parameter>
+            <parameter name="name" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+              <type name="utf8" c:type="const gchar*"/>
+            </parameter>
+            <parameter name="prop" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">property name, optionally with an alternative suffix
+  (e.g. "bitrate" or "bitrate[1920x1080]")</doc>
+              <type name="utf8" c:type="const gchar*"/>
+            </parameter>
+            <parameter name="value" direction="out" caller-allocates="1" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.h">#GValue to store the property value</doc>
+              <type name="GObject.Value" c:type="GValue*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
+      <field name="get_property_alternatives">
+        <callback name="get_property_alternatives">
+          <source-position filename="../subprojects/gstreamer/gst/gstpreset.h"/>
+          <return-value transfer-ownership="full" nullable="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">
+  a %NULL-terminated array of alternative names (e.g.
+  ["1920x1080", "3840x2160@48", ...]), or %NULL if no
+  alternatives exist. Free with g_strfreev().</doc>
+            <array c:type="gchar**">
+              <type name="utf8"/>
+            </array>
+          </return-value>
+          <parameters>
+            <parameter name="preset" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">a #GObject that implements #GstPreset</doc>
+              <type name="Preset" c:type="GstPreset*"/>
+            </parameter>
+            <parameter name="name" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">preset name</doc>
+              <type name="utf8" c:type="const gchar*"/>
+            </parameter>
+            <parameter name="prop" transfer-ownership="none">
+              <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpreset.c">base property name (e.g. "bitrate")</doc>
+              <type name="utf8" c:type="const gchar*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
       <field name="_gst_reserved" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="4">
+        <array zero-terminated="0" fixed-size="2">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>
@@ -41995,6 +42180,8 @@ references would be
    on a given PTP clock.
  * `timestamp/x-unix`: for timestamps based on the UNIX epoch according to
    the local clock.
+ * `timestamp/x-system-monotonic`: for timestamps based on the system
+   monotonic clock.
 
 Since 1.24 it can be serialized using gst_meta_serialize() and
 gst_meta_deserialize().
@@ -44485,7 +44672,7 @@ gst_element_set_state(). Only @GST_STATE_CHANGE_FAILURE is a real failure.</doc>
         </parameters>
       </function>
     </enumeration>
-    <record name="StaticCaps" c:type="GstStaticCaps">
+    <record name="StaticCaps" c:type="GstStaticCaps" glib:type-name="GstStaticCaps" glib:get-type="gst_static_caps_get_type" c:symbol-prefix="static_caps">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstcaps.h">Data structure to initialize #GstCaps from a string description usually
 used in conjunction with GST_STATIC_CAPS() and gst_static_caps_get() to
 instantiate a #GstCaps.</doc>
@@ -44533,7 +44720,7 @@ instantiate a #GstCaps.</doc>
         </parameters>
       </method>
     </record>
-    <record name="StaticPadTemplate" c:type="GstStaticPadTemplate">
+    <record name="StaticPadTemplate" c:type="GstStaticPadTemplate" glib:type-name="GstStaticPadTemplate" glib:get-type="gst_static_pad_template_get_type" c:symbol-prefix="static_pad_template">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpadtemplate.h">Structure describing the #GstStaticPadTemplate.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstpadtemplate.h"/>
       <field name="name_template" writable="1">
@@ -47907,10 +48094,36 @@ Subclasses can however override all of the important methods for sync and
 async notifications to implement their own callback methods or blocking
 wait operations.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstsystemclock.h"/>
+      <constructor name="new" c:identifier="gst_system_clock_new" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">Creates a new instance of the system clock. Unlike gst_system_clock_obtain()
+this allows to apply custom calibration to it via
+gst_clock_set_calibration(), set a master clock via gst_clock_set_master() or
+change the `clock-type` property without changing the behaviour of the
+default system clock for the whole process.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstsystemclock.h"/>
+        <return-value transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">the new system clock instance.</doc>
+          <type name="Clock" c:type="GstClock*"/>
+        </return-value>
+        <parameters>
+          <parameter name="name" transfer-ownership="none" nullable="1" allow-none="1">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">name of the new clock</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="clock_type" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">#GstClockType for the new clock</doc>
+            <type name="ClockType" c:type="GstClockType"/>
+          </parameter>
+        </parameters>
+      </constructor>
       <function name="obtain" c:identifier="gst_system_clock_obtain">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">Get a handle to the default system clock. The refcount of the
 clock will be increased so you need to unref the clock after
-usage.</doc>
+usage.
+
+Changing the calibration via gst_clock_set_calibration(), setting a master
+clock via gst_clock_set_master() or changing the `clock-type` property on the
+returned clock will change the behaviour for the whole process.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstsystemclock.h"/>
         <return-value transfer-ownership="full">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstsystemclock.c">the default clock.
@@ -52459,7 +52672,7 @@ events may contain values for different #GstPads.</doc>
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttracerrecord.h">the value is related to a #GstPad</doc>
       </member>
     </enumeration>
-    <record name="TypeFind" c:type="GstTypeFind">
+    <record name="TypeFind" c:type="GstTypeFind" glib:type-name="GstTypeFind" glib:get-type="gst_type_find_get_type" c:symbol-prefix="type_find">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttypefind.c">The following functions allow you to detect the media type of an unknown
 stream.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gsttypefind.h"/>
@@ -56360,7 +56573,8 @@ Only one logger at a time is possible.</doc>
     <function name="debug_bin_to_dot_data" c:identifier="gst_debug_bin_to_dot_data">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">To aid debugging applications one can use this method to obtain the whole
 network of gstreamer elements that form the pipeline into a dot file.
-This data can be processed with graphviz to get an image.</doc>
+
+See gst_debug_bin_to_dot_file() for more details.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstdebugutils.h"/>
       <return-value transfer-ownership="full">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">a string containing the pipeline in graphviz
@@ -56381,11 +56595,28 @@ dot format.</doc>
     <function name="debug_bin_to_dot_file" c:identifier="gst_debug_bin_to_dot_file">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">To aid debugging applications one can use this method to write out the whole
 network of gstreamer elements that form the pipeline into a dot file.
-This file can be processed with graphviz to get an image.
+This file can be processed with graphviz to get an image, like this:
 
 ``` shell
- dot -Tpng -oimage.png graph_lowlevel.dot
-```</doc>
+dot -Tpng -oimage.png graph_lowlevel.dot
+```
+
+There is also the interactive [gst-dots-viewer](https://gstreamer.freedesktop.org/documentation/coretracers/dots.html)
+tool, and [xdot](https://pypi.org/project/xdot/) which allows you to view the
+dot file directly without converting it first.
+
+If @file_name is NULL, the output filename will be based on the application
+name as returned by g_get_application_name(), or "unnamed" if the application
+name cannot be determined.
+
+The file will be written to the directory specified by the
+`GST_DEBUG_DUMP_DOT_DIR` environment variable, and the `.dot` extension will be
+added. If `GST_DEBUG_DUMP_DOT_DIR` was not defined at the time
+gst_init() was called, the file will not be generated. Note that the
+directory must already exist, it will not be created by this function.
+
+gst_debug_bin_to_dot_data() can be used if it is desired to generate the
+file even when `GST_DEBUG_DUMP_DOT_DIR` is not set.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstdebugutils.h"/>
       <return-value transfer-ownership="none">
         <type name="none" c:type="void"/>
@@ -56399,7 +56630,7 @@ This file can be processed with graphviz to get an image.
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">type of #GstDebugGraphDetails to use</doc>
           <type name="DebugGraphDetails" c:type="GstDebugGraphDetails"/>
         </parameter>
-        <parameter name="file_name" transfer-ownership="none">
+        <parameter name="file_name" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">output base filename (e.g. "myplayer")</doc>
           <type name="filename" c:type="const gchar*"/>
         </parameter>
@@ -56421,7 +56652,7 @@ to the filename, so that it can be used to take multiple snapshots.</doc>
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">type of #GstDebugGraphDetails to use</doc>
           <type name="DebugGraphDetails" c:type="GstDebugGraphDetails"/>
         </parameter>
-        <parameter name="file_name" transfer-ownership="none">
+        <parameter name="file_name" transfer-ownership="none" nullable="1" allow-none="1">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstdebugutils.c">output base filename (e.g. "myplayer")</doc>
           <type name="filename" c:type="const gchar*"/>
         </parameter>
@@ -59838,20 +60069,6 @@ the GStreamer core. See gst_segtrap_is_enabled() for more information.</doc>
         </parameter>
       </parameters>
     </function>
-    <function name="static_caps_get_type" c:identifier="gst_static_caps_get_type">
-      <attribute name="doc.skip" value="true"/>
-      <source-position filename="../subprojects/gstreamer/gst/gstcaps.h"/>
-      <return-value transfer-ownership="none">
-        <type name="GType" c:type="GType"/>
-      </return-value>
-    </function>
-    <function name="static_pad_template_get_type" c:identifier="gst_static_pad_template_get_type">
-      <attribute name="doc.skip" value="true"/>
-      <source-position filename="../subprojects/gstreamer/gst/gstpadtemplate.h"/>
-      <return-value transfer-ownership="none">
-        <type name="GType" c:type="GType"/>
-      </return-value>
-    </function>
     <function name="stream_error_quark" c:identifier="gst_stream_error_quark" moved-to="StreamError.quark">
       <attribute name="doc.skip" value="true"/>
       <return-value transfer-ownership="none">
@@ -60303,13 +60520,6 @@ Use %NULL for @detail to register to all hooks.</doc>
           <type name="GObject.Callback" c:type="GCallback"/>
         </parameter>
       </parameters>
-    </function>
-    <function name="type_find_get_type" c:identifier="gst_type_find_get_type">
-      <attribute name="doc.skip" value="true"/>
-      <source-position filename="../subprojects/gstreamer/gst/gsttypefind.h"/>
-      <return-value transfer-ownership="none">
-        <type name="GType" c:type="GType"/>
-      </return-value>
     </function>
     <function name="type_find_register" c:identifier="gst_type_find_register" moved-to="TypeFind.register">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttypefind.c">Registers a new typefind function to be used for typefinding. After
@@ -62326,6 +62536,23 @@ Note that this means subtraction as in sets, not as in mathematics.</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <function name="value_take_structure" c:identifier="gst_value_take_structure" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstvalue.c">Sets the contents of @value to @structure. Takes ownership of the structure</doc>
+      <source-position filename="../subprojects/gstreamer/gst/gstvalue.h"/>
+      <return-value transfer-ownership="none">
+        <type name="none" c:type="void"/>
+      </return-value>
+      <parameters>
+        <parameter name="value" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstvalue.c">a GValue initialized to GST_TYPE_STRUCTURE</doc>
+          <type name="GObject.Value" c:type="GValue*"/>
+        </parameter>
+        <parameter name="structure" transfer-ownership="full">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstvalue.c">the structure to set the value to</doc>
+          <type name="Structure" c:type="GstStructure*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="value_union" c:identifier="gst_value_union">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstvalue.c">Creates a GValue corresponding to the union of @value1 and @value2.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gstvalue.h"/>

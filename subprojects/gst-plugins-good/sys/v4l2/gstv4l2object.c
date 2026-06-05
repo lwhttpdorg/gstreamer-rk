@@ -1029,6 +1029,14 @@ gst_v4l2_object_init_poll (GstV4l2Object * v4l2object)
   v4l2object->can_poll_device = TRUE;
 }
 
+static void
+gst_v4l2_object_init_ref_ts_meta_type (GstV4l2Object * v4l2object)
+{
+  v4l2object->mono_ts_type = "timestamp/x-system-monotonic";
+  v4l2object->driver_ts_type =
+      g_strdup_printf ("timestamp/x-%s-stream", v4l2object->vcap.driver);
+}
+
 gboolean
 gst_v4l2_object_open (GstV4l2Object * v4l2object, GstV4l2Error * error)
 {
@@ -1038,6 +1046,7 @@ gst_v4l2_object_open (GstV4l2Object * v4l2object, GstV4l2Error * error)
     return FALSE;
 
   gst_v4l2_object_init_poll (v4l2object);
+  gst_v4l2_object_init_ref_ts_meta_type (v4l2object);
 
   return TRUE;
 }
@@ -1077,6 +1086,11 @@ gst_v4l2_object_close (GstV4l2Object * v4l2object)
   if (v4l2object->channel) {
     g_free (v4l2object->channel);
     v4l2object->channel = NULL;
+  }
+
+  if (v4l2object->driver_ts_type) {
+    g_free (v4l2object->driver_ts_type);
+    v4l2object->driver_ts_type = NULL;
   }
 
   /* remove old fd from poll */
@@ -5446,7 +5460,12 @@ gst_v4l2_object_probe_caps (GstV4l2Object * v4l2object, GstCaps * filter)
       if (dmabuf_tmpl) {
         gst_caps_append_structure (format_caps,
             gst_structure_copy (dmabuf_tmpl));
-        add_alternate_variant (v4l2object, format_caps, dmabuf_tmpl, NULL);
+        gst_caps_set_features (filter, 0,
+            gst_caps_features_new_single_static_str
+            (GST_CAPS_FEATURE_MEMORY_DMABUF));
+        add_alternate_variant (v4l2object, format_caps, dmabuf_tmpl,
+            gst_caps_features_new_single_static_str
+            (GST_CAPS_FEATURE_MEMORY_DMABUF));
       }
 
       if (sysmem_tmpl) {

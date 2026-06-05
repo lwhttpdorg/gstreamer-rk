@@ -427,7 +427,7 @@ gst_value_transform_any_list_string (const GValue * src_value,
   guint alen;
 
   array = src_value->data[0].v_pointer;
-  alen = array->len;
+  alen = array ? array->len : 0;
 
   /* estimate minimum string length to minimise re-allocs in GString */
   s = g_string_sized_new (2 + (10 * alen) + 2);
@@ -494,7 +494,7 @@ _gst_value_transform_g_value_array_string (const GValue * src_value,
   guint alen;
 
   array = src_value->data[0].v_pointer;
-  alen = array->n_values;
+  alen = array ? array->n_values : 0;
 
   /* estimate minimum string length to minimise re-allocs in GString */
   s = g_string_sized_new (2 + (10 * alen) + 2);
@@ -1158,8 +1158,10 @@ gst_value_unique_list_append_and_take_value (GValue * value,
   for (i = 0; i < gst_value_unique_list_get_size (value); i++) {
     p_val = gst_value_unique_list_get_value (value, i);
 
-    if (gst_value_compare (p_val, append_value) == GST_VALUE_EQUAL)
-      return;                   /* value already exist in set */
+    if (gst_value_compare (p_val, append_value) == GST_VALUE_EQUAL) {
+      g_value_unset (append_value);
+      return;
+    }
   }
 
   _gst_value_list_append_and_take_value (value, append_value);
@@ -3332,6 +3334,25 @@ gst_value_set_structure (GValue * value, const GstStructure * structure)
 }
 
 /**
+ * gst_value_take_structure:
+ * @value: a GValue initialized to GST_TYPE_STRUCTURE
+ * @structure: (transfer full): the structure to set the value to
+ *
+ * Sets the contents of @value to @structure. Takes ownership of the structure
+ *
+ * Since: 1.30
+ */
+void
+gst_value_take_structure (GValue * value, GstStructure * structure)
+{
+  g_return_if_fail (G_IS_VALUE (value));
+  g_return_if_fail (G_VALUE_TYPE (value) == GST_TYPE_STRUCTURE);
+  g_return_if_fail (structure == NULL || GST_IS_STRUCTURE (structure));
+
+  g_value_take_boxed (value, structure);
+}
+
+/**
  * gst_value_get_structure:
  * @value: a GValue initialized to GST_TYPE_STRUCTURE
  *
@@ -3663,12 +3684,13 @@ wrong_length:
   }
 map_failed:
   {
+    gst_buffer_unref (buffer);
     return FALSE;
   }
 wrong_char:
   {
-    gst_buffer_unref (buffer);
     gst_buffer_unmap (buffer, &info);
+    gst_buffer_unref (buffer);
     return FALSE;
   }
 }

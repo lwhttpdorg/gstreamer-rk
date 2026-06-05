@@ -463,7 +463,7 @@ _buffer_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
     VkImageAspectFlags plane_aspect;
     guint32 width, height, row, img_h;
 
-    mem = gst_vulkan_buffer_peek_plane_memory (inbuf, &raw->in_info, i);
+    mem = gst_vulkan_buffer_peek_plane_memory (inbuf, &raw->in_info, i, NULL);
     if (!mem)
       goto unlock_error;
     if (!gst_is_vulkan_buffer_memory (mem)) {
@@ -500,7 +500,8 @@ _buffer_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
     };
     /* *INDENT-ON* */
 
-    mem = gst_vulkan_buffer_peek_plane_memory (*outbuf, &raw->out_info, i);
+    mem = gst_vulkan_buffer_peek_plane_memory (*outbuf, &raw->out_info, i,
+        NULL);
     if (!mem)
       goto unlock_error;
     if (!gst_is_vulkan_image_memory (mem)) {
@@ -616,22 +617,46 @@ _raw_to_image_transform_caps (gpointer impl, GstPadDirection direction,
 static gboolean
 _raw_to_image_set_caps (gpointer impl, GstCaps * in_caps, GstCaps * out_caps)
 {
+  GstVideoInfo in_info, out_info;
   struct RawToImageUpload *raw = impl;
 
-  if (!gst_video_info_from_caps (&raw->in_info, in_caps))
+  if (!gst_video_info_from_caps (&in_info, in_caps))
     return FALSE;
 
-  if (!gst_video_info_from_caps (&raw->out_info, out_caps))
+  if (!gst_video_info_from_caps (&out_info, out_caps))
     return FALSE;
 
   if (raw->in_pool) {
-    if (raw->in_pool_active) {
-      gst_buffer_pool_set_active (raw->in_pool, FALSE);
+    GstVideoInfo copy;
+    gboolean realloc_pool = FALSE;
+
+    // Check that all caps fields are the same, except for the framerate which
+    // can be changed freely without re-allocating the buffer pool.
+    copy = in_info;
+    copy.fps_n = raw->in_info.fps_n;
+    copy.fps_d = raw->in_info.fps_d;
+    if (!gst_video_info_is_equal (&copy, &raw->in_info))
+      realloc_pool = TRUE;
+
+    copy = out_info;
+    copy.fps_n = raw->out_info.fps_n;
+    copy.fps_d = raw->out_info.fps_d;
+    if (!gst_video_info_is_equal (&copy, &raw->out_info))
+      realloc_pool = TRUE;
+
+    if (realloc_pool) {
+      GST_INFO ("Reallocating pool");
+      if (raw->in_pool_active) {
+        gst_buffer_pool_set_active (raw->in_pool, FALSE);
+      }
+      raw->in_pool_active = FALSE;
+      gst_object_unref (raw->in_pool);
+      raw->in_pool = NULL;
     }
-    raw->in_pool_active = FALSE;
-    gst_object_unref (raw->in_pool);
-    raw->in_pool = NULL;
   }
+
+  raw->in_info = in_info;
+  raw->out_info = out_info;
 
   return TRUE;
 }
@@ -724,6 +749,7 @@ _raw_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
 
   for (i = 0; i < n_planes; i++) {
     VkBufferImageCopy region;
+    GstBuffer *used_buf = inbuf;
     GstMemory *mem;
     GstVulkanBufferMemory *buf_mem;
     GstVulkanImageMemory *img_mem;
@@ -733,7 +759,7 @@ _raw_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
     VkImageAspectFlags plane_aspect;
     guint32 width, height, row, img_h;
 
-    mem = gst_vulkan_buffer_peek_plane_memory (inbuf, &raw->in_info, i);
+    mem = gst_vulkan_buffer_peek_plane_memory (inbuf, &raw->in_info, i, NULL);
     if (!mem)
       goto unlock_error;
 
@@ -742,6 +768,7 @@ _raw_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
     } else if (in_vk_copy) {
       GST_TRACE_OBJECT (raw->upload,
           "Have buffer copy of GstVulkanBufferMemory");
+      used_buf = in_vk_copy;
       mem = gst_buffer_peek_memory (in_vk_copy, i);
       g_assert (gst_is_vulkan_buffer_memory (mem));
     } else {
@@ -774,12 +801,14 @@ _raw_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
         goto unlock_error;
       }
 
+      used_buf = in_vk_copy;
       mem = gst_buffer_peek_memory (in_vk_copy, i);
     }
 
     buf_mem = (GstVulkanBufferMemory *) mem;
 
-    mem = gst_vulkan_buffer_peek_plane_memory (*outbuf, &raw->out_info, i);
+    mem = gst_vulkan_buffer_peek_plane_memory (*outbuf, &raw->out_info, i,
+        NULL);
     if (!mem)
       goto unlock_error;
     if (!gst_is_vulkan_image_memory (mem)) {
@@ -793,7 +822,7 @@ _raw_to_image_perform (gpointer impl, GstBuffer * inbuf, GstBuffer ** outbuf)
     else
       plane_aspect = aspects[i];
 
-    gst_vulkan_buffer_get_plane_dimensions (inbuf, &raw->in_info, i, &width,
+    gst_vulkan_buffer_get_plane_dimensions (used_buf, &raw->in_info, i, &width,
         &height, &row, &img_h);
 
     /* *INDENT-OFF* */
@@ -991,7 +1020,7 @@ gst_vulkan_upload_class_init (GstVulkanUploadClass * klass)
   gobject_class->get_property = gst_vulkan_upload_get_property;
 
   gst_element_class_set_static_metadata (gstelement_class, "Vulkan Uploader",
-      "Filter/Video", "A Vulkan data uploader",
+      "Filter/Video/Uploader", "A Vulkan data uploader",
       "Matthew Waters <matthew@centricular.com>");
 
   {
@@ -1088,6 +1117,12 @@ gst_vulkan_upload_query (GstBaseTransform * bt, GstPadDirection direction,
 
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CONTEXT:{
+      if (gst_vulkan_requested_extensions_handle_context_query (GST_ELEMENT
+              (vk_upload), query,
+              direction == GST_PAD_SINK ? GST_PAD_SRC : GST_PAD_SINK,
+              vk_upload->instance))
+        return TRUE;
+
       if (gst_vulkan_handle_context_query (GST_ELEMENT (vk_upload), query,
               NULL, vk_upload->instance, vk_upload->device))
         return TRUE;

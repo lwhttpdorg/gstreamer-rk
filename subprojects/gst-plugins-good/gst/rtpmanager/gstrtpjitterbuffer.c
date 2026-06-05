@@ -1741,9 +1741,7 @@ gst_jitter_buffer_sink_parse_caps (GstRtpJitterBuffer * jitterbuffer,
           hostname = g_strdup (host);
 
         if (use_system_clock) {
-          clock =
-              g_object_new (GST_TYPE_SYSTEM_CLOCK, "clock-type",
-              GST_CLOCK_TYPE_REALTIME, NULL);
+          clock = gst_system_clock_new (NULL, GST_CLOCK_TYPE_REALTIME);
           /* difference between UNIX epoch and NTP epoch */
           clock_correction = GST_RTP_NTP_UNIX_OFFSET * GST_SECOND;
         } else {
@@ -1764,9 +1762,7 @@ gst_jitter_buffer_sink_parse_caps (GstRtpJitterBuffer * jitterbuffer,
         domain = 0;
 
       if (use_system_clock) {
-        clock =
-            g_object_new (GST_TYPE_SYSTEM_CLOCK, "clock-type",
-            GST_CLOCK_TYPE_REALTIME, NULL);
+        clock = gst_system_clock_new (NULL, GST_CLOCK_TYPE_REALTIME);
         /* difference between UNIX and PTP/TAI (37 leap seconds as of October 2023) */
         clock_correction = 37 * GST_SECOND;
       } else {
@@ -1780,9 +1776,7 @@ gst_jitter_buffer_sink_parse_caps (GstRtpJitterBuffer * jitterbuffer,
       ts_meta_ref = gst_caps_new_empty_simple ("timestamp/x-ntp");
     } else {
       if (use_system_clock) {
-        clock =
-            g_object_new (GST_TYPE_SYSTEM_CLOCK, "clock-type",
-            GST_CLOCK_TYPE_REALTIME, NULL);
+        clock = gst_system_clock_new (NULL, GST_CLOCK_TYPE_REALTIME);
       } else {
         GST_FIXME_OBJECT (jitterbuffer,
             "Unsupported timestamp reference clock");
@@ -1930,7 +1924,8 @@ gst_rtp_jitter_buffer_src_activate_mode (GstPad * pad, GstObject * parent,
         /* start pushing out buffers */
         GST_DEBUG_OBJECT (jitterbuffer, "Starting task on srcpad");
         result = gst_pad_start_task (jitterbuffer->priv->srcpad,
-            (GstTaskFunction) gst_rtp_jitter_buffer_loop, jitterbuffer, NULL);
+            (GstTaskFunction) gst_rtp_jitter_buffer_loop,
+            gst_object_ref (jitterbuffer), gst_object_unref);
       } else {
         /* make sure all data processing stops ASAP */
         gst_rtp_jitter_buffer_flush_start (jitterbuffer);

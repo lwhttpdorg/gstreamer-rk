@@ -383,6 +383,8 @@ enum
   PROP_TLS_VALIDATION_FLAGS,
   PROP_TLS_DATABASE,
   PROP_TLS_INTERACTION,
+  PROP_TLS_CLIENT_CERTIFICATE,
+  PROP_TLS_CLIENT_KEY,
   PROP_DO_RETRANSMISSION,
   PROP_NTP_TIME_SOURCE,
   PROP_USER_AGENT,
@@ -421,6 +423,66 @@ gst_rtsp_nat_method_get_type (void)
         g_enum_register_static ("GstRTSPNatMethod", rtsp_nat_method);
   }
   return rtsp_nat_method_type;
+}
+
+/* GTlsInteraction subclass that presents a client certificate loaded from
+ * the tls-client-certificate and tls-client-key properties. */
+
+#define GST_TYPE_RTSPSRC_TLS_INTERACTION (gst_rtspsrc_tls_interaction_get_type())
+G_DECLARE_FINAL_TYPE (GstRTSPSrcTlsInteraction, gst_rtspsrc_tls_interaction,
+    GST, RTSPSRC_TLS_INTERACTION, GTlsInteraction);
+struct _GstRTSPSrcTlsInteraction
+{
+  GTlsInteraction parent;
+  GTlsCertificate *certificate;
+};
+G_DEFINE_TYPE (GstRTSPSrcTlsInteraction, gst_rtspsrc_tls_interaction,
+    G_TYPE_TLS_INTERACTION);
+
+static GTlsInteractionResult
+gst_rtspsrc_tls_interaction_request_certificate (GTlsInteraction * interaction,
+    GTlsConnection * connection, GTlsCertificateRequestFlags flags,
+    GCancellable * cancellable, GError ** error)
+{
+  GstRTSPSrcTlsInteraction *self = GST_RTSPSRC_TLS_INTERACTION (interaction);
+
+  g_tls_connection_set_certificate (connection, self->certificate);
+  return G_TLS_INTERACTION_HANDLED;
+}
+
+static void
+gst_rtspsrc_tls_interaction_finalize (GObject * object)
+{
+  GstRTSPSrcTlsInteraction *self = GST_RTSPSRC_TLS_INTERACTION (object);
+
+  g_clear_object (&self->certificate);
+  G_OBJECT_CLASS (gst_rtspsrc_tls_interaction_parent_class)->finalize (object);
+}
+
+static void
+gst_rtspsrc_tls_interaction_class_init (GstRTSPSrcTlsInteractionClass * klass)
+{
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  GTlsInteractionClass *interaction_class = G_TLS_INTERACTION_CLASS (klass);
+
+  gobject_class->finalize = gst_rtspsrc_tls_interaction_finalize;
+  interaction_class->request_certificate =
+      gst_rtspsrc_tls_interaction_request_certificate;
+}
+
+static void
+gst_rtspsrc_tls_interaction_init (GstRTSPSrcTlsInteraction * self)
+{
+}
+
+static GTlsInteraction *
+gst_rtspsrc_tls_interaction_new (GTlsCertificate * cert)
+{
+  GstRTSPSrcTlsInteraction *self;
+
+  self = g_object_new (GST_TYPE_RTSPSRC_TLS_INTERACTION, NULL);
+  self->certificate = g_object_ref (cert);
+  return G_TLS_INTERACTION (self);
 }
 
 #define RTSP_SRC_RESPONSE_ERROR(src, response_msg, err_cat, err_code, error_message) \
@@ -473,6 +535,8 @@ static GstRTSPResult gst_rtspsrc_play (GstRTSPSrc * src, GstSegment * segment,
 static GstRTSPResult gst_rtspsrc_pause (GstRTSPSrc * src, gboolean async);
 static GstRTSPResult gst_rtspsrc_close (GstRTSPSrc * src, gboolean async,
     gboolean only_close);
+
+static void gst_rtspsrc_stop_keep_alive (GstRTSPSrc * src);
 
 static gboolean gst_rtspsrc_uri_set_uri (GstURIHandler * handler,
     const gchar * uri, GError ** error);
@@ -913,6 +977,39 @@ gst_rtspsrc_class_init (GstRTSPSrcClass * klass)
       g_param_spec_object ("tls-interaction", "TLS interaction",
           "A GTlsInteraction object to prompt the user for password or certificate",
           G_TYPE_TLS_INTERACTION, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRTSPSrc:tls-client-certificate:
+   *
+   * Path to a PEM-encoded TLS client certificate file. When set together
+   * with #GstRTSPSrc:tls-client-key, the certificate is presented
+   * during the TLS handshake for mutual authentication (mTLS).
+   *
+   * These file-based properties are a convenience alternative to setting
+   * the #GstRTSPSrc:tls-interaction property from application code and
+   * can be used from gst-launch-1.0.
+   *
+   * If #GstRTSPSrc:tls-interaction is also set it takes precedence.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_TLS_CLIENT_CERTIFICATE,
+      g_param_spec_string ("tls-client-certificate", "TLS client certificate",
+          "Path to a PEM-encoded TLS client certificate file for mTLS",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRTSPSrc:tls-client-key:
+   *
+   * Path to a PEM-encoded private key file corresponding to
+   * #GstRTSPSrc:tls-client-certificate.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_TLS_CLIENT_KEY,
+      g_param_spec_string ("tls-client-key", "TLS client key file",
+          "Path to a PEM-encoded private key file for the TLS client certificate",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstRTSPSrc::do-retransmission:
@@ -1820,6 +1917,8 @@ gst_rtspsrc_init (GstRTSPSrc * src)
   src->tls_validation_flags = DEFAULT_TLS_VALIDATION_FLAGS;
   src->tls_database = DEFAULT_TLS_DATABASE;
   src->tls_interaction = DEFAULT_TLS_INTERACTION;
+  src->tls_client_cert_file = NULL;
+  src->tls_client_key_file = NULL;
   src->do_retransmission = DEFAULT_DO_RETRANSMISSION;
   src->ntp_time_source = DEFAULT_NTP_TIME_SOURCE;
   src->user_agent = g_strdup (DEFAULT_USER_AGENT);
@@ -1852,6 +1951,10 @@ gst_rtspsrc_init (GstRTSPSrc * src)
   /* protects the streaming thread in interleaved mode or the polling
    * thread in UDP mode. */
   g_rec_mutex_init (&src->stream_rec_lock);
+
+  /* queue of CSeqs of in-flight keep-alive requests (see header) */
+  g_mutex_init (&src->keep_alive_cseq_lock);
+  g_queue_init (&src->keep_alive_cseqs);
 
   /* protects our state changes from multiple invocations */
   g_rec_mutex_init (&src->state_rec_lock);
@@ -1891,6 +1994,8 @@ gst_rtspsrc_finalize (GObject * object)
 
   rtspsrc = GST_RTSPSRC (object);
 
+  gst_rtspsrc_stop_keep_alive (rtspsrc);
+
   gst_rtsp_ext_list_free (rtspsrc->extensions);
   g_free (rtspsrc->conninfo.location);
   gst_rtsp_url_free (rtspsrc->conninfo.url);
@@ -1920,6 +2025,9 @@ gst_rtspsrc_finalize (GObject * object)
   if (rtspsrc->tls_interaction)
     g_object_unref (rtspsrc->tls_interaction);
 
+  g_free (rtspsrc->tls_client_cert_file);
+  g_free (rtspsrc->tls_client_key_file);
+
   if (rtspsrc->initial_seek)
     gst_event_unref (rtspsrc->initial_seek);
 
@@ -1934,6 +2042,8 @@ gst_rtspsrc_finalize (GObject * object)
   /* free locks */
   g_rec_mutex_clear (&rtspsrc->stream_rec_lock);
   g_rec_mutex_clear (&rtspsrc->state_rec_lock);
+  g_mutex_clear (&rtspsrc->keep_alive_cseq_lock);
+  g_queue_clear (&rtspsrc->keep_alive_cseqs);
 
   g_mutex_clear (&rtspsrc->conninfo.send_lock);
   g_mutex_clear (&rtspsrc->conninfo.recv_lock);
@@ -2156,6 +2266,14 @@ gst_rtspsrc_set_property (GObject * object, guint prop_id, const GValue * value,
       g_clear_object (&rtspsrc->tls_interaction);
       rtspsrc->tls_interaction = g_value_dup_object (value);
       break;
+    case PROP_TLS_CLIENT_CERTIFICATE:
+      g_free (rtspsrc->tls_client_cert_file);
+      rtspsrc->tls_client_cert_file = g_value_dup_string (value);
+      break;
+    case PROP_TLS_CLIENT_KEY:
+      g_free (rtspsrc->tls_client_key_file);
+      rtspsrc->tls_client_key_file = g_value_dup_string (value);
+      break;
     case PROP_DO_RETRANSMISSION:
       rtspsrc->do_retransmission = g_value_get_boolean (value);
       break;
@@ -2352,6 +2470,12 @@ gst_rtspsrc_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_TLS_INTERACTION:
       g_value_set_object (value, rtspsrc->tls_interaction);
+      break;
+    case PROP_TLS_CLIENT_CERTIFICATE:
+      g_value_set_string (value, rtspsrc->tls_client_cert_file);
+      break;
+    case PROP_TLS_CLIENT_KEY:
+      g_value_set_string (value, rtspsrc->tls_client_key_file);
       break;
     case PROP_DO_RETRANSMISSION:
       g_value_set_boolean (value, rtspsrc->do_retransmission);
@@ -4286,12 +4410,12 @@ set_manager_buffer_mode (GstRTSPSrc * src)
 }
 
 static void
-update_srtcp_params (GstRTSPStream * stream)
+update_srtcp_params (GstRTSPStream * stream, gboolean update)
 {
   GstStructure *s = gst_caps_get_structure (stream->srtcpparams, 0);
   if (s) {
     GstBuffer *buf;
-    GstBuffer *mki_buf;
+    GstBuffer *mki_buf = NULL;
     const gchar *str;
     GType ciphertype, authtype;
     GValue rtcp_cipher = G_VALUE_INIT, rtcp_auth = G_VALUE_INIT;
@@ -4308,6 +4432,22 @@ update_srtcp_params (GstRTSPStream * stream)
     gst_structure_get (s, "srtp-key", GST_TYPE_BUFFER, &buf, NULL);
     gst_structure_get (s, "mki", GST_TYPE_BUFFER, &mki_buf, NULL);
 
+    if (update) {
+      GstBuffer *current_mki_buf = NULL;
+
+      g_object_get (stream->srtpenc, "mki", &current_mki_buf, NULL);
+
+      if ((current_mki_buf != NULL) != (mki_buf != NULL)) {
+        GstRTSPSrc *rtspsrc = GST_RTSPSRC (stream->parent);
+        GST_WARNING_OBJECT (rtspsrc,
+            "Mixed MKI and non-MKI keys detected in the same SRTP session. "
+            "Current key has %s MKI, new key has %s MKI",
+            current_mki_buf ? "an" : "no", mki_buf ? "an" : "no");
+      }
+
+      gst_clear_buffer (&current_mki_buf);
+    }
+
     g_object_set_property (G_OBJECT (stream->srtpenc), "rtp-cipher",
         &rtcp_cipher);
     g_object_set_property (G_OBJECT (stream->srtpenc), "rtp-auth", &rtcp_auth);
@@ -4320,7 +4460,7 @@ update_srtcp_params (GstRTSPStream * stream)
     g_value_unset (&rtcp_cipher);
     g_value_unset (&rtcp_auth);
     gst_buffer_unref (buf);
-    gst_buffer_unref (mki_buf);
+    gst_clear_buffer (&mki_buf);
   }
 }
 
@@ -4363,7 +4503,7 @@ request_key (GstElement * srtpdec, guint ssrc, GstRTSPStream * stream)
       gst_caps_unref (stream->srtcpparams);
 
     stream->srtcpparams = signal_get_srtcp_params (rtspsrc, stream);
-    update_srtcp_params (stream);
+    update_srtcp_params (stream, TRUE);
   } else {
     GST_ERROR_OBJECT (rtspsrc, "No MIKEYs for stream with id %u", stream->id);
     return NULL;
@@ -4483,7 +4623,7 @@ request_rtcp_encoder (GstElement * rtpbin, guint session,
     }
 
     /* get RTCP crypto parameters from caps */
-    update_srtcp_params (stream);
+    update_srtcp_params (stream, FALSE);
   }
   name = g_strdup_printf ("rtcp_sink_%d", session);
   pad = gst_element_request_pad_simple (stream->srtpenc, name);
@@ -5864,9 +6004,29 @@ gst_rtsp_conninfo_connect (GstRTSPSrc * src, GstRTSPConnInfo * info,
           gst_rtsp_connection_set_tls_database (info->connection,
               src->tls_database);
 
-        if (src->tls_interaction)
+        if (src->tls_interaction) {
           gst_rtsp_connection_set_tls_interaction (info->connection,
               src->tls_interaction);
+        } else if (src->tls_client_cert_file && src->tls_client_key_file) {
+          GError *cert_err = NULL;
+          GTlsCertificate *certificate;
+
+          certificate =
+              g_tls_certificate_new_from_files (src->tls_client_cert_file,
+              src->tls_client_key_file, &cert_err);
+          if (certificate) {
+            GTlsInteraction *interaction =
+                gst_rtspsrc_tls_interaction_new (certificate);
+            gst_rtsp_connection_set_tls_interaction (info->connection,
+                interaction);
+            g_object_unref (interaction);
+            g_object_unref (certificate);
+          } else {
+            GST_WARNING_OBJECT (src,
+                "Failed to load TLS client certificate: %s", cert_err->message);
+            g_error_free (cert_err);
+          }
+        }
         gst_rtsp_connection_set_accept_certificate_func (info->connection,
             accept_certificate_cb, src, NULL);
       }
@@ -5885,6 +6045,15 @@ gst_rtsp_conninfo_connect (GstRTSPSrc * src, GstRTSPConnInfo * info,
         }
 
         gst_rtsp_connection_set_backchannel_method (info->connection, method);
+
+        if (src->user_agent) {
+          GString *user_agent = g_string_new (src->user_agent);
+
+          g_string_replace (user_agent, "{VERSION}", PACKAGE_VERSION, 0);
+          gst_rtsp_connection_add_extra_http_request_header (info->connection,
+              "User-Agent", user_agent->str);
+          g_string_free (user_agent, TRUE);
+        }
       }
 
       if (src->proxy_host) {
@@ -6093,14 +6262,17 @@ send_error:
   }
 }
 
-/* send server keep-alive */
+/* Send a keep-alive request.  When @track_cseq is TRUE, the assigned CSeq
+ * is recorded so synchronous receivers can skip the matching response —
+ * used by the worker for fire-and-forget sends from a separate thread. */
 static GstRTSPResult
-gst_rtspsrc_send_keep_alive (GstRTSPSrc * src)
+gst_rtspsrc_send_keep_alive_internal (GstRTSPSrc * src, gboolean track_cseq)
 {
   GstRTSPMessage request = { 0 };
   GstRTSPResult res;
   GstRTSPMethod method;
   const gchar *control;
+  gchar *cseq_str = NULL;
 
   if (src->do_rtsp_keep_alive == FALSE) {
     GST_DEBUG_OBJECT (src, "do-rtsp-keep-alive is FALSE, not sending.");
@@ -6133,6 +6305,17 @@ gst_rtspsrc_send_keep_alive (GstRTSPSrc * src)
     goto send_error;
 
   gst_rtsp_connection_reset_timeout (src->conninfo.connection);
+
+  if (track_cseq
+      && gst_rtsp_message_get_header (&request, GST_RTSP_HDR_CSEQ, &cseq_str,
+          0) == GST_RTSP_OK && cseq_str != NULL) {
+    guint cseq = (guint) g_ascii_strtoull (cseq_str, NULL, 10);
+    g_mutex_lock (&src->keep_alive_cseq_lock);
+    g_queue_push_tail (&src->keep_alive_cseqs, GUINT_TO_POINTER (cseq));
+    g_mutex_unlock (&src->keep_alive_cseq_lock);
+    GST_DEBUG_OBJECT (src, "tracked keep-alive CSeq=%u", cseq);
+  }
+
   gst_rtsp_message_unset (&request);
 
   return GST_RTSP_OK;
@@ -6140,7 +6323,7 @@ gst_rtspsrc_send_keep_alive (GstRTSPSrc * src)
   /* ERRORS */
 no_control:
   {
-    GST_WARNING_OBJECT (src, "no control url to send keepalive");
+    GST_WARNING_OBJECT (src, "no control url to send keep-alive");
     return GST_RTSP_OK;
   }
 send_error:
@@ -6153,6 +6336,165 @@ send_error:
     g_free (str);
     return res;
   }
+}
+
+/* send server keep-alive */
+static GstRTSPResult
+gst_rtspsrc_send_keep_alive (GstRTSPSrc * src)
+{
+  return gst_rtspsrc_send_keep_alive_internal (src, FALSE);
+}
+
+/* As gst_rtspsrc_send_keep_alive(), but tracks the CSeq so receivers can
+ * skip the matching response. */
+static GstRTSPResult
+gst_rtspsrc_send_keep_alive_tracked (GstRTSPSrc * src)
+{
+  return gst_rtspsrc_send_keep_alive_internal (src, TRUE);
+}
+
+/* Prune the pending-keep-alive queue using @message's CSeq, and return TRUE
+ * if @message is the response to a tracked keep-alive request. */
+static gboolean
+gst_rtspsrc_prune_keep_alive (GstRTSPSrc * src, GstRTSPMessage * message)
+{
+  gchar *cseq_str = NULL;
+  guint cseq;
+  gboolean matched = FALSE;
+
+  if (message->type != GST_RTSP_MESSAGE_RESPONSE)
+    return FALSE;
+
+  if (gst_rtsp_message_get_header (message, GST_RTSP_HDR_CSEQ, &cseq_str, 0)
+      != GST_RTSP_OK || cseq_str == NULL)
+    return FALSE;
+
+  cseq = (guint) g_ascii_strtoull (cseq_str, NULL, 10);
+
+  g_mutex_lock (&src->keep_alive_cseq_lock);
+  while (!g_queue_is_empty (&src->keep_alive_cseqs)) {
+    guint head = GPOINTER_TO_UINT (g_queue_peek_head (&src->keep_alive_cseqs));
+    if (head > cseq)
+      break;                    /* not ours (older/untracked CSeq) */
+    g_queue_pop_head (&src->keep_alive_cseqs);  /* head match or stale */
+    if (head == cseq) {
+      matched = TRUE;
+      break;
+    }
+  }
+  g_mutex_unlock (&src->keep_alive_cseq_lock);
+
+  return matched;
+}
+
+static gboolean
+gst_rtspsrc_keep_alive_timer_cb (GstRTSPSrc * src)
+{
+  GstRTSPResult res;
+  gint64 next_timeout;
+
+  if (!src->conninfo.connection)
+    return G_SOURCE_CONTINUE;
+
+  next_timeout =
+      gst_rtsp_connection_next_timeout_usec (src->conninfo.connection);
+  /* Same condition as the streaming loop in gst_rtspsrc_loop_interleaved(). */
+  if (next_timeout != 0)
+    return G_SOURCE_CONTINUE;
+
+  GST_DEBUG_OBJECT (src,
+      "Keep-alive timeout expired. Sending keep-alive request");
+  res = gst_rtspsrc_send_keep_alive_tracked (src);
+  if (res < 0) {
+    gchar *str = gst_rtsp_strresult (res);
+    GST_WARNING_OBJECT (src, "keep-alive worker send failed: %s", str);
+    g_free (str);
+  }
+  return G_SOURCE_CONTINUE;
+}
+
+static gpointer
+gst_rtspsrc_keep_alive_thread_func (GstRTSPSrc * src)
+{
+  g_main_context_push_thread_default (src->keep_alive_context);
+  g_main_loop_run (src->keep_alive_loop);
+  g_main_context_pop_thread_default (src->keep_alive_context);
+  return NULL;
+}
+
+/* Independent keep-alive timer.
+ *
+ * In non-live + TCP-interleaved mode, the streaming loop reads RTSP control
+ * messages and RTP data over the same TCP connection.  When downstream is
+ * paused, the loop blocks on data push and never reaches the receive call,
+ * so the existing receive-timeout-based keep-alive cannot fire.  This worker
+ * thread fires keep-alives from a separate context to keep the session alive.
+ */
+static void
+gst_rtspsrc_start_keep_alive (GstRTSPSrc * src)
+{
+#define GST_RTSPSRC_KEEP_ALIVE_POLL_INTERVAL_SEC 1
+  if (src->is_live || !src->interleaved)
+    return;
+
+  if (src->keep_alive_thread)
+    return;                     /* already running */
+
+  src->keep_alive_context = g_main_context_new ();
+  src->keep_alive_loop = g_main_loop_new (src->keep_alive_context, FALSE);
+
+  src->keep_alive_source =
+      g_timeout_source_new_seconds (GST_RTSPSRC_KEEP_ALIVE_POLL_INTERVAL_SEC);
+  g_source_set_callback (src->keep_alive_source,
+      (GSourceFunc) gst_rtspsrc_keep_alive_timer_cb, src, NULL);
+  g_source_attach (src->keep_alive_source, src->keep_alive_context);
+
+  src->keep_alive_thread = g_thread_new ("rtspsrc-keep-alive",
+      (GThreadFunc) gst_rtspsrc_keep_alive_thread_func, src);
+
+  GST_DEBUG_OBJECT (src, "keep-alive worker started (poll=%us)",
+      GST_RTSPSRC_KEEP_ALIVE_POLL_INTERVAL_SEC);
+}
+
+static gboolean
+gst_rtspsrc_quit_keep_alive_loop (gpointer loop)
+{
+  g_main_loop_quit ((GMainLoop *) loop);
+  return G_SOURCE_REMOVE;
+}
+
+static void
+gst_rtspsrc_stop_keep_alive (GstRTSPSrc * src)
+{
+  if (!src->keep_alive_thread)
+    return;
+
+  /* Quit via the context so the signal isn't lost if the worker hasn't
+   * reached g_main_loop_run() yet. */
+  g_main_context_invoke (src->keep_alive_context,
+      gst_rtspsrc_quit_keep_alive_loop, src->keep_alive_loop);
+  g_thread_join (src->keep_alive_thread);
+  src->keep_alive_thread = NULL;
+
+  if (src->keep_alive_source) {
+    g_source_destroy (src->keep_alive_source);
+    g_source_unref (src->keep_alive_source);
+    src->keep_alive_source = NULL;
+  }
+
+  g_main_loop_unref (src->keep_alive_loop);
+  src->keep_alive_loop = NULL;
+
+  g_main_context_unref (src->keep_alive_context);
+  src->keep_alive_context = NULL;
+
+  /* The connection is about to be torn down; leftover responses don't
+   * matter anymore. */
+  g_mutex_lock (&src->keep_alive_cseq_lock);
+  g_queue_clear (&src->keep_alive_cseqs);
+  g_mutex_unlock (&src->keep_alive_cseq_lock);
+
+  GST_DEBUG_OBJECT (src, "keep-alive worker stopped");
 }
 
 static GstFlowReturn
@@ -6441,6 +6783,7 @@ gst_rtspsrc_loop_interleaved (GstRTSPSrc * src)
         /* we ignore response messages */
         GST_DEBUG_OBJECT (src, "ignoring response message");
         DEBUG_RTSP (src, &message);
+        gst_rtspsrc_prune_keep_alive (src, &message);
         break;
       case GST_RTSP_MESSAGE_DATA:
         GST_DEBUG_OBJECT (src, "got data message");
@@ -6461,7 +6804,7 @@ gst_rtspsrc_loop_interleaved (GstRTSPSrc * src)
         gst_rtsp_connection_next_timeout_usec (src->conninfo.connection);
     if (timeout == 0) {
       GST_DEBUG_OBJECT (src,
-          "Keepalive timeout expired. Sending keep-alive request");
+          "Keep-alive timeout expired. Sending keep-alive request");
       if ((res = gst_rtspsrc_send_keep_alive (src)) == GST_RTSP_EINTR) {
         goto interrupt;
       }
@@ -6603,6 +6946,7 @@ gst_rtspsrc_loop_udp (GstRTSPSrc * src)
         /* we ignore response and data messages */
         GST_DEBUG_OBJECT (src, "ignoring response message");
         DEBUG_RTSP (src, &message);
+        gst_rtspsrc_prune_keep_alive (src, &message);
         if (message.type_data.response.code == GST_RTSP_STS_UNAUTHORIZED) {
           GST_DEBUG_OBJECT (src, "but is Unauthorized response ...");
           if (gst_rtspsrc_setup_auth (src, &message) && !(retry++)) {
@@ -7251,6 +7595,13 @@ next:
       /* Not a response, receive next message */
       goto next;
     case GST_RTSP_MESSAGE_RESPONSE:
+      /* Drop responses that belong to the keep-alive worker so we keep
+       * waiting for our caller's actual response. */
+      if (gst_rtspsrc_prune_keep_alive (src, response)) {
+        GST_DEBUG_OBJECT (src, "skipping keep-alive response");
+        gst_rtsp_message_unset (response);
+        goto next;
+      }
       /* ok, a response is good */
       GST_DEBUG_OBJECT (src, "received response message");
       break;
@@ -9059,6 +9410,10 @@ gst_rtspsrc_open_from_sdp (GstRTSPSrc * src, GstSDPMessage * sdp,
 
   src->state = GST_RTSP_STATE_READY;
 
+  /* Start the independent keep-alive worker if conditions warrant it.  The
+   * function is a no-op for live streams or non-interleaved transports. */
+  gst_rtspsrc_start_keep_alive (src);
+
   return res;
 
   /* ERRORS */
@@ -9343,6 +9698,10 @@ gst_rtspsrc_close (GstRTSPSrc * src, gboolean async, gboolean only_close)
   const gchar *control;
 
   GST_DEBUG_OBJECT (src, "TEARDOWN...");
+
+  /* Stop the independent keep-alive worker before tearing down the
+   * connection so it cannot fire a send concurrently with TEARDOWN. */
+  gst_rtspsrc_stop_keep_alive (src);
 
   gst_rtspsrc_set_state (src, GST_STATE_READY);
 

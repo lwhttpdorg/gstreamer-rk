@@ -23,6 +23,7 @@ codecparser_sources = files([
   'gstvp9bitwriter.c',
   'gstjpegbitwriter.c',
   'gstlcevcmeta.c',
+  'gsth274parser.c',
 ])
 codecparser_headers = files([
   'codecparsers-prelude.h',
@@ -31,6 +32,7 @@ codecparser_headers = files([
   'gsth264parser.h',
   'gstvc1parser.h',
   'gstmpeg4parser.h',
+  'gsth265bitwriter.h',
   'gsth265parser.h',
   'gstvp8parser.h',
   'gstvp8rangedecoder.h',
@@ -43,6 +45,7 @@ codecparser_headers = files([
   'gstav1parser.h',
   'gstlcevcmeta.h',
   'gsth266parser.h',
+  'gsth274parser.h',
 ])
 install_headers(codecparser_headers, subdir : 'gstreamer-1.0/gst/codecparsers')
 
@@ -72,7 +75,7 @@ gstcodecparsers = library('gstcodecparsers-' + api_version,
   soversion : soversion,
   darwin_versions : osxversion,
   install : true,
-  dependencies : [gstbase_dep],
+  dependencies : [gstbase_dep, gstvideo_dep],
 )
 
 pkg_name = 'gstreamer-codecparsers-1.0'
@@ -101,6 +104,7 @@ if build_gir
        '--c-include=gst/codecparsers/gstav1parser.h',
        '--c-include=gst/codecparsers/gsth264bitwriter.h',
        '--c-include=gst/codecparsers/gsth264parser.h',
+       '--c-include=gst/codecparsers/gsth265bitwriter.h',
        '--c-include=gst/codecparsers/gsth265parser.h',
        '--c-include=gst/codecparsers/gsth266parser.h',
        '--c-include=gst/codecparsers/gstjpeg2000sampling.h',
