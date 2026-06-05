@@ -228,11 +228,109 @@ gst_test_aggregator_init (GstTestAggregator * self)
   self->gap_expected = FALSE;
 }
 
+#define GST_TYPE_TEST_AGGREGATOR2            (gst_test_aggregator2_get_type ())
+#define GST_TEST_AGGREGATOR2(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_TEST_AGGREGATOR2, GstTestAggregator2))
+#define GST_TEST_AGGREGATOR2_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GST_TYPE_TEST_AGGREGATOR2, GstTestAggregator2Class))
+#define GST_TEST_AGGREGATOR2_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_TEST_AGGREGATOR2, GstTestAggregator2Class))
+
+typedef struct _GstTestAggregator2 GstTestAggregator2;
+typedef struct _GstTestAggregator2Class GstTestAggregator2Class;
+
+static GType gst_test_aggregator2_get_type (void);
+
+struct _GstTestAggregator2
+{
+  GstAggregator parent;
+
+  GstPad *sink_0;
+  GstPad *sink_1;
+};
+
+struct _GstTestAggregator2Class
+{
+  GstAggregatorClass agg_class;
+};
+
+static GstFlowReturn
+gst_test_aggregator2_aggregate (GstAggregator * agg, gboolean timeout)
+{
+  GstTestAggregator2 *self = GST_TEST_AGGREGATOR2 (agg);
+  GstAggregatorPad *sink_0 = GST_AGGREGATOR_PAD (self->sink_0);
+  GstAggregatorPad *sink_1 = GST_AGGREGATOR_PAD (self->sink_1);
+
+  gst_aggregator_pad_drop_buffer (sink_0);
+  gst_aggregator_pad_drop_buffer (sink_1);
+
+  if (gst_aggregator_pad_is_eos (sink_0) || gst_aggregator_pad_is_eos (sink_1))
+    return GST_FLOW_EOS;
+
+  gst_aggregator_finish_buffer (agg, gst_buffer_new ());
+
+  return GST_FLOW_OK;
+}
+
+G_DEFINE_TYPE (GstTestAggregator2, gst_test_aggregator2, GST_TYPE_AGGREGATOR);
+
+static void
+gst_test_aggregator2_class_init (GstTestAggregator2Class * klass)
+{
+  GstElementClass *elem_class = GST_ELEMENT_CLASS (klass);
+  GstAggregatorClass *agg_class = GST_AGGREGATOR_CLASS (klass);
+  static GstStaticPadTemplate test2_src_template =
+      GST_STATIC_PAD_TEMPLATE ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
+      GST_STATIC_CAPS_ANY);
+
+  static GstStaticPadTemplate test2_sink_template_0 =
+      GST_STATIC_PAD_TEMPLATE ("sink_0", GST_PAD_SINK, GST_PAD_ALWAYS,
+      GST_STATIC_CAPS_ANY);
+
+  static GstStaticPadTemplate test2_sink_template_1 =
+      GST_STATIC_PAD_TEMPLATE ("sink_1", GST_PAD_SINK, GST_PAD_ALWAYS,
+      GST_STATIC_CAPS_ANY);
+
+  gst_element_class_add_static_pad_template_with_gtype (elem_class,
+      &test2_src_template, GST_TYPE_AGGREGATOR_PAD);
+
+  gst_element_class_add_static_pad_template_with_gtype (elem_class,
+      &test2_sink_template_0, GST_TYPE_AGGREGATOR_PAD);
+
+  gst_element_class_add_static_pad_template_with_gtype (elem_class,
+      &test2_sink_template_1, GST_TYPE_AGGREGATOR_PAD);
+
+  gst_element_class_set_static_metadata (elem_class, "TestAggregator2",
+      "Testing", "Combine N buffers", "Seungha Yang <seungha@centricular.com>");
+
+  agg_class->aggregate = gst_test_aggregator2_aggregate;
+}
+
+static void
+gst_test_aggregator2_init (GstTestAggregator2 * self)
+{
+  GstAggregator *agg = GST_AGGREGATOR (self);
+  GstElement *elem = GST_ELEMENT (self);
+  GstPadTemplate *templ;
+
+  gst_segment_init (&GST_AGGREGATOR_PAD (agg->srcpad)->segment,
+      GST_FORMAT_TIME);
+
+  templ = gst_element_get_pad_template (elem, "sink_0");
+  self->sink_0 = gst_pad_new_from_template (templ, "sink_0");
+  templ = gst_element_get_pad_template (elem, "sink_1");
+  self->sink_1 = gst_pad_new_from_template (templ, "sink_1");
+
+  gst_element_add_pad (elem, self->sink_0);
+  gst_element_add_pad (elem, self->sink_1);
+}
+
 static gboolean
 gst_test_aggregator_plugin_init (GstPlugin * plugin)
 {
-  return gst_element_register (plugin, "testaggregator", GST_RANK_NONE,
+  gst_element_register (plugin, "testaggregator", GST_RANK_NONE,
       GST_TYPE_TEST_AGGREGATOR);
+  gst_element_register (plugin, "testaggregator2", GST_RANK_NONE,
+      GST_TYPE_TEST_AGGREGATOR2);
+
+  return TRUE;
 }
 
 static gboolean
@@ -1456,6 +1554,135 @@ GST_START_TEST (test_force_live)
 
 GST_END_TEST;
 
+typedef struct _UpstreamFlowEosData
+{
+  GMutex lock;
+  GCond cond;
+  gboolean got_eos;
+} UpstreamFlowEosData;
+
+static GstPadProbeReturn
+test_upstream_flow_eos_probe (GstPad * pad, GstPadProbeInfo * info,
+    UpstreamFlowEosData * data)
+{
+  GstEvent *event = GST_PAD_PROBE_INFO_EVENT (info);
+  if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
+    g_mutex_lock (&data->lock);
+    data->got_eos = TRUE;
+    g_cond_signal (&data->cond);
+    g_mutex_unlock (&data->lock);
+  }
+
+  return GST_PAD_PROBE_OK;
+}
+
+/* Testing GST_FLOW_EOS flow to upstream
+ * https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/3999
+ */
+GST_START_TEST (test_upstream_flow_eos)
+{
+  GstElement *bin;
+  GstElement *fakesink;
+  GstElement *agg;
+  GstPad *pad;
+  GstPad *sink_0;
+  GstPad *sink_1;
+  gboolean ret;
+  GstStateChangeReturn state_ret;
+  GstFlowReturn flow_ret;
+  GstBuffer *buf;
+  GstCaps *caps;
+  GstSegment segment;
+  UpstreamFlowEosData test_data;
+
+  g_mutex_init (&test_data.lock);
+  g_cond_init (&test_data.cond);
+  test_data.got_eos = FALSE;
+
+  bin = gst_bin_new (NULL);
+  fakesink = gst_element_factory_make ("fakesink", NULL);
+  agg = gst_element_factory_make ("testaggregator2", NULL);
+
+  gst_bin_add_many (GST_BIN (bin), agg, fakesink, NULL);
+  ret = gst_element_link (agg, fakesink);
+  fail_unless (ret);
+
+  pad = gst_element_get_static_pad (fakesink, "sink");
+  gst_pad_add_probe (pad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
+      (GstPadProbeCallback) test_upstream_flow_eos_probe, &test_data, NULL);
+  gst_object_unref (pad);
+
+  sink_0 = gst_element_get_static_pad (agg, "sink_0");
+  fail_unless (sink_0);
+  sink_1 = gst_element_get_static_pad (agg, "sink_1");
+  fail_unless (sink_1);
+
+  state_ret = gst_element_set_state (bin, GST_STATE_PLAYING);
+  fail_if (state_ret == GST_STATE_CHANGE_FAILURE);
+
+  /* Sends mandatory events to both pads */
+  ret = gst_pad_send_event (sink_0,
+      gst_event_new_stream_start ("test-start-0"));
+  fail_unless (ret);
+  ret = gst_pad_send_event (sink_1,
+      gst_event_new_stream_start ("test-start-1"));
+
+  caps = gst_caps_new_empty_simple ("foo/x-bar");
+  ret = gst_pad_send_event (sink_0, gst_event_new_caps (caps));
+  fail_unless (ret);
+  ret = gst_pad_send_event (sink_1, gst_event_new_caps (caps));
+  fail_unless (ret);
+  gst_caps_unref (caps);
+
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  ret = gst_pad_send_event (sink_0, gst_event_new_segment (&segment));
+  fail_unless (ret);
+  ret = gst_pad_send_event (sink_1, gst_event_new_segment (&segment));
+  fail_unless (ret);
+
+  /* Push single buffer to each pad */
+  buf = gst_buffer_new ();
+  GST_BUFFER_PTS (buf) = 0;
+  flow_ret = gst_pad_chain (sink_0, gst_buffer_ref (buf));
+  fail_unless (flow_ret == GST_FLOW_OK);
+  flow_ret = gst_pad_chain (sink_1, buf);
+  fail_unless (flow_ret == GST_FLOW_OK);
+
+  /* Send EOS to first pad, then push buffer to second pad */
+  ret = gst_pad_send_event (sink_0, gst_event_new_eos ());
+  fail_unless (ret);
+  buf = gst_buffer_new ();
+  GST_BUFFER_PTS (buf) = GST_SECOND;
+  flow_ret = gst_pad_chain (sink_1, buf);
+  /* chain function will return previous flow of aggregate() vfunc.
+   * Should be still GST_FLOW_OK */
+  fail_unless (flow_ret == GST_FLOW_OK);
+
+  /* Wait for idle until GstAggregatorPad.priv.flow_return is updated to
+   * GST_FLOW_EOS */
+  g_mutex_lock (&test_data.lock);
+  while (!test_data.got_eos)
+    g_cond_wait (&test_data.cond, &test_data.lock);
+  g_mutex_unlock (&test_data.lock);
+
+  buf = gst_buffer_new ();
+  GST_BUFFER_PTS (buf) = 2 * GST_SECOND;
+  flow_ret = gst_pad_chain (sink_1, buf);
+  /* GstAggregatorPad.priv.flow_return must be GST_FLOW_EOS at this moment */
+  fail_unless (flow_ret == GST_FLOW_EOS);
+
+  gst_element_set_state (bin, GST_STATE_NULL);
+
+  gst_object_unref (sink_0);
+  gst_object_unref (sink_1);
+  gst_object_unref (bin);
+
+  g_mutex_clear (&test_data.lock);
+  g_cond_clear (&test_data.cond);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_aggregator_suite (void)
 {
@@ -1487,6 +1714,7 @@ gst_aggregator_suite (void)
   tcase_add_test (general, test_flush_on_aggregate);
   tcase_add_test (general, test_remove_pad_on_aggregate);
   tcase_add_test (general, test_force_live);
+  tcase_add_test (general, test_upstream_flow_eos);
 
   return suite;
 }

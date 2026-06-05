@@ -1151,11 +1151,18 @@ gst_aggregator_pad_reset_peeked_buffer (GstElement * self, GstPad * epad,
 
 static void
 gst_aggregator_pad_set_flushing (GstAggregatorPad * aggpad,
-    GstFlowReturn flow_return, gboolean full)
+    GstFlowReturn flow_return, gboolean full,
+    gboolean skip_stream_start_pending)
 {
   GList *item;
 
   PAD_LOCK (aggpad);
+  if (skip_stream_start_pending && aggpad->priv->stream_start_pending) {
+    GST_DEBUG_OBJECT (aggpad, "Pad has pending stream-start");
+    PAD_UNLOCK (aggpad);
+    return;
+  }
+
   if (flow_return == GST_FLOW_NOT_LINKED)
     aggpad->priv->flow_return = MIN (flow_return, aggpad->priv->flow_return);
   else
@@ -1587,11 +1594,6 @@ gst_aggregator_loop (GstAggregator * self)
   handle_error:
     GST_LOG_OBJECT (self, "flow return is %s", gst_flow_get_name (flow_return));
 
-    /* Don't flush buffer/event/queries on EOS. We may do restart pad task
-     * on new stream-start */
-    if (flow_return == GST_FLOW_EOS)
-      return GST_FLOW_EOS;
-
     if (flow_return != GST_FLOW_OK) {
       GList *item;
 
@@ -1599,7 +1601,8 @@ gst_aggregator_loop (GstAggregator * self)
       for (item = GST_ELEMENT (self)->sinkpads; item; item = item->next) {
         GstAggregatorPad *aggpad = GST_AGGREGATOR_PAD (item->data);
 
-        gst_aggregator_pad_set_flushing (aggpad, flow_return, TRUE);
+        gst_aggregator_pad_set_flushing (aggpad, flow_return, TRUE,
+            flow_return == GST_FLOW_EOS);
       }
       GST_OBJECT_UNLOCK (self);
       SRC_LOCK (self);
@@ -1779,7 +1782,7 @@ gst_aggregator_flush_start (GstAggregator * self, GstAggregatorPad * aggpad,
   GstAggregatorPadPrivate *padpriv = aggpad->priv;
   guint32 seqnum = gst_event_get_seqnum (event);
 
-  gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, FALSE);
+  gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, FALSE, FALSE);
 
   PAD_FLUSH_LOCK (aggpad);
   PAD_LOCK (aggpad);
@@ -2254,7 +2257,7 @@ gst_aggregator_release_pad (GstElement * element, GstPad * pad)
   GST_INFO_OBJECT (pad, "Removing pad");
 
   SRC_LOCK (self);
-  gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, TRUE);
+  gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, TRUE, FALSE);
   PAD_LOCK (aggpad);
   gst_buffer_replace (&aggpad->priv->peeked_buffer, NULL);
   gst_buffer_replace (&aggpad->priv->clipped_buffer, NULL);
@@ -3581,7 +3584,7 @@ gst_aggregator_pad_activate_mode_func (GstPad * pad,
 
   if (active == FALSE) {
     SRC_LOCK (self);
-    gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, TRUE);
+    gst_aggregator_pad_set_flushing (aggpad, GST_FLOW_FLUSHING, TRUE, FALSE);
     SRC_BROADCAST (self);
     SRC_UNLOCK (self);
   } else {
@@ -3658,7 +3661,7 @@ gst_aggregator_pad_dispose (GObject * object)
 {
   GstAggregatorPad *pad = (GstAggregatorPad *) object;
 
-  gst_aggregator_pad_set_flushing (pad, GST_FLOW_FLUSHING, TRUE);
+  gst_aggregator_pad_set_flushing (pad, GST_FLOW_FLUSHING, TRUE, FALSE);
 
   G_OBJECT_CLASS (gst_aggregator_pad_parent_class)->dispose (object);
 }
