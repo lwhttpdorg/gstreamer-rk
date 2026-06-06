@@ -1834,6 +1834,7 @@ _dma_buf_upload_perform (gpointer impl, GstBuffer * buffer, GstBuffer ** outbuf)
     return GST_GL_UPLOAD_ERROR;
 
   gst_buffer_add_parent_buffer_meta (dmabuf->outbuf, buffer);
+  gst_buffer_add_gl_sync_meta (dmabuf->upload->context, dmabuf->outbuf);
 
   *outbuf = dmabuf->outbuf;
   dmabuf->outbuf = NULL;
