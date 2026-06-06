@@ -41,6 +41,7 @@
 #include "gstfakevideosink.h"
 #include "gstfakesinkutils.h"
 
+#include <gst/allocators/gstdmabuf.h>
 #include <gst/video/video.h>
 
 #define C_FLAGS(v) ((guint) v)
@@ -168,6 +169,33 @@ G_DEFINE_TYPE (GstFakeVideoSink, gst_fake_video_sink, GST_TYPE_BIN);
 GST_ELEMENT_REGISTER_DEFINE (fakevideosink, "fakevideosink",
     GST_RANK_NONE, gst_fake_video_sink_get_type ());
 
+static GstFlowReturn
+gst_fake_video_sink_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
+{
+  GstFakeVideoSink *self = GST_FAKE_VIDEO_SINK (parent);
+  GstCaps *caps;
+  GstPad *childpad;
+  GstFlowReturn ret;
+
+  caps = gst_pad_get_current_caps (pad);
+  if (gst_video_is_dma_drm_caps (caps) &&
+      !gst_is_dmabuf_memory (gst_buffer_peek_memory (buf, 0))) {
+    GST_ERROR_OBJECT (self,
+        "Received non-dmabuf buffer memory while using DMA_DRM caps");
+    gst_buffer_unref (buf);
+    ret = GST_FLOW_ERROR;
+    goto out;
+  }
+
+  childpad = gst_element_get_static_pad (self->child, "sink");
+  ret = gst_pad_chain (childpad, buf);
+  gst_object_unref (childpad);
+
+out:
+  gst_caps_unref (caps);
+  return ret;
+}
+
 static gboolean
 gst_fake_video_sink_query (GstPad * pad, GstObject * parent, GstQuery * query)
 {
@@ -249,6 +277,7 @@ gst_fake_video_sink_init (GstFakeVideoSink * self)
     gst_element_add_pad (GST_ELEMENT (self), ghost_pad);
     gst_object_unref (sink_pad);
 
+    gst_pad_set_chain_function (ghost_pad, gst_fake_video_sink_chain);
     gst_pad_set_query_function (ghost_pad, gst_fake_video_sink_query);
 
     self->child = child;
