@@ -2773,7 +2773,7 @@ gst_video_encoder_infer_dts_unlocked (GstVideoEncoder * encoder,
 
 static void
 gst_video_encoder_send_header_unlocked (GstVideoEncoder * encoder,
-    gboolean * discont, gboolean key_unit)
+    GstVideoCodecFrame * frame, gboolean * discont, gboolean key_unit)
 {
   GstVideoEncoderPrivate *priv = encoder->priv;
 
@@ -2806,6 +2806,10 @@ gst_video_encoder_send_header_unlocked (GstVideoEncoder * encoder,
       } else {
         GST_BUFFER_FLAG_UNSET (tmpbuf, GST_BUFFER_FLAG_DISCONT);
       }
+
+      GST_BUFFER_PTS (tmpbuf) = frame->pts;
+      GST_BUFFER_DTS (tmpbuf) = frame->dts;
+      GST_BUFFER_DURATION (tmpbuf) = frame->duration;
 
       gst_pad_push (encoder->srcpad, gst_buffer_ref (tmpbuf));
     }
@@ -3025,7 +3029,7 @@ gst_video_encoder_finish_frame (GstVideoEncoder * encoder,
   if (G_UNLIKELY (send_headers))
     priv->new_headers = TRUE;
 
-  gst_video_encoder_send_header_unlocked (encoder, &discont, key_unit);
+  gst_video_encoder_send_header_unlocked (encoder, frame, &discont, key_unit);
 
   if (key_unit) {
     GST_BUFFER_FLAG_UNSET (frame->output_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
@@ -3162,7 +3166,7 @@ gst_video_encoder_finish_subframe (GstVideoEncoder * encoder,
   if (G_UNLIKELY (send_headers))
     priv->new_headers = TRUE;
 
-  gst_video_encoder_send_header_unlocked (encoder, &discont, key_unit);
+  gst_video_encoder_send_header_unlocked (encoder, frame, &discont, key_unit);
 
   if (key_unit) {
     GST_BUFFER_FLAG_UNSET (subframe_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
