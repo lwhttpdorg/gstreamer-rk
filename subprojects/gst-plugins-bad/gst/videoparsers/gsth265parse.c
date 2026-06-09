@@ -118,12 +118,11 @@ static GstCaps *gst_h265_parse_get_caps (GstBaseParse * parse,
 static gboolean gst_h265_parse_event (GstBaseParse * parse, GstEvent * event);
 static gboolean gst_h265_parse_src_event (GstBaseParse * parse,
     GstEvent * event);
-static void
-gst_h265_parse_process_sei_user_data (GstH265Parse * h265parse,
+static void gst_h265_parse_process_sei_user_data (GstH265Parse * h265parse,
     GstH265RegisteredUserData * rud);
-static void
-gst_h265_parse_process_sei_user_data_unregistered (GstH265Parse * h265parse,
+static void gst_h265_parse_process_sei_user_data_unregistered (GstH265Parse * h265parse,
     GstH265UserDataUnregistered * urud);
+static gboolean gst_h265_parse_process_nal (GstH265Parse * h265parse, GstH265NalUnit * nalu);
 
 static void
 gst_h265_parse_class_init (GstH265ParseClass * klass)
@@ -389,9 +388,11 @@ gst_h265_parse_format_from_caps (GstCaps * caps, guint * format, guint * align)
 /* check downstream caps to configure format and alignment */
 static void
 gst_h265_parse_negotiate (GstH265Parse * h265parse, gint in_format,
-    GstCaps * in_caps)
+    GstCaps * in_caps, GstH265DecoderConfigRecord *config)
 {
+  guint i, j;
   GstCaps *caps;
+  GstH265NalUnit *nalu;
   guint format = GST_H265_PARSE_FORMAT_NONE;
   guint align = GST_H265_PARSE_ALIGN_NONE;
 
@@ -439,6 +440,20 @@ gst_h265_parse_negotiate (GstH265Parse * h265parse, gint in_format,
 
   h265parse->transform = in_format != h265parse->format ||
       align == GST_H265_PARSE_ALIGN_AU;
+
+  if (config) {
+    for (i = 0; i < config->nalu_array->len; i++) {
+      GstH265DecoderConfigRecordNalUnitArray *array =
+          &g_array_index (config->nalu_array,
+          GstH265DecoderConfigRecordNalUnitArray, i);
+
+      for (j = 0; j < array->nalu->len; j++) {
+        nalu = &g_array_index (array->nalu, GstH265NalUnit, j);
+
+        gst_h265_parse_process_nal (h265parse, nalu);
+      }
+    }
+  }
 
   if (caps)
     gst_caps_unref (caps);
@@ -1264,7 +1279,7 @@ gst_h265_parse_handle_frame (GstBaseParse * parse,
 
   /* need to configure aggregation */
   if (G_UNLIKELY (h265parse->format == GST_H265_PARSE_FORMAT_NONE))
-    gst_h265_parse_negotiate (h265parse, GST_H265_PARSE_FORMAT_BYTE, NULL);
+    gst_h265_parse_negotiate (h265parse, GST_H265_PARSE_FORMAT_BYTE, NULL, NULL);
 
   /* avoid stale cached parsing state */
   if (frame->flags & GST_BASE_PARSE_FRAME_FLAG_NEW_FRAME) {
@@ -3407,7 +3422,6 @@ gst_h265_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
   if (format != GST_H265_PARSE_FORMAT_BYTE &&
       (value = gst_structure_get_value (str, "codec_data"))) {
     GstMapInfo map;
-    guint i, j;
 
     GST_DEBUG_OBJECT (h265parse, "have packetized h265");
     /* make note for optional split processing */
@@ -3430,19 +3444,6 @@ gst_h265_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
     GST_DEBUG_OBJECT (h265parse, "nal length size %u",
         h265parse->nal_length_size);
 
-    for (i = 0; i < config->nalu_array->len; i++) {
-      GstH265DecoderConfigRecordNalUnitArray *array =
-          &g_array_index (config->nalu_array,
-          GstH265DecoderConfigRecordNalUnitArray, i);
-
-      for (j = 0; j < array->nalu->len; j++) {
-        GstH265NalUnit *nalu = &g_array_index (array->nalu, GstH265NalUnit, j);
-
-        gst_h265_parse_process_nal (h265parse, nalu);
-      }
-    }
-
-    gst_h265_decoder_config_record_free (config);
     gst_buffer_unmap (codec_data, &map);
 
     /* don't confuse codec_data with inband vps/sps/pps */
@@ -3473,7 +3474,8 @@ gst_h265_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
         "alignment", G_TYPE_STRING,
         gst_h265_parse_get_string (h265parse, FALSE, align), NULL);
     /* negotiate with downstream, sets ->format and ->align */
-    gst_h265_parse_negotiate (h265parse, format, in_caps);
+    gst_h265_parse_negotiate (h265parse, format, in_caps, config);
+    gst_h265_decoder_config_record_free (config);
     gst_caps_unref (in_caps);
   }
 

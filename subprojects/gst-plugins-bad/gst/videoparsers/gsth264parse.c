@@ -127,6 +127,7 @@ static gboolean gst_h264_parse_src_event (GstBaseParse * parse,
     GstEvent * event);
 static void gst_h264_parse_update_src_caps (GstH264Parse * h264parse,
     GstCaps * caps);
+static gboolean gst_h264_parse_process_nal (GstH264Parse * h264parse, GstH264NalUnit * nalu);
 
 static void
 gst_h264_parse_class_init (GstH264ParseClass * klass)
@@ -426,9 +427,11 @@ gst_h264_parse_format_from_caps (GstCaps * caps, guint * format, guint * align)
 /* check downstream caps to configure format and alignment */
 static void
 gst_h264_parse_negotiate (GstH264Parse * h264parse, gint in_format,
-    GstCaps * in_caps)
+    GstCaps * in_caps, GstH264DecoderConfigRecord *config)
 {
+  guint i;
   GstCaps *caps;
+  GstH264NalUnit *nalu;
   guint format = h264parse->format;
   guint align = h264parse->align;
 
@@ -479,6 +482,18 @@ gst_h264_parse_negotiate (GstH264Parse * h264parse, gint in_format,
 
   h264parse->transform = in_format != h264parse->format ||
       align == GST_H264_PARSE_ALIGN_AU;
+
+  if (config) {
+    for (i = 0; i < config->sps->len; i++) {
+      nalu = &g_array_index (config->sps, GstH264NalUnit, i);
+      gst_h264_parse_process_nal (h264parse, nalu);
+    }
+
+    for (i = 0; i < config->pps->len; i++) {
+      nalu = &g_array_index (config->pps, GstH264NalUnit, i);
+      gst_h264_parse_process_nal (h264parse, nalu);
+    }
+  }
 
   if (caps)
     gst_caps_unref (caps);
@@ -1459,7 +1474,7 @@ gst_h264_parse_handle_frame (GstBaseParse * parse,
 
   /* need to configure aggregation */
   if (G_UNLIKELY (h264parse->format == GST_H264_PARSE_FORMAT_NONE))
-    gst_h264_parse_negotiate (h264parse, GST_H264_PARSE_FORMAT_BYTE, NULL);
+    gst_h264_parse_negotiate (h264parse, GST_H264_PARSE_FORMAT_BYTE, NULL, NULL);
 
   /* avoid stale cached parsing state */
   if (frame->flags & GST_BASE_PARSE_FRAME_FLAG_NEW_FRAME) {
@@ -3776,7 +3791,6 @@ gst_h264_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
   const GValue *codec_data_value;
   GstBuffer *codec_data = NULL;
   guint format, align;
-  GstH264NalUnit *nalu;
   GstH264ParserResult parseres;
   GstCaps *old_caps;
   GstH264DecoderConfigRecord *config = NULL;
@@ -3848,7 +3862,6 @@ gst_h264_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
   /* packetized video has codec_data (required for AVC and AVC3) */
   if (codec_data_value != NULL) {
     GstMapInfo map;
-    guint i;
 
     GST_DEBUG_OBJECT (h264parse, "have packetized h264");
     /* make note for optional split processing */
@@ -3881,17 +3894,6 @@ gst_h264_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
     GST_DEBUG_OBJECT (h264parse, "AVCLevelIndication %d",
         config->level_indication);
 
-    for (i = 0; i < config->sps->len; i++) {
-      nalu = &g_array_index (config->sps, GstH264NalUnit, i);
-      gst_h264_parse_process_nal (h264parse, nalu);
-    }
-
-    for (i = 0; i < config->pps->len; i++) {
-      nalu = &g_array_index (config->pps, GstH264NalUnit, i);
-      gst_h264_parse_process_nal (h264parse, nalu);
-    }
-
-    gst_h264_decoder_config_record_free (config);
     gst_buffer_unmap (codec_data, &map);
 
     gst_buffer_replace (&h264parse->codec_data_in, codec_data);
@@ -3921,7 +3923,9 @@ gst_h264_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
         "alignment", G_TYPE_STRING,
         gst_h264_parse_get_string (h264parse, FALSE, align), NULL);
     /* negotiate with downstream, sets ->format and ->align */
-    gst_h264_parse_negotiate (h264parse, format, in_caps);
+    gst_h264_parse_negotiate (h264parse, format, in_caps, config);
+    if (config)
+      gst_h264_decoder_config_record_free (config);
     gst_caps_unref (in_caps);
   }
 
