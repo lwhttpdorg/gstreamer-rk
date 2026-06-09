@@ -87,6 +87,9 @@ struct _GstRtpH265Depay
   GstAllocator *allocator;
   GstAllocationParams params;
 
+  /* carrier for metadata from consumed parameter set NALs (hvc1 mode) */
+  GstBuffer *ps_meta_buf;
+
   gboolean wait_for_keyframe;
   gboolean request_keyframe;
   gboolean waiting_for_keyframe;

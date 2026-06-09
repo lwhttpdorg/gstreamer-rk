@@ -265,6 +265,7 @@ gst_rtp_h265_depay_reset (GstRtpH265Depay * rtph265depay, gboolean hard)
   rtph265depay->last_ts = 0;
   rtph265depay->current_fu_type = 0;
   rtph265depay->new_codec_data = FALSE;
+  gst_clear_buffer (&rtph265depay->ps_meta_buf);
   g_ptr_array_set_size (rtph265depay->vps, 0);
   g_ptr_array_set_size (rtph265depay->sps, 0);
   g_ptr_array_set_size (rtph265depay->pps, 0);
@@ -302,6 +303,8 @@ gst_rtp_h265_depay_finalize (GObject * object)
 
   if (rtph265depay->codec_data)
     gst_buffer_unref (rtph265depay->codec_data);
+
+  gst_clear_buffer (&rtph265depay->ps_meta_buf);
 
   g_object_unref (rtph265depay->adapter);
   g_object_unref (rtph265depay->picture_adapter);
@@ -1263,6 +1266,11 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
 
   if (!rtph265depay->byte_stream) {
     if (NAL_TYPE_IS_PARAMETER_SET (nal_type)) {
+      /* Hold a ref to the first param set NAL so its metadata can be
+       * transferred to the next VCL NAL entering the picture adapter. */
+      if (!rtph265depay->ps_meta_buf)
+        rtph265depay->ps_meta_buf = gst_buffer_ref (nal);
+
       gst_rtp_h265_depay_add_vps_sps_pps (rtph265depay,
           gst_buffer_copy_region (nal, GST_BUFFER_COPY_ALL,
               4, gst_buffer_get_size (nal) - 4));
@@ -1321,6 +1329,11 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
     }
 
     GST_DEBUG_OBJECT (depayload, "adding NAL to picture adapter");
+    /* Transfer metadata from the consumed parameter set NAL */
+    if (rtph265depay->ps_meta_buf) {
+      gst_rtp_copy_video_meta (rtph265depay, nal, rtph265depay->ps_meta_buf);
+      gst_clear_buffer (&rtph265depay->ps_meta_buf);
+    }
     gst_adapter_push (rtph265depay->picture_adapter, nal);
     rtph265depay->last_ts = in_timestamp;
     rtph265depay->last_keyframe |= keyframe;
