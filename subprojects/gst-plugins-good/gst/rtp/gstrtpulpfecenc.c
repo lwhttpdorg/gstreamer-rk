@@ -128,6 +128,12 @@ enum
   PROP_PERCENTAGE_IMPORTANT,
 };
 
+typedef struct
+{
+  GstRtpUlpFecEnc *fec;
+  GstFlowReturn ret;
+} UlpFecEncListData;
+
 #define RTP_FEC_MAP_INFO_NTH(ctx, data) (&g_array_index (\
     ((GstRtpUlpFecEncStreamCtx *)ctx)->info_arr, \
     RtpUlpFecMapInfo, \
@@ -598,17 +604,11 @@ gst_rtp_ulpfec_enc_aquire_ctx (GstRtpUlpFecEnc * fec, guint ssrc)
 }
 
 static GstFlowReturn
-gst_rtp_ulpfec_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
+ulpfec_enc_process_buffer (GstRtpUlpFecEnc * fec, GstBuffer * buffer)
 {
-  GstRtpUlpFecEnc *fec = GST_RTP_ULPFEC_ENC (parent);
   GstRTPBuffer rtp = GST_RTP_BUFFER_INIT;
-  GstFlowReturn ret;
   guint ssrc = 0;
   GstRtpUlpFecEncStreamCtx *ctx;
-
-  if (fec->pt == UNDEF_PT)
-    return gst_pad_push (fec->srcpad, buffer);
-
   /* FIXME: avoid this additional mapping of the buffer to get the
      ssrc! */
   if (!gst_rtp_buffer_map (buffer,
@@ -620,12 +620,47 @@ gst_rtp_ulpfec_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   ctx = gst_rtp_ulpfec_enc_aquire_ctx (fec, ssrc);
 
-  ret = gst_rtp_ulpfec_enc_stream_ctx_process (ctx, buffer, fec->twcc_ext_id);
+  GstFlowReturn ret =
+      gst_rtp_ulpfec_enc_stream_ctx_process (ctx, buffer, fec->twcc_ext_id);
 
   /* FIXME: does not work for multiple ssrcs */
   fec->num_packets_protected = ctx->num_packets_protected;
-
   return ret;
+}
+
+static gboolean
+ulpfec_enc_process_list_buffer (GstBuffer ** buffer, guint idx,
+    gpointer userdata)
+{
+  UlpFecEncListData *data = (UlpFecEncListData *) userdata;
+  data->ret = ulpfec_enc_process_buffer (data->fec, *buffer);
+  return data->ret == GST_FLOW_OK;
+}
+
+static GstFlowReturn
+gst_rtp_ulpfec_enc_chain_list (GstPad * pad, GstObject * parent,
+    GstBufferList * list)
+{
+  GstRtpUlpFecEnc *fec = GST_RTP_ULPFEC_ENC (parent);
+
+  if (fec->pt == UNDEF_PT)
+    return gst_pad_push_list (fec->srcpad, list);
+
+  UlpFecEncListData data = { fec, GST_FLOW_OK };
+  gst_buffer_list_foreach (list, ulpfec_enc_process_list_buffer, &data);
+
+  return data.ret;
+}
+
+static GstFlowReturn
+gst_rtp_ulpfec_enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
+{
+  GstRtpUlpFecEnc *fec = GST_RTP_ULPFEC_ENC (parent);
+
+  if (fec->pt == UNDEF_PT)
+    return gst_pad_push (fec->srcpad, buffer);
+
+  return ulpfec_enc_process_buffer (fec, buffer);
 }
 
 static void
@@ -771,6 +806,8 @@ gst_rtp_ulpfec_enc_init (GstRtpUlpFecEnc * fec)
   GST_PAD_SET_PROXY_ALLOCATION (fec->sinkpad);
   gst_pad_set_chain_function (fec->sinkpad,
       GST_DEBUG_FUNCPTR (gst_rtp_ulpfec_enc_chain));
+  gst_pad_set_chain_list_function (fec->sinkpad,
+      GST_DEBUG_FUNCPTR (gst_rtp_ulpfec_enc_chain_list));
   gst_pad_set_event_function (fec->sinkpad,
       GST_DEBUG_FUNCPTR (gst_rtp_ulpfec_enc_event_sink));
   gst_element_add_pad (GST_ELEMENT (fec), fec->sinkpad);
