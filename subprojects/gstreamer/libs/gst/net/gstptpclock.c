@@ -924,7 +924,7 @@ select_best_master_clock (PtpDomainData * domain, GstClockTime now)
       domain->iface_idx = best->iface_idx;
       domain->mean_path_delay = 0;
       domain->last_delay_req = 0;
-      domain->last_path_delays_missing = 9;
+      domain->last_path_delays_missing = MEDIAN_PRE_FILTERING_WINDOW;
       domain->last_ptp_delay_resp_time_local = 0;
       domain->min_delay_req_interval = 0;
       domain->sync_interval = 0;
@@ -992,7 +992,7 @@ handle_announce_message (PtpMessage * msg, guint8 iface_idx,
         gst_system_clock_new (clock_name, GST_CLOCK_TYPE_MONOTONIC);
     g_free (clock_name);
     g_queue_init (&domain->pending_syncs);
-    domain->last_path_delays_missing = 9;
+    domain->last_path_delays_missing = MEDIAN_PRE_FILTERING_WINDOW;
     domain_data = g_list_prepend (domain_data, domain);
 
     g_mutex_lock (&domain_clocks_lock);
@@ -1606,7 +1606,7 @@ handle_sync_message (PtpMessage * msg, guint8 iface_idx,
         gst_system_clock_new (clock_name, GST_CLOCK_TYPE_MONOTONIC);
     g_free (clock_name);
     g_queue_init (&domain->pending_syncs);
-    domain->last_path_delays_missing = 9;
+    domain->last_path_delays_missing = MEDIAN_PRE_FILTERING_WINDOW;
     domain_data = g_list_prepend (domain_data, domain);
 
     g_mutex_lock (&domain_clocks_lock);
