@@ -3444,9 +3444,10 @@ gst_h265_slice_hdr_free (GstH265SliceHdr * slice_hdr)
 {
   g_return_if_fail (slice_hdr != NULL);
 
-  if (slice_hdr->num_entry_point_offsets > 0)
+  if (slice_hdr->entry_point_offset_minus1 != NULL) {
     g_free (slice_hdr->entry_point_offset_minus1);
-  slice_hdr->entry_point_offset_minus1 = 0;
+  }
+  slice_hdr->entry_point_offset_minus1 = NULL;
 }
 
 /**
