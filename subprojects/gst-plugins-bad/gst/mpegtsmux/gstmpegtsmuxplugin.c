@@ -5,6 +5,7 @@
 #endif
 
 #include "gstatscmux.h"
+#include "gstdvbmux.h"
 #include "gstmpegtsmux.h"
 
 static gboolean
@@ -14,6 +15,7 @@ plugin_init (GstPlugin * plugin)
 
   ret |= GST_ELEMENT_REGISTER (mpegtsmux, plugin);
   ret |= GST_ELEMENT_REGISTER (atscmux, plugin);
+  ret |= GST_ELEMENT_REGISTER (dvbmux, plugin);
 
   return ret;
 }
