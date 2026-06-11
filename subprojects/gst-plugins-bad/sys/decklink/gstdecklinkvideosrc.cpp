@@ -146,6 +146,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_decklink_video_src_debug);
 #define DEFAULT_BUFFER_SIZE (5)
 #define DEFAULT_OUTPUT_STREAM_TIME (FALSE)
 #define DEFAULT_SKIP_FIRST_TIME (0)
+#define DEFAULT_FORCE_8_BIT (FALSE)
 #define DEFAULT_DROP_NO_SIGNAL_FRAMES (FALSE)
 #define DEFAULT_OUTPUT_CC (FALSE)
 #define DEFAULT_OUTPUT_AFD_BAR (FALSE)
@@ -170,6 +171,7 @@ enum
   PROP_TIMECODE_FORMAT,
   PROP_OUTPUT_STREAM_TIME,
   PROP_SKIP_FIRST_TIME,
+  PROP_8BIT,
   PROP_DROP_NO_SIGNAL_FRAMES,
   PROP_SIGNAL,
   PROP_HW_SERIAL_NUMBER,
@@ -280,6 +282,12 @@ gst_decklink_video_src_class_init (GstDecklinkVideoSrcClass * klass)
       GST_DEBUG_FUNCPTR (gst_decklink_video_src_unlock_stop);
 
   pushsrc_class->create = GST_DEBUG_FUNCPTR (gst_decklink_video_src_create);
+
+  g_object_class_install_property (gobject_class, PROP_8BIT,
+      g_param_spec_boolean ("force-8-bit", "Force 8-bit",
+          "Always pick the 8-bit equivalent, ignoring 10-bit detection",
+          DEFAULT_FORCE_8_BIT,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   g_object_class_install_property (gobject_class, PROP_MODE,
       g_param_spec_enum ("mode", "Playback Mode",
@@ -448,6 +456,7 @@ gst_decklink_video_src_init (GstDecklinkVideoSrc * self)
   self->signal_state = SIGNAL_STATE_UNKNOWN;
   self->output_stream_time = DEFAULT_OUTPUT_STREAM_TIME;
   self->skip_first_time = DEFAULT_SKIP_FIRST_TIME;
+  self->force_8_bit = DEFAULT_FORCE_8_BIT;
   self->drop_no_signal_frames = DEFAULT_DROP_NO_SIGNAL_FRAMES;
   self->output_cc = DEFAULT_OUTPUT_CC;
   self->output_afd_bar = DEFAULT_OUTPUT_AFD_BAR;
@@ -532,6 +541,9 @@ gst_decklink_video_src_set_property (GObject * object, guint property_id,
     case PROP_SKIP_FIRST_TIME:
       self->skip_first_time = g_value_get_uint64 (value);
       break;
+    case PROP_8BIT:
+      self->force_8_bit = g_value_get_boolean (value);
+      break;
     case PROP_DROP_NO_SIGNAL_FRAMES:
       self->drop_no_signal_frames = g_value_get_boolean (value);
       break;
@@ -586,6 +598,9 @@ gst_decklink_video_src_get_property (GObject * object, guint property_id,
       break;
     case PROP_SKIP_FIRST_TIME:
       g_value_set_uint64 (value, self->skip_first_time);
+      break;
+    case PROP_8BIT:
+      g_value_set_boolean (value, self->force_8_bit);
       break;
     case PROP_DROP_NO_SIGNAL_FRAMES:
       g_value_set_boolean (value, self->drop_no_signal_frames);
@@ -1989,6 +2004,7 @@ gst_decklink_video_src_open (GstDecklinkVideoSrc * self)
   self->input->mode = mode;
   self->input->format = self->caps_format;
   self->input->auto_format = self->video_format == GST_DECKLINK_VIDEO_FORMAT_AUTO;
+  self->input->force_8_bit = self->force_8_bit;
   self->input->got_video_frame = gst_decklink_video_src_got_frame;
   self->input->start_streams = gst_decklink_video_src_start_streams;
   g_mutex_unlock (&self->input->lock);

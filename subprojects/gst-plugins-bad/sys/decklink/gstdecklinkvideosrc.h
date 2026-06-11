@@ -69,6 +69,7 @@ struct _GstDecklinkVideoSrc
   GstDecklinkConnectionEnum connection;
   gint device_number;
   gint64 persistent_id;
+  gboolean force_8_bit;
   gboolean output_stream_time;
   GstClockTime skip_first_time;
   gboolean drop_no_signal_frames;
