@@ -50,6 +50,7 @@ G_BEGIN_DECLS
 #define GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID "gimi-track-content-id"
 #define GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID "gimi-component-content-id"
 #define GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML "gimi-security-markings-xml"
+#define GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID "gimi-security-markings-content-id"
 
 #define GST_QT_DEMUX_PRECISION_CLOCK_TYPE "precision-clock-type"
 #define GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY "precision-clock-time-uncertainty-nanoseconds"

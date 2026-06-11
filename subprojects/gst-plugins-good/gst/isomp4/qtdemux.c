@@ -21589,6 +21589,124 @@ gst_qtdemux_append_protection_system_id (GstQTDemux * qtdemux,
           -1));
 }
 
+/* Returns the nth property of the item with item_id in the iprp box,
+ * or NULL if not found.
+ *
+ * The caller should call it with 0 and then iterate with increasing
+ * nth_property until it returns NULL to get all properties of the item.
+ */
+static GNode *
+qtdemux_parse_iprp_get_nth_property (GstQTDemux * qtdemux, GNode * iprp,
+    guint item_id, gint nth_property, gboolean * essential)
+{
+  GNode *ipco;
+  GNode *ipma;
+  guint32 entry_count;
+  GstByteReader ipma_data;
+  guint8 version;
+  guint32 i;
+  guint flags;
+
+  if (!iprp)
+    return NULL;
+
+  *essential = FALSE;
+
+  ipco = qtdemux_tree_get_child_by_type (iprp, FOURCC_ipco);
+  if (!ipco) {
+    GST_WARNING_OBJECT (qtdemux, "iprp box missing ipco child");
+    return NULL;
+  }
+
+  ipma = qtdemux_tree_get_child_by_type_full (iprp, FOURCC_ipma, &ipma_data);
+  if (!ipma) {
+    GST_WARNING_OBJECT (qtdemux, "iprp box missing ipma child");
+    return NULL;
+  }
+
+  if (!gst_byte_reader_get_uint8 (&ipma_data, &version)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain version");
+    return NULL;
+  }
+  if (!gst_byte_reader_get_uint24_be (&ipma_data, &flags)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain flags");
+    return NULL;
+  }
+  if (!gst_byte_reader_get_uint32_be (&ipma_data, &entry_count)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain entry count");
+    return NULL;
+  }
+
+  for (i = 0; i++ < entry_count;) {
+    guint32 item_id_in_ipma;
+    guint8 association_count;
+    GNode *ipco_entry;
+    guint16 property_index;
+
+    if (version == 0) {
+      guint16 tmp16;
+      if (!gst_byte_reader_get_uint16_be (&ipma_data, &tmp16))  /* item_id */
+        return NULL;
+      item_id_in_ipma = tmp16;
+    } else {
+      if (!gst_byte_reader_get_uint32_be (&ipma_data, &item_id_in_ipma))        /* item_id */
+        return NULL;
+    }
+
+    if (!gst_byte_reader_get_uint8 (&ipma_data, &association_count)) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma box too short to contain association count");
+      return NULL;
+    }
+    if (association_count == 0) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma entry with zero associations, skipping");
+      continue;
+    }
+
+    if (item_id_in_ipma != item_id) {
+      /* We're only looking for item_id */
+      if (!gst_byte_reader_skip (&ipma_data, association_count *
+              (flags & 1 ? 2 : 1)))
+        return NULL;
+      continue;
+    }
+
+    if (nth_property >= association_count) {
+      return NULL;
+    }
+
+    if (flags & 1) {
+      if (!gst_byte_reader_skip (&ipma_data, (nth_property) * 2))
+        return NULL;
+      if (!gst_byte_reader_get_uint16_be (&ipma_data, &property_index))
+        return NULL;
+      *essential = (property_index & 0x8000) != 0;
+      property_index = property_index & 0x7fff;
+    } else {
+      guint8 property_index_8;
+
+      if (!gst_byte_reader_skip (&ipma_data, (nth_property)))
+        return NULL;
+      if (!gst_byte_reader_get_uint8 (&ipma_data, &property_index_8))
+        return NULL;
+      *essential = (property_index_8 & 0x80) != 0;
+      property_index = property_index_8 & 0x7f;
+    }
+
+    ipco_entry = qtdemux_tree_get_child_by_index (ipco, property_index - 1);
+    if (!ipco_entry) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma association index %u out of bounds", property_index);
+      return NULL;
+    }
+
+    return ipco_entry;
+  }
+
+  return NULL;
+}
+
 static void
 qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
     gint length)
@@ -21598,6 +21716,10 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
   GNode *idat;
   GstByteReader idat_data;
   GNode *iinf;
+  GNode *iprp = NULL;
+  static guint8 CONTENT_ID_UUID[] = { 0x26, 0x1e, 0xf3, 0x74, 0x1d, 0x97,
+    0x5b, 0xba, 0xac, 0xbd, 0x9d, 0x2c, 0x8e, 0xa7, 0x35, 0x22
+  };
 
   meta = g_node_new ((gpointer) buffer);
   qtdemux_parse_node (qtdemux, meta, buffer, length);
@@ -21615,6 +21737,8 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
     goto end;
 
   iinf = qtdemux_tree_get_child_by_type (meta, FOURCC_iinf);
+
+  iprp = qtdemux_tree_get_child_by_type (meta, FOURCC_iprp);
 
   while (iinf) {
     GNode *infe;
@@ -21634,6 +21758,8 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
         if (!strcmp (infe_uri_or_type, "application/nga-gimi-ism+xml")) {
           const guint8 *item_data = NULL;
           guint item_size = 0;
+          guint property_index = 0;
+
           /* GIMI Security Markings XML */
           if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
                   infe_item_id, &item_data, &item_size))
@@ -21651,8 +21777,68 @@ qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
             goto skip_infe;
           }
 
+          for (property_index = 0;; property_index++) {
+            GNode *ipco_entry;
+            gboolean essential = FALSE;
+            guint8 *prop_data;
+            guint32 prop_length, prop_fourcc, prop_offset;
+            guint8 *cid_data;
+            guint32 cid_length;
+
+            ipco_entry = qtdemux_parse_iprp_get_nth_property (qtdemux, iprp,
+                infe_item_id, property_index, &essential);
+            if (essential) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Security Markings XML property %u is essential,"
+                  " but we don't know how to handle it, skipping item",
+                  property_index);
+              goto skip_infe;
+            }
+            if (!ipco_entry)
+              break;
+
+            prop_data = (guint8 *) ipco_entry->data;
+            prop_length = QT_UINT32 (prop_data);
+            prop_fourcc = QT_FOURCC (prop_data + 4);
+
+            if (prop_length <= 4 + 4 + 16) {
+              GST_DEBUG_OBJECT (qtdemux, "uuid atom is too short, skipping");
+              continue;
+            }
+
+            if (prop_fourcc != FOURCC_uuid)
+              continue;
+
+            prop_offset = 4 + 4;
+
+            if (memcmp (prop_data + prop_offset, CONTENT_ID_UUID, 16) != 0)
+              continue;
+
+            prop_offset += 16;
+
+            cid_data = prop_data + prop_offset;
+            cid_length = prop_length - prop_offset;
+
+            if (cid_length < 2) {
+              GST_DEBUG_OBJECT (qtdemux, "GIMI Security Markings XML Content"
+                  " ID is empty, skipping");
+              continue;
+            }
+
+            if (cid_data[cid_length - 1] != 0) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Security Markings XML Content ID is not nul-terminated,"
+                  " skipping");
+              continue;
+            }
+
+            gst_tag_list_add (qtdemux->tag_list, GST_TAG_MERGE_APPEND,
+                GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID, cid_data, NULL);
+          }
           gst_tag_list_add (qtdemux->tag_list, GST_TAG_MERGE_APPEND,
               GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML, item_data, NULL);
+
+
         } else {
           GST_WARNING_OBJECT (qtdemux,
               "Mime define meta %s handling not implemented", infe_uri_or_type);

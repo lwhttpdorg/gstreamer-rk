@@ -505,6 +505,11 @@ G_BEGIN_DECLS
 /* GIMI Content ID */
 #define FOURCC_suid     GST_MAKE_FOURCC ('s','u','i','d')
 
+/* Items and properties */
+#define FOURCC_iprp     GST_MAKE_FOURCC ('i','p','r','p')
+#define FOURCC_ipco     GST_MAKE_FOURCC ('i','p','c','o')
+#define FOURCC_ipma     GST_MAKE_FOURCC ('i','p','m','a')
+
 G_END_DECLS
 
 #endif /* __FOURCC_H__ */
