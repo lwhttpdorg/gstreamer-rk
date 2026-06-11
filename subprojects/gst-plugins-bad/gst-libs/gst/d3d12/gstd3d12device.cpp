@@ -2061,6 +2061,17 @@ gst_d3d12_device_is_equal (GstD3D12Device * device1, GstD3D12Device * device2)
   return FALSE;
 }
 
+/**
+ * gst_d3d12_device_get_11on12_handle:
+ * @device: a #GstD3D12Device
+ *
+ * Gets @device owned ID3D11On12Device handle
+ *
+ * Returns: (transfer none) (nullable): ID3D11On12Device handle created with
+ * main DIRECT queue of @device. Or %NULL if d3d11on12 device is unavailable
+ *
+ * Since: 1.26
+ */
 IUnknown *
 gst_d3d12_device_get_11on12_handle (GstD3D12Device * device)
 {
@@ -2103,6 +2114,16 @@ gst_d3d12_device_get_11on12_handle (GstD3D12Device * device)
   return priv->device11on12.Get ();
 }
 
+/**
+ * gst_d3d12_device_11on12_lock:
+ * @device: a #GstD3D12Device
+ *
+ * Take lock for @device. Any thread-unsafe D3D11 API call needs to be
+ * protected by this method. This call must be paired with
+ * gst_d3d12_device_11on12_unlock()
+ *
+ * Since: 1.26
+ */
 void
 gst_d3d12_device_11on12_lock (GstD3D12Device * device)
 {
@@ -2112,6 +2133,15 @@ gst_d3d12_device_11on12_lock (GstD3D12Device * device)
   priv->device11on12_lock.lock ();
 }
 
+/**
+ * gst_d3d12_device_11on12_unlock:
+ * @device: a #GstD3D12Device
+ *
+ * Release d3d11on12 lock for @device. This call must be paired with
+ * gst_d3d12_device_11on12_lock()
+ *
+ * Since: 1.26
+ */
 void
 gst_d3d12_device_11on12_unlock (GstD3D12Device * device)
 {

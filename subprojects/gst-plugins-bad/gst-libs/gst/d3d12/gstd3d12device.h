@@ -124,5 +124,14 @@ GST_D3D12_API
 gboolean                gst_d3d12_device_is_equal                 (GstD3D12Device * device1,
                                                                    GstD3D12Device * device2);
 
+GST_D3D12_API
+IUnknown *              gst_d3d12_device_get_11on12_handle        (GstD3D12Device * device);
+
+GST_D3D12_API
+void                    gst_d3d12_device_11on12_lock              (GstD3D12Device * device);
+
+GST_D3D12_API
+void                    gst_d3d12_device_11on12_unlock            (GstD3D12Device * device);
+
 G_END_DECLS
 
