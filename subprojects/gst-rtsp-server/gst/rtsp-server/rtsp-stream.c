@@ -2777,7 +2777,6 @@ send_func (GstRTSPStream * stream)
 
   while (priv->continue_sending) {
     int i;
-    int idx = -1;
     guint cookie;
 
     cookie = priv->send_cookie;
@@ -2789,13 +2788,8 @@ send_func (GstRTSPStream * stream)
     for (i = 1; i >= 0; i--) {
       if (priv->have_buffer[i]) {
         /* send message */
-        idx = i;
-        break;
+        send_tcp_message (stream, i);
       }
-    }
-
-    if (idx != -1) {
-      send_tcp_message (stream, idx);
     }
 
     g_mutex_unlock (&priv->lock);
