@@ -77,6 +77,7 @@ option('vmnc', type : 'feature', value : 'auto')
 
 # Feature options for libraries that need external deps
 option('opencv', type : 'feature', value : 'auto', description : 'OpenCV computer vision library support')
+option('airtimeaws', type : 'feature', value : 'auto', description : 'AWS support from airtime')
 
 # Feature options for optional deps in plugins
 option('drm', type : 'feature', value : 'auto', description: 'libdrm support in the GstVA library')
