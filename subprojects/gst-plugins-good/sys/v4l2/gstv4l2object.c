@@ -5129,8 +5129,9 @@ gst_v4l2_object_setup_padding (GstV4l2Object * obj)
   GstVideoAlignment *align = &obj->align;
   struct v4l2_rect rect;
 
-  if (align->padding_left + align->padding_top
-      + align->padding_right + align->padding_bottom == 0) {
+  if ((align->padding_left + align->padding_top
+       + align->padding_right + align->padding_bottom == 0)
+      && !obj->layout_rect_updated) {
     GST_DEBUG_OBJECT (obj->dbg_obj, "no cropping/composing needed");
     return TRUE;
   }
@@ -5139,6 +5140,17 @@ gst_v4l2_object_setup_padding (GstV4l2Object * obj)
   rect.top = align->padding_top;
   rect.width = GST_V4L2_WIDTH (obj);
   rect.height = GST_V4L2_FIELD_HEIGHT (obj);
+
+  if (obj->layout_rect_updated) {
+    obj->layout_rect_updated = FALSE;
+    rect.left = obj->layout_rect.x;
+    rect.top = obj->layout_rect.y;
+    rect.width = obj->layout_rect.w;
+    rect.height = obj->layout_rect.h;
+  }
+
+  GST_DEBUG ("padding left/top/width/height %d %d %d %d",
+      rect.left, rect.top, rect.width, rect.height);
 
   if (V4L2_TYPE_IS_OUTPUT (obj->type)) {
     return gst_v4l2_object_set_crop (obj, &rect);
@@ -5576,7 +5588,7 @@ gst_v4l2_object_get_caps (GstV4l2Object * v4l2object, GstCaps * filter)
 static gboolean
 gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
     gsize offset[GST_VIDEO_MAX_PLANES], gint stride[GST_VIDEO_MAX_PLANES],
-    gsize buffer_size, guint padded_height)
+    gsize buffer_size, guint padded_width, guint padded_height)
 {
   gboolean need_fmt_update = FALSE;
   GstVideoInfo *info = &obj->info.vinfo;
@@ -5616,6 +5628,28 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
     }
   }
 
+  if (padded_width) {
+    guint fmt_width;
+
+    if (V4L2_TYPE_IS_MULTIPLANAR (obj->type))
+      fmt_width = obj->format.fmt.pix_mp.width;
+    else
+      fmt_width = obj->format.fmt.pix.width;
+
+    if (padded_width > fmt_width) {
+      GST_LOG_OBJECT (obj->dbg_obj,
+          "Remote width %" G_GUINT32_FORMAT " is higher than %"
+          G_GUINT32_FORMAT, padded_width, fmt_width);
+      need_fmt_update = TRUE;
+    } else if (padded_width < fmt_width) {
+      GST_DEBUG_OBJECT (obj->dbg_obj,
+          "Use original value as remote width %" G_GUINT32_FORMAT
+          " is smaller than %" G_GUINT32_FORMAT,
+          padded_width, fmt_width);
+      padded_width = fmt_width;
+    }
+  }
+
   if (padded_height) {
     guint fmt_height;
 
@@ -5629,6 +5663,12 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
           "Remote height %" G_GUINT32_FORMAT " is higher than %"
           G_GUINT32_FORMAT, padded_height, fmt_height);
       need_fmt_update = TRUE;
+    } else if (padded_height < fmt_height) {
+      GST_DEBUG_OBJECT (obj->dbg_obj,
+          "Use original value as remote height %" G_GUINT32_FORMAT
+          " is smaller than %" G_GUINT32_FORMAT,
+          padded_height, fmt_height);
+      padded_height = fmt_height;
     }
   }
 
@@ -5637,6 +5677,17 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
     gint wanted_stride[GST_VIDEO_MAX_PLANES] = { 0, };
 
     format = obj->format;
+
+    if (padded_width) {
+      GST_DEBUG_OBJECT (obj->dbg_obj, "Padded width %u", padded_width);
+
+      obj->align.padding_right =
+          padded_width - GST_VIDEO_INFO_WIDTH (info);
+    } else {
+      GST_WARNING_OBJECT (obj->dbg_obj,
+          "Failed to compute padded width; keep the default one");
+      padded_width = format.fmt.pix_mp.width;
+    }
 
     if (padded_height) {
       GST_DEBUG_OBJECT (obj->dbg_obj, "Padded height %u", padded_height);
@@ -5667,6 +5718,7 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
         GST_DEBUG_OBJECT (obj->dbg_obj, "    [%u] %i", i, wanted_stride[i]);
       }
 
+      format.fmt.pix_mp.width = padded_width;
       format.fmt.pix_mp.height = padded_height;
     } else {
       gint plane_stride = stride[0];
@@ -5678,6 +5730,7 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
             GST_VIDEO_FORMAT_INFO_TILE_STRIDE (info->finfo, 0);
 
       format.fmt.pix.bytesperline = plane_stride;
+      format.fmt.pix.width = padded_width;
       format.fmt.pix.height = padded_height;
       wanted_stride[0] = plane_stride;
     }
@@ -5728,6 +5781,12 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
         }
       }
 
+      if (format.fmt.pix_mp.width != padded_width) {
+        GST_DEBUG_OBJECT (obj->dbg_obj,
+            "Driver did not accept the padded width (wants %i, got %i)",
+            padded_width, format.fmt.pix_mp.width);
+      }
+
       if (format.fmt.pix_mp.height != padded_height) {
         GST_DEBUG_OBJECT (obj->dbg_obj,
             "Driver did not accept the padded height (wants %i, got %i)",
@@ -5741,15 +5800,26 @@ gst_v4l2_object_match_buffer_layout (GstV4l2Object * obj, guint n_planes,
         return FALSE;
       }
 
+      if (format.fmt.pix.width != padded_width) {
+        GST_DEBUG_OBJECT (obj->dbg_obj,
+            "Driver did not accept the padded width (wants %i, got %i)",
+            padded_width, format.fmt.pix.width);
+      }
+
       if (format.fmt.pix.height != padded_height) {
         GST_DEBUG_OBJECT (obj->dbg_obj,
             "Driver did not accept the padded height (wants %i, got %i)",
             padded_height, format.fmt.pix.height);
       }
     }
+  } else {
+    GST_DEBUG_OBJECT (obj->dbg_obj,
+        "There is no need update fmt");
   }
 
-  if (obj->align.padding_right || obj->align.padding_bottom) {
+  if (obj->align.padding_right || obj->align.padding_bottom ||
+      obj->align.padding_left || obj->align.padding_top ||
+      obj->layout_rect_updated) {
     /* Setup padding */
     GST_DEBUG_OBJECT (obj->dbg_obj,
         "setup padding (top: %u left: %u right: %u bottom: %u)",
@@ -5770,6 +5840,7 @@ gst_v4l2_object_match_buffer_layout_from_struct (GstV4l2Object * obj,
   GstVideoInfo info;
   GstVideoAlignment align;
   gsize plane_size[GST_VIDEO_MAX_PLANES];
+  guint padded_width = 0;
 
   gst_video_alignment_reset (&align);
 
@@ -5807,8 +5878,11 @@ gst_v4l2_object_match_buffer_layout_from_struct (GstV4l2Object * obj,
   GST_DEBUG_OBJECT (obj->dbg_obj,
       "try matching buffer layout requested by downstream");
 
+  padded_width = GST_VIDEO_INFO_WIDTH (&info) + align.padding_left +
+      align.padding_right;
+
   gst_v4l2_object_match_buffer_layout (obj, GST_VIDEO_INFO_N_PLANES (&info),
-      info.offset, info.stride, buffer_size,
+      info.offset, info.stride, buffer_size, padded_width,
       GST_VIDEO_INFO_PLANE_HEIGHT (&info, 0, plane_size));
 
   return TRUE;
@@ -6120,6 +6194,9 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
   gboolean need_pool;
   GstStructure *allocation_meta = NULL;
   GstAllocationParams allocation_params;
+  GstV4l2Error error = GST_V4L2_ERROR_INIT;
+
+  GST_DEBUG_OBJECT (obj->dbg_obj, "propose");
 
   /* Set defaults allocation parameters */
   size = GST_V4L2_SIZE (obj);
@@ -6131,40 +6208,38 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
   if (caps == NULL)
     goto no_caps;
 
-  switch (obj->mode) {
-    case GST_V4L2_IO_MMAP:
-    case GST_V4L2_IO_DMABUF:
-      if (need_pool) {
-        GstBufferPool *obj_pool = gst_v4l2_object_get_buffer_pool (obj);
-        if (obj_pool) {
-          if (!gst_buffer_pool_is_active (obj_pool))
-            pool = gst_object_ref (obj_pool);
+  if (obj->mode != GST_V4L2_IO_RW) {
+    pool = gst_v4l2_object_get_buffer_pool (obj);
+    if (pool) {
+      if (gst_buffer_pool_is_active (pool)) {
+        gst_object_unref (pool);
+        pool = NULL;
 
-          gst_object_unref (obj_pool);
+        GST_DEBUG_OBJECT (obj->dbg_obj,
+            "do nothing when pool is active");
+      } else if (!gst_v4l2_object_caps_equal (obj, caps)) {
+        gst_object_unref (pool);
+        pool = NULL;
+
+        GST_DEBUG_OBJECT (obj->dbg_obj,
+            "got different caps %" GST_PTR_FORMAT, caps);
+
+        if (!gst_v4l2_object_stop (obj)) {
+          goto stop_failed;
         }
-      }
-      break;
-    default:
-      break;
-  }
 
-  if (pool != NULL) {
-    GstCaps *pcaps;
-    GstStructure *config;
+        if (!gst_v4l2_object_set_format (obj, caps, &error)) {
+          goto invalid_format;
+        }
 
-    /* we had a pool, check caps */
-    config = gst_buffer_pool_get_config (pool);
-    gst_buffer_pool_config_get_params (config, &pcaps, NULL, NULL, NULL);
-
+        pool = gst_v4l2_object_get_buffer_pool (obj);
+      } else {
     GST_DEBUG_OBJECT (obj->dbg_obj,
-        "we had a pool with caps %" GST_PTR_FORMAT, pcaps);
-    if (!gst_caps_is_equal (caps, pcaps)) {
-      gst_structure_free (config);
-      gst_object_unref (pool);
-      goto different_caps;
+            "we had a pool with caps %" GST_PTR_FORMAT, caps);
+      }
     }
-    gst_structure_free (config);
   }
+
   gst_v4l2_get_driver_min_buffers (obj);
 
   min = MAX (obj->min_buffers, GST_V4L2_MIN_BUFFERS (obj));
@@ -6173,7 +6248,8 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
    * between aligned size and actual size as extra padding to the upstream
    * element */
   if (V4L2_TYPE_IS_MULTIPLANAR (obj->type)) {
-    /* FIXME */
+    for (guint i = 0; i < obj->format.fmt.pix_mp.num_planes; i++)
+      aligned_size += obj->format.fmt.pix_mp.plane_fmt[i].sizeimage;
   } else {
     aligned_size = obj->format.fmt.pix.sizeimage;
   }
@@ -6186,8 +6262,11 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
     /* Update size to aligned size required by driver */
     size = aligned_size;
   }
-
-  gst_query_add_allocation_pool (query, pool, size, min, max);
+  if ((obj->mode == GST_V4L2_IO_MMAP) || (obj->mode == GST_V4L2_IO_DMABUF)) {
+    gst_query_add_allocation_pool (query, need_pool ? pool : NULL, size, min, max);
+  } else {
+    gst_query_add_allocation_pool (query, NULL, size, min, max);
+  }
 
   if (obj->align.padding_top || obj->align.padding_bottom ||
       obj->align.padding_left || obj->align.padding_right) {
@@ -6198,6 +6277,8 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
   /* we also support various metadata */
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE,
       allocation_meta);
+  gst_query_add_allocation_meta (query,
+      GST_VIDEO_CROP_META_API_TYPE, NULL);
 
   if (allocation_meta)
     gst_structure_free (allocation_meta);
@@ -6205,6 +6286,7 @@ gst_v4l2_object_propose_allocation (GstV4l2Object * obj, GstQuery * query)
   if (pool)
     gst_object_unref (pool);
 
+  GST_DEBUG ("proposed");
   return TRUE;
 
   /* ERRORS */
@@ -6213,11 +6295,51 @@ no_caps:
     GST_DEBUG_OBJECT (obj->dbg_obj, "no caps specified");
     return FALSE;
   }
-different_caps:
+stop_failed:
   {
-    /* different caps, we can't use this pool */
-    GST_DEBUG_OBJECT (obj->dbg_obj, "pool has different caps");
+    GST_DEBUG_OBJECT (obj->dbg_obj, "stop failed");
     return FALSE;
+  }
+invalid_format:
+  {
+    /* error already posted */
+    gst_v4l2_error (obj->dbg_obj, &error);
+    GST_DEBUG_OBJECT (obj->dbg_obj, "can't set format");
+    return FALSE;
+  }
+}
+
+static gboolean
+gst_v4l2_object_layout_rect_changed (GstV4l2Object * obj,
+    const GstVideoRectangle * rect)
+{
+  if (obj->layout_rect.x == rect->x
+      && obj->layout_rect.y == rect->y
+      && obj->layout_rect.w == rect->w && obj->layout_rect.h == rect->h)
+    return FALSE;
+
+  return TRUE;
+}
+
+static void
+gst_v4l2_object_setup_layout_rect_from_crop_meta (GstV4l2Object * obj,
+    const GstVideoCropMeta * cmeta)
+{
+  if (cmeta) {
+    GstVideoRectangle rect = obj->layout_rect;
+
+    rect.x = cmeta->x;
+    rect.y = cmeta->y;
+    rect.w = cmeta->width;
+    rect.h = cmeta->height;
+
+    if (gst_v4l2_object_layout_rect_changed (obj, &rect)) {
+      obj->layout_rect = rect;
+      obj->layout_rect_updated = TRUE;
+      GST_DEBUG_OBJECT (obj->dbg_obj,
+          "layout rect has changed, rect: x/y/w/h %d/%d/%d/%d",
+          rect.x, rect.y, rect.w, rect.h);
+    }
   }
 }
 
@@ -6247,13 +6369,19 @@ gst_v4l2_object_try_import (GstV4l2Object * obj, GstBuffer * buffer)
 
   /* we need matching strides/offsets and size */
   if (vmeta) {
+    guint plane_width = 0;
     guint plane_height[GST_VIDEO_MAX_PLANES] = { 0, };
 
+    plane_width = vmeta->alignment.padding_left
+        + vmeta->alignment.padding_right + vmeta->width;
     gst_video_meta_get_plane_height (vmeta, plane_height);
+
+    gst_v4l2_object_setup_layout_rect_from_crop_meta (obj,
+        gst_buffer_get_video_crop_meta (buffer));
 
     if (!gst_v4l2_object_match_buffer_layout (obj, vmeta->n_planes,
             vmeta->offset, vmeta->stride, gst_buffer_get_size (buffer),
-            plane_height[0]))
+            plane_width, plane_height[0]))
       return FALSE;
   }
 

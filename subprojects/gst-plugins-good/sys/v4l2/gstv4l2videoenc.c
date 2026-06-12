@@ -868,6 +868,23 @@ gst_v4l2_video_enc_handle_frame (GstVideoEncoder * encoder,
       guint min = MAX (self->v4l2output->min_buffers,
           GST_V4L2_MIN_BUFFERS (self->v4l2output));
 
+      if (self->v4l2output->mode == GST_V4L2_IO_USERPTR ||
+          self->v4l2output->mode == GST_V4L2_IO_DMABUF_IMPORT) {
+        if (!gst_v4l2_object_try_import (self->v4l2output, frame->input_buffer)) {
+          GST_ERROR_OBJECT (self, "cannot import buffers from upstream");
+          gst_object_unref (opool);
+          ret = GST_FLOW_ERROR;
+          goto drop;
+        }
+
+        if (self->v4l2output->need_video_meta) {
+          /* We may need video meta if imported buffer is using non-standard
+          * stride/padding */
+          gst_buffer_pool_config_add_option (config,
+              GST_BUFFER_POOL_OPTION_VIDEO_META);
+        }
+      }
+
       gst_buffer_pool_config_set_params (config, self->input_state->caps,
           self->v4l2output->info.vinfo.size, min, min);
 
