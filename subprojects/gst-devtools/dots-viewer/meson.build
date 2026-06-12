@@ -1,8 +1,8 @@
-if not add_languages('rust', required: get_option('dots_viewer'), native: false)
+if not add_languages('rust', required: get_option('dots_viewer'), native: not meson.is_cross_build())
   subdir_done()
 endif
 
-rustc = meson.get_compiler('rust')
+rustc = meson.get_compiler('rust', native: not meson.is_cross_build())
 
 cargo = find_program('cargo', version:'>=1.40', required: get_option('dots_viewer'))
 if not cargo.found()
