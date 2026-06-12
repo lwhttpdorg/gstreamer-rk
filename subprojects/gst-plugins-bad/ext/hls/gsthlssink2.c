@@ -39,6 +39,34 @@
  * gst-launch-1.0 videotestsrc is-live=true ! x264enc ! h264parse ! hlssink2 max-files=5
  * ]|
  *
+ * ## Bus messages
+ *
+ * hlssink2 posts the following element messages on the bus, so that
+ * applications know when a new segment has been written or the playlist
+ * has been updated without having to monitor the output directory, e.g.
+ * via inotify:
+ *
+ * * `hls-segment-added`: posted whenever a segment file has been
+ *   completely written and added to the playlist (Since: 1.30).
+ *   The message contains the following fields:
+ *
+ *   * `location` (string): the location of the segment file
+ *   * `running-time` (#GstClockTime): the running time of the first
+ *     buffer in the segment
+ *   * `duration` (#GstClockTime): the duration of the segment
+ *
+ * * `hls-segment-removed`: posted whenever an old segment file has been
+ *   removed from the playlist during rotation, i.e. when
+ *   #GstHlsSink2:max-files is exceeded (Since: 1.30). The message contains
+ *   the following fields:
+ *
+ *   * `location` (string): the location of the removed segment file
+ *
+ * * `hls-playlist-written`: posted whenever the playlist file has been
+ *   successfully written to its location (Since: 1.30).
+ *   The message contains the following fields:
+ *
+ *   * `location` (string): the location of the playlist file
  */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -414,6 +442,7 @@ gst_hls_sink2_write_playlist (GstHlsSink2 * sink)
   GError *error = NULL;
   GOutputStream *stream = NULL;
   gsize bytes_to_write;
+  gboolean success = TRUE;
 
   g_signal_emit (sink, signals[SIGNAL_GET_PLAYLIST_STREAM], 0,
       sink->playlist_location, &stream);
@@ -433,10 +462,42 @@ gst_hls_sink2_write_playlist (GstHlsSink2 * sink)
         (("Failed to write playlist '%s'."), error->message), (NULL));
     g_error_free (error);
     error = NULL;
+    success = FALSE;
   }
 
   g_free (playlist_content);
+  /* Closing the stream writes the data to its target, in case of the
+   * default implementation it also atomically replaces the old playlist */
   g_object_unref (stream);
+
+  if (success) {
+    gst_element_post_message (GST_ELEMENT_CAST (sink),
+        gst_message_new_element (GST_OBJECT_CAST (sink),
+            gst_structure_new ("hls-playlist-written",
+                "location", G_TYPE_STRING, sink->playlist_location, NULL)));
+  }
+}
+
+static void
+gst_hls_sink2_post_segment_added_message (GstHlsSink2 * sink,
+    const gchar * location, GstClockTime running_time, GstClockTime duration)
+{
+  gst_element_post_message (GST_ELEMENT_CAST (sink),
+      gst_message_new_element (GST_OBJECT_CAST (sink),
+          gst_structure_new ("hls-segment-added",
+              "location", G_TYPE_STRING, location,
+              "running-time", GST_TYPE_CLOCK_TIME, running_time,
+              "duration", GST_TYPE_CLOCK_TIME, duration, NULL)));
+}
+
+static void
+gst_hls_sink2_post_segment_removed_message (GstHlsSink2 * sink,
+    const gchar * location)
+{
+  gst_element_post_message (GST_ELEMENT_CAST (sink),
+      gst_message_new_element (GST_OBJECT_CAST (sink),
+          gst_structure_new ("hls-segment-removed",
+              "location", G_TYPE_STRING, location, NULL)));
 }
 
 static void
@@ -492,6 +553,10 @@ gst_hls_sink2_handle_message (GstBin * bin, GstMessage * message)
                 NULL, running_time - start_time, sink->index++, FALSE);
           g_free (entry_location);
 
+          gst_hls_sink2_post_segment_added_message (sink,
+              sink->current_location, sink->current_running_time_start,
+              running_time - start_time);
+
           gst_hls_sink2_write_playlist (sink);
           sink->state |= GST_M3U8_PLAYLIST_RENDER_STARTED;
 
@@ -520,6 +585,7 @@ gst_hls_sink2_handle_message (GstBin * bin, GstMessage * message)
 
                 g_object_unref (file);
               }
+              gst_hls_sink2_post_segment_removed_message (sink, old_location);
               g_free (old_location);
             }
           }

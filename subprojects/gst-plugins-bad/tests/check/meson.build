@@ -53,6 +53,7 @@ base_tests = [
   [['elements/h265parse.c'], false, [libparser_dep, gstcodecparsers_dep]],
   [['elements/h266parse.c'], false, [libparser_dep, gstcodecparsers_dep]],
   [['elements/hlsdemux_m3u8.c'], not hls_dep.found(), [hls_dep]],
+  [['elements/hlssink2.c'], not hls_dep.found()],
   [['elements/id3mux.c'], get_option('id3tag').disabled()],
   [['elements/interlace.c'], get_option('interlace').disabled()],
   [['elements/ioutracker.c'], get_option('tensordecoders').disabled(), gstanalytics_dep],
