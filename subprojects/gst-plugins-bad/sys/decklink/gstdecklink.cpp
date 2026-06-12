@@ -841,6 +841,18 @@ gst_decklink_video_format_from_type (BMDPixelFormat pf)
   return GST_VIDEO_FORMAT_UNKNOWN;
 }
 
+gboolean
+gst_decklink_pixel_format_is_yuv (BMDPixelFormat f)
+{
+  return (f == bmdFormat8BitYUV || f == bmdFormat10BitYUV);
+}
+
+gboolean
+gst_decklink_pixel_formats_same_colorspace (BMDPixelFormat a, BMDPixelFormat b)
+{
+  return gst_decklink_pixel_format_is_yuv (a) == gst_decklink_pixel_format_is_yuv (b);
+}
+
 GstVideoColorRange
 gst_decklink_pixel_format_to_range (BMDPixelFormat pf)
 {
@@ -1289,9 +1301,46 @@ public:
     }
 
     g_mutex_lock (&m_input->lock);
+    /* If downstream expressed a same-colorspace format preference via
+     * caps negotiation, use it instead of the detected format.
+     * Cross-colorspace overrides are NOT applied here because the SDK
+     * fires VideoInputFormatChanged in a loop when the configured pixel
+     * format does not match the detected signal colorspace. */
+    BMDPixelFormat chosen_format = pixelFormat;
+    if (m_input->auto_format &&
+        m_input->preferred_format != bmdFormatUnspecified) {
+      if (gst_decklink_pixel_formats_same_colorspace (
+              m_input->preferred_format, pixelFormat)) {
+        chosen_format = m_input->preferred_format;
+      } else {
+        GST_WARNING ("Ignoring cross-colorspace preferred format 0x%x "
+            "(detected 0x%x)", m_input->preferred_format, pixelFormat);
+      }
+    }
+
+    BMDDisplayMode new_mode_id = mode->GetDisplayMode ();
+
     m_input->input->PauseStreams ();
-    m_input->input->EnableVideoInput (mode->GetDisplayMode (),
-        pixelFormat, bmdVideoInputEnableFormatDetection);
+    HRESULT hr = m_input->input->EnableVideoInput (new_mode_id,
+        chosen_format, bmdVideoInputEnableFormatDetection);
+
+    /* If the preferred format was rejected by the card, fall back
+     * to the detected native format */
+    if (hr != S_OK && chosen_format != pixelFormat) {
+      GST_WARNING ("Card rejected preferred format 0x%x, "
+          "falling back to detected format 0x%x",
+          chosen_format, pixelFormat);
+      chosen_format = pixelFormat;
+      hr = m_input->input->EnableVideoInput (new_mode_id,
+          chosen_format, bmdVideoInputEnableFormatDetection);
+    }
+
+    if (hr != S_OK) {
+      GST_ERROR ("Failed to enable video input");
+      g_mutex_unlock (&m_input->lock);
+      return E_FAIL;
+    }
+
     m_input->input->FlushStreams ();
 
     /* Reset any timestamp observations we might've made */
@@ -1318,8 +1367,8 @@ public:
     m_input->input->StartStreams ();
     m_input->mode =
         gst_decklink_get_mode (gst_decklink_get_mode_enum_from_bmd
-        (mode->GetDisplayMode ()));
-    m_input->format = pixelFormat;
+        (new_mode_id));
+    m_input->format = chosen_format;
     g_mutex_unlock (&m_input->lock);
 
     return S_OK;
