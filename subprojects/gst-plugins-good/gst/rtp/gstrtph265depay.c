@@ -1269,9 +1269,10 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
       gst_buffer_unmap (nal, &map);
       gst_buffer_unref (nal);
       return;
-    } else if (rtph265depay->sps->len == 0 || rtph265depay->pps->len == 0) {
-      /* Down push down any buffer in non-bytestream mode if the SPS/PPS haven't
-       * go through yet
+    } else if (rtph265depay->vps->len == 0 || rtph265depay->sps->len == 0
+        || rtph265depay->pps->len == 0) {
+      /* Don't push any buffer in non-bytestream mode if the VPS/SPS/PPS
+       * haven't gone through yet
        */
       gst_pad_push_event (GST_RTP_BASE_DEPAYLOAD_SINKPAD (depayload),
           gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
@@ -1283,7 +1284,8 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
     }
 
     if (rtph265depay->new_codec_data &&
-        rtph265depay->sps->len > 0 && rtph265depay->pps->len > 0)
+        rtph265depay->vps->len > 0 && rtph265depay->sps->len > 0
+        && rtph265depay->pps->len > 0)
       gst_rtp_h265_set_src_caps (rtph265depay);
   }
 
