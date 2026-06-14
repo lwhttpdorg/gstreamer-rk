@@ -1136,6 +1136,32 @@ GST_START_TEST (audiodecoder_plc_on_gap_event_with_delay)
 
 GST_END_TEST;
 
+GST_START_TEST (audiodecoder_unsupported_segment_format)
+{
+  GstHarness *h = setup_audiodecodertester (NULL, NULL);
+  gst_audio_decoder_set_estimate_rate ((GstAudioDecoder *) h->element, FALSE);
+
+  GstSegment segment;
+  gst_segment_init (&segment, GST_FORMAT_BYTES);
+  fail_unless (gst_harness_push_event (h, gst_event_new_segment (&segment)));
+
+  // This used to fail when `gst_audio_decoder_sink_eventfunc()` returned
+  // `FALSE` (indicating it wasn't able to handle an event) for segment events
+  // it meant to "ignore".
+  fail_unless (gst_harness_push (h, create_test_buffer (0)) == GST_FLOW_OK);
+
+  GstBuffer *buffer = gst_harness_pull (h);
+  fail_unless (buffer != NULL);
+  gst_buffer_unref (buffer);
+
+  fail_unless (gst_harness_push_event (h, gst_event_new_eos ()));
+  fail_unless (GST_PAD_IS_EOS (h->sinkpad));
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_audiodecoder_suite (void)
 {
@@ -1165,6 +1191,8 @@ gst_audiodecoder_suite (void)
 
   tcase_add_test (tc, audiodecoder_plc_on_gap_event);
   tcase_add_test (tc, audiodecoder_plc_on_gap_event_with_delay);
+
+  tcase_add_test (tc, audiodecoder_unsupported_segment_format);
 
   return s;
 }

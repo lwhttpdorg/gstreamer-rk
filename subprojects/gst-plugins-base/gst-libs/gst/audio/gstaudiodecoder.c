@@ -2430,7 +2430,7 @@ gst_audio_decoder_sink_eventfunc (GstAudioDecoder * dec, GstEvent * event)
           GST_DEBUG_OBJECT (dec, "unsupported format; ignoring");
           GST_AUDIO_DECODER_STREAM_UNLOCK (dec);
           gst_event_unref (event);
-          ret = FALSE;
+          ret = TRUE;
           break;
         }
       }
