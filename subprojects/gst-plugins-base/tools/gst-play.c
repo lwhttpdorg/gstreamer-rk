@@ -131,6 +131,8 @@ static gboolean quiet = FALSE;
 static gboolean instant_rate_changes = FALSE;
 static gboolean install_missing = TRUE;
 
+static GstBusSyncReply play_bus_sync_msg (GstBus * bus, GstMessage * msg,
+    gpointer user_data);
 static gboolean play_bus_msg (GstBus * bus, GstMessage * msg, gpointer data);
 static gboolean play_next (GstPlay * play);
 static gboolean play_prev (GstPlay * play);
@@ -138,6 +140,8 @@ static gboolean play_timeout (gpointer user_data);
 static void play_about_to_finish (GstElement * playbin, gpointer user_data);
 static void play_reset (GstPlay * play);
 static void play_set_relative_volume (GstPlay * play, gdouble volume_step);
+static gboolean play_do_seek_full (GstPlay * play, GstElement * target,
+    gint64 pos, gdouble rate, GstPlayTrickMode mode);
 static gboolean play_do_seek (GstPlay * play, gint64 pos, gdouble rate,
     GstPlayTrickMode mode);
 
@@ -249,6 +253,10 @@ play_new (gchar ** uris, const gchar * audio_sink, const gchar * video_sink,
 
   play->loop = g_main_loop_new (NULL, FALSE);
 
+  if (start_position > 0.0) {
+    gst_bus_set_sync_handler (GST_ELEMENT_BUS (play->playbin),
+        play_bus_sync_msg, play, NULL);
+  }
   play->bus_watch = gst_bus_add_watch (GST_ELEMENT_BUS (play->playbin),
       play_bus_msg, play);
 
@@ -444,6 +452,31 @@ play_install_missing_plugins (GstPlay * play)
   }
 
   return installed_something;
+}
+
+static GstBusSyncReply
+play_bus_sync_msg (GstBus * bus, GstMessage * msg, gpointer user_data)
+{
+  GstPlay *play = user_data;
+
+  switch (GST_MESSAGE_TYPE (msg)) {
+    case GST_MESSAGE_STREAM_COLLECTION:
+    {
+      if (play->start_position > 0.0) {
+        gst_print (_("Early Seek to %f on %s\n"), play->start_position,
+            GST_OBJECT_NAME (GST_MESSAGE_SRC (msg)));
+        if (play_do_seek_full (play, (GstElement *) GST_MESSAGE_SRC (msg),
+                play->start_position * GST_SECOND, play->rate,
+                play->trick_mode))
+          play->start_position = 0.0;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return GST_BUS_PASS;
 }
 
 static gboolean
@@ -1079,7 +1112,8 @@ play_set_rate_and_trick_mode (GstPlay * play, gdouble rate,
 }
 
 static gboolean
-play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
+play_do_seek_full (GstPlay * play, GstElement * target, gint64 pos,
+    gdouble rate, GstPlayTrickMode mode)
 {
   GstSeekFlags seek_flags;
   GstQuery *query;
@@ -1087,7 +1121,7 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
   gboolean seekable = FALSE;
 
   query = gst_query_new_seeking (GST_FORMAT_TIME);
-  if (!gst_element_query (play->playbin, query)) {
+  if (!gst_element_query (target, query)) {
     gst_query_unref (query);
     return FALSE;
   }
@@ -1125,7 +1159,7 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
         seek_flags | GST_SEEK_FLAG_INSTANT_RATE_CHANGE,
         GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE,
         GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE);
-    if (gst_element_send_event (play->playbin, seek)) {
+    if (gst_element_send_event (target, seek)) {
       goto done;
     }
   }
@@ -1146,13 +1180,19 @@ play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
         /* start */ GST_SEEK_TYPE_SET, 0,
         /* stop */ GST_SEEK_TYPE_SET, pos);
 
-  if (!gst_element_send_event (play->playbin, seek))
+  if (!gst_element_send_event (target, seek))
     return FALSE;
 
 done:
   play->rate = rate;
   play->trick_mode = mode & ~GST_PLAY_TRICK_MODE_INSTANT_RATE;
   return TRUE;
+}
+
+static gboolean
+play_do_seek (GstPlay * play, gint64 pos, gdouble rate, GstPlayTrickMode mode)
+{
+  return play_do_seek_full (play, play->playbin, pos, rate, mode);
 }
 
 static void
