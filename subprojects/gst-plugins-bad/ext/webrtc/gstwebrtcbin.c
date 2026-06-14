@@ -4395,6 +4395,37 @@ _media_add_fec (GstSDPMedia * media, WebRTCTransceiver * trans, GstCaps * caps,
 }
 
 static void
+_media_add_telephone_event (GstSDPMedia * media, GstCaps * caps)
+{
+  guint i;
+
+  for (i = 0; i < gst_caps_get_size (caps); i++) {
+    const GstStructure *s = gst_caps_get_structure (caps, i);
+
+    if (gst_structure_has_name (s, "application/x-rtp")) {
+      const gchar *encoding_name =
+          gst_structure_get_string (s, "encoding-name");
+      gint clock_rate;
+      gint pt;
+
+      if (gst_structure_get_int (s, "clock-rate", &clock_rate) &&
+          gst_structure_get_int (s, "payload", &pt)) {
+        if (!g_strcmp0 (encoding_name, "TELEPHONE-EVENT")) {
+          gchar *str;
+
+          str = g_strdup_printf ("%u", pt);
+          gst_sdp_media_add_format (media, str);
+          g_free (str);
+          str = g_strdup_printf ("%u telephone-event/%d", pt, clock_rate);
+          gst_sdp_media_add_attribute (media, "rtpmap", str);
+          g_free (str);
+        }
+      }
+    }
+  }
+}
+
+static void
 _media_add_rtx (GstSDPMedia * media, WebRTCTransceiver * trans,
     GstCaps * offer_caps, gint target_pt, guint target_ssrc)
 {
@@ -4734,6 +4765,7 @@ _create_answer_task (GstWebRTCBin * webrtc, const GstStructure * options,
         if (!trans->do_nack)
           gst_structure_remove_fields (s, "rtcp-fb-nack", NULL);
       }
+      _media_add_telephone_event(media, answer_caps);
 
       static const gchar *disallowed_payloads[4] = { "rtx", "red", "ulpfec",
         NULL
