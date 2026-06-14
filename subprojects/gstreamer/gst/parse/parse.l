@@ -180,6 +180,8 @@ _link ([!:][[:space:]]*{_caps}([[:space:]]*(";"[[:space:]]*{_caps})*[[:space:]]*
 
 [[:space:]]+ { PRINT ("SPACE: [%s]", yytext); }
 
+"#"[^\n]* { PRINT ("COMMENT: [%s]", yytext); }
+
 . {
     PRINT ("Invalid Lexer element: %s\n", yytext);
     return *yytext;

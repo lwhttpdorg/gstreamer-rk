@@ -736,6 +736,49 @@ GST_START_TEST (test_parsing)
 
 GST_END_TEST;
 
+GST_START_TEST (test_comments)
+{
+  GstElement *pipeline;
+  GError *err = NULL;
+
+  /* A comment with no pipeline is an empty pipeline - should fail */
+  pipeline = gst_parse_launch_full ("# this is a comment", NULL, 0, &err);
+  fail_unless (err != NULL, "expected error for comment-only pipeline");
+  fail_unless_equals_int (err->code, GST_PARSE_ERROR_EMPTY);
+  g_clear_error (&err);
+  if (pipeline)
+    gst_object_unref (pipeline);
+
+  /* Comment after a valid pipeline on the same line */
+  pipeline =
+      gst_parse_launch ("fakesrc ! fakesink silent=true\n# trailing comment",
+      &err);
+  fail_unless (err == NULL, "unexpected error: %s",
+      err ? err->message : "(none)");
+  fail_unless (pipeline != NULL);
+  gst_object_unref (pipeline);
+
+  /* Leading whitespace before the # should also be ignored */
+  pipeline =
+      gst_parse_launch ("fakesrc ! fakesink silent=true\n   # indented comment",
+      &err);
+  fail_unless (err == NULL, "unexpected error: %s",
+      err ? err->message : "(none)");
+  fail_unless (pipeline != NULL);
+  gst_object_unref (pipeline);
+
+  /* Comment in the middle of a multi-line description */
+  pipeline =
+      gst_parse_launch
+      ("fakesrc\n# comment between elements\n! fakesink silent=true", &err);
+  fail_unless (err == NULL, "unexpected error: %s",
+      err ? err->message : "(none)");
+  fail_unless (pipeline != NULL);
+  gst_object_unref (pipeline);
+}
+
+GST_END_TEST;
+
 static Suite *
 parse_suite (void)
 {
@@ -755,6 +798,7 @@ parse_suite (void)
   tcase_add_test (tc_chain, test_missing_elements);
   tcase_add_test (tc_chain, test_parsing);
   tcase_add_test (tc_chain, test_preset);
+  tcase_add_test (tc_chain, test_comments);
   return s;
 }
 
