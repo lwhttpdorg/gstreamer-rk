@@ -193,6 +193,31 @@ GST_START_TEST (test_reply_immutable)
 
 GST_END_TEST;
 
+GST_START_TEST (test_reply_take)
+{
+  GstPromise *r;
+  GstStructure *s, *ret;
+
+  r = gst_promise_new ();
+
+  s = gst_structure_new ("promise", "test", G_TYPE_INT, 1, NULL);
+  gst_promise_reply (r, s);
+  ret = gst_promise_take_reply (r);
+  fail_unless (ret != NULL);
+
+  gst_structure_set (ret, "foo", G_TYPE_STRING, "bar", NULL);
+  fail_if (gst_structure_get_string (ret, "foo") == NULL);
+
+  gst_structure_free (ret);
+
+  ret = gst_promise_take_reply (r);
+  fail_unless (ret == NULL);
+
+  gst_promise_unref (r);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_interrupt)
 {
   GstPromise *r;
@@ -619,6 +644,7 @@ gst_promise_suite (void)
   tcase_add_test (tc_chain, test_reply);
   tcase_add_test (tc_chain, test_reply_data);
   tcase_add_test (tc_chain, test_reply_immutable);
+  tcase_add_test (tc_chain, test_reply_take);
   tcase_add_test (tc_chain, test_interrupt);
   tcase_add_test (tc_chain, test_expire);
   tcase_add_test (tc_chain, test_change_func);

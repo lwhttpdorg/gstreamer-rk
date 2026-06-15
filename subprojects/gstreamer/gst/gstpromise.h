@@ -94,6 +94,9 @@ void                    gst_promise_expire                  (GstPromise * promis
 GST_API
 const GstStructure *    gst_promise_get_reply               (GstPromise * promise);
 
+GST_API
+GstStructure *          gst_promise_take_reply              (GstPromise * promise);
+
 #ifndef GST_DISABLE_MINIOBJECT_INLINE_FUNCTIONS
 static inline GstPromise *
 gst_promise_ref (GstPromise * promise)

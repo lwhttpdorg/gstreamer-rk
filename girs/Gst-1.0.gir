@@ -39416,6 +39416,21 @@ is not visible to the consumer.</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="take_reply" c:identifier="gst_promise_take_reply" version="1.26">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpromise.c">Retrieve the reply set on @promise.  @promise must be in
+%GST_PROMISE_RESULT_REPLIED and the returned structure is owned by the caller.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstpromise.h"/>
+        <return-value transfer-ownership="full" nullable="1">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpromise.c">The reply set on @promise</doc>
+          <type name="Structure" c:type="GstStructure*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="promise" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpromise.c">a #GstPromise</doc>
+            <type name="Promise" c:type="GstPromise*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
       <method name="unref" c:identifier="gst_promise_unref" version="1.14">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstpromise.c">Decreases the refcount of the promise. If the refcount reaches 0, the
 promise will be freed.</doc>
