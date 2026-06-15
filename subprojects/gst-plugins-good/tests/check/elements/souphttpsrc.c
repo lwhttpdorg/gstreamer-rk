@@ -478,10 +478,90 @@ GST_START_TEST (test_icy_stream)
 
 GST_END_TEST;
 
+/* Number of EOS-triggered loops to exercise in test_loop_no_freeze */
+#define N_LOOP_ITERATIONS 50
+/* Per-iteration timeout (milliseconds): if EOS takes longer the source is
+ * considered as frozen */
+#define LOOP_ITERATION_TIMEOUT_MS 500
+
+GST_START_TEST (test_loop_no_freeze)
+{
+  GstElement *pipeline, *src, *sink;
+  SoupServer *server;
+  guint port;
+  gchar *url;
+
+  server = run_server (FALSE);
+  if (server == NULL) {
+    g_print ("Failed to start up HTTP server, skipping test");
+    return;
+  }
+  port = get_port_from_server (server);
+
+  pipeline = gst_pipeline_new (NULL);
+
+  src = gst_element_factory_make ("souphttpsrc", NULL);
+  fail_unless (src != NULL);
+
+  sink = gst_element_factory_make ("fakesink", NULL);
+  fail_unless (sink != NULL);
+
+  gst_bin_add_many (GST_BIN (pipeline), src, sink, NULL);
+  fail_unless (gst_element_link (src, sink));
+
+  url = g_strdup_printf ("http://127.0.0.1:%u/", port);
+  g_object_set (src, "location", url, NULL);
+  g_free (url);
+
+  gst_element_set_state (pipeline, GST_STATE_PLAYING);
+
+  for (gint i = 0; i < N_LOOP_ITERATIONS; ++i) {
+    GstMessage *msg;
+
+    /* Wait for EOS with a timeout; a freeze will make this expire */
+    msg = gst_bus_poll (GST_ELEMENT_BUS (pipeline),
+        GST_MESSAGE_EOS | GST_MESSAGE_ERROR,
+        LOOP_ITERATION_TIMEOUT_MS * GST_MSECOND);
+
+    fail_unless (msg != NULL,
+        "Timed out waiting for EOS on loop iteration %d/%d "
+        "— souphttpsrc is frozen", i + 1, N_LOOP_ITERATIONS);
+
+    if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR) {
+      GError *err = NULL;
+      gchar *dbg = NULL;
+
+      gst_message_parse_error (msg, &err, &dbg);
+      gst_message_unref (msg);
+      fail ("Unexpected error on loop iteration %d/%d: %s (%s)",
+          i + 1, N_LOOP_ITERATIONS, err->message, dbg);
+      g_error_free (err);
+      g_free (dbg);
+      break;
+    }
+
+    gst_message_unref (msg);
+    GST_DEBUG ("loop %d/%d: seeking back to start", i + 1, N_LOOP_ITERATIONS);
+
+    /* Seek back to 0, flushing — mirrors the EOS-triggered loop pattern
+     * that exercises the rapid cancel/reset/retry race in souphttpsrc */
+    fail_unless (gst_element_seek_simple (pipeline, GST_FORMAT_BYTES,
+            GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE, 0),
+        "Seek to byte 0 failed on loop iteration %d/%d",
+        i + 1, N_LOOP_ITERATIONS);
+  }
+
+  gst_element_set_state (pipeline, GST_STATE_NULL);
+  gst_object_unref (pipeline);
+  gst_object_unref (server);
+}
+
+GST_END_TEST;
+
 static Suite *
 souphttpsrc_suite (void)
 {
-  TCase *tc_chain, *tc_internet;
+  TCase *tc_chain, *tc_loop, *tc_internet;
   Suite *s;
 
   /* we don't support exceptions from the proxy, so just unset the environment
@@ -491,6 +571,7 @@ souphttpsrc_suite (void)
 
   s = suite_create ("souphttpsrc");
   tc_chain = tcase_create ("general");
+  tc_loop = tcase_create ("loop");
   tc_internet = tcase_create ("internet");
 
   suite_add_tcase (s, tc_chain);
@@ -507,6 +588,11 @@ souphttpsrc_suite (void)
   tcase_add_test (tc_chain, test_bad_user_digest_auth);
   tcase_add_test (tc_chain, test_bad_password_digest_auth);
   tcase_add_test (tc_chain, test_https);
+
+  suite_add_tcase (s, tc_loop);
+  tcase_set_timeout (tc_loop,
+      5 + (N_LOOP_ITERATIONS * LOOP_ITERATION_TIMEOUT_MS) / 1000.0);
+  tcase_add_test (tc_loop, test_loop_no_freeze);
 
   suite_add_tcase (s, tc_internet);
   tcase_set_timeout (tc_internet, 250);
