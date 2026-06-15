@@ -708,6 +708,7 @@ enum
   PROP_SCTP_TRANSPORT,
   PROP_HTTP_PROXY,
   PROP_REUSE_SRC_PADS,
+  PROP_ICE_CONSENT_FRESHNESS,
 };
 
 static guint gst_webrtc_bin_signals[LAST_SIGNAL] = { 0 };
@@ -8926,6 +8927,9 @@ gst_webrtc_bin_set_property (GObject * object, guint prop_id,
     case PROP_REUSE_SRC_PADS:
       webrtc->priv->reuse_source_pads = g_value_get_boolean (value);
       break;
+    case PROP_ICE_CONSENT_FRESHNESS:
+      webrtc->priv->ice_consent_freshness = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -9010,6 +9014,9 @@ gst_webrtc_bin_get_property (GObject * object, guint prop_id,
     case PROP_REUSE_SRC_PADS:
       g_value_set_boolean (value, webrtc->priv->reuse_source_pads);
       break;
+    case PROP_ICE_CONSENT_FRESHNESS:
+      g_value_set_boolean (value, webrtc->priv->ice_consent_freshness);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -9025,7 +9032,9 @@ gst_webrtc_bin_constructed (GObject * object)
 
   if (!webrtc->priv->ice) {
     name = g_strdup_printf ("%s:ice", GST_OBJECT_NAME (webrtc));
-    webrtc->priv->ice = GST_WEBRTC_ICE (gst_webrtc_nice_new (name));
+    webrtc->priv->ice = GST_WEBRTC_ICE (g_object_new (GST_TYPE_WEBRTC_NICE,
+            "name", name, "consent-freshness",
+            webrtc->priv->ice_consent_freshness, NULL));
     g_free (name);
   }
   gst_webrtc_ice_set_on_ice_candidate (webrtc->priv->ice,
@@ -9351,6 +9360,30 @@ gst_webrtc_bin_class_init (GstWebRTCBinClass * klass)
       g_param_spec_boolean ("reuse-source-pads", "Reuse source pads",
           "If FALSE, webrtcbin will send EOS on source pads with inactive transceivers. TRUE to reuse pads after renegotiation with no EOS",
           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstWebRTCBin:ice-consent-freshness:
+   *
+   * Whether the ICE agent should perform consent freshness checks as specified
+   * in RFC 7675. When enabled (the default), the agent periodically sends STUN
+   * binding requests on the selected pair and fails the connection if it gets
+   * no response. Some peers (e.g. AWS KVS) keep the connection alive with
+   * binding indications and do not answer consent requests, in which case this
+   * should be disabled.
+   *
+   * This is construct-only because the underlying option can only be set when
+   * the ICE agent is created. It has no effect when a custom #GstWebRTCICE is
+   * supplied via the #GstWebRTCBin:ice-agent property.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_ICE_CONSENT_FRESHNESS,
+      g_param_spec_boolean ("ice-consent-freshness", "ICE consent freshness",
+          "Whether the ICE agent should perform consent freshness checks "
+          "(RFC 7675)",
+          TRUE,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstWebRTCBin::create-offer:
@@ -9822,4 +9855,5 @@ gst_webrtc_bin_init (GstWebRTCBin * webrtc)
   /* we start off closed until we move to READY */
   webrtc->priv->is_closed = TRUE;
   webrtc->priv->jb_latency = DEFAULT_JB_LATENCY;
+  webrtc->priv->ice_consent_freshness = TRUE;
 }
