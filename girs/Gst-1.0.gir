@@ -48230,6 +48230,10 @@ The album name as it should be sorted, e.g. 'Jazz Guitar, The'</doc>
       <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
       <type name="utf8" c:type="gchar*"/>
     </constant>
+    <constant name="TAG_ALBUM_VOLUME_SUBTITLE" value="album-disc-subtitle" c:type="GST_TAG_ALBUM_VOLUME_SUBTITLE">
+      <source-position filename="../subprojects/gstreamer/gst/gsttaglist.h"/>
+      <type name="utf8" c:type="gchar*"/>
+    </constant>
     <constant name="TAG_APPLICATION_DATA" value="application-data" c:type="GST_TAG_APPLICATION_DATA">
       <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gsttaglist.h">Arbitrary application data (sample)
 

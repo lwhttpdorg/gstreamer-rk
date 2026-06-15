@@ -741,6 +741,7 @@ static const struct
   GST_TAG_TRACK_COUNT, add_count_or_num_tag, "TRCK"}, {
   GST_TAG_ALBUM_VOLUME_NUMBER, add_count_or_num_tag, "TPOS"}, {
   GST_TAG_ALBUM_VOLUME_COUNT, add_count_or_num_tag, "TPOS"}, {
+  GST_TAG_ALBUM_VOLUME_SUBTITLE, add_text_tag, "TSST"}, {
   GST_TAG_ENCODER, add_encoder_tag, ""}, {
   GST_TAG_ENCODER_VERSION, add_encoder_tag, ""}, {
   GST_TAG_COPYRIGHT_URI, add_uri_tag, "WCOP"}, {

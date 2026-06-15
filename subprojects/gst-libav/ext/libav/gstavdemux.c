@@ -1113,6 +1113,7 @@ static const struct
   {
       "date", GST_TAG_DATE_TIME}, {
       "disc", GST_TAG_ALBUM_VOLUME_NUMBER}, {
+      "disc_subtitle", GST_TAG_ALBUM_VOLUME_SUBTITLE}, {
       "encoder", GST_TAG_ENCODER}, {
       "encoded_by", GST_TAG_ENCODED_BY}, {
       "genre", GST_TAG_GENRE}, {

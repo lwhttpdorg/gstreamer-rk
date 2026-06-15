@@ -3219,6 +3219,7 @@ gst_asf_demux_get_gst_tag_from_tag_name (const gchar * name_utf8)
     "WM/AlbumTitle", GST_TAG_ALBUM}, {
     "WM/AlbumArtist", GST_TAG_ARTIST}, {
     "WM/PartOfSet", GST_TAG_ALBUM_VOLUME_COUNT}, {
+    "WM/SetSubTitle", GST_TAG_ALBUM_VOLUME_SUBTITLE}, {
     "WM/Picture", GST_TAG_IMAGE}, {
     "WM/Track", GST_TAG_TRACK_NUMBER}, {
     "WM/TrackNumber", GST_TAG_TRACK_NUMBER}, {

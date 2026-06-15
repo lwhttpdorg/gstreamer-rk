@@ -54,6 +54,7 @@ static const GstTagEntryMatch tag_matches[] = {
   {GST_TAG_TRACK_COUNT, "TOTALTRACKS"}, /* old / non-standard */
   {GST_TAG_ALBUM_VOLUME_COUNT, "DISCTOTAL"},
   {GST_TAG_ALBUM_VOLUME_COUNT, "TOTALDISCS"},   /* old / non-standard */
+  {GST_TAG_ALBUM_VOLUME_SUBTITLE, "DISCSUBTITLE"},
   {GST_TAG_ARTIST, "ARTIST"},
   {GST_TAG_PERFORMER, "PERFORMER"},
   {GST_TAG_COMPOSER, "COMPOSER"},

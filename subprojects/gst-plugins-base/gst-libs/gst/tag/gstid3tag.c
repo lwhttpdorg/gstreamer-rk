@@ -101,6 +101,7 @@ static const GstTagEntryMatch tag_matches[] = {
   {GST_TAG_DATE_TIME, "TDRC"},
   {GST_TAG_COMMENT, "COMM"},
   {GST_TAG_ALBUM_VOLUME_NUMBER, "TPOS"},
+  {GST_TAG_ALBUM_VOLUME_SUBTITLE, "TSST"},
   {GST_TAG_DURATION, "TLEN"},
   {GST_TAG_ISRC, "TSRC"},
   {GST_TAG_IMAGE, "APIC"},

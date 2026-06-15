@@ -1152,6 +1152,9 @@ static const struct
       GST_TAG_INTERPRETED_BY, add_text_tag, "TPE4"}, {
       GST_TAG_MUSICAL_KEY, add_text_tag, "TKEY"}, {
 
+        /* Simple text tags, v2.4 ONLY */
+      GST_TAG_ALBUM_VOLUME_SUBTITLE, add_text_tag_v4, "TSST"}, {
+
         /* Private frames */
       GST_TAG_PRIVATE_DATA, add_private_data_tag, "PRIV"}, {
       GST_ID3_DEMUX_TAG_ID3V2_FRAME, add_id3v2frame_tag, NULL}, {

@@ -260,6 +260,7 @@ GST_START_TEST (test_vorbis_tags)
   gst_vorbis_tag_add (list, "TRACKTOTAL", "77");
   gst_vorbis_tag_add (list, "DISCNUMBER", "1");
   gst_vorbis_tag_add (list, "DISCTOTAL", "2");
+  gst_vorbis_tag_add (list, "DISCSUBTITLE", "Strudel");
   gst_vorbis_tag_add (list, "DATE", "1954-12-31");
 
   ASSERT_TAG_LIST_HAS_STRING (list, GST_TAG_TITLE, "Too");
@@ -284,6 +285,7 @@ GST_START_TEST (test_vorbis_tags)
   ASSERT_TAG_LIST_HAS_UINT (list, GST_TAG_TRACK_COUNT, 77);
   ASSERT_TAG_LIST_HAS_UINT (list, GST_TAG_ALBUM_VOLUME_NUMBER, 1);
   ASSERT_TAG_LIST_HAS_UINT (list, GST_TAG_ALBUM_VOLUME_COUNT, 2);
+  ASSERT_TAG_LIST_HAS_STRING (list, GST_TAG_ALBUM_VOLUME_SUBTITLE, "Strudel");
 
   {
     GstDateTime *dt = NULL;
