@@ -9471,19 +9471,43 @@ restart:
   if (async)
     GST_ELEMENT_PROGRESS (src, CONTINUE, "open", ("Retrieving server options"));
 
-  if ((res =
-          gst_rtspsrc_send (src, &src->conninfo, &request, &response,
-              NULL, versions, TRUE)) < 0) {
-    goto send_error;
+  /* Use low-level send/receive so a middlebox mangling OPTIONS (e.g. treating
+   * it as HTTP OPTIONS) does not post a fatal element error. */
+  res = gst_rtspsrc_connection_send (src, &src->conninfo, &request,
+      src->tcp_timeout);
+
+  if (res == GST_RTSP_OK)
+    res = gst_rtspsrc_connection_receive (src, &src->conninfo, &response,
+        src->tcp_timeout);
+
+  if (res == GST_RTSP_EPARSE ||
+      (res == GST_RTSP_OK &&
+          response.type == GST_RTSP_MESSAGE_RESPONSE &&
+          response.type_data.response.code >= 400 &&
+          response.type_data.response.code < 500)) {
+    gchar *str = gst_rtsp_strresult (res);
+    GST_WARNING_OBJECT (src,
+        "OPTIONS failed (%s), assuming DESCRIBE, SETUP, PLAY, TEARDOWN are available",
+        str);
+    g_free (str);
+    gst_rtsp_message_unset (&request);
+    gst_rtsp_message_unset (&response);
+    src->methods =
+        GST_RTSP_DESCRIBE | GST_RTSP_SETUP | GST_RTSP_PLAY | GST_RTSP_TEARDOWN;
+    src->seekable = G_MAXFLOAT;
+    if ((res = gst_rtsp_conninfo_reconnect (src, &src->conninfo, async)) < 0)
+      goto connect_failed;
+  } else if (res != GST_RTSP_OK) {
+    goto cleanup_error;
+  } else {
+    src->version = request.type_data.request.version;
+    GST_INFO_OBJECT (src, "Now using version: %s",
+        gst_rtsp_version_as_text (src->version));
+
+    /* parse OPTIONS */
+    if (!gst_rtspsrc_parse_methods (src, &response))
+      goto methods_error;
   }
-
-  src->version = request.type_data.request.version;
-  GST_INFO_OBJECT (src, "Now using version: %s",
-      gst_rtsp_version_as_text (src->version));
-
-  /* parse OPTIONS */
-  if (!gst_rtspsrc_parse_methods (src, &response))
-    goto methods_error;
 
   /* create DESCRIBE */
   GST_DEBUG_OBJECT (src, "create describe...");
