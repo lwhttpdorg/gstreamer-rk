@@ -1450,6 +1450,16 @@ gst_video_encoder_sink_event_default (GstVideoEncoder * encoder,
       GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
       break;
     }
+    /* GAP events should be pushed immediately, not wait for a frame to go along with */
+    case GST_EVENT_GAP:{
+      GstClockTime timestamp, duration;
+
+      gst_event_parse_gap (event, &timestamp, &duration);
+      ret = gst_video_encoder_push_event (encoder, event);
+
+      event = NULL;
+      break;
+    }
     case GST_EVENT_SEGMENT:
     {
       GstSegment segment;
