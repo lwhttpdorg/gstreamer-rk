@@ -22,10 +22,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #ifndef __GST_ANALYTICS_KEYPOINT_MTD_H__
 #define __GST_ANALYTICS_KEYPOINT_MTD_H__
 
@@ -98,9 +94,24 @@ gboolean gst_analytics_relation_meta_add_keypoint_mtd (
     GstAnalyticsKeypointMtd *keypoint_mtd);
 
 GST_ANALYTICS_META_API
+gboolean gst_analytics_relation_meta_add_keypoint_mtd_f (
+    GstAnalyticsRelationMeta *instance,
+    GstAnalyticsKeypointDimensions dimension,
+    gfloat x, gfloat y, gfloat z,
+    guint8 visibility_flags,
+    gfloat confidence,
+    GstAnalyticsKeypointMtd *keypoint_mtd);
+
+GST_ANALYTICS_META_API
 gboolean gst_analytics_keypoint_mtd_get_position (
     const GstAnalyticsKeypointMtd *handle,
     gint *x, gint *y, gint *z,
+    GstAnalyticsKeypointDimensions *dimension);
+
+GST_ANALYTICS_META_API
+gboolean gst_analytics_keypoint_mtd_get_position_f (
+    const GstAnalyticsKeypointMtd *handle,
+    gfloat *x, gfloat *y, gfloat *z,
     GstAnalyticsKeypointDimensions *dimension);
 
 GST_ANALYTICS_META_API
@@ -126,6 +137,20 @@ gboolean gst_analytics_relation_meta_add_keypoints_group (
     GstAnalyticsKeypointDimensions dimension,
     gsize positions_len,
     const gint *positions,
+    gsize keypoint_count,
+    const gfloat *confidences,
+    const guint8 *visibilities,
+    gsize skeleton_pairs_len,
+    const gint *skeleton_pairs,
+    GstAnalyticsGroupMtd *group_mtd);
+
+GST_ANALYTICS_META_API
+gboolean gst_analytics_relation_meta_add_keypoints_group_f (
+    GstAnalyticsRelationMeta *instance,
+    const gchar *semantic_tag,
+    GstAnalyticsKeypointDimensions dimension,
+    gsize positions_len,
+    const gfloat *positions,
     gsize keypoint_count,
     const gfloat *confidences,
     const guint8 *visibilities,

@@ -27,6 +27,7 @@
 #include "config.h"
 #endif
 
+#include <math.h>
 #include <gst/video/video.h>
 #include "gstanalyticskeypointmtd.h"
 
@@ -140,9 +141,9 @@ typedef struct _GstAnalyticsKeypointMtdData GstAnalyticsKeypointMtdData;
 struct _GstAnalyticsKeypointMtdData
 {
   GstAnalyticsKeypointDimensions dimension;
-  gint x;
-  gint y;
-  gint z;
+  gfloat x;
+  gfloat y;
+  gfloat z;
   gfloat confidence;
   guint8 visibility_flags;
 };
@@ -163,29 +164,59 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
     GstAnalyticsKeypointMtdData *kpdata =
         gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
         transmtd->id);
+    const gfloat det =
+        (trans->matrix[0][0] * trans->matrix[1][1]) -
+        (trans->matrix[0][1] * trans->matrix[1][0]);
+    const gfloat z_scale = sqrtf (fabsf (det));
+    gdouble x_in = kpdata->x - trans->in_rectangle.x;
+    gdouble y_in = kpdata->y - trans->in_rectangle.y;
+    gdouble w_prime = trans->matrix[2][0] * x_in + trans->matrix[2][1] * y_in +
+        trans->matrix[2][2];
+    gdouble x_temp;
+    gdouble y_temp;
 
-    /* TODO: Add support for 3d point transformation, meanwhile project
-     * z component on XY plane. */
-    if (kpdata->z != 0) {
-      GST_WARNING ("Only 2d keypoint transformation is supported, z component "
-          "projected on XY plane");
-      kpdata->z = 0;
-      kpdata->dimension = GST_ANALYTICS_KEYPOINT_DIMENSIONS_2D;
+    if (w_prime == 0.0f)
+      return FALSE;
+
+    if (w_prime == 1.0f) {
+      x_temp = trans->matrix[0][0] * x_in + trans->matrix[0][1] * y_in +
+          trans->matrix[0][2];
+      y_temp = trans->matrix[1][0] * x_in + trans->matrix[1][1] * y_in +
+          trans->matrix[1][2];
+    } else {
+      x_temp = (trans->matrix[0][0] * x_in + trans->matrix[0][1] * y_in +
+          trans->matrix[0][2]) / w_prime;
+      y_temp = (trans->matrix[1][0] * x_in + trans->matrix[1][1] * y_in +
+          trans->matrix[1][2]) / w_prime;
     }
 
-    if (!gst_video_meta_transform_matrix_point (trans, &kpdata->x, &kpdata->y))
-      return FALSE;
+    kpdata->x = x_temp + trans->out_rectangle.x;
+    kpdata->y = y_temp + trans->out_rectangle.y;
+
+    if (kpdata->dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D)
+      kpdata->z *= z_scale;
 
   } else if (GST_VIDEO_META_TRANSFORM_IS_SCALE (type)) {
     /* Handle scaling transforms (e.g., videoconvert with different resolution) */
     GstVideoMetaTransform *trans = data;
     GstAnalyticsKeypointMtdData *kpdata;
     gint ow, oh, nw, nh;
+    gfloat x_scale, y_scale, z_scale;
 
     ow = GST_VIDEO_INFO_WIDTH (trans->in_info);
     nw = GST_VIDEO_INFO_WIDTH (trans->out_info);
     oh = GST_VIDEO_INFO_HEIGHT (trans->in_info);
     nh = GST_VIDEO_INFO_HEIGHT (trans->out_info);
+
+    if (G_UNLIKELY (ow == 0 || oh == 0)) {
+      GST_WARNING ("Invalid input resolution for keypoint scale transform: "
+          "(%dx%d)", ow, oh);
+      return FALSE;
+    }
+
+    x_scale = (gfloat) nw / (gfloat) ow;
+    y_scale = (gfloat) nh / (gfloat) oh;
+    z_scale = (x_scale + y_scale) * 0.5f;
 
     kpdata = gst_analytics_relation_meta_get_mtd_data (transmtd->meta,
         transmtd->id);
@@ -193,13 +224,14 @@ gst_analytics_keypoint_mtd_meta_transform (GstBuffer * transbuf,
     GST_DEBUG ("Keypoint scale transform: in=(%ux%u) out=(%ux%u)",
         ow, oh, nw, nh);
 
-    kpdata->x *= nw;
-    kpdata->x /= ow;
+    kpdata->x *= x_scale;
 
-    kpdata->y *= nh;
-    kpdata->y /= oh;
+    kpdata->y *= y_scale;
 
-    GST_DEBUG ("Keypoint scaled: (%d,%d) in frame (%u,%u) -> (%u,%u)",
+    if (kpdata->dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D)
+      kpdata->z *= z_scale;
+
+    GST_DEBUG ("Keypoint scaled: (%f,%f) in frame (%u,%u) -> (%u,%u)",
         kpdata->x, kpdata->y, ow, oh, nw, nh);
   }
 
@@ -254,6 +286,37 @@ gst_analytics_relation_meta_add_keypoint_mtd (GstAnalyticsRelationMeta *
     guint8 visibility_flags, gfloat confidence,
     GstAnalyticsKeypointMtd * keypoint_mtd)
 {
+  return gst_analytics_relation_meta_add_keypoint_mtd_f (instance, dimension,
+      (gfloat) x, (gfloat) y, (gfloat) z, visibility_flags, confidence,
+      keypoint_mtd);
+}
+
+/**
+ * gst_analytics_relation_meta_add_keypoint_mtd_f:
+ * @instance: Instance of #GstAnalyticsRelationMeta where to add keypoint
+ * @dimension: 2D or 3D keypoint dimension
+ * @x: X coordinate, increases toward the right
+ * @y: Y coordinate, increases toward the bottom
+ * @z: Z coordinate, increases along the axis defined by a right-hand coordinate
+ *   system with respect to X and Y, that is out of the XY plane. z=0 is on
+ *   the XY plane.
+ * @visibility_flags: Visibility flags, a combination of #GstAnalyticsKeypointVisibility values
+ * @confidence: Confidence score
+ * @keypoint_mtd: (out) (not nullable): Handle updated to newly added keypoint
+ *
+ * Add individual keypoint metadata to @instance. The point represents a location
+ * in Euclidean space.
+ *
+ * Returns: TRUE if added successfully, FALSE otherwise
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_relation_meta_add_keypoint_mtd_f (GstAnalyticsRelationMeta *
+    instance, GstAnalyticsKeypointDimensions dimension, gfloat x, gfloat y,
+    gfloat z, guint8 visibility_flags, gfloat confidence,
+    GstAnalyticsKeypointMtd * keypoint_mtd)
+{
   g_return_val_if_fail (instance, FALSE);
   g_return_val_if_fail (keypoint_mtd, FALSE);
 
@@ -293,6 +356,48 @@ gboolean
 gst_analytics_keypoint_mtd_get_position (const GstAnalyticsKeypointMtd * handle,
     gint * x, gint * y, gint * z, GstAnalyticsKeypointDimensions * dimension)
 {
+  gfloat xf, yf, zf;
+
+  g_return_val_if_fail (handle, FALSE);
+  g_return_val_if_fail (x, FALSE);
+  g_return_val_if_fail (y, FALSE);
+  g_return_val_if_fail (dimension, FALSE);
+
+  if (!gst_analytics_keypoint_mtd_get_position_f (handle, &xf, &yf, &zf,
+          dimension))
+    return FALSE;
+
+  *x = lroundf (xf);
+  *y = lroundf (yf);
+
+  if (z != NULL)
+    *z = lroundf (zf);
+  else if (zf != 0.0f)
+    GST_DEBUG ("keypoint has non-zero z component but z was not read");
+
+  return TRUE;
+}
+
+/**
+ * gst_analytics_keypoint_mtd_get_position_f:
+ * @handle: handle
+ * @x: (out): X coordinate
+ * @y: (out): Y coordinate
+ * @z: (out) (nullable): Z coordinate, or %NULL to ignore. Always 0 for 2D keypoints.
+ * @dimension: (out): Keypoint dimension (2D or 3D)
+ *
+ * Get keypoint position and dimension using floating point coordinates.
+ * See #gst_analytics_relation_meta_add_keypoint_mtd_f for more details
+ *
+ * Returns: TRUE if successful, FALSE otherwise
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_keypoint_mtd_get_position_f (const GstAnalyticsKeypointMtd *
+    handle, gfloat * x, gfloat * y, gfloat * z,
+    GstAnalyticsKeypointDimensions * dimension)
+{
   GstAnalyticsKeypointMtdData *keypoint_data;
 
   g_return_val_if_fail (handle, FALSE);
@@ -309,7 +414,7 @@ gst_analytics_keypoint_mtd_get_position (const GstAnalyticsKeypointMtd * handle,
 
   if (z != NULL)
     *z = keypoint_data->z;
-  else if (keypoint_data->z != 0)
+  else if (keypoint_data->z != 0.0f)
     GST_DEBUG ("keypoint has non-zero z component but z was not read");
 
   *dimension = keypoint_data->dimension;
@@ -403,6 +508,60 @@ gst_analytics_relation_meta_add_keypoints_group (GstAnalyticsRelationMeta *
     const gint * skeleton_pairs, GstAnalyticsGroupMtd * group_mtd)
 {
   gboolean ret;
+  gsize i;
+  gfloat *positions_f;
+
+  g_return_val_if_fail (positions, FALSE);
+
+  /* Preserve compatibility: convert integer positions and reuse float core. */
+  positions_f = g_new (gfloat, positions_len);
+  for (i = 0; i < positions_len; i++)
+    positions_f[i] = (gfloat) positions[i];
+
+  ret = gst_analytics_relation_meta_add_keypoints_group_f (instance,
+      semantic_tag, dimension, positions_len, positions_f, keypoint_count,
+      confidences, visibilities, skeleton_pairs_len, skeleton_pairs, group_mtd);
+
+  g_free (positions_f);
+  return ret;
+}
+
+/**
+ * gst_analytics_relation_meta_add_keypoints_group_f:
+ * @instance: Instance of #GstAnalyticsRelationMeta
+ * @semantic_tag: Semantic tag for the group (e.g., "hand-21-kp", "pose-17-kp")
+ * @dimension: 2D or 3D keypoints
+ * @positions_len: length of @positions array.
+ * @positions: (array length=positions_len): Array of positions [x0, y0, [z0], x1, y1, [z1], ...]
+ * @keypoint_count: Number of keypoints
+ * @confidences: (array length=keypoint_count) (nullable): Array of confidence scores [c0, c1, ...] or NULL
+ * @visibilities: (array length=keypoint_count) (nullable): Array of #GstAnalyticsKeypointVisibility flags [v0, v1, ...] or NULL
+ * @skeleton_pairs_len: Length of @skeleton_pairs array (must be even, representing pairs of keypoint indices)
+ * @skeleton_pairs: (array length=skeleton_pairs_len) (nullable): Array of keypoint index pairs [kp1_idx, kp2_idx, kp1_idx, kp2_idx, ...] or NULL
+ * @group_mtd: (out) (not nullable): Handle to newly created group
+ *
+ * Creates a group of keypoints with optional skeleton structure.
+ * Individual keypoints are created as #GstAnalyticsMtd.
+ * Skeleton links are represented as RELATE_TO relations between keypoints.
+ *
+ * The @skeleton_pairs array contains pairs of keypoint indices that are connected.
+ * For example, [0, 1, 1, 2, 2, 3] creates links: 0<->1, 1<->2, 2<->3.
+ *
+ * See #gst_analytics_relation_meta_add_keypoint_mtd_f for more details
+ *
+ * Returns: TRUE if successful, FALSE otherwise
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_relation_meta_add_keypoints_group_f (GstAnalyticsRelationMeta *
+    instance, const gchar * semantic_tag,
+    GstAnalyticsKeypointDimensions dimension, gsize positions_len,
+    const gfloat * positions, gsize keypoint_count, const gfloat * confidences,
+    const guint8 * visibilities, gsize skeleton_pairs_len,
+    const gint * skeleton_pairs, GstAnalyticsGroupMtd * group_mtd)
+{
+  gboolean ret;
   gsize i, pos_stride;
   guint *keypoint_ids;
   GstAnalyticsKeypointMtd kp_mtd;
@@ -423,30 +582,27 @@ gst_analytics_relation_meta_add_keypoints_group (GstAnalyticsRelationMeta *
   /* Create group with space for all keypoints */
   ret = gst_analytics_relation_meta_add_group_mtd_with_size (instance,
       keypoint_count, group_mtd);
-  if (!ret) {
+  if (!ret)
     return FALSE;
-  }
 
   /* Set semantic tag */
   gst_analytics_mtd_set_semantic_tag (group_mtd, semantic_tag);
 
   /* Allocate array to store keypoint IDs for skeleton processing */
   keypoint_ids = g_malloc_n (keypoint_count, sizeof (guint));
-
   /* Position stride depends on dimension */
   pos_stride = _GET_KEYPOINT_STRIDE (dimension);
 
   /* Create individual keypoints and add to group */
   for (i = 0; i < keypoint_count; i++) {
-    gint x, y, z = 0;
+    gfloat x, y, z = 0.0f;
     gfloat confidence;
 
     /* Extract position from array */
     x = positions[i * pos_stride];
     y = positions[i * pos_stride + 1];
-    if (dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D) {
+    if (dimension == GST_ANALYTICS_KEYPOINT_DIMENSIONS_3D)
       z = positions[i * pos_stride + 2];
-    }
 
     /* Get confidence and visibility or use defaults */
     confidence = confidences ? confidences[i] : 1.0f;
@@ -454,7 +610,7 @@ gst_analytics_relation_meta_add_keypoints_group (GstAnalyticsRelationMeta *
         : GST_ANALYTICS_KEYPOINT_VISIBILITY_UNKNOWN;
 
     /* Add keypoint metadata which may trigger buffer reallocation */
-    ret = gst_analytics_relation_meta_add_keypoint_mtd (instance, dimension,
+    ret = gst_analytics_relation_meta_add_keypoint_mtd_f (instance, dimension,
         x, y, z, visibility, confidence, &kp_mtd);
     if (!ret) {
       GST_WARNING ("Failed to add keypoint %zu", i);
