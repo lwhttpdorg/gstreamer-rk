@@ -50,6 +50,7 @@ variables:
     -Dgst-plugins-good:soup-lookup-dep=true
     -Dgst-plugins-good:vpx=enabled
     -Dgst-devtools:dots_viewer=disabled
+    -Dgst-plugins-bad:gst_play_tests=true
     -Dpygobject:tests=false
     -Dpython=enabled
     -Dlibav=enabled
@@ -612,10 +613,12 @@ build vs2022 x86:
   variables:
     ARCH: 'x86'
     # Installed python is 64 bits instead of 32 bits
+    # there is no libsoup3 wrap yet
     MESON_CROSS_ARGS: >
       -Dpython=disabled
       -Dintrospection=disabled
       -Dlibxml2:python=false
+      -Dgst-plugins-bad:gst_play_tests=false
 
 build vs2022 arm64:
   extends: '.build windows cross'
@@ -628,9 +631,11 @@ build vs2022 arm64:
     # https://github.com/mesonbuild/meson/issues/9889
     # libsoup requires glib-compile-resources, which isn't available in a cross
     # build
+    # there is no libsoup3 wrap yet
     MESON_CROSS_ARGS: >-
       -Dgst-plugins-base:pango=disabled
       -Dgst-plugins-good:cairo=disabled
+      -Dgst-plugins-bad:gst_play_tests=false
       -Dgst-devtools:cairo=disabled
       -Dpython=disabled
       -Dintrospection=disabled
@@ -647,6 +652,8 @@ build msys2:
     - $env:CI_PROJECT_DIR = $env:CI_PROJECT_DIR.replace('\','/')
     # Windows Graphics Capture currently requires Visual Studio
     - $env:MESON_ARGS = $env:MESON_ARGS.replace('-Dgst-plugins-bad:d3d11-wgc=enabled','') + ' -Dpython=disabled -Dintrospection=disabled'
+    # there is no libsoup3 wrap yet
+    - $env:MESON_ARGS = $env:MESON_ARGS.replace('-Dgst-plugins-bad:gst_play_tests=true','-Dgst-plugins-bad:gst_play_tests=false')
     # Configure MSYS2 to use the UCRT64 environment, start in the same directory
     # and inherit PATH
     - C:\msys64\msys2_shell.cmd -ucrt64 -defterm -no-start -here -use-full-path -lc "meson setup build $env:MESON_ARGS $env:GTK_ARGS && meson compile -C build --jobs $env:FDO_CI_CONCURRENT"
@@ -674,6 +681,8 @@ build macos:
       - BUILD_TYPE: ["--default-library=both"]
         BUILD_GST_DEBUG: ["-Dgstreamer:gst_debug=true"]
         # FIXME: We currently don't have pkg-config required by gobject-introspection/pygobject/sharp
+        # macos doesn't support vaapi
+        # there is no libsoup3 wrap yet
         MESON_ARGS: >-
           ${SIMPLE_BUILD}
           -Dintrospection=disabled
@@ -683,6 +692,7 @@ build macos:
           -Dgst-plugins-base:pango=enabled
           -Dgst-plugins-good:cairo=enabled
           -Dgst-plugins-good:soup=enabled
+          -Dgst-plugins-bad:gst_play_tests=false
 
 abi-check:
   stage: 'build'
