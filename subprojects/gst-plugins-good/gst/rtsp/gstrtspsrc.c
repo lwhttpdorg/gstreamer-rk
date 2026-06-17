@@ -528,6 +528,8 @@ static gboolean gst_rtspsrc_loop_send_cmd (GstRTSPSrc * src, gint cmd,
     gint mask);
 static GstRTSPResult gst_rtspsrc_send_cb (GstRTSPExtension * ext,
     GstRTSPMessage * request, GstRTSPMessage * response, GstRTSPSrc * src);
+static GstRTSPResult
+gst_rtspsrc_send_options (GstRTSPSrc * src, gboolean async);
 
 static GstRTSPResult gst_rtspsrc_open (GstRTSPSrc * src, gboolean async);
 static GstRTSPResult gst_rtspsrc_play (GstRTSPSrc * src, GstSegment * segment,
@@ -7775,8 +7777,6 @@ receive_error:
  * @request: must point to a valid request
  * @response: must point to an empty #GstRTSPMessage
  * @code: an optional code result
- * @versions: List of versions to try, setting it back onto the @request message
- *            if not set, `src->version` will be used as RTSP version.
  *
  * send @request and retrieve the response in @response. optionally @code can be
  * non-NULL in which case it will contain the status code of the response.
@@ -7796,15 +7796,13 @@ receive_error:
 static GstRTSPResult
 gst_rtspsrc_send (GstRTSPSrc * src, GstRTSPConnInfo * conninfo,
     GstRTSPMessage * request, GstRTSPMessage * response,
-    GstRTSPStatusCode * code, GstRTSPVersion * versions,
-    gboolean update_content_base)
+    GstRTSPStatusCode * code, gboolean update_content_base)
 {
   GstRTSPStatusCode int_code = GST_RTSP_STS_OK;
   GstRTSPResult res = GST_RTSP_ERROR;
   gint count;
   gboolean retry;
   GstRTSPMethod method = GST_RTSP_INVALID;
-  gint version_retry = 0;
 
   count = 0;
   do {
@@ -7817,8 +7815,7 @@ gst_rtspsrc_send (GstRTSPSrc * src, GstRTSPConnInfo * conninfo,
     /* save method so we can disable it when the server complains */
     method = request->type_data.request.method;
 
-    if (!versions)
-      request->type_data.request.version = src->version;
+    request->type_data.request.version = src->version;
 
     if ((res =
             gst_rtspsrc_try_send (src, conninfo, request, response,
@@ -7834,20 +7831,6 @@ gst_rtspsrc_send (GstRTSPSrc * src, GstRTSPConnInfo * conninfo,
           retry = TRUE;
         }
         break;
-      case GST_RTSP_STS_RTSP_VERSION_NOT_SUPPORTED:
-        GST_INFO_OBJECT (src, "Version %s not supported by the server",
-            versions ? gst_rtsp_version_as_text (versions[version_retry]) :
-            "unknown");
-        if (versions && versions[version_retry] != GST_RTSP_VERSION_INVALID) {
-          GST_INFO_OBJECT (src, "Unsupported version %s => trying %s",
-              gst_rtsp_version_as_text (request->type_data.request.version),
-              gst_rtsp_version_as_text (versions[version_retry]));
-          request->type_data.request.version = versions[version_retry];
-          retry = TRUE;
-          version_retry++;
-          break;
-        }
-        /* fallthrough */
       default:
         break;
     }
@@ -7949,7 +7932,7 @@ static GstRTSPResult
 gst_rtspsrc_send_cb (GstRTSPExtension * ext, GstRTSPMessage * request,
     GstRTSPMessage * response, GstRTSPSrc * src)
 {
-  return gst_rtspsrc_send (src, &src->conninfo, request, response, NULL, NULL,
+  return gst_rtspsrc_send (src, &src->conninfo, request, response, NULL,
       FALSE);
 }
 
@@ -8714,7 +8697,7 @@ gst_rtspsrc_setup_streams_start (GstRTSPSrc * src, gboolean async)
     /* handle the code ourselves */
     res =
         gst_rtspsrc_send (src, conninfo, &request,
-        pipelined_request_id ? NULL : &response, &code, NULL, FALSE);
+        pipelined_request_id ? NULL : &response, &code, FALSE);
     if (res < 0)
       goto send_error;
 
@@ -9435,13 +9418,8 @@ gst_rtspsrc_retrieve_sdp (GstRTSPSrc * src, GstSDPMessage ** sdp,
   guint8 *data;
   guint size;
   gchar *respcont = NULL;
-  GstRTSPVersion versions[] =
-      { GST_RTSP_VERSION_2_0, GST_RTSP_VERSION_INVALID };
 
   src->version = src->default_version;
-  if (src->default_version == GST_RTSP_VERSION_2_0) {
-    versions[0] = GST_RTSP_VERSION_1_0;
-  }
 
 restart:
   src->need_redirect = FALSE;
@@ -9456,58 +9434,8 @@ restart:
   if ((res = gst_rtsp_conninfo_connect (src, &src->conninfo, async)) < 0)
     goto connect_failed;
 
-  /* create OPTIONS */
-  GST_DEBUG_OBJECT (src, "create options... (%s)", async ? "async" : "sync");
-  res =
-      gst_rtspsrc_init_request (src, &request, GST_RTSP_OPTIONS,
-      src->conninfo.url_str);
-  if (res < 0)
-    goto create_request_failed;
-
-  /* send OPTIONS */
-  request.type_data.request.version = src->version;
-  GST_DEBUG_OBJECT (src, "send options...");
-
-  if (async)
-    GST_ELEMENT_PROGRESS (src, CONTINUE, "open", ("Retrieving server options"));
-
-  /* Use low-level send/receive so a middlebox mangling OPTIONS (e.g. treating
-   * it as HTTP OPTIONS) does not post a fatal element error. */
-  res = gst_rtspsrc_connection_send (src, &src->conninfo, &request,
-      src->tcp_timeout);
-
-  if (res == GST_RTSP_OK)
-    res = gst_rtspsrc_connection_receive (src, &src->conninfo, &response,
-        src->tcp_timeout);
-
-  if (res == GST_RTSP_EPARSE ||
-      (res == GST_RTSP_OK &&
-          response.type == GST_RTSP_MESSAGE_RESPONSE &&
-          response.type_data.response.code >= 400 &&
-          response.type_data.response.code < 500)) {
-    gchar *str = gst_rtsp_strresult (res);
-    GST_WARNING_OBJECT (src,
-        "OPTIONS failed (%s), assuming DESCRIBE, SETUP, PLAY, TEARDOWN are available",
-        str);
-    g_free (str);
-    gst_rtsp_message_unset (&request);
-    gst_rtsp_message_unset (&response);
-    src->methods =
-        GST_RTSP_DESCRIBE | GST_RTSP_SETUP | GST_RTSP_PLAY | GST_RTSP_TEARDOWN;
-    src->seekable = G_MAXFLOAT;
-    if ((res = gst_rtsp_conninfo_reconnect (src, &src->conninfo, async)) < 0)
-      goto connect_failed;
-  } else if (res != GST_RTSP_OK) {
+  if ((res = gst_rtspsrc_send_options (src, async)) < 0)
     goto cleanup_error;
-  } else {
-    src->version = request.type_data.request.version;
-    GST_INFO_OBJECT (src, "Now using version: %s",
-        gst_rtsp_version_as_text (src->version));
-
-    /* parse OPTIONS */
-    if (!gst_rtspsrc_parse_methods (src, &response))
-      goto methods_error;
-  }
 
   /* create DESCRIBE */
   GST_DEBUG_OBJECT (src, "create describe...");
@@ -9534,7 +9462,7 @@ restart:
 
   if ((res =
           gst_rtspsrc_send (src, &src->conninfo, &request, &response,
-              NULL, NULL, TRUE)) < 0)
+              NULL, TRUE)) < 0)
     goto send_error;
 
   /* we only perform redirect for describe and play, currently */
@@ -9630,12 +9558,6 @@ send_error:
      * taken care of it because we passed NULL for the response code */
     goto cleanup_error;
   }
-methods_error:
-  {
-    /* error was posted */
-    res = GST_RTSP_ERROR;
-    goto cleanup_error;
-  }
 wrong_content_type:
   {
     GST_ELEMENT_ERROR (src, RESOURCE, SETTINGS, (NULL),
@@ -9660,6 +9582,120 @@ cleanup_error:
     gst_rtsp_message_unset (&response);
     return res;
   }
+}
+
+
+/* Send OPTIONS using low-level send/receive so a middlebox mangling OPTIONS
+ * (e.g. treating it as HTTP OPTIONS) does not post a fatal element error.
+ * Also handles RTSP version negotiation (505 retry with fallback version).
+ *
+ * On tolerable failures (parse errors, 4xx responses), assumes default methods
+ * and reconnects. On success, parses the server's supported methods and updates
+ * src->version.
+ *
+ * Returns: GST_RTSP_OK on success, or an error code on fatal failure.
+ */
+static GstRTSPResult
+gst_rtspsrc_send_options (GstRTSPSrc * src, gboolean async)
+{
+  GstRTSPResult res;
+  GstRTSPMessage request = { 0 };
+  GstRTSPMessage response = { 0 };
+  static const GstRTSPVersion versions[] =
+      { GST_RTSP_VERSION_2_0, GST_RTSP_VERSION_1_0,
+    GST_RTSP_VERSION_INVALID
+  };
+  gint version_idx = 0;
+
+  /* Find the starting index in the versions array based on default_version */
+  while (versions[version_idx] != GST_RTSP_VERSION_INVALID &&
+      versions[version_idx] != src->default_version)
+    version_idx++;
+
+  GST_DEBUG_OBJECT (src, "create options... (%s)", async ? "async" : "sync");
+  res =
+      gst_rtspsrc_init_request (src, &request, GST_RTSP_OPTIONS,
+      src->conninfo.url_str);
+  if (res < 0) {
+    gchar *str = gst_rtsp_strresult (res);
+    GST_ELEMENT_ERROR (src, LIBRARY, INIT, (NULL),
+        ("Could not create request. (%s)", str));
+    g_free (str);
+    return res;
+  }
+
+  request.type_data.request.version = versions[version_idx];
+  GST_DEBUG_OBJECT (src, "send options...");
+
+  if (async)
+    GST_ELEMENT_PROGRESS (src, CONTINUE, "open", ("Retrieving server options"));
+
+  res = gst_rtspsrc_connection_send (src, &src->conninfo, &request,
+      src->tcp_timeout);
+
+  if (res == GST_RTSP_OK)
+    res = gst_rtspsrc_connection_receive (src, &src->conninfo, &response,
+        src->tcp_timeout);
+
+  /* Version negotiation: if server returns 505, walk through remaining
+   * versions in descending order until one is accepted or exhausted. */
+  while (res == GST_RTSP_OK &&
+      response.type == GST_RTSP_MESSAGE_RESPONSE &&
+      response.type_data.response.code ==
+      GST_RTSP_STS_RTSP_VERSION_NOT_SUPPORTED) {
+    version_idx++;
+    if (versions[version_idx] == GST_RTSP_VERSION_INVALID)
+      break;
+    GST_INFO_OBJECT (src, "Unsupported version %s => trying %s",
+        gst_rtsp_version_as_text (request.type_data.request.version),
+        gst_rtsp_version_as_text (versions[version_idx]));
+    gst_rtsp_message_unset (&response);
+    request.type_data.request.version = versions[version_idx];
+    res = gst_rtspsrc_connection_send (src, &src->conninfo, &request,
+        src->tcp_timeout);
+    if (res == GST_RTSP_OK)
+      res = gst_rtspsrc_connection_receive (src, &src->conninfo, &response,
+          src->tcp_timeout);
+  }
+
+  if (res == GST_RTSP_EPARSE ||
+      (res == GST_RTSP_OK &&
+          response.type == GST_RTSP_MESSAGE_RESPONSE &&
+          response.type_data.response.code >= 400 &&
+          response.type_data.response.code < 500)) {
+    /* Tolerable failure: middlebox or server not supporting OPTIONS properly */
+    gchar *str = gst_rtsp_strresult (res);
+    GST_WARNING_OBJECT (src,
+        "OPTIONS failed (%s), assuming DESCRIBE, SETUP, PLAY, TEARDOWN are available",
+        str);
+    g_free (str);
+    gst_rtsp_message_unset (&request);
+    gst_rtsp_message_unset (&response);
+    src->methods =
+        GST_RTSP_DESCRIBE | GST_RTSP_SETUP | GST_RTSP_PLAY | GST_RTSP_TEARDOWN;
+    src->seekable = G_MAXFLOAT;
+    res = gst_rtsp_conninfo_reconnect (src, &src->conninfo, async);
+    return res;
+  } else if (res != GST_RTSP_OK) {
+    gst_rtsp_message_unset (&request);
+    gst_rtsp_message_unset (&response);
+    return res;
+  }
+
+  /* Success: update version from what was actually used in the request */
+  src->version = request.type_data.request.version;
+  GST_INFO_OBJECT (src, "Now using version: %s",
+      gst_rtsp_version_as_text (src->version));
+
+  if (!gst_rtspsrc_parse_methods (src, &response)) {
+    gst_rtsp_message_unset (&request);
+    gst_rtsp_message_unset (&response);
+    return GST_RTSP_ERROR;
+  }
+
+  gst_rtsp_message_unset (&request);
+  gst_rtsp_message_unset (&response);
+  return GST_RTSP_OK;
 }
 
 static GstRTSPResult
@@ -9779,7 +9815,7 @@ gst_rtspsrc_close (GstRTSPSrc * src, gboolean async, gboolean only_close)
       GST_ELEMENT_PROGRESS (src, CONTINUE, "close", ("Closing stream"));
 
     if ((res =
-            gst_rtspsrc_send (src, info, &request, &response, NULL, NULL,
+            gst_rtspsrc_send (src, info, &request, &response, NULL,
                 FALSE)) < 0)
       goto send_error;
 
@@ -10395,7 +10431,7 @@ restart:
     gst_segment_init (&src->out_segment, GST_FORMAT_UNDEFINED);
 
     if ((res =
-            gst_rtspsrc_send (src, conninfo, &request, &response, NULL, NULL,
+            gst_rtspsrc_send (src, conninfo, &request, &response, NULL,
                 FALSE))
         < 0)
       goto send_error;
@@ -10629,7 +10665,7 @@ gst_rtspsrc_pause (GstRTSPSrc * src, gboolean async)
 
     if ((res =
             gst_rtspsrc_send (src, conninfo, &request, &response, NULL,
-                NULL, FALSE)) < 0)
+                FALSE)) < 0)
       goto send_error;
 
     gst_rtsp_message_unset (&request);
@@ -11202,7 +11238,7 @@ gst_rtspsrc_get_parameter (GstRTSPSrc * src, ParameterRequest * req)
   }
 
   if ((res = gst_rtspsrc_send (src, &src->conninfo,
-              &request, &response, &code, NULL, FALSE)) < 0)
+              &request, &response, &code, FALSE)) < 0)
     goto send_error;
 
   res = gst_rtsp_message_get_body (&response, (guint8 **) & recv_body,
@@ -11322,7 +11358,7 @@ gst_rtspsrc_set_parameter (GstRTSPSrc * src, ParameterRequest * req)
   }
 
   if ((res = gst_rtspsrc_send (src, &src->conninfo,
-              &request, &response, &code, NULL, FALSE)) < 0)
+              &request, &response, &code, FALSE)) < 0)
     goto send_error;
 
 done:
