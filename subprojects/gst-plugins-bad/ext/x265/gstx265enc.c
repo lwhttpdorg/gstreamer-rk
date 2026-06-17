@@ -1533,7 +1533,13 @@ gst_x265_enc_encode_frame (GstX265Enc * encoder, x265_picture * pic_in,
 {
   GstVideoCodecFrame *frame = NULL;
   GstBuffer *out_buf = NULL;
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+  x265_picture pic_layers_out[MAX_SCALABLE_LAYERS];
+  x265_picture *pic_lyrptr_out[MAX_SCALABLE_LAYERS];
+  x265_picture *pic_out;
+#else
   x265_picture pic_out;
+#endif
   x265_nal *nal;
   int i_size, i, offset;
   int encoder_return;
@@ -1568,8 +1574,16 @@ gst_x265_enc_encode_frame (GstX265Enc * encoder, x265_picture * pic_in,
   if (G_UNLIKELY (update_latency))
     gst_x265_enc_set_latency (encoder);
 
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+  for (i = 0; i < MAX_SCALABLE_LAYERS; i++)
+    pic_lyrptr_out[i] = &pic_layers_out[i];
+
+  encoder_return = api->encoder_encode (encoder->x265enc,
+      &nal, i_nal, pic_in, pic_lyrptr_out);
+#else
   encoder_return = api->encoder_encode (encoder->x265enc,
       &nal, i_nal, pic_in, &pic_out);
+#endif
 
   GST_DEBUG_OBJECT (encoder, "encoder result (%d) with %u nal units",
       encoder_return, *i_nal);
@@ -1594,12 +1608,21 @@ gst_x265_enc_encode_frame (GstX265Enc * encoder, x265_picture * pic_in,
   }
 
   frame = gst_video_encoder_get_frame (GST_VIDEO_ENCODER (encoder),
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+      GPOINTER_TO_INT (pic_out->userData));
+#else
       GPOINTER_TO_INT (pic_out.userData));
+#endif
   g_assert (frame || !send);
 
   GST_DEBUG_OBJECT (encoder,
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+      "output picture ready POC=%d system=%d frame found %d", pic_out->poc,
+      GPOINTER_TO_INT (pic_out->userData), frame != NULL);
+#else
       "output picture ready POC=%d system=%d frame found %d", pic_out.poc,
       GPOINTER_TO_INT (pic_out.userData), frame != NULL);
+#endif
 
   if (!send || !frame) {
     GST_LOG_OBJECT (encoder, "not sending (%d) or frame not found (%d)", send,
@@ -1618,7 +1641,11 @@ gst_x265_enc_encode_frame (GstX265Enc * encoder, x265_picture * pic_in,
     offset += nal[i].sizeBytes;
   }
 
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+  if (pic_out->sliceType == X265_TYPE_IDR || pic_out->sliceType == X265_TYPE_I) {
+#else
   if (pic_out.sliceType == X265_TYPE_IDR || pic_out.sliceType == X265_TYPE_I) {
+#endif
     GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT (frame);
   }
 
@@ -1633,9 +1660,15 @@ gst_x265_enc_encode_frame (GstX265Enc * encoder, x265_picture * pic_in,
 
   GST_LOG_OBJECT (encoder,
       "output: dts %" G_GINT64_FORMAT " pts %" G_GINT64_FORMAT,
+#if (X265_BUILD >= 210) && (X265_BUILD < 213)
+      (gint64) pic_out->dts, (gint64) pic_out->pts);
+
+  frame->dts = pic_out->dts + encoder->dts_offset;
+#else
       (gint64) pic_out.dts, (gint64) pic_out.pts);
 
   frame->dts = pic_out.dts + encoder->dts_offset;
+#endif
 
 out:
   if (frame) {
