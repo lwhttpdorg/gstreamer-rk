@@ -3853,8 +3853,6 @@ GstCaps *
 gst_gl_upload_fixate_caps (GstGLUpload * upload, GstPadDirection direction,
     GstCaps * caps, GstCaps * othercaps)
 {
-  guint n, i;
-  GstGLTextureTarget target;
   GstCaps *ret_caps = NULL;
 
   GST_DEBUG_OBJECT (upload, "Fixate caps %" GST_PTR_FORMAT ", using caps %"
@@ -3894,10 +3892,18 @@ gst_gl_upload_fixate_caps (GstGLUpload * upload, GstPadDirection direction,
 done:
   GST_OBJECT_UNLOCK (upload);
 
-  /* Prefer target 2D->rectangle->oes */
-  for (target = GST_GL_TEXTURE_TARGET_2D;
-      target <= GST_GL_TEXTURE_TARGET_EXTERNAL_OES; target++) {
-    n = gst_caps_get_size (othercaps);
+  /* Prefer target oes->2D->rectangle */
+  GstGLTextureTarget targets[] = {
+    GST_GL_TEXTURE_TARGET_EXTERNAL_OES,
+    GST_GL_TEXTURE_TARGET_2D,
+    GST_GL_TEXTURE_TARGET_RECTANGLE,
+  };
+
+  for (guint t = 0; t < G_N_ELEMENTS (targets); t++) {
+    GstGLTextureTarget target = targets[t];
+    guint n = gst_caps_get_size (othercaps);
+    guint i;
+
     for (i = 0; i < n; i++) {
       GstStructure *s;
 
