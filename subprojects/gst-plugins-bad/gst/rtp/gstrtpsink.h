@@ -48,6 +48,7 @@ struct _GstRtpSink
   gint ttl;
   gint ttl_mc;
   gchar *multi_iface;
+  gboolean loopback;
 
   /* Internal elements */
   GstElement *rtpbin;

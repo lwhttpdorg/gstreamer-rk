@@ -59,6 +59,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_rtp_sink_debug);
 #define DEFAULT_PROP_PORT             5004
 #define DEFAULT_PROP_URI              "rtp://"DEFAULT_PROP_ADDRESS":"G_STRINGIFY(DEFAULT_PROP_PORT)
 #define DEFAULT_PROP_MULTICAST_IFACE  NULL
+#define DEFAULT_PROP_MULTICAST_LOOPBACK FALSE
 
 enum
 {
@@ -70,6 +71,7 @@ enum
   PROP_TTL,
   PROP_TTL_MC,
   PROP_MULTICAST_IFACE,
+  PROP_MULTICAST_LOOPBACK,
 
   PROP_LAST
 };
@@ -157,10 +159,20 @@ gst_rtp_sink_set_property (GObject * object, guint prop_id,
     case PROP_MULTICAST_IFACE:
       g_free (self->multi_iface);
 
-      if (g_value_get_string (value) == NULL)
-        self->multi_iface = g_strdup (DEFAULT_PROP_MULTICAST_IFACE);
-      else
-        self->multi_iface = g_value_dup_string (value);
+      self->multi_iface = g_value_dup_string (value);
+
+      /* apply */
+      g_object_set_property (G_OBJECT (self->rtp_sink),
+          "multicast-iface", value);
+      g_object_set_property (G_OBJECT (self->rtcp_sink),
+          "multicast-iface", value);
+      break;
+    case PROP_MULTICAST_LOOPBACK:
+      self->loopback = g_value_get_boolean (value);
+
+      /* apply */
+      g_object_set_property (G_OBJECT (self->rtp_sink), "loop", value);
+      g_object_set_property (G_OBJECT (self->rtcp_sink), "loop", value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -197,6 +209,9 @@ gst_rtp_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_MULTICAST_IFACE:
       g_value_set_string (value, self->multi_iface);
+      break;
+    case PROP_MULTICAST_LOOPBACK:
+      g_value_set_boolean (value, self->loopback);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -363,6 +378,19 @@ gst_rtp_sink_class_init (GstRtpSinkClass * klass)
           "This allows multiple interfaces separated by comma. (\"eth0,eth1\")",
           DEFAULT_PROP_MULTICAST_IFACE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRtpSink:multicast-loopback:
+   *
+   * When enabled, the packet will be received locally.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_MULTICAST_LOOPBACK,
+      g_param_spec_boolean ("multicast-loopback", "Multicast Loopback",
+          "When enabled, the packet will be received locally.",
+          DEFAULT_PROP_MULTICAST_LOOPBACK,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_CONSTRUCT));
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&sink_template));
@@ -591,6 +619,7 @@ gst_rtp_sink_init (GstRtpSink * self)
   self->ttl = DEFAULT_PROP_TTL;
   self->ttl_mc = DEFAULT_PROP_TTL_MC;
   self->multi_iface = g_strdup (DEFAULT_PROP_MULTICAST_IFACE);
+  self->loopback = DEFAULT_PROP_MULTICAST_LOOPBACK;
 
   g_mutex_init (&self->lock);
 
@@ -649,6 +678,9 @@ gst_rtp_sink_init (GstRtpSink * self)
     missing_plugin = "udp";
     goto missing_plugin;
   }
+
+  g_object_set (G_OBJECT (self->rtp_sink), "loop", self->loopback, NULL);
+  g_object_set (G_OBJECT (self->rtcp_sink), "loop", self->loopback, NULL);
 
   gst_bin_add (GST_BIN (self), self->funnel_rtp);
   gst_bin_add (GST_BIN (self), self->funnel_rtcp);

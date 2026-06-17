@@ -66,6 +66,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_rtp_src_debug);
 #define DEFAULT_PROP_PORT             5004
 #define DEFAULT_PROP_URI              "rtp://"DEFAULT_PROP_ADDRESS":"G_STRINGIFY(DEFAULT_PROP_PORT)
 #define DEFAULT_PROP_MULTICAST_IFACE  NULL
+#define DEFAULT_PROP_MULTICAST_LOOPBACK FALSE
 
 enum
 {
@@ -79,6 +80,7 @@ enum
   PROP_ENCODING_NAME,
   PROP_LATENCY,
   PROP_MULTICAST_IFACE,
+  PROP_MULTICAST_LOOPBACK,
   PROP_CAPS,
 
   PROP_LAST
@@ -249,10 +251,21 @@ gst_rtp_src_set_property (GObject * object, guint prop_id,
     case PROP_MULTICAST_IFACE:
       g_free (self->multi_iface);
 
-      if (g_value_get_string (value) == NULL)
-        self->multi_iface = g_strdup (DEFAULT_PROP_MULTICAST_IFACE);
-      else
-        self->multi_iface = g_value_dup_string (value);
+      self->multi_iface = g_value_dup_string (value);
+
+      /* apply */
+      g_object_set_property (G_OBJECT (self->rtp_src),
+          "multicast-iface", value);
+      g_object_set_property (G_OBJECT (self->rtcp_src),
+          "multicast-iface", value);
+
+      break;
+    case PROP_MULTICAST_LOOPBACK:
+      self->loopback = g_value_get_boolean (value);
+
+      /* apply */
+      g_object_set_property (G_OBJECT (self->rtp_src), "loop", value);
+      g_object_set_property (G_OBJECT (self->rtcp_src), "loop", value);
       break;
     case PROP_CAPS:
     {
@@ -311,6 +324,9 @@ gst_rtp_src_get_property (GObject * object, guint prop_id,
       break;
     case PROP_MULTICAST_IFACE:
       g_value_set_string (value, self->multi_iface);
+      break;
+    case PROP_MULTICAST_LOOPBACK:
+      g_value_set_boolean (value, self->loopback);
       break;
     case PROP_CAPS:
       gst_value_set_caps (value, self->caps);
@@ -513,6 +529,19 @@ gst_rtp_src_class_init (GstRtpSrcClass * klass)
   g_object_class_install_property (gobject_class, PROP_CAPS,
       g_param_spec_boxed ("caps", "Caps",
           "The caps of the incoming stream", GST_TYPE_CAPS,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstRtpSrc:multicast-loopback:
+   *
+   * Whether to enable loopback for multicast packets.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_MULTICAST_LOOPBACK,
+      g_param_spec_boolean ("multicast-loopback", "Multicast Loopback",
+          "Whether to enable loopback for multicast packets",
+          DEFAULT_PROP_MULTICAST_LOOPBACK,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_element_class_add_pad_template (gstelement_class,
@@ -854,6 +883,7 @@ gst_rtp_src_init (GstRtpSrc * self)
   self->ttl_mc = DEFAULT_PROP_TTL_MC;
   self->encoding_name = DEFAULT_PROP_ENCODING_NAME;
   self->caps = DEFAULT_PROP_CAPS;
+  self->loopback = DEFAULT_PROP_MULTICAST_LOOPBACK;
 
   GST_OBJECT_FLAG_SET (GST_OBJECT (self), GST_ELEMENT_FLAG_SOURCE);
   gst_bin_set_suppressed_flags (GST_BIN (self),
@@ -910,6 +940,9 @@ gst_rtp_src_init (GstRtpSrc * self)
     missing_plugin = "udp";
     goto missing_plugin;
   }
+
+  g_object_set (G_OBJECT (self->rtp_src), "loop", self->loopback, NULL);
+  g_object_set (G_OBJECT (self->rtcp_src), "loop", self->loopback, NULL);
 
   if (missing_plugin == NULL)
     return;
