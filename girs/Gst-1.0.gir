@@ -44849,7 +44849,10 @@ a new one will be automatically generated</doc>
             <type name="utf8" c:type="const gchar*"/>
           </parameter>
           <parameter name="caps" transfer-ownership="none" nullable="1" allow-none="1">
-            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the #GstCaps of the stream</doc>
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the #GstCaps of the stream.
+  The caps must be fixed - i.e. a single structure with no ranges.
+  Use %NULL to create a stream without caps and set them later via
+  gst_stream_set_caps().</doc>
             <type name="Caps" c:type="GstCaps*"/>
           </parameter>
           <parameter name="type" transfer-ownership="none">
@@ -44945,7 +44948,8 @@ during the lifetime of @stream.</doc>
             <type name="Stream" c:type="GstStream*"/>
           </instance-parameter>
           <parameter name="caps" transfer-ownership="none" nullable="1" allow-none="1">
-            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstCaps</doc>
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the new #GstCaps for the stream.
+  The caps must be a fixed #GstCaps. Passing %NULL is a no-op.</doc>
             <type name="Caps" c:type="GstCaps*"/>
           </parameter>
         </parameters>

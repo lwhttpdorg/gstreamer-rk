@@ -200,7 +200,10 @@ gst_stream_finalize (GObject * object)
  * gst_stream_new:
  * @stream_id: (allow-none): the id for the new stream. If %NULL,
  * a new one will be automatically generated
- * @caps: (allow-none) (transfer none): the #GstCaps of the stream
+ * @caps: (allow-none) (transfer none): the #GstCaps of the stream.
+ *   The caps must be fixed - i.e. a single structure with no ranges.
+ *   Use %NULL to create a stream without caps and set them later via
+ *   gst_stream_set_caps().
  * @type: the #GstStreamType of the stream
  * @flags: the #GstStreamFlags of the stream
  *
@@ -216,6 +219,8 @@ gst_stream_new (const gchar * stream_id, GstCaps * caps, GstStreamType type,
     GstStreamFlags flags)
 {
   GstStream *stream;
+
+  g_return_val_if_fail (caps == NULL || gst_caps_is_fixed (caps), NULL);
 
   stream = g_object_new (GST_TYPE_STREAM, "stream-id", stream_id, "caps", caps,
       "stream-type", type, "stream-flags", flags, NULL);
@@ -418,10 +423,37 @@ gst_stream_get_tags (GstStream * stream)
   return res;
 }
 
+static gboolean
+_gst_stream_set_caps_internal (GstStream * stream, GstCaps * caps)
+{
+  gboolean notify = FALSE;
+
+  if (caps == NULL) {
+    GST_OBJECT_LOCK (stream);
+    if (stream->priv->caps != NULL)
+      GST_WARNING ("Cannot clear existing caps on GstStream, this is a no-op");
+    GST_OBJECT_UNLOCK (stream);
+    return FALSE;
+  }
+
+  g_return_val_if_fail (gst_caps_is_fixed (caps), FALSE);
+
+  GST_OBJECT_LOCK (stream);
+  if (stream->priv->caps == NULL ||
+      !gst_caps_is_equal (stream->priv->caps, caps)) {
+    gst_caps_replace (&stream->priv->caps, caps);
+    notify = TRUE;
+  }
+  GST_OBJECT_UNLOCK (stream);
+
+  return notify;
+}
+
 /**
  * gst_stream_set_caps:
  * @stream: a #GstStream
- * @caps: (transfer none) (allow-none): a #GstCaps
+ * @caps: (transfer none) (allow-none): the new #GstCaps for the stream.
+ *   The caps must be a fixed #GstCaps. Passing %NULL is a no-op.
  *
  * Set the caps for the #GstStream
  *
@@ -430,21 +462,12 @@ gst_stream_get_tags (GstStream * stream)
 void
 gst_stream_set_caps (GstStream * stream, GstCaps * caps)
 {
-  gboolean notify = FALSE;
-
   g_return_if_fail (GST_IS_STREAM (stream));
 
-  GST_OBJECT_LOCK (stream);
-  if (stream->priv->caps == NULL || (caps
-          && !gst_caps_is_equal (stream->priv->caps, caps))) {
-    gst_caps_replace (&stream->priv->caps, caps);
-    notify = TRUE;
-  }
-  GST_OBJECT_UNLOCK (stream);
-
-  if (notify)
+  if (_gst_stream_set_caps_internal (stream, caps))
     g_object_notify_by_pspec (G_OBJECT (stream), gst_stream_pspecs[PROP_CAPS]);
 }
+
 
 
 /**
@@ -501,11 +524,11 @@ gst_stream_set_property (GObject * object, guint prop_id,
       GST_OBJECT_UNLOCK (stream);
       break;
     case PROP_CAPS:
-      GST_OBJECT_LOCK (stream);
-      gst_mini_object_replace ((GstMiniObject **) & stream->priv->caps,
-          (GstMiniObject *) g_value_get_boxed (value));
-      GST_OBJECT_UNLOCK (stream);
+    {
+      GstCaps *caps_value = g_value_get_boxed (value);
+      _gst_stream_set_caps_internal (stream, caps_value);
       break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
