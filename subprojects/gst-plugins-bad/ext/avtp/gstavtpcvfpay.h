@@ -46,6 +46,8 @@ struct _GstAvtpCvfPay
   GstAvtpVfPayBase vfbase;
 
   GstBuffer *header;
+  guint header_size;
+  guint8 format_subtype;
 
   /* H.264 specific information */
   guint8 nal_length_size;
