@@ -1335,6 +1335,7 @@ not been tested and explicitly activated if you set use --wanted-tests ALL""")
             "switch_audio_track",
             "switch_audio_track_while_paused",
             "switch_subtitle_track",
+            "switch_subtitle_track_stress",
             "switch_subtitle_track_while_paused",
             "disable_subtitle_track_while_paused",
             "change_state_intensive",
