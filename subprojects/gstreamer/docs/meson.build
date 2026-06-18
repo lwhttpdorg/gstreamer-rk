@@ -1,30 +1,4 @@
 build_hotdoc = false
-if meson.is_cross_build()
-    if get_option('doc').enabled()
-        error('Documentation enabled but building the doc while cross building is not supported yet.')
-    endif
-
-    message('Documentation not built as building it while cross building is not supported yet.')
-    subdir_done()
-endif
-
-if static_build
-    if get_option('doc').enabled()
-        error('Documentation enabled but not supported when building statically.')
-    endif
-
-    message('Building statically, can\'t build the documentation')
-    subdir_done()
-endif
-
-if get_option('check').disabled()
-    if get_option('doc').enabled()
-        error('Documentation enabled but not supported when gstcheck is disabled')
-    endif
-
-    message('gstcheck is disabled, can\'t build the documentation')
-    subdir_done()
-endif
 
 hotdoc_plugin_scanner = executable('gst-hotdoc-plugins-scanner',
   'gst-hotdoc-plugins-scanner.c',
@@ -52,6 +26,33 @@ gst_plugins_doc_dep = custom_target('build-doc-cache',
     depends: [hotdoc_plugin_scanner],
     build_always_stale: true,
 )
+
+if meson.is_cross_build()
+    if get_option('doc').enabled()
+        error('Documentation enabled but building the doc while cross building is not supported yet.')
+    endif
+
+    message('Documentation not built as building it while cross building is not supported yet.')
+    subdir_done()
+endif
+
+if static_build
+    if get_option('doc').enabled()
+        error('Documentation enabled but not supported when building statically.')
+    endif
+
+    message('Building statically, can\'t build the documentation')
+    subdir_done()
+endif
+
+if get_option('check').disabled()
+    if get_option('doc').enabled()
+        error('Documentation enabled but not supported when gstcheck is disabled')
+    endif
+
+    message('gstcheck is disabled, can\'t build the documentation')
+    subdir_done()
+endif
 
 if static_build
     if get_option('doc').enabled()
