@@ -255,6 +255,19 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_ENC_FMT (SGBRG16, ENCODED),  GST_V4L2_BAYER},
   {MAP_ENC_FMT (SGRBG16, ENCODED),  GST_V4L2_BAYER},
   {MAP_ENC_FMT (SRGGB16, ENCODED),  GST_V4L2_BAYER},
+  /* CSI-2 packed Bayer formats */
+  {MAP_ENC_FMT (SBGGR10P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGBRG10P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGRBG10P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SRGGB10P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SBGGR12P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGBRG12P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGRBG12P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SRGGB12P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SBGGR14P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGBRG14P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SGRBG14P, ENCODED),  GST_V4L2_BAYER},
+  {MAP_ENC_FMT (SRGGB14P, ENCODED),  GST_V4L2_BAYER},
 
   /* compressed formats */
   {MAP_ENC_FMT (MJPEG, ENCODED),        GST_V4L2_CODEC},
@@ -1295,6 +1308,18 @@ gst_v4l2_object_format_get_rank (const struct v4l2_fmtdesc *fmt)
     case V4L2_PIX_FMT_SGBRG16:
     case V4L2_PIX_FMT_SGRBG16:
     case V4L2_PIX_FMT_SRGGB16:
+    case V4L2_PIX_FMT_SBGGR10P:
+    case V4L2_PIX_FMT_SGBRG10P:
+    case V4L2_PIX_FMT_SGRBG10P:
+    case V4L2_PIX_FMT_SRGGB10P:
+    case V4L2_PIX_FMT_SBGGR12P:
+    case V4L2_PIX_FMT_SGBRG12P:
+    case V4L2_PIX_FMT_SGRBG12P:
+    case V4L2_PIX_FMT_SRGGB12P:
+    case V4L2_PIX_FMT_SBGGR14P:
+    case V4L2_PIX_FMT_SGBRG14P:
+    case V4L2_PIX_FMT_SGRBG14P:
+    case V4L2_PIX_FMT_SRGGB14P:
       rank = BAYER_BASE_RANK;
       break;
 
@@ -1730,6 +1755,42 @@ gst_v4l2_object_v4l2fourcc_to_bare_struct (guint32 fourcc,
     case V4L2_PIX_FMT_SRGGB16:
       bayer_format = "rggb16le";
       break;
+    case V4L2_PIX_FMT_SBGGR10P:
+      bayer_format = "bggr10p";
+      break;
+    case V4L2_PIX_FMT_SGBRG10P:
+      bayer_format = "gbrg10p";
+      break;
+    case V4L2_PIX_FMT_SGRBG10P:
+      bayer_format = "grbg10p";
+      break;
+    case V4L2_PIX_FMT_SRGGB10P:
+      bayer_format = "rggb10p";
+      break;
+    case V4L2_PIX_FMT_SBGGR12P:
+      bayer_format = "bggr12p";
+      break;
+    case V4L2_PIX_FMT_SGBRG12P:
+      bayer_format = "gbrg12p";
+      break;
+    case V4L2_PIX_FMT_SGRBG12P:
+      bayer_format = "grbg12p";
+      break;
+    case V4L2_PIX_FMT_SRGGB12P:
+      bayer_format = "rggb12p";
+      break;
+    case V4L2_PIX_FMT_SBGGR14P:
+      bayer_format = "bggr14p";
+      break;
+    case V4L2_PIX_FMT_SGBRG14P:
+      bayer_format = "gbrg14p";
+      break;
+    case V4L2_PIX_FMT_SGRBG14P:
+      bayer_format = "grbg14p";
+      break;
+    case V4L2_PIX_FMT_SRGGB14P:
+      bayer_format = "rggb14p";
+      break;
     case V4L2_PIX_FMT_SN9C10X:
       structure = gst_structure_new_empty ("video/x-sonix");
       break;
@@ -2161,6 +2222,30 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
         fourcc = V4L2_PIX_FMT_SGRBG16;
       else if (!g_ascii_strcasecmp (format, "rggb16le"))
         fourcc = V4L2_PIX_FMT_SRGGB16;
+      else if (!g_ascii_strcasecmp (format, "bggr10p"))
+        fourcc = V4L2_PIX_FMT_SBGGR10P;
+      else if (!g_ascii_strcasecmp (format, "gbrg10p"))
+        fourcc = V4L2_PIX_FMT_SGBRG10P;
+      else if (!g_ascii_strcasecmp (format, "grbg10p"))
+        fourcc = V4L2_PIX_FMT_SGRBG10P;
+      else if (!g_ascii_strcasecmp (format, "rggb10p"))
+        fourcc = V4L2_PIX_FMT_SRGGB10P;
+      else if (!g_ascii_strcasecmp (format, "bggr12p"))
+        fourcc = V4L2_PIX_FMT_SBGGR12P;
+      else if (!g_ascii_strcasecmp (format, "gbrg12p"))
+        fourcc = V4L2_PIX_FMT_SGBRG12P;
+      else if (!g_ascii_strcasecmp (format, "grbg12p"))
+        fourcc = V4L2_PIX_FMT_SGRBG12P;
+      else if (!g_ascii_strcasecmp (format, "rggb12p"))
+        fourcc = V4L2_PIX_FMT_SRGGB12P;
+      else if (!g_ascii_strcasecmp (format, "bggr14p"))
+        fourcc = V4L2_PIX_FMT_SBGGR14P;
+      else if (!g_ascii_strcasecmp (format, "gbrg14p"))
+        fourcc = V4L2_PIX_FMT_SGBRG14P;
+      else if (!g_ascii_strcasecmp (format, "grbg14p"))
+        fourcc = V4L2_PIX_FMT_SGRBG14P;
+      else if (!g_ascii_strcasecmp (format, "rggb14p"))
+        fourcc = V4L2_PIX_FMT_SRGGB14P;
     }
   } else if (g_str_equal (mimetype, "video/x-sonix")) {
     fourcc = V4L2_PIX_FMT_SN9C10X;
