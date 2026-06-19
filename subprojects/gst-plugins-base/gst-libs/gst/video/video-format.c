@@ -4820,9 +4820,13 @@ pack_A422_16 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 #define PACK_A422_16LE GST_VIDEO_FORMAT_AYUV64, unpack_A422_16, 1, pack_A422_16
 #define PACK_A422_16BE GST_VIDEO_FORMAT_AYUV64, unpack_A422_16, 1, pack_A422_16
 
-/* Helpers for the most common tile format */
+/* Helpers for the most common tile format.
+ * y_tx and uv_tx are separate tile X indices for Y and UV planes, allowing
+ * formats where the UV tile width differs from the Y tile width (e.g.
+ * NV12_VSI_8L8 has 8x8 luma tiles but 2x4 chroma tiles, so 2 UV tiles per luma tile). */
 static void
-get_tile_NV (const GstVideoFormatInfo * info, gint tx, gint ty,
+get_tile_NV (const GstVideoFormatInfo * info, gint y_tx, gint ty,
+    gint uv_tx,
     const gpointer data[GST_VIDEO_MAX_PLANES],
     const gint stride[GST_VIDEO_MAX_PLANES],
     gpointer tile_data[GST_VIDEO_MAX_PLANES],
@@ -4832,12 +4836,13 @@ get_tile_NV (const GstVideoFormatInfo * info, gint tx, gint ty,
   gsize index, offset;
 
   /* index of Y tile */
-  index = gst_video_tile_get_index (mode, tx, ty,
+  index = gst_video_tile_get_index (mode, y_tx, ty,
       GST_VIDEO_TILE_X_TILES (stride[0]), GST_VIDEO_TILE_Y_TILES (stride[0]));
   offset = index * GST_VIDEO_FORMAT_INFO_TILE_SIZE (info, 0);
   tile_data[0] = ((guint8 *) data[0]) + offset;
 
-  index = gst_video_tile_get_index (mode, tx,
+  /* index of UV tile (may differ from Y when UV tiles are narrower) */
+  index = gst_video_tile_get_index (mode, uv_tx,
       GST_VIDEO_FORMAT_INFO_HAS_SUBTILES (info) ? ty : ty / 2,
       GST_VIDEO_TILE_X_TILES (stride[1]), GST_VIDEO_TILE_Y_TILES (stride[1]));
   offset = index * GST_VIDEO_FORMAT_INFO_TILE_SIZE (info, 1);
@@ -4859,12 +4864,19 @@ unpack_TILED (GstVideoFormat inner_format,
 {
   const GstVideoFormatInfo *unpack_info, *tile_finfo;
   guint8 *line = dest;
-  gint tile_width, tile_height;
-  gint ntx, tx, ty;
+  gint y_tile_width, tile_height;
+  gint uv_tile_width, uv_tile_width_luma;
+  gint ty;
   gint unpack_pstride;
+  gint w_sub;
+  gint luma_x, end_x;
 
-  tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 0);
+  y_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 0);
   tile_height = GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (info, 0);
+  uv_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 1);
+  w_sub = GST_VIDEO_FORMAT_INFO_W_SUB (info, 1);
+  /* UV tile width expressed in luma pixels */
+  uv_tile_width_luma = uv_tile_width << w_sub;
 
   /* we reuse these unpack functions */
   tile_finfo = gst_video_format_get_info (inner_format);
@@ -4873,33 +4885,47 @@ unpack_TILED (GstVideoFormat inner_format,
   unpack_info = gst_video_format_get_info (info->unpack_format);
   unpack_pstride = GST_VIDEO_FORMAT_INFO_PSTRIDE (unpack_info, 0);
 
-  /* first x tile to convert */
-  tx = x / tile_width;
-  /* Last tile to convert */
-  ntx = ((x + width - 1) / tile_width) + 1;
   /* The row we are going to convert */
   ty = y / tile_height;
 
   /* y position in a tile */
   y = y % tile_height;
-  /* x position in a tile */
-  x = x % tile_width;
 
-  for (; tx < ntx; tx++) {
+  end_x = x + width;
+
+  for (luma_x = x; luma_x < end_x;) {
     gpointer tdata[GST_VIDEO_MAX_PLANES];
     gint tstride[GST_VIDEO_MAX_PLANES];
     gint unpack_width;
+    gint y_tx, y_x_off, uv_tx;
 
-    get_tile_NV (info, tx, ty, data, stride, tdata, tstride);
+    /* Compute Y tile index and intra-tile offset */
+    y_tx = luma_x / y_tile_width;
+    y_x_off = luma_x % y_tile_width;
 
-    /* the number of pixels left to unpack */
-    unpack_width = MIN (width - x, tile_width - x);
+    /* Compute UV tile index from chroma position */
+    uv_tx = (luma_x >> w_sub) / uv_tile_width;
 
-    tile_finfo->unpack_func (tile_finfo, flags, line, tdata, tstride, x, y,
+    get_tile_NV (info, y_tx, ty, uv_tx, data, stride, tdata, tstride);
+
+    /* Bake Y intra-tile offset into the data pointer so we can pass x=0
+     * to the inner unpack. This is needed because the inner NV12 unpack
+     * applies x to both Y and UV pointers, but we need independent offsets
+     * when UV tiles are narrower than Y tiles.
+     * Convert pixel offset to bytes using tile stride/width ratio to handle
+     * non-integer bytes-per-pixel formats like 10LE40. */
+    tdata[0] = ((guint8 *) tdata[0]) + y_x_off * tstride[0] / y_tile_width;
+
+    /* Don't cross either Y or UV tile boundary */
+    unpack_width = end_x - luma_x;
+    unpack_width = MIN (unpack_width, y_tile_width - y_x_off);
+    unpack_width = MIN (unpack_width, uv_tile_width_luma -
+        (luma_x % uv_tile_width_luma));
+
+    tile_finfo->unpack_func (tile_finfo, flags, line, tdata, tstride, 0, y,
         unpack_width);
 
-    x = 0;
-    width -= unpack_width;
+    luma_x += unpack_width;
     line += unpack_width * unpack_pstride;
   }
 }
@@ -4913,12 +4939,19 @@ pack_TILED (GstVideoFormat inner_format,
 {
   const GstVideoFormatInfo *pack_info, *tile_finfo;
   guint8 *line = src;
-  gint tile_width, tile_height;
-  gint ntx, tx, ty;
+  gint y_tile_width, tile_height;
+  gint uv_tile_width, uv_tile_width_luma;
+  gint ty;
   gint pack_pstride;
+  gint w_sub;
+  gint luma_x;
 
-  tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 0);
+  y_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 0);
   tile_height = GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (info, 0);
+  uv_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info, 1);
+  w_sub = GST_VIDEO_FORMAT_INFO_W_SUB (info, 1);
+  /* UV tile width expressed in luma pixels */
+  uv_tile_width_luma = uv_tile_width << w_sub;
 
   /* we reuse these pack functions */
   tile_finfo = gst_video_format_get_info (inner_format);
@@ -4927,28 +4960,42 @@ pack_TILED (GstVideoFormat inner_format,
   pack_info = gst_video_format_get_info (info->unpack_format);
   pack_pstride = GST_VIDEO_FORMAT_INFO_PSTRIDE (pack_info, 0);
 
-  /* Last tile to convert */
-  ntx = ((width - 1) / tile_width) + 1;
   /* The row we are going to convert */
   ty = y / tile_height;
 
   /* y position in a tile */
   y = y % tile_height;
 
-  for (tx = 0; tx < ntx; tx++) {
+  for (luma_x = 0; luma_x < width;) {
     gpointer tdata[GST_VIDEO_MAX_PLANES];
     gint tstride[GST_VIDEO_MAX_PLANES];
     gint pack_width;
+    gint y_tx, y_x_off, uv_tx;
 
-    get_tile_NV (info, tx, ty, data, stride, tdata, tstride);
+    /* Compute Y tile index and intra-tile offset */
+    y_tx = luma_x / y_tile_width;
+    y_x_off = luma_x % y_tile_width;
 
-    /* the number of pixels left to pack */
-    pack_width = MIN (width, tile_width);
+    /* Compute UV tile index from chroma position */
+    uv_tx = (luma_x >> w_sub) / uv_tile_width;
+
+    get_tile_NV (info, y_tx, ty, uv_tx, data, stride, tdata, tstride);
+
+    /* Bake Y intra-tile offset into the data pointer (same reason as
+     * unpack_TILED — independent Y/UV offsets are needed).
+     * Convert pixel offset to bytes using tile stride/width ratio. */
+    tdata[0] = ((guint8 *) tdata[0]) + y_x_off * tstride[0] / y_tile_width;
+
+    /* Don't cross either Y or UV tile boundary */
+    pack_width = width - luma_x;
+    pack_width = MIN (pack_width, y_tile_width - y_x_off);
+    pack_width = MIN (pack_width, uv_tile_width_luma -
+        (luma_x % uv_tile_width_luma));
 
     tile_finfo->pack_func (tile_finfo, flags, line, sstride, tdata, tstride,
         chroma_site, y, pack_width);
 
-    width -= pack_width;
+    luma_x += pack_width;
     line += pack_width * pack_pstride;
   }
 }
