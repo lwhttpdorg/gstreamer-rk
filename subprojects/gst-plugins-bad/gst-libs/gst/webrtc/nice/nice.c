@@ -682,12 +682,7 @@ _on_new_candidate (NiceAgent * agent, NiceCandidate * candidate,
     return;
   }
 
-  c = nice_candidate_copy (candidate);
-  gst_webrtc_nice_fill_local_candidate_credentials (agent, c);
-
   attr = nice_agent_generate_local_candidate_sdp (agent, c);
-
-  nice_candidate_free (c);
 
   if (ice->priv->on_candidate)
     ice->priv->on_candidate (GST_WEBRTC_ICE (ice), item->session_id, attr,
