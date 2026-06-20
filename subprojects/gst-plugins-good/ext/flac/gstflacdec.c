@@ -774,6 +774,7 @@ gst_flac_dec_flush (GstAudioDecoder * audio_dec, gboolean hard)
   dec->do_resync = FALSE;
   FLAC__stream_decoder_flush (dec->decoder);
   gst_adapter_clear (dec->adapter);
+  dec->got_headers = FALSE;
 }
 
 static GstFlowReturn
