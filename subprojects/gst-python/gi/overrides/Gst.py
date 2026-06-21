@@ -1131,6 +1131,30 @@ override(Memory)
 __all__.append('Memory')
 
 
+real_clock_time_none = ~0
+
+
+class ClockTime(int):
+    __gtype__ = Gst.TYPE_CLOCK_TIME
+
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls, *args, *kwargs)
+
+    def __eq__(self, other):
+        if other < 0:
+            return super().__eq__(other & real_clock_time_none)
+        return super().__eq__(other)
+
+    def __ne__(self, other):
+        if other < 0:
+            return super().__ne__(other & real_clock_time_none)
+        return super().__ne__(other)
+
+
+CLOCK_TIME_NONE = ClockTime(real_clock_time_none)
+__all__.extend(['ClockTime', 'CLOCK_TIME_NONE'])
+
+
 def TIME_ARGS(time: int) -> str:
     if time == Gst.CLOCK_TIME_NONE:
         return "CLOCK_TIME_NONE"
