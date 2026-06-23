@@ -235,8 +235,6 @@ _io_surface_gl_memory_set_surface (GstIOSurfaceGLMemory * memory,
   GstGLContext *context = ((GstGLBaseMemory *) gl_mem)->context;
   GstGLFuncs *gl = context->gl_vtable;
 
-  if (memory->surface)
-    IOSurfaceDecrementUseCount (memory->surface);
   memory->surface = surface;
   if (surface) {
     GLuint tex_id, tex_target, texifmt;
@@ -254,7 +252,6 @@ _io_surface_gl_memory_set_surface (GstIOSurfaceGLMemory * memory,
         IOSurfaceGetHeightOfPlane (surface, plane), texifmt, GL_UNSIGNED_BYTE,
         surface, plane);
     gl->BindTexture (tex_target, 0);
-    IOSurfaceIncrementUseCount (surface);
     GST_DEBUG ("bound surface %p to texture %u: %d", surface, tex_id, cglError);
   }
 }
@@ -274,6 +271,17 @@ gst_io_surface_gl_memory_set_surface (GstIOSurfaceGLMemory * memory,
 
   g_return_if_fail (gst_is_io_surface_gl_memory ((GstMemory *) memory));
 
+  // When wrapping an IOSurface coming from a CVImageBufferRef of a
+  // VTDecompressionSession we need to increase the usage count from
+  // this thread, which is the decoder's callback thread. Otherwise,
+  // if we delegate it to the GL thread, it might be too late: the
+  // IOSurface is returned to the pool and its content is overwritten.
+  if (memory->surface) {
+    IOSurfaceDecrementUseCount (memory->surface);
+  }
+  if (surface) {
+    IOSurfaceIncrementUseCount (surface);
+  }
   context = memory->gl_mem.mem.context;
   gst_gl_context_thread_add (context,
       (GstGLContextThreadFunc) _do_set_surface, &data);
