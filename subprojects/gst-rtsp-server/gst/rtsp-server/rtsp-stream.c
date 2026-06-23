@@ -6041,14 +6041,18 @@ gst_rtsp_stream_is_receiver (GstRTSPStream * stream)
 #define AES_128_KEY_LEN 16
 #define AES_256_KEY_LEN 32
 
-#define HMAC_32_KEY_LEN 4
-#define HMAC_80_KEY_LEN 10
+#define HMAC_KEY_LEN 20
+#define HMAC_32_TAG_LEN 4
+#define HMAC_80_TAG_LEN 10
+
+#define AES_GCM_TAG_LEN 16
 
 static gboolean
 mikey_apply_policy (GstCaps * caps, GstMIKEYMessage * msg, guint8 policy)
 {
   const gchar *srtp_cipher;
-  const gchar *srtp_auth;
+  gboolean srtp_auth_alg_is_hmac_sha1;
+  guint srtp_auth_tag_length_bits;
   const GstMIKEYPayload *sp;
   guint i;
 
@@ -6063,7 +6067,8 @@ mikey_apply_policy (GstCaps * caps, GstMIKEYMessage * msg, guint8 policy)
 
   /* the default ciphers */
   srtp_cipher = "aes-128-icm";
-  srtp_auth = "hmac-sha1-80";
+  srtp_auth_alg_is_hmac_sha1 = TRUE;
+  srtp_auth_tag_length_bits = (HMAC_80_TAG_LEN * 8);
 
   /* now override the defaults with what is in the Security Policy */
   if (sp != NULL) {
@@ -6119,22 +6124,24 @@ mikey_apply_policy (GstCaps * caps, GstMIKEYMessage * msg, guint8 policy)
         case GST_MIKEY_SP_SRTP_AUTH_ALG:
           switch (param->val[0]) {
             case GST_MIKEY_MAC_NULL:
-              srtp_auth = "null";
+              srtp_auth_alg_is_hmac_sha1 = FALSE;
               break;
             case GST_MIKEY_MAC_HMAC_SHA_1_160:
-              srtp_auth = "hmac-sha1-80";
+              srtp_auth_alg_is_hmac_sha1 = TRUE;
               break;
             default:
               break;
           }
           break;
         case GST_MIKEY_SP_SRTP_AUTH_KEY_LEN:
+          // the Authentication Key length will be determined by the value of [srtp_auth_alg]
+          break;
+        case GST_MIKEY_SP_SRTP_AUTH_TAG_LEN:
           switch (param->val[0]) {
-            case HMAC_32_KEY_LEN:
-              srtp_auth = "hmac-sha1-32";
-              break;
-            case HMAC_80_KEY_LEN:
-              srtp_auth = "hmac-sha1-80";
+            case HMAC_32_TAG_LEN:
+            case HMAC_80_TAG_LEN:
+            case AES_GCM_TAG_LEN:
+              srtp_auth_tag_length_bits = param->val[0] * 8;
               break;
             default:
               break;
@@ -6149,12 +6156,21 @@ mikey_apply_policy (GstCaps * caps, GstMIKEYMessage * msg, guint8 policy)
       }
     }
   }
+
+  const gchar *srtp_auth_final;
+  if (!srtp_auth_alg_is_hmac_sha1)
+    srtp_auth_final = "null";
+  else if (srtp_auth_tag_length_bits == (HMAC_32_TAG_LEN * 8))
+    srtp_auth_final = "hmac-sha1-32";
+  else
+    srtp_auth_final = "hmac-sha1-80";
+
   /* now configure the SRTP parameters */
   gst_caps_set_simple (caps,
       "srtp-cipher", G_TYPE_STRING, srtp_cipher,
-      "srtp-auth", G_TYPE_STRING, srtp_auth,
+      "srtp-auth", G_TYPE_STRING, srtp_auth_final,
       "srtcp-cipher", G_TYPE_STRING, srtp_cipher,
-      "srtcp-auth", G_TYPE_STRING, srtp_auth, NULL);
+      "srtcp-auth", G_TYPE_STRING, srtp_auth_final, NULL);
 
   return TRUE;
 }

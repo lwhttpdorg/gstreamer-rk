@@ -79,12 +79,6 @@
 
 #include <gst/video/video-event.h>
 
-#define AES_128_KEY_LEN 16
-#define AES_256_KEY_LEN 32
-
-#define HMAC_32_KEY_LEN 4
-#define HMAC_80_KEY_LEN 10
-
 #include "rtsp-media.h"
 #include "rtsp-server-internal.h"
 
