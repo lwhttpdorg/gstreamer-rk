@@ -3282,6 +3282,7 @@ GST_START_TEST (test_video_formats_pstrides)
         || fmt == GST_VIDEO_FORMAT_GRAY10_LE32
         || fmt == GST_VIDEO_FORMAT_NV12_64Z32
         || fmt == GST_VIDEO_FORMAT_NV12_4L4
+        || fmt == GST_VIDEO_FORMAT_NV12_VSI_8L8
         || fmt == GST_VIDEO_FORMAT_NV12_32L32
         || fmt == GST_VIDEO_FORMAT_NV12_16L32S
         || fmt == GST_VIDEO_FORMAT_NV12_10LE32
@@ -3292,6 +3293,7 @@ GST_START_TEST (test_video_formats_pstrides)
         || fmt == GST_VIDEO_FORMAT_NV12_8L128
         || fmt == GST_VIDEO_FORMAT_NV12_10BE_8L128
         || fmt == GST_VIDEO_FORMAT_NV12_10LE40_4L4
+        || fmt == GST_VIDEO_FORMAT_NV15_VSI_8L8
         || fmt == GST_VIDEO_FORMAT_DMA_DRM
         || fmt == GST_VIDEO_FORMAT_MT2110T || fmt == GST_VIDEO_FORMAT_MT2110R) {
       fmt++;

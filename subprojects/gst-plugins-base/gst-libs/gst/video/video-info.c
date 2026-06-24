@@ -1205,26 +1205,36 @@ fill_planes (GstVideoInfo * info, gsize plane_size[GST_VIDEO_MAX_PLANES])
           n_tile_x * GST_ROUND_UP_2 (n_tile_y) / 2 * tile_size;
       break;
     }
+
     case GST_VIDEO_FORMAT_NV12_16L32S:
+    case GST_VIDEO_FORMAT_NV12_VSI_8L8:
+    case GST_VIDEO_FORMAT_NV15_VSI_8L8:
     {
       const gsize y_tile_size =
           GST_VIDEO_FORMAT_INFO_TILE_SIZE (info->finfo, 0);
       const gsize uv_tile_size =
           GST_VIDEO_FORMAT_INFO_TILE_SIZE (info->finfo, 1);
-      gint tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info->finfo, 0);
-      gint tile_height = GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (info->finfo, 0);
-      gint n_tile_x = GST_ROUND_UP_N (info->width, tile_width) / tile_width;
-      gint n_tile_y = GST_ROUND_UP_N (info->height, tile_height) / tile_height;
+      gint y_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info->finfo, 0);
+      gint y_tile_height = GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (info->finfo, 0);
+      gint uv_tile_width = GST_VIDEO_FORMAT_INFO_TILE_WIDTH (info->finfo, 1);
+      gint uv_tile_height = GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (info->finfo, 1);
+      gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB (info->finfo, 1);
+      gint h_sub = GST_VIDEO_FORMAT_INFO_H_SUB (info->finfo, 1);
+      gint n_y_tile_x = GST_ROUND_UP_N (info->width, y_tile_width) /
+          y_tile_width;
+      gint n_y_tile_y = GST_ROUND_UP_N (info->height, y_tile_height) /
+          y_tile_height;
+      gint chroma_width = GST_ROUND_UP_N (info->width >> w_sub, uv_tile_width);
+      gint chroma_height = GST_ROUND_UP_N (info->height >> h_sub,
+          uv_tile_height);
+      gint n_uv_tile_x = chroma_width / uv_tile_width;
+      gint n_uv_tile_y = chroma_height / uv_tile_height;
 
-      info->stride[0] = GST_VIDEO_TILE_MAKE_STRIDE (n_tile_x, n_tile_y);
-      /*
-       * size of UV plane tiles is subsample, hence have the same number of
-       * tiles in both directions.
-       */
-      info->stride[1] = info->stride[0];
+      info->stride[0] = GST_VIDEO_TILE_MAKE_STRIDE (n_y_tile_x, n_y_tile_y);
+      info->stride[1] = GST_VIDEO_TILE_MAKE_STRIDE (n_uv_tile_x, n_uv_tile_y);
       info->offset[0] = 0;
-      info->offset[1] = n_tile_x * n_tile_y * y_tile_size;
-      info->size = info->offset[1] + n_tile_x * n_tile_y * uv_tile_size;
+      info->offset[1] = n_y_tile_x * n_y_tile_y * y_tile_size;
+      info->size = info->offset[1] + n_uv_tile_x * n_uv_tile_y * uv_tile_size;
       break;
     }
     case GST_VIDEO_FORMAT_A420_10LE:

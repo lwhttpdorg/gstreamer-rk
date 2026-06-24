@@ -7875,6 +7875,7 @@ get_scale_format (GstVideoFormat format, gint plane)
     case GST_VIDEO_FORMAT_GBR_16LE:
     case GST_VIDEO_FORMAT_NV12_64Z32:
     case GST_VIDEO_FORMAT_NV12_4L4:
+    case GST_VIDEO_FORMAT_NV12_VSI_8L8:
     case GST_VIDEO_FORMAT_NV12_32L32:
     case GST_VIDEO_FORMAT_NV12_16L32S:
     case GST_VIDEO_FORMAT_A420_10BE:
@@ -7924,6 +7925,7 @@ get_scale_format (GstVideoFormat format, gint plane)
     case GST_VIDEO_FORMAT_NV12_8L128:
     case GST_VIDEO_FORMAT_NV12_10BE_8L128:
     case GST_VIDEO_FORMAT_NV12_10LE40_4L4:
+    case GST_VIDEO_FORMAT_NV15_VSI_8L8:
     case GST_VIDEO_FORMAT_DMA_DRM:
     case GST_VIDEO_FORMAT_MT2110T:
     case GST_VIDEO_FORMAT_MT2110R:
