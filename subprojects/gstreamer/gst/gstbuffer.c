@@ -3046,6 +3046,48 @@ gst_buffer_add_custom_meta (GstBuffer * buffer, const gchar * name)
 }
 
 /**
+ * gst_buffer_add_custom_meta_with_structure:
+ * @buffer: a #GstBuffer to attach the metadata to
+ * @name: the registered name of the custom metadata type
+ * @structure: (transfer full): the #GstStructure to attach to the metadata
+ *
+ * Attaches a custom metadata element to the buffer with a pre-populated structure,
+ * thus bypassing the current bug with get_structure returning a copy
+ *
+ * Returns: (transfer none) (nullable): The #GstCustomMeta that was added to the buffer
+ * Since: 1.28
+ */
+GstCustomMeta *
+gst_buffer_add_custom_meta_with_structure (GstBuffer * buffer,
+    const gchar * name, GstStructure * structure)
+{
+  GstCustomMeta *meta;
+
+  g_return_val_if_fail (name != NULL, NULL);
+  g_return_val_if_fail (structure != NULL, NULL);
+  g_return_val_if_fail (GST_IS_BUFFER (buffer), NULL);
+
+  meta = gst_buffer_add_custom_meta (buffer, name);
+
+  if (G_UNLIKELY (meta == NULL)) {
+    gst_structure_free (structure);
+    return NULL;
+  }
+
+  if (meta->structure) {
+    gst_structure_set_parent_refcount (meta->structure, NULL);
+    gst_structure_free (meta->structure);
+  }
+
+  meta->structure = structure;
+
+  gst_structure_set_parent_refcount (meta->structure,
+      &GST_MINI_OBJECT_REFCOUNT (buffer));
+
+  return meta;
+}
+
+/**
  * gst_buffer_get_custom_meta:
  * @buffer: a #GstBuffer
  * @name: the registered name of the custom meta to retrieve.

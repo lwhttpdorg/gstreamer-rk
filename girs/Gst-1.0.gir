@@ -2210,6 +2210,29 @@ been successfully registered with gst_meta_register_custom().</doc>
           </parameter>
         </parameters>
       </method>
+      <method name="add_custom_meta_with_structure" c:identifier="gst_buffer_add_custom_meta_with_structure" version="1.28">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">Attaches a custom metadata element to the buffer with a pre-populated structure,
+thus bypassing the current bug with get_structure returning a copy</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gstbuffer.h"/>
+        <return-value transfer-ownership="none" nullable="1">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">The #GstCustomMeta that was added to the buffer</doc>
+          <type name="CustomMeta" c:type="GstCustomMeta*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="buffer" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">a #GstBuffer to attach the metadata to</doc>
+            <type name="Buffer" c:type="GstBuffer*"/>
+          </instance-parameter>
+          <parameter name="name" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">the registered name of the custom metadata type</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="structure" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">the #GstStructure to attach to the metadata</doc>
+            <type name="Structure" c:type="GstStructure*"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="add_meta" c:identifier="gst_buffer_add_meta">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gstbuffer.c">Adds metadata for @info to @buffer using the parameters in @params.</doc>
         <source-position filename="../subprojects/gstreamer/gst/gstbuffer.h"/>
