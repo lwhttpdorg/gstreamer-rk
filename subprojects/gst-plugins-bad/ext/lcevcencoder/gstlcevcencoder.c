@@ -23,7 +23,7 @@
 
 #include <math.h>
 
-#include <gst/codecparsers/gstlcevcmeta.h>
+#include <gst/video/gstvideolcevc.h>
 
 #include <lcevc_eil.h>
 
@@ -43,6 +43,8 @@ GST_DEBUG_CATEGORY_STATIC (lcevcencoder_debug);
 
 /* The max number of frames the encoder can receive without encoding a frame */
 #define MAX_DELAYED_FRAMES 65
+
+GstSaticCaps LCEVC_CAPS = GST_STATIC_CAPS ("video/x-lcevc");
 
 struct GstEILContext_
 {
@@ -571,7 +573,11 @@ on_encoded_output (void *data, EILOutput * output)
   if (output->lcevc_length > 0) {
     GstBuffer *lcevc_data = gst_buffer_new_memdup ((gpointer) output->lcevc,
         output->lcevc_length);
-    gst_buffer_add_lcevc_meta (frame->output_buffer, lcevc_data);
+    GstCaps *lvevc_caps = gst_static_caps_get (&LCEVC_CAPS);
+
+    gst_buffer_add_video_enhancement_meta (frame->output_buffer, lcevc_caps,
+        lcevc_data);
+    gst_caps_unref (lcevc_caps);
     gst_buffer_unref (lcevc_data);
   }
 

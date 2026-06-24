@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gst/codecparsers/gstlcevcmeta.h>
+#include <gst/video/gstvideoenhancementmeta.h>
 
 #include "gstlcevcdecutils.h"
 #include "gstlcevcdec.h"
@@ -125,6 +125,8 @@ gst_lcevc_dec_init (GstLcevcDec * lcevc)
   lcevc->max_width = DEFAULT_MAX_WIDTH;
   lcevc->max_height = DEFAULT_MAX_HEIGHT;
   lcevc->max_latency = DEFAULT_MAX_LATENCY;
+
+  lcvec->lcvec_caps = gst_caps_new_empty ("video/x-lcevc");
 }
 
 static void
@@ -175,6 +177,16 @@ gst_lcevc_dec_get_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+}
+
+static void
+gst_lcevc_dec_finalize (GObject * object)
+{
+  GstLcevcDec *self = GST_LCEVC_DEC (object);
+
+  gst_caps_clear (&self->lcevc_caps);
+
+  GST_LCEVC_DEC_PARENT (object)->finalize (object);
 }
 
 static void
@@ -568,14 +580,14 @@ static gboolean
 send_enhancement_data (GstLcevcDec * lcevc, GstBuffer * input_buffer)
 {
   gboolean ret = FALSE;
-  GstLcevcMeta *lcevc_meta;
+  GstVideoEnhancementMeta *lcevc_meta;
   GstMapInfo enhancement_info;
   uint32_t out_w, out_h;
 
   out_w = GST_VIDEO_INFO_WIDTH (&lcevc->input_state->info);
   out_h = GST_VIDEO_INFO_HEIGHT (&lcevc->input_state->info);
 
-  lcevc_meta = gst_buffer_get_lcevc_meta (input_buffer);
+  lcevc_meta = gst_buffer_get_video_lcevc_meta (input_buffer, self->lcevc_caps);
   if (!lcevc_meta) {
     GST_INFO_OBJECT (lcevc,
         "Input buffer %" GST_TIME_FORMAT
@@ -583,6 +595,9 @@ send_enhancement_data (GstLcevcDec * lcevc, GstBuffer * input_buffer)
         GST_TIME_ARGS (GST_BUFFER_PTS (input_buffer)));
     return ensure_output_resolution (lcevc, out_w, out_h, out_w, out_h);
   }
+
+  if (self->lcevc_caps != lcevc_meta->caps)
+    gst_caps_replace (&self->lcevc_caps, lcevc_caps->caps);
 
   if (!gst_buffer_map (lcevc_meta->enhancement_data, &enhancement_info,
           GST_MAP_READ)) {
@@ -781,6 +796,7 @@ gst_lcevc_dec_class_init (GstLcevcDecClass * klass)
 
   gobject_class->set_property = gst_lcevc_dec_set_property;
   gobject_class->get_property = gst_lcevc_dec_get_property;
+  gobject_class->finalize = gst_lcevc_dec_finalize;
 
   bt_class->start = gst_lcevc_dec_start;
   bt_class->stop = gst_lcevc_dec_stop;

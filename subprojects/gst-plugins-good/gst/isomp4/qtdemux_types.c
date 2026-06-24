@@ -270,6 +270,8 @@ static const QtNodeType qt_node_types[] = {
   {FOURCC_resv, "Restricted Video Sample Entry", 0},
   {FOURCC_rinf, "Restricted Scheme Info Box", QT_FLAG_CONTAINER},
   {FOURCC_cmpC, "Compression Configuration Box", 0},
+  {FOURCC_sbas, "Subsegment Association Box", 0},
+  {FOURCC_lvc1, "Low Complexity Enhancement Video Coding Sample Entry", 0},
   {0, "unknown", 0,},
 };
 

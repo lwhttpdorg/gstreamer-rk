@@ -346,6 +346,7 @@ struct _QtDemuxStreamStsdEntry
   GstVideoContentLightLevel content_light_level;
   gboolean mastering_display_info_set;
   GstVideoMasteringDisplayInfo mastering_display_info;
+  gboolean is_lcevc;
 
   /* audio info */
   gdouble rate;
@@ -559,6 +560,10 @@ struct _QtDemuxStream
    */
   guint64 cslg_shift;
 
+  /* sbas */
+  guint32 subsegment_association_track_id;
+  guint32 subsegment_association_ref_track_id;
+
   /* fragmented */
   gboolean parsed_trex;
   guint32 def_sample_description_index; /* index is 1-based */
@@ -581,6 +586,14 @@ struct _QtDemuxStream
 
   /* KEY_UNITS trickmode with an interval */
   GstClockTime last_keyframe_pts;
+
+  /* Internal streams don't expose src pads.
+   * This is the case for LCEVC streams that reference other video stream.
+   */
+  gboolean internal;
+
+  /* Only used in PUSH mode to attach LCEVC metadata to video buffers */
+  GQueue *cached_buffer_datas;
 
   gint ref_count;               /* atomic */
 };

@@ -10626,6 +10626,30 @@ and @get_caps are likely needed as well.</doc>
     <record name="VideoEncoderPrivate" c:type="GstVideoEncoderPrivate" disguised="1" opaque="1">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h"/>
     </record>
+    <record name="VideoEnhancementMeta" c:type="GstVideoEnhancementMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h">Video enhancement data for enhancement codecs</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="caps" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h">a #GstCaps describing the enhancement data</doc>
+        <type name="Gst.Caps" c:type="GstCaps*"/>
+      </field>
+      <field name="enhancement_data" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h">the enhancemnent data</doc>
+        <type name="Gst.Buffer" c:type="GstBuffer*"/>
+      </field>
+      <function name="get_info" c:identifier="gst_video_enhancement_meta_get_info" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">Gets the #GstMetaInfo of the enhancement meta.</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the #GstVideoEnhancementMeta of the enhancement meta.</doc>
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
     <enumeration name="VideoFieldOrder" version="1.12" glib:type-name="GstVideoFieldOrder" glib:get-type="gst_video_field_order_get_type" c:type="GstVideoFieldOrder">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-info.h">Field order of interlaced content. This is only valid for
 interlace-mode=interleaved and not interlace-mode=mixed. In the case of
@@ -17460,6 +17484,27 @@ the given alpha buffer.</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="buffer_add_video_enhancement_meta" c:identifier="gst_buffer_add_video_enhancement_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">Attaches GstVideoEnhancementMeta metadata to @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the #GstVideoEnhancementMeta on @buffer.</doc>
+        <type name="VideoEnhancementMeta" c:type="GstVideoEnhancementMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="enhancement_caps" transfer-ownership="none">
+          <type name="Gst.Caps" c:type="GstCaps*"/>
+        </parameter>
+        <parameter name="enhancement_data" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the parsed ENHANCEMENT enhancement data</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="buffer_add_video_gl_texture_upload_meta" c:identifier="gst_buffer_add_video_gl_texture_upload_meta">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.c">Attaches GstVideoGLTextureUploadMeta metadata to @buffer with the given
 parameters.</doc>
@@ -17891,6 +17936,29 @@ Note: there may be two #GstVideoAFDMeta structs for interlaced video.</doc>
         </parameter>
       </parameters>
     </function-macro>
+    <function name="buffer_get_video_enhancement_meta" c:identifier="gst_buffer_get_video_enhancement_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">Find the #GstVideoEnhancementMeta on @buffer with the lowest @id.
+
+Buffers can contain multiple #GstVideoEnhancementMeta metadata items when dealing
+with multiview buffers.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+      <return-value transfer-ownership="none" nullable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the matching
+#GstVideoEnhancementMeta with lowest id (usually 0) or %NULL when
+there is no such metadata on @buffer.</doc>
+        <type name="VideoEnhancementMeta" c:type="GstVideoEnhancementMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+        <parameter name="enhancement_caps" transfer-ownership="none" nullable="1" allow-none="1">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">a #GstCaps to filter on</doc>
+          <type name="Gst.Caps" c:type="GstCaps*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function-macro name="buffer_get_video_gl_texture_upload_meta" c:identifier="gst_buffer_get_video_gl_texture_upload_meta" introspectable="0">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.h"/>
       <parameters>
@@ -20073,6 +20141,22 @@ NV12:0x0100000000000002, or NULL otherwise.</doc>
     <function name="video_dsc_verification_meta_get_info" c:identifier="gst_video_dsc_verification_meta_get_info" moved-to="VideoDSCVerificationMeta.get_info" version="1.30">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodscmeta.h"/>
       <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
+    </function>
+    <function name="video_enhancement_meta_api_get_type" c:identifier="gst_video_enhancement_meta_api_get_type" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">Gets the #GType of the enhancement meta API.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the #GType of the enhancement meta API.</doc>
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="video_enhancement_meta_get_info" c:identifier="gst_video_enhancement_meta_get_info" moved-to="VideoEnhancementMeta.get_info" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">Gets the #GstMetaInfo of the enhancement meta.</doc>
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoenhancementmeta.c">the #GstVideoEnhancementMeta of the enhancement meta.</doc>
         <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
       </return-value>
     </function>

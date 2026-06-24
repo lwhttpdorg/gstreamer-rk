@@ -27,8 +27,8 @@
 #include <gst/pbutils/pbutils.h>
 #include <gst/video/video.h>
 #include <gst/video/video-sei.h>
+#include <gst/video/gstvideoenhancementmeta.h>
 #include <gst/base/gstbitreader.h>
-#include <gst/codecparsers/gstlcevcmeta.h>
 #include <gstvideoparseutils.h>
 
 GST_DEBUG_CATEGORY_EXTERN (videoparseutils_debug);
@@ -334,9 +334,16 @@ gst_video_push_user_data (GstElement * elt, GstVideoParseUserData * user_data,
 
   /* 4. handle LCEVC */
   if (user_data->lcevc_enhancement_data) {
-    if (!gst_buffer_get_meta (buf, GST_LCEVC_META_API_TYPE)) {
-      gst_buffer_add_lcevc_meta (buf, user_data->lcevc_enhancement_data);
+    if (!user_data->lcevc_caps)
+      user_data->lcevc_caps = gst_caps_new_empty_simple ("video/x-lcevc");
+    GstVideoEnhancementMeta *lcevc_meta =
+        gst_buffer_get_video_enhancement_meta (buf, user_data->lcevc_caps);
+    if (!lcevc_meta) {
+      gst_buffer_add_video_enhancement_meta (buf, user_data->lcevc_caps,
+          user_data->lcevc_enhancement_data);
     } else {
+      if (user_data->lcevc_caps != lcevc_meta->caps)
+        gst_caps_replace (&user_data->lcevc_caps, lcevc_meta->caps);
       GST_DEBUG_OBJECT (elt, "LCEVC data already found on buffer, "
           "discarding to avoid duplication");
     }
@@ -519,8 +526,10 @@ gst_video_clear_user_data (GstVideoParseUserData * user_data, gboolean free)
   user_data->closedcaptions_size = 0;
   user_data->bar_data_size = 0;
   user_data->active_format_flag = 0;
-  if (free)
+  if (free) {
     g_clear_pointer (&user_data->lcevc_enhancement_data, gst_buffer_unref);
+    g_clear_pointer (&user_data->lcevc_caps, gst_caps_unref);
+  }
 }
 
 /*
