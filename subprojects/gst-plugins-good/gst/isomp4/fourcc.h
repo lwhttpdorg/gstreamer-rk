@@ -349,6 +349,13 @@ G_BEGIN_DECLS
 #define FOURCC_saiz     GST_MAKE_FOURCC('s','a','i','z')
 #define FOURCC_saio     GST_MAKE_FOURCC('s','a','i','o')
 
+#define FOURCC_idat     GST_MAKE_FOURCC('i','d','a','t')
+#define FOURCC_iinf     GST_MAKE_FOURCC('i','i','n','f')
+#define FOURCC_iloc     GST_MAKE_FOURCC('i','l','o','c')
+#define FOURCC_infe     GST_MAKE_FOURCC('i','n','f','e')
+#define FOURCC_uri_     GST_MAKE_FOURCC('u','r','i',' ')
+#define FOURCC_mime     GST_MAKE_FOURCC('m','i','m','e')
+
 #define FOURCC_3gg6     GST_MAKE_FOURCC('3','g','g','6')
 #define FOURCC_3gg7     GST_MAKE_FOURCC('3','g','g','7')
 #define FOURCC_3gp4     GST_MAKE_FOURCC('3','g','p','4')
@@ -490,6 +497,18 @@ G_BEGIN_DECLS
 #define FOURCC_rinf     GST_MAKE_FOURCC('r','i','n','f')
 #define FOURCC_cmpC     GST_MAKE_FOURCC('c','m','p','C')
 #define FOURCC_gcmp     GST_MAKE_FOURCC('g','c','m','p')
+
+/* TAI Precision Timestamps */
+#define FOURCC_taic     GST_MAKE_FOURCC ('t','a','i','c')
+#define FOURCC_stai     GST_MAKE_FOURCC ('s','t','a','i')
+
+/* GIMI Content ID */
+#define FOURCC_suid     GST_MAKE_FOURCC ('s','u','i','d')
+
+/* Items and properties */
+#define FOURCC_iprp     GST_MAKE_FOURCC ('i','p','r','p')
+#define FOURCC_ipco     GST_MAKE_FOURCC ('i','p','c','o')
+#define FOURCC_ipma     GST_MAKE_FOURCC ('i','p','m','a')
 
 G_END_DECLS
 

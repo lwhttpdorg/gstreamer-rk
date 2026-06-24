@@ -415,8 +415,13 @@ static void gst_qtdemux_reset (GstQTDemux * qtdemux, gboolean hard);
 static void qtdemux_clear_protection_events_on_all_streams (GstQTDemux *
     qtdemux);
 
+
 static GstFlowReturn gst_qtdemux_combine_flows (GstQTDemux * demux,
     QtDemuxStream * stream, GstFlowReturn ret);
+
+static void qtdemux_parse_file_meta (GstQTDemux * qtdemux,
+    const guint8 * buffer, gint length);
+
 
 static void
 gst_qtdemux_set_property (GObject * object, guint prop_id, const GValue * value,
@@ -2632,11 +2637,23 @@ gst_qtdemux_stream_flush_segments_data (QtDemuxStream * stream)
 }
 
 static void
+qtdemux_aux_info_clear (QtDemuxAuxInfo * aux)
+{
+  g_free (aux->sample_sizes);
+  g_free (aux->chunk_offsets);
+  g_free (aux->first_sample_in_chunk);
+  memset (aux, 0, sizeof (*aux));
+}
+
+static void
 gst_qtdemux_stream_flush_samples_data (QtDemuxStream * stream)
 {
   g_free (stream->samples);
   stream->samples = NULL;
   gst_qtdemux_stbl_free (stream);
+
+  qtdemux_aux_info_clear (&stream->aux_stai);
+  qtdemux_aux_info_clear (&stream->aux_suid);
 
   /* fragments */
   g_free (stream->ra_entries);
@@ -2657,6 +2674,8 @@ static void
 gst_qtdemux_stream_clear (QtDemuxStream * stream)
 {
   gint i;
+  QtDemuxAuxPendingBuffer *pending;
+
   if (stream->allocator)
     gst_object_unref (stream->allocator);
   while (stream->buffers) {
@@ -2665,6 +2684,12 @@ gst_qtdemux_stream_clear (QtDemuxStream * stream)
   }
   g_queue_clear_full (&stream->reorder_queue,
       (GDestroyNotify) gst_mini_object_unref);
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    gst_buffer_unref (pending->buf);
+    g_free (pending);
+  }
+  g_free (stream->suid_pending_content_id);
+  stream->suid_pending_content_id = NULL;
   for (i = 0; i < stream->stsd_entries_length; i++) {
     QtDemuxStreamStsdEntry *entry = &stream->stsd_entries[i];
     if (entry->rgb8_palette) {
@@ -4214,11 +4239,12 @@ qtdemux_parse_saiz (GstQTDemux * qtdemux, QtDemuxStream * stream,
 }
 
 /* Parses the offset of sample auxiliary information contained within a stream,
- * as given in a saio box. Returns TRUE if successful; FALSE otherwise. */
+ * as given in a saio box. Returns TRUE if successful; FALSE otherwise.
+ * Fills @offsets (pre-allocated by the caller with @n_offsets elements). */
 static gboolean
 qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
     GstByteReader * br, guint32 * info_type, guint32 * info_type_parameter,
-    guint64 * offset)
+    guint64 * offsets, guint32 n_offsets)
 {
   guint8 version = 0;
   guint32 flags = 0;
@@ -4227,12 +4253,14 @@ qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
   guint32 entry_count;
   guint32 off_32;
   guint64 off_64;
+  guint32 i;
   const guint8 *aux_info_type_data = NULL;
 
   g_return_val_if_fail (qtdemux != NULL, FALSE);
   g_return_val_if_fail (stream != NULL, FALSE);
   g_return_val_if_fail (br != NULL, FALSE);
-  g_return_val_if_fail (offset != NULL, FALSE);
+  g_return_val_if_fail (offsets != NULL, FALSE);
+  g_return_val_if_fail (n_offsets > 0, FALSE);
 
   if (!gst_byte_reader_get_uint8 (br, &version))
     return FALSE;
@@ -4266,22 +4294,31 @@ qtdemux_parse_saio (GstQTDemux * qtdemux, QtDemuxStream * stream,
   if (!gst_byte_reader_get_uint32_be (br, &entry_count))
     return FALSE;
 
-  if (entry_count != 1) {
-    GST_ERROR_OBJECT (qtdemux, "multiple offsets are not supported");
+  if (entry_count == 0) {
+    GST_ERROR_OBJECT (qtdemux, "saio box has no entries");
     return FALSE;
   }
 
-  if (version == 0) {
-    if (!gst_byte_reader_get_uint32_be (br, &off_32))
-      return FALSE;
-    *offset = (guint64) off_32;
-  } else {
-    if (!gst_byte_reader_get_uint64_be (br, &off_64))
-      return FALSE;
-    *offset = off_64;
+  if (entry_count > n_offsets) {
+    GST_ERROR_OBJECT (qtdemux,
+        "saio entry count %u exceeds allocated buffer size %u", entry_count,
+        n_offsets);
+    return FALSE;
   }
 
-  GST_DEBUG_OBJECT (qtdemux, "offset: %" G_GUINT64_FORMAT, *offset);
+  for (i = 0; i < entry_count; i++) {
+    if (version == 0) {
+      if (!gst_byte_reader_get_uint32_be (br, &off_32))
+        return FALSE;
+      offsets[i] = (guint64) off_32;
+    } else {
+      if (!gst_byte_reader_get_uint64_be (br, &off_64))
+        return FALSE;
+      offsets[i] = off_64;
+    }
+    GST_DEBUG_OBJECT (qtdemux, "offset[%u]: %" G_GUINT64_FORMAT, i, offsets[i]);
+  }
+
   return TRUE;
 }
 
@@ -4487,6 +4524,81 @@ qtdemux_parse_pssh (GstQTDemux * qtdemux, GNode * node)
 }
 
 static gboolean
+qtdemux_find_saiz_saio (GstQTDemux * qtdemux, GNode * parent_node,
+    guint32 fourcc, GNode ** saiz, GstByteReader * saiz_data, GNode ** saio,
+    GstByteReader * saio_data)
+{
+  GNode *saiz_node = NULL;
+  guint32 flags = 0;
+
+  saiz_node =
+      qtdemux_tree_get_child_by_type_full (parent_node, FOURCC_saiz, saiz_data);
+
+  while (saiz_node) {
+    guint32 aux_info_type = 0;
+    const guint8 *aux_info_type_data;
+
+    if (!gst_byte_reader_get_uint32_be (saiz_data, &flags))
+      return FALSE;
+
+    if (flags & 0x1) {
+      if (!gst_byte_reader_get_data (saiz_data, 4, &aux_info_type_data))
+        return FALSE;
+      aux_info_type = QT_FOURCC (aux_info_type_data);
+      /* skip aux_info_type_parameter */
+      if (!gst_byte_reader_skip (saiz_data, 4))
+        return FALSE;
+    }
+
+    if (aux_info_type == fourcc) {
+      *saio =
+          qtdemux_tree_get_child_by_type_full (parent_node, FOURCC_saio,
+          saio_data);
+      while (*saio) {
+        guint32 saio_aux_info_type = 0;
+        const guint8 *saio_aux_info_type_data;
+
+        if (!gst_byte_reader_get_uint32_be (saio_data, &flags))
+          return FALSE;
+
+        if (flags & 0x1) {
+          if (!gst_byte_reader_get_data (saio_data, 4,
+                  &saio_aux_info_type_data))
+            return FALSE;
+          saio_aux_info_type = QT_FOURCC (saio_aux_info_type_data);
+          /* skip aux_info_type_parameter */
+          if (!gst_byte_reader_skip (saio_data, 4))
+            return FALSE;
+
+        }
+        if (saio_aux_info_type == fourcc) {
+          /* Found matching saiz and saio nodes */
+
+          *saiz = saiz_node;
+          gst_byte_reader_set_pos (saiz_data, 0);
+          gst_byte_reader_set_pos (saio_data, 0);
+
+          return TRUE;
+        }
+
+        *saio =
+            qtdemux_tree_get_sibling_by_type_full (*saio, FOURCC_saio,
+            saio_data);
+      }
+
+      GST_WARNING_OBJECT (qtdemux, "saiz box without a corresponding saio box");
+    }
+    saiz_node = qtdemux_tree_get_sibling_by_type_full (saiz_node, FOURCC_saiz,
+        saiz_data);
+  }
+
+  *saiz = NULL;
+  *saio = NULL;
+
+  return TRUE;
+}
+
+static gboolean
 qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
     guint64 moof_offset, QtDemuxStream * stream)
 {
@@ -4590,9 +4702,19 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
      * data in the fragment (consisting of a saiz box and a corresponding saio
      * box); in theory, however, there could be multiple sets of sample
      * auxiliary data in a fragment. */
-    saiz_node =
-        qtdemux_tree_get_child_by_type_full (traf_node, FOURCC_saiz,
-        &saiz_data);
+
+    if (!qtdemux_find_saiz_saio (qtdemux, traf_node, FOURCC_cenc, &saiz_node,
+            &saiz_data, &saio_node, &saio_data))
+      goto fail;
+    if (saiz_node == NULL)
+      if (!qtdemux_find_saiz_saio (qtdemux, traf_node, FOURCC_cbcs, &saiz_node,
+              &saiz_data, &saio_node, &saio_data))
+        goto fail;
+    if (saiz_node == NULL)
+      if (!qtdemux_find_saiz_saio (qtdemux, traf_node, 0, &saiz_node,
+              &saiz_data, &saio_node, &saio_data))
+        goto fail;
+
     if (saiz_node) {
       guint32 info_type = 0;
       guint64 offset = 0;
@@ -4607,23 +4729,15 @@ qtdemux_parse_moof (GstQTDemux * qtdemux, const guint8 * buffer, guint length,
         GST_ERROR_OBJECT (qtdemux, "failed to parse saiz box");
         goto fail;
       }
-      saio_node =
-          qtdemux_tree_get_child_by_type_full (traf_node, FOURCC_saio,
-          &saio_data);
-      if (!saio_node) {
-        GST_ERROR_OBJECT (qtdemux, "saiz box without a corresponding saio box");
-        g_free (qtdemux->cenc_aux_info_sizes);
-        qtdemux->cenc_aux_info_sizes = NULL;
-        goto fail;
-      }
 
       if (G_UNLIKELY (!qtdemux_parse_saio (qtdemux, stream, &saio_data,
-                  &info_type, &info_type_parameter, &offset))) {
+                  &info_type, &info_type_parameter, &offset, 1))) {
         GST_ERROR_OBJECT (qtdemux, "failed to parse saio box");
         g_free (qtdemux->cenc_aux_info_sizes);
         qtdemux->cenc_aux_info_sizes = NULL;
         goto fail;
       }
+
       if (base_offset > -1 && base_offset > qtdemux->moof_offset)
         offset += (guint64) (base_offset - qtdemux->moof_offset);
       if ((info_type == FOURCC_cenc || info_type == FOURCC_cbcs)
@@ -5258,27 +5372,12 @@ gst_qtdemux_loop_state_header (GstQTDemux * qtdemux)
     case FOURCC_meta:
     {
       GstBuffer *meta = NULL;
-      GNode *node, *child;
-      GstByteReader child_data;
       ret = gst_qtdemux_pull_atom (qtdemux, cur_offset, length, &meta);
       if (ret != GST_FLOW_OK)
         goto beach;
       qtdemux->offset += length;
       gst_buffer_map (meta, &map, GST_MAP_READ);
-
-      node = g_node_new (map.data);
-
-      qtdemux_parse_node (qtdemux, node, map.data, map.size);
-
-      /* Parse ONVIF Export File Format CorrectStartTime box if available */
-      if ((child =
-              qtdemux_tree_get_child_by_type_full (node, FOURCC_cstb,
-                  &child_data))) {
-        qtdemux_parse_cstb (qtdemux, &child_data);
-      }
-
-      g_node_destroy (node);
-
+      qtdemux_parse_file_meta (qtdemux, map.data, map.size);
       gst_buffer_unmap (meta, &map);
       gst_buffer_unref (meta);
       break;
@@ -7062,6 +7161,115 @@ gst_qtdemux_split_and_push_buffer (GstQTDemux * qtdemux, QtDemuxStream * stream,
   return ret;
 }
 
+/* Compute the file offset of auxiliary data for the given sample_index
+ * using the non-fragmented (stbl) saiz/saio information.
+ * Returns 0 if no data is available for that sample. */
+static guint64
+qtdemux_aux_info_offset_for_sample (const QtDemuxAuxInfo * aux,
+    guint32 sample_index)
+{
+  guint32 lo, hi, chunk_idx, first_sample;
+  guint64 within_offset = 0;
+
+  if (!aux->present || sample_index >= aux->sample_count)
+    return 0;
+
+  /* Binary search first_sample_in_chunk to find the chunk containing
+   * sample_index.  We want the last chunk whose first sample <= sample_index. */
+  lo = 0;
+  hi = aux->n_chunk_offsets;
+  while (lo < hi) {
+    guint32 mid = (lo + hi) / 2;
+    if (aux->first_sample_in_chunk[mid] <= sample_index)
+      lo = mid + 1;
+    else
+      hi = mid;
+  }
+  chunk_idx = lo - 1;
+  first_sample = aux->first_sample_in_chunk[chunk_idx];
+
+  /* Accumulate per-sample sizes within the chunk up to sample_index */
+  for (guint32 s = first_sample; s < sample_index; s++)
+    within_offset += aux->sample_sizes[s];
+
+  return aux->chunk_offsets[chunk_idx] + within_offset;
+}
+
+/* Parse saiz/saio with the given aux_info_type fourcc from a stbl node
+ * and populate a QtDemuxAuxInfo for non-fragmented tracks.
+ * Returns TRUE if aux info was found and parsed. */
+static gboolean
+qtdemux_aux_info_parse_stbl (GstQTDemux * qtdemux, QtDemuxStream * stream,
+    GNode * stbl, guint32 fourcc, QtDemuxAuxInfo * aux)
+{
+  GNode *saiz_node = NULL, *saio_node = NULL;
+  GstByteReader saiz_data, saio_data;
+  guint8 *sample_sizes;
+  guint32 sample_count = 0;
+  guint32 n_chunk_offsets = 0;
+  guint32 info_type = 0;
+  guint64 *chunk_offsets;
+  GstByteReader stsc;
+  guint32 first_sample = 0;
+
+  if (!qtdemux_find_saiz_saio (qtdemux, stbl, fourcc, &saiz_node,
+          &saiz_data, &saio_node, &saio_data))
+    return FALSE;
+
+  /* It's valid to not have them */
+  if (!saiz_node || !saio_node)
+    return TRUE;
+
+  sample_sizes =
+      qtdemux_parse_saiz (qtdemux, stream, &saiz_data, &sample_count);
+  if (!sample_sizes)
+    return FALSE;
+
+  /* The number of saio offsets matches the number of chunks in stco */
+  n_chunk_offsets = GST_READ_UINT32_BE (stream->stco.data + 4);
+
+  chunk_offsets = g_new (guint64, n_chunk_offsets);
+
+  if (!qtdemux_parse_saio (qtdemux, stream, &saio_data, &info_type,
+          NULL, chunk_offsets, n_chunk_offsets)) {
+    g_free (chunk_offsets);
+    g_free (sample_sizes);
+    return FALSE;
+  }
+
+  aux->present = TRUE;
+  aux->sample_sizes = sample_sizes;
+  aux->sample_count = sample_count;
+  aux->chunk_offsets = chunk_offsets;
+  aux->n_chunk_offsets = n_chunk_offsets;
+
+  /* Pre-compute first sample index per chunk by walking stsc */
+  aux->first_sample_in_chunk = g_new0 (guint32, n_chunk_offsets);
+  stsc = stream->stsc;
+  for (guint32 i = 0; i < stream->n_samples_per_chunk; i++) {
+    guint32 cur_first_chunk, cur_samples_per_chunk, next_first_chunk;
+    cur_first_chunk = gst_byte_reader_get_uint32_be_unchecked (&stsc) - 1;
+    cur_samples_per_chunk = gst_byte_reader_get_uint32_be_unchecked (&stsc);
+    /* skip sample_description_index */
+    gst_byte_reader_skip_unchecked (&stsc, 4);
+    if (i + 1 < stream->n_samples_per_chunk)
+      next_first_chunk = gst_byte_reader_peek_uint32_be_unchecked (&stsc) - 1;
+    else
+      next_first_chunk = n_chunk_offsets;
+    for (guint32 c = cur_first_chunk;
+        c < next_first_chunk && c < n_chunk_offsets; c++) {
+      aux->first_sample_in_chunk[c] = first_sample;
+      first_sample += cur_samples_per_chunk;
+    }
+  }
+
+  GST_DEBUG_OBJECT (qtdemux,
+      "Found '%" GST_FOURCC_FORMAT "' aux info: %u samples, %u chunks",
+      GST_FOURCC_ARGS (fourcc), sample_count, n_chunk_offsets);
+
+  return TRUE;
+}
+
 /* Sets a buffer's attributes properly and pushes it downstream.
  * Also checks for additional actions and custom processing that may
  * need to be done first.
@@ -7154,6 +7362,54 @@ gst_qtdemux_decorate_and_push_buffer (GstQTDemux * qtdemux,
             pts) + qtdemux->start_utc_time - stream->cslg_shift,
         GST_CLOCK_TIME_NONE);
     gst_caps_unref (caps);
+  }
+
+  if (stream->stai_pending_valid) {
+    static GstStaticCaps tai_caps = GST_STATIC_CAPS ("timestamp/x-tai1958");
+    GstCaps *caps = gst_static_caps_get (&tai_caps);
+    GstReferenceTimestampMeta *tai_meta;
+
+    tai_meta = gst_buffer_add_reference_timestamp_meta (buf, caps,
+        stream->stai_pending_tai_ts, GST_CLOCK_TIME_NONE);
+    if (tai_meta) {
+      guint8 flags = stream->stai_pending_flags;
+      gboolean synchronization_state = !!(flags & 0x80);
+      gboolean timestamp_generation_failure = !!(flags & 0x40);
+      gboolean timestamp_is_modified = !!(flags & 0x20);
+
+      GST_LOG_OBJECT (stream->pad,
+          "Adding TAI timestamp meta with timestamp %" GST_TIME_FORMAT
+          ", synchronization_state=%d, timestamp_generation_failure=%d, "
+          "timestamp_is_modified=%d",
+          GST_TIME_ARGS (stream->stai_pending_tai_ts), synchronization_state,
+          timestamp_generation_failure, timestamp_is_modified);
+
+      tai_meta->info =
+          gst_structure_new ("iso23001-17-timestamp",
+          "synchronization-state", G_TYPE_BOOLEAN, synchronization_state,
+          "timestamp-generation-failure", G_TYPE_BOOLEAN,
+          timestamp_generation_failure, "timestamp-is-modified", G_TYPE_BOOLEAN,
+          timestamp_is_modified, NULL);
+    }
+    gst_caps_unref (caps);
+    stream->stai_pending_valid = FALSE;
+  }
+
+  if (stream->suid_pending_valid && stream->suid_pending_content_id) {
+    GstCustomMeta *suid_meta =
+        gst_buffer_add_custom_meta (buf, "GimiContentID");
+    if (suid_meta) {
+      GstStructure *s = gst_custom_meta_get_structure (suid_meta);
+
+      gst_structure_set (s, "content-id", G_TYPE_STRING,
+          stream->suid_pending_content_id, NULL);
+      GST_LOG_OBJECT (stream->pad,
+          "Adding GimiContentID meta with content-id=%s",
+          stream->suid_pending_content_id);
+    }
+    g_free (stream->suid_pending_content_id);
+    stream->suid_pending_content_id = NULL;
+    stream->suid_pending_valid = FALSE;
   }
 
   GST_BUFFER_OFFSET (buf) = -1;
@@ -7631,6 +7887,85 @@ gst_qtdemux_loop_state_movie (GstQTDemux * qtdemux)
     pts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
     dts += stream->offset_in_sample / CUR_STREAM (stream)->bytes_per_frame;
     duration = size / CUR_STREAM (stream)->bytes_per_frame;
+  }
+
+  /* Read STAI (TAI timestamp) data for this sample in pull mode */
+  stream->stai_pending_valid = FALSE;
+  if (stream->aux_stai.present) {
+    guint64 stai_offset = qtdemux_aux_info_offset_for_sample (&stream->aux_stai,
+        stream->sample_index);
+
+    if (stai_offset > 0) {
+      guint8 stai_size = stream->aux_stai.sample_sizes[stream->sample_index];
+      GstBuffer *stai_buf = NULL;
+      GstMapInfo stai_map;
+
+      GST_DEBUG_OBJECT (qtdemux,
+          "STAI pulling sample %u: offset=%" G_GUINT64_FORMAT " size=%u",
+          stream->sample_index, stai_offset, stai_size);
+
+      ret = gst_qtdemux_pull_atom (qtdemux, stai_offset, stai_size, &stai_buf);
+      if (G_UNLIKELY (ret != GST_FLOW_OK)) {
+        GST_WARNING_OBJECT (qtdemux, "STAI sample %u: pull failed ret=%s",
+            stream->sample_index, gst_flow_get_name (ret));
+        goto beach;
+      }
+
+      gst_buffer_map (stai_buf, &stai_map, GST_MAP_READ);
+      if (stai_map.size >= 9) {
+        stream->stai_pending_tai_ts = GST_READ_UINT64_BE (stai_map.data);
+        stream->stai_pending_flags = stai_map.data[8];
+        stream->stai_pending_valid = TRUE;
+        GST_TRACE_OBJECT (qtdemux,
+            "STAI sample %u: TAI ts=%" G_GUINT64_FORMAT " flags=0x%02x",
+            stream->sample_index, stream->stai_pending_tai_ts,
+            stream->stai_pending_flags);
+      } else {
+        GST_WARNING_OBJECT (qtdemux,
+            "STAI sample %u: map size %" G_GSIZE_FORMAT " < 9",
+            stream->sample_index, stai_map.size);
+      }
+      gst_buffer_unmap (stai_buf, &stai_map);
+      gst_buffer_unref (stai_buf);
+    } else {
+      GST_WARNING_OBJECT (qtdemux,
+          "STAI sample %u: offset is 0 (stai_sample_count=%u)",
+          stream->sample_index, stream->aux_stai.sample_count);
+    }
+  }
+
+  /* Read SUID (GIMI Content ID) data for this sample in pull mode */
+  g_free (stream->suid_pending_content_id);
+  stream->suid_pending_content_id = NULL;
+  stream->suid_pending_valid = FALSE;
+  if (stream->aux_suid.present) {
+    guint64 suid_offset = qtdemux_aux_info_offset_for_sample (&stream->aux_suid,
+        stream->sample_index);
+
+    if (suid_offset > 0) {
+      guint8 suid_size = stream->aux_suid.sample_sizes[stream->sample_index];
+      GstBuffer *suid_buf = NULL;
+      GstFlowReturn suid_ret;
+
+      suid_ret =
+          gst_qtdemux_pull_atom (qtdemux, suid_offset, suid_size, &suid_buf);
+      if (G_LIKELY (suid_ret == GST_FLOW_OK)) {
+        GstMapInfo suid_map;
+
+        gst_buffer_map (suid_buf, &suid_map, GST_MAP_READ);
+        if (suid_map.size > 0) {
+          /* suid is a null-terminated UTF-8 string */
+          stream->suid_pending_content_id =
+              g_strndup ((const gchar *) suid_map.data, suid_map.size);
+          stream->suid_pending_valid = TRUE;
+          GST_LOG_OBJECT (qtdemux,
+              "SUID sample %u: GIMI ContentID=%s",
+              stream->sample_index, stream->suid_pending_content_id);
+        }
+        gst_buffer_unmap (suid_buf, &suid_map);
+        gst_buffer_unref (suid_buf);
+      }
+    }
   }
 
   ret = gst_qtdemux_decorate_and_push_buffer (qtdemux, stream, buf,
@@ -8311,6 +8646,85 @@ gst_qtdemux_chain (GstPad * sinkpad, GstObject * parent, GstBuffer * inbuf)
   return gst_qtdemux_process_adapter (demux, FALSE);
 }
 
+/* Flush the auxiliary pending buffer queue for a stream, optionally attaching
+ * TAI timestamps from the provided STAI data and/or GIMI Content IDs from
+ * SUID data.  If data pointers are NULL, the corresponding metas are not
+ * attached (e.g. at EOS or when aux data was not found in todrop). */
+static GstFlowReturn
+gst_qtdemux_aux_flush_pending (GstQTDemux * demux, QtDemuxStream * stream,
+    const guint8 * stai_data, gsize stai_data_size,
+    const guint8 * suid_data, gsize suid_data_size)
+{
+  GstFlowReturn ret = GST_FLOW_OK;
+  QtDemuxAuxPendingBuffer *pending;
+  guint idx = 0;
+  guint64 stai_pos = 0;
+  guint64 suid_pos = 0;
+
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    if (stai_data && stream->aux_stai.present) {
+      guint8 stai_sample_size = 9;
+
+      /* Use per-sample size if available */
+      if (idx < stream->aux_stai.sample_count) {
+        stai_sample_size = stream->aux_stai.sample_sizes[idx];
+      }
+
+      if (stai_pos + 9 <= stai_data_size) {
+        stream->stai_pending_tai_ts = GST_READ_UINT64_BE (stai_data + stai_pos);
+        stream->stai_pending_flags = stai_data[stai_pos + 8];
+        stream->stai_pending_valid = TRUE;
+        GST_LOG_OBJECT (demux,
+            "STAI push pending %u: TAI ts=%" G_GUINT64_FORMAT " flags=0x%02x",
+            idx, stream->stai_pending_tai_ts, stream->stai_pending_flags);
+      }
+      stai_pos += stai_sample_size;
+    }
+
+    if (suid_data) {
+      guint8 suid_sample_size = 0;
+
+      if (stream->aux_suid.present && idx < stream->aux_suid.sample_count)
+        suid_sample_size = stream->aux_suid.sample_sizes[idx];
+
+      if (suid_sample_size > 0 && suid_pos + suid_sample_size <= suid_data_size) {
+        g_free (stream->suid_pending_content_id);
+        stream->suid_pending_content_id =
+            g_strndup ((const gchar *) (suid_data + suid_pos),
+            suid_sample_size);
+        stream->suid_pending_valid = TRUE;
+        GST_LOG_OBJECT (demux,
+            "SUID push pending %u: content-id=%s",
+            idx, stream->suid_pending_content_id);
+      }
+      suid_pos += suid_sample_size;
+    }
+
+    ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, pending->buf,
+        pending->dts, pending->pts, pending->duration,
+        pending->round_up_duration, pending->keyframe, pending->position,
+        pending->byte_position);
+
+    g_free (pending);
+    idx++;
+
+    GST_OBJECT_LOCK (demux);
+    ret = gst_qtdemux_combine_flows (demux, stream, ret);
+    GST_OBJECT_UNLOCK (demux);
+
+    if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+      break;
+  }
+
+  /* Free any remaining queued buffers on error */
+  while ((pending = g_queue_pop_head (&stream->aux_pending_buffers))) {
+    gst_buffer_unref (pending->buf);
+    g_free (pending);
+  }
+
+  return ret;
+}
+
 static GstFlowReturn
 gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
 {
@@ -8621,20 +9035,8 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
           GST_DEBUG_OBJECT (demux, "Parsing [sidx]");
           qtdemux_parse_sidx (demux, data, demux->neededbytes);
         } else if (fourcc == FOURCC_meta) {
-          GNode *node, *child;
-          GstByteReader child_data;
-
-          node = g_node_new ((gpointer) data);
-          qtdemux_parse_node (demux, node, data, demux->neededbytes);
-
-          /* Parse ONVIF Export File Format CorrectStartTime box if available */
-          if ((child =
-                  qtdemux_tree_get_child_by_type_full (node, FOURCC_cstb,
-                      &child_data))) {
-            qtdemux_parse_cstb (demux, &child_data);
-          }
-
-          g_node_destroy (node);
+          GST_DEBUG_OBJECT (demux, "Parsing [meta]");
+          qtdemux_parse_file_meta (demux, data, demux->neededbytes);
         } else {
           switch (fourcc) {
             case FOURCC_styp:
@@ -8806,6 +9208,105 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             demux->cenc_aux_info_sizes = NULL;
             gst_adapter_unmap (demux->adapter);
           }
+
+          /* Check if any stream has auxiliary data in this todrop range */
+          for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
+            QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
+            guint64 stai_abs_offset = 0;
+            guint32 stai_total_size = 0;
+            guint64 suid_abs_offset = 0;
+            guint32 suid_total_size = 0;
+            const guint8 *stai_ptr = NULL;
+            const guint8 *suid_ptr = NULL;
+            guint n_pending;
+
+            n_pending = g_queue_get_length (&s->aux_pending_buffers);
+            if (n_pending == 0)
+              continue;
+
+            /* Determine the absolute STAI offset for this stream's chunk */
+            if (s->aux_stai.present) {
+              QtDemuxAuxPendingBuffer *first =
+                  g_queue_peek_head (&s->aux_pending_buffers);
+              guint64 soff = qtdemux_aux_info_offset_for_sample (&s->aux_stai,
+                  first->byte_position == 0 ? 0 : s->sample_index - n_pending);
+              if (soff > 0)
+                stai_abs_offset = soff;
+            }
+
+            /* Determine the absolute SUID offset for this stream's chunk */
+            if (s->aux_suid.present) {
+              QtDemuxAuxPendingBuffer *first =
+                  g_queue_peek_head (&s->aux_pending_buffers);
+              guint64 soff = qtdemux_aux_info_offset_for_sample (&s->aux_suid,
+                  first->byte_position == 0 ? 0 : s->sample_index - n_pending);
+              if (soff > 0)
+                suid_abs_offset = soff;
+            }
+
+            if (stai_abs_offset == 0 && suid_abs_offset == 0)
+              continue;
+
+            /* Compute total STAI data size for pending samples */
+            if (stai_abs_offset > 0) {
+              for (guint j = 0; j < n_pending; j++) {
+                if (s->aux_stai.present
+                    && (s->sample_index - n_pending + j) <
+                    s->aux_stai.sample_count)
+                  stai_total_size +=
+                      s->aux_stai.sample_sizes[s->sample_index - n_pending + j];
+                else
+                  stai_total_size += 9;
+              }
+            }
+
+            /* Compute total SUID data size for pending samples */
+            if (suid_abs_offset > 0) {
+              for (guint j = 0; j < n_pending; j++) {
+                if (s->aux_suid.present
+                    && (s->sample_index - n_pending + j) <
+                    s->aux_suid.sample_count)
+                  suid_total_size +=
+                      s->aux_suid.sample_sizes[s->sample_index - n_pending + j];
+              }
+            }
+
+            {
+              const guint8 *drop_data =
+                  gst_adapter_map (demux->adapter, demux->todrop);
+
+              /* Resolve STAI pointer within todrop range */
+              if (stai_abs_offset >= demux->offset
+                  && stai_abs_offset < demux->offset + demux->todrop) {
+                guint64 rel = stai_abs_offset - demux->offset;
+
+                if (rel + stai_total_size <= demux->todrop)
+                  stai_ptr = drop_data + rel;
+                else
+                  GST_WARNING_OBJECT (demux, "STAI data extends beyond todrop");
+              }
+
+              /* Resolve SUID pointer within todrop range */
+              if (suid_abs_offset >= demux->offset
+                  && suid_abs_offset < demux->offset + demux->todrop) {
+                guint64 rel = suid_abs_offset - demux->offset;
+
+                if (rel + suid_total_size <= demux->todrop)
+                  suid_ptr = drop_data + rel;
+                else
+                  GST_WARNING_OBJECT (demux, "SUID data extends beyond todrop");
+              }
+
+              ret =
+                  gst_qtdemux_aux_flush_pending (demux, s,
+                  stai_ptr, stai_total_size, suid_ptr, suid_total_size);
+              gst_adapter_unmap (demux->adapter);
+
+              if (ret != GST_FLOW_OK && ret != GST_FLOW_NOT_LINKED)
+                goto done;
+            }
+          }
+
           gst_qtdemux_drop_data (demux, demux->todrop);
         }
 
@@ -8903,9 +9404,25 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
             /* FIXME: should either be an assert or a plain check */
             g_return_val_if_fail (outbuf != NULL, GST_FLOW_ERROR);
 
-            ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
-                dts, pts, duration, round_up_duration, keyframe, dts,
-                demux->offset);
+            if (stream->aux_stai.present || stream->aux_suid.present) {
+              /* Queue buffer for later push when aux data arrives in todrop */
+              QtDemuxAuxPendingBuffer *pending =
+                  g_new0 (QtDemuxAuxPendingBuffer, 1);
+              pending->buf = outbuf;
+              pending->dts = dts;
+              pending->pts = pts;
+              pending->duration = duration;
+              pending->round_up_duration = round_up_duration;
+              pending->keyframe = keyframe;
+              pending->position = dts;
+              pending->byte_position = demux->offset;
+              g_queue_push_tail (&stream->aux_pending_buffers, pending);
+              ret = GST_FLOW_OK;
+            } else {
+              ret = gst_qtdemux_decorate_and_push_buffer (demux, stream, outbuf,
+                  dts, pts, duration, round_up_duration, keyframe, dts,
+                  demux->offset);
+            }
           }
 
           /* combine flows */
@@ -8930,6 +9447,12 @@ gst_qtdemux_process_adapter (GstQTDemux * demux, gboolean force)
 
 
         if (ret == GST_FLOW_EOS) {
+          /* Flush any remaining pending buffers without aux meta */
+          for (i = 0; i < QTDEMUX_N_STREAMS (demux); i++) {
+            QtDemuxStream *s = QTDEMUX_NTH_STREAM (demux, i);
+            if (!g_queue_is_empty (&s->aux_pending_buffers))
+              gst_qtdemux_aux_flush_pending (demux, s, NULL, 0, NULL, 0);
+          }
           GST_DEBUG_OBJECT (demux, "All streams are EOS, signal upstream");
           demux->neededbytes = -1;
           goto eos;
@@ -9276,6 +9799,30 @@ qtdemux_parse_node (GstQTDemux * qtdemux, GNode * node, const guint8 * buffer,
             "parsing stsd (sample table, sample description) atom");
         /* Skip over 8 byte atom hdr + 1 byte version, 3 bytes flags, 4 byte num_entries */
         qtdemux_parse_container (qtdemux, node, buffer + 16, end);
+        break;
+      }
+      case FOURCC_iinf:
+      {
+        guint8 version = buffer[8];
+        guint count = 0;
+
+        if (node_length < 18) {
+          GST_LOG_OBJECT (qtdemux, "skipping small iinf box");
+          break;
+        }
+
+        if (version == 0) {
+          count = QT_UINT16 (buffer + 12);
+          qtdemux_parse_container (qtdemux, node, buffer + 14, end);
+        } else {
+          count = QT_UINT32 (buffer + 12);
+          qtdemux_parse_container (qtdemux, node, buffer + 16, end);
+        }
+        if (count && g_node_n_children (node) != count) {
+          GST_WARNING_OBJECT (qtdemux,
+              "Expected %u children to iinf box, but have %u", count,
+              g_node_n_children (node));
+        }
         break;
       }
       case FOURCC_mp4a:
@@ -10356,7 +10903,7 @@ gst_qtdemux_add_stream (GstQTDemux * qtdemux,
 {
   gboolean ret = TRUE;
 
-  if (stream->subtype == FOURCC_vide) {
+  if (stream->subtype == FOURCC_vide || stream->subtype == FOURCC_pict) {
     gchar *name = g_strdup_printf ("video_%u", qtdemux->n_video_streams);
 
     stream->pad =
@@ -11048,6 +11595,15 @@ qtdemux_stbl_init (GstQTDemux * qtdemux, QtDemuxStream * stream, GNode * stbl)
     qtdemux_merge_sample_table (qtdemux, stream);
   }
 
+  /* TAI precision timestamps: look for saiz/saio with aux_info_type "stai" */
+  if (!qtdemux_aux_info_parse_stbl (qtdemux, stream, stbl, FOURCC_stai,
+          &stream->aux_stai))
+    goto corrupt_file;
+
+  /* GIMI Content ID: look for saiz/saio with aux_info_type "suid" */
+  qtdemux_aux_info_parse_stbl (qtdemux, stream, stbl, FOURCC_suid,
+      &stream->aux_suid);
+
 done:
   GST_DEBUG_OBJECT (qtdemux, "allocating n_samples %u * %u (%.2f MB)",
       stream->n_samples, (guint) sizeof (QtDemuxSample),
@@ -11080,6 +11636,8 @@ corrupt_file:
 no_samples:
   {
     gst_qtdemux_stbl_free (stream);
+    qtdemux_aux_info_clear (&stream->aux_stai);
+    qtdemux_aux_info_clear (&stream->aux_suid);
     if (!qtdemux->fragmented) {
       /* not quite good */
       GST_WARNING_OBJECT (qtdemux, "stream has no samples");
@@ -15167,6 +15725,408 @@ error:
   }
 }
 
+static gboolean
+read_variable_size (GstByteReader * data, guint8 size, guint64 * value)
+{
+  if (size == 0) {
+    *value = 0;
+    return TRUE;
+  } else if (size == 4) {
+    guint32 val;
+
+    if (!gst_byte_reader_get_uint32_be (data, &val))
+      return FALSE;
+    *value = val;
+    return TRUE;
+  } else if (size == 8) {
+    return gst_byte_reader_get_uint64_be (data, value);
+  }
+
+  return FALSE;
+}
+
+static gboolean
+qtdemux_find_iloc_item_id (GstQTDemux * qtdemux, GNode * meta,
+    GstByteReader * idat_data, guint32 item_id, const guint8 ** item_data,
+    guint * item_size)
+{
+  GNode *iloc;
+  GstByteReader iloc_data;
+
+  iloc = qtdemux_tree_get_child_by_type_full (meta, FOURCC_iloc, &iloc_data);
+  while (iloc) {
+    guint8 iloc_version;
+    guint offset_size, length_size, base_offset_size, index_size = 0;
+    guint8 tmp8;
+    guint32 item_count;
+    guint i;
+
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &iloc_version))
+      return FALSE;
+
+    /* skip flags */
+    if (!gst_byte_reader_skip (&iloc_data, 3))
+      return FALSE;
+
+    if (iloc_version > 2) {
+      GST_WARNING_OBJECT (qtdemux, "Can't understand iloc version %u > 2",
+          iloc_version);
+      goto skip_iloc;
+    }
+
+    /* read offset_size(4) and length_size(4) */
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &tmp8))
+      return FALSE;
+    offset_size = tmp8 >> 4;
+    length_size = tmp8 & 0x0F;
+
+    if (offset_size != 0 && offset_size != 4 && offset_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid offset_size %u, must be one of"
+          " [0, 4, 8]", offset_size);
+      goto skip_iloc;
+    }
+    if (length_size != 0 && length_size != 4 && length_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid length_size %u, must be one of"
+          " [0, 4, 8]", length_size);
+      goto skip_iloc;
+    }
+
+    /* read base_offset_size(4) and index_size(4) */
+    if (!gst_byte_reader_get_uint8 (&iloc_data, &tmp8))
+      return FALSE;
+    base_offset_size = tmp8 >> 4;
+    if (base_offset_size != 0 && base_offset_size != 4 && base_offset_size != 8) {
+      GST_WARNING_OBJECT (qtdemux, "Invalid base_offset_size %u, must be one of"
+          " [0, 4, 8]", base_offset_size);
+      goto skip_iloc;
+    }
+
+    if (iloc_version == 1 || iloc_version == 2)
+      index_size = tmp8 & 0x0F;
+
+    if (iloc_version < 2) {
+      guint16 item_count_16;
+
+      if (!gst_byte_reader_get_uint16_be (&iloc_data, &item_count_16))
+        return FALSE;
+      item_count = item_count_16;
+    } else if (iloc_version == 2) {
+      if (!gst_byte_reader_get_uint32_be (&iloc_data, &item_count))
+        return FALSE;
+    } else {
+      g_assert_not_reached ();
+    }
+
+    for (i = 0; i < item_count; i++) {
+      guint32 iloc_item_id;
+      guint16 construction_method = 0;
+      guint64 base_offset = 0;
+      guint16 extent_count;
+      guint64 extent_offset = 0, extent_length = 0;
+
+      if (iloc_version < 2) {
+        guint16 iloc_item_id_16;
+
+        if (!gst_byte_reader_get_uint16_be (&iloc_data, &iloc_item_id_16))
+          return FALSE;
+        iloc_item_id = iloc_item_id_16;
+      } else {
+        if (!gst_byte_reader_get_uint32_be (&iloc_data, &iloc_item_id))
+          return FALSE;
+      }
+
+      if (iloc_version == 1 || iloc_version == 2)
+        if (!gst_byte_reader_get_uint16_be (&iloc_data, &construction_method))
+          return FALSE;
+      construction_method &= 0x0F;
+
+      if (construction_method != 1) {
+        GST_FIXME_OBJECT (qtdemux, "Construction method %u not yet implemented",
+            construction_method);
+        goto skip_iloc;
+      }
+
+      /* Skip data_reference_index */
+      if (!gst_byte_reader_skip (&iloc_data, 2))
+        return FALSE;
+
+      if (!read_variable_size (&iloc_data, base_offset_size, &base_offset))
+        return FALSE;
+
+      if (!gst_byte_reader_get_uint16_be (&iloc_data, &extent_count))
+        return FALSE;
+
+      if (extent_count != 1) {
+        GST_FIXME_OBJECT (qtdemux, "Extent count > 1 not implemneted for iloc");
+        if (!gst_byte_reader_skip (&iloc_data,
+                extent_count * (index_size + offset_size + length_size)))
+          return FALSE;
+        continue;
+      }
+
+      /* Skip extent index */
+      if (!gst_byte_reader_skip (&iloc_data, index_size))
+        return FALSE;
+
+      if (!read_variable_size (&iloc_data, offset_size, &extent_offset))
+        return FALSE;
+      if (!read_variable_size (&iloc_data, length_size, &extent_length))
+        return FALSE;
+
+      if (extent_length > G_MAXUINT32) {
+        GST_FIXME_OBJECT (qtdemux, "Extents larger than 2^32 not implemented");
+        return FALSE;
+      }
+
+      if (iloc_item_id == item_id) {
+        guint64 item_offset = base_offset + extent_offset;
+
+        if (item_offset > G_MAXUINT32) {
+          GST_FIXME_OBJECT (qtdemux,
+              "Item offset %" G_GUINT64_FORMAT " exceeds 32-bit range",
+              item_offset);
+          return FALSE;
+        }
+        if (!gst_byte_reader_set_pos (idat_data, (guint) item_offset)) {
+          GST_WARNING_OBJECT (qtdemux,
+              "idat is too small for the specified offset %" G_GUINT64_FORMAT
+              " and length %" G_GUINT64_FORMAT, item_offset, extent_length);
+          return FALSE;
+        }
+        if (!gst_byte_reader_get_data (idat_data, extent_length, item_data)) {
+          GST_WARNING_OBJECT (qtdemux,
+              "idat is too small for the specified offset %" G_GUINT64_FORMAT
+              " and length %" G_GUINT64_FORMAT, item_offset, extent_length);
+          return FALSE;
+        }
+
+        *item_size = extent_length;
+
+        return TRUE;
+      }
+    }
+
+  skip_iloc:
+    iloc = qtdemux_tree_get_sibling_by_type_full (iloc, FOURCC_iloc,
+        &iloc_data);
+  }
+
+  GST_WARNING_OBJECT (qtdemux, "Could not find matching iloc for infe item %u",
+      item_id);
+
+  return FALSE;
+}
+
+static gboolean
+qtdemux_parse_infe (GstQTDemux * qtdemux, guint32 * infe_item_type,
+    const gchar ** item_uri_or_type, guint32 * infe_item_id,
+    GstByteReader * infe_data)
+{
+  guint8 infe_version;
+  guint16 infe_protection_index;
+
+  if (!gst_byte_reader_get_uint8 (infe_data, &infe_version))
+    return FALSE;
+
+  /* skip flags */
+  if (!gst_byte_reader_skip (infe_data, 3))
+    return FALSE;
+
+  if (infe_version == 2) {
+    guint16 infe_item_id_16;
+
+    if (!gst_byte_reader_get_uint16_be (infe_data, &infe_item_id_16))
+      return FALSE;
+    *infe_item_id = infe_item_id_16;
+  } else if (infe_version == 3) {
+    if (!gst_byte_reader_get_uint32_be (infe_data, infe_item_id))
+      return FALSE;
+  } else {
+    GST_FIXME_OBJECT (qtdemux, "infe version %u not understood,"
+        "only versions 2 and 3 are parsed", infe_version);
+    *infe_item_type = 0;
+    return TRUE;
+  }
+
+  if (!gst_byte_reader_get_uint16_be (infe_data, &infe_protection_index))
+    return FALSE;
+
+  if (infe_protection_index != 0) {
+    GST_FIXME_OBJECT (qtdemux, "protected infe not supported, ignoring");
+    *infe_item_type = 0;
+    return TRUE;
+  }
+
+  if (!gst_byte_reader_get_uint32_le (infe_data, infe_item_type))
+    return FALSE;
+
+  /* Skip item_name */
+  if (!gst_byte_reader_skip_string_utf8 (infe_data))
+    return FALSE;
+
+  if (*infe_item_type == FOURCC_uri_) {
+    if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
+      GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+      return FALSE;
+    }
+  } else if (*infe_item_type == FOURCC_mime) {
+    if (!gst_byte_reader_get_string_utf8 (infe_data, item_uri_or_type)) {
+      GST_ERROR_OBJECT (qtdemux, "infe has invalid string");
+      return FALSE;
+    }
+
+    /* Skip content encoding */
+    if (!gst_byte_reader_skip_string_utf8 (infe_data))
+      return FALSE;
+  } else {
+    GST_FIXME_OBJECT (qtdemux, "Only 'uri ' and 'mime' infe supported, '%"
+        GST_FOURCC_FORMAT "' ignored", GST_FOURCC_ARGS (*infe_item_type));
+  }
+
+  return TRUE;
+}
+
+
+static gboolean
+qtdemux_parse_track_meta (GstQTDemux * qtdemux, GstTagList * stream_taglist,
+    GNode * meta)
+{
+  GNode *idat;
+  GNode *iinf;
+  GstByteReader idat_data;
+
+  idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
+
+  if (!idat) {
+    GST_FIXME_OBJECT (qtdemux, "track meta box without idat,"
+        " can't use it for now");
+    return TRUE;
+  }
+
+  iinf = qtdemux_tree_get_child_by_type (meta, FOURCC_iinf);
+  while (iinf) {
+    GNode *infe;
+    GstByteReader infe_data;
+
+    infe = qtdemux_tree_get_child_by_type_full (iinf, FOURCC_infe, &infe_data);
+    while (infe) {
+      guint32 infe_item_type = 0;
+      const gchar *infe_uri_or_type = NULL;
+      guint32 infe_item_id;
+
+      if (!qtdemux_parse_infe (qtdemux, &infe_item_type, &infe_uri_or_type,
+              &infe_item_id, &infe_data))
+        return FALSE;
+
+      if (infe_item_type == FOURCC_uri_) {
+        if (!strcmp (infe_uri_or_type,
+                "urn:uuid:15beb8e4-944d-5fc6-a3dd-cb5a7e655c73")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          /* GIMI ContentID */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            return FALSE;
+
+          if (item_size < 2) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI ContentID item size is too small");
+            goto skip_infe;
+          }
+
+          if (item_data[item_size - 1] != 0) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI ContentID is not nul-terminated, skipping");
+            goto skip_infe;
+          }
+
+          gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID, item_data, NULL);
+        } else if (!strcmp (infe_uri_or_type,
+                "urn:uuid:fef58f02-43a6-5aaf-a891-099b1953d1f6")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          GstStructure *s;
+          guint32 val;
+          guint32 num_components = 0;
+          guint32 i = 0;
+
+          /* GIMI ContentID */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            return FALSE;
+
+          if (item_size < 13) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Component ContentID List item size is too small");
+            goto skip_infe;
+          }
+
+          GstByteReader item_reader =
+              GST_BYTE_READER_INIT (item_data, item_size);
+
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
+            GST_WARNING_OBJECT (qtdemux,
+                "Can't read number of samples entries");
+            return FALSE;
+          }
+          if (val != 1) {
+            GST_WARNING_OBJECT (qtdemux, "Only a single Sample entry is"
+                " supported for GIMI ComponentContentID but have %u", val);
+            goto skip_infe;
+          }
+
+          /* Skip sample entry index */
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &val)) {
+            GST_WARNING_OBJECT (qtdemux,
+                "Can't read number of samples entries");
+            return FALSE;
+          }
+
+          if (!gst_byte_reader_get_uint32_be (&item_reader, &num_components)) {
+            GST_WARNING_OBJECT (qtdemux, "Can't read number of components");
+            return FALSE;
+          }
+
+          s = gst_structure_new_empty ("ids");
+
+          for (i = 0; i < num_components; i++) {
+            const char *component_content_id = NULL;
+            char cid_str[11];
+            if (!gst_byte_reader_get_string_utf8 (&item_reader,
+                    &component_content_id)) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Component %u/%u ContentID can't be read, skipping box",
+                  i, num_components);
+              gst_structure_free (s);
+              goto skip_infe;
+            }
+
+            snprintf (cid_str, 11, "%u", i);
+            gst_structure_set (s, cid_str, G_TYPE_STRING, component_content_id,
+                NULL);
+          }
+
+          gst_tag_list_add (stream_taglist, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID, s, NULL);
+          gst_structure_free (s);
+        } else {
+          GST_DEBUG_OBJECT (qtdemux, "Unknown URI %s in infe",
+              infe_uri_or_type);
+        }
+      }
+
+    skip_infe:
+      infe = qtdemux_tree_get_sibling_by_type_full (infe, FOURCC_infe,
+          &infe_data);
+    }
+
+    iinf = qtdemux_tree_get_sibling_by_type (iinf, FOURCC_iinf);
+  }
+
+  return TRUE;
+}
+
 /* parse the traks.
  * With each track we associate a new QtDemuxStream that contains all the info
  * about the trak.
@@ -15186,6 +16146,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
   GNode *esds;
   GNode *tref;
   GNode *udta;
+  GNode *meta;
 
   QtDemuxStream *stream = NULL;
   const guint8 *stsd_data;
@@ -15452,6 +16413,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       GNode *btrt;
       GNode *clli;
       GNode *mdcv;
+      GNode *taic;
       guint32 version;
       gboolean gray;
       gint depth, palette_size, palette_count;
@@ -15628,6 +16590,7 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
       btrt = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_btrt);
       clli = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_clli);
       mdcv = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_mdcv);
+      taic = qtdemux_tree_get_child_by_type (stsd_entry, FOURCC_taic);
 
       if (pasp) {
         const guint8 *pasp_data = (const guint8 *) pasp->data;
@@ -15755,6 +16718,49 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
                 GST_TAG_MERGE_REPLACE, GST_TAG_BITRATE, avg_bitrate, NULL);
           }
         }
+      }
+
+      if (taic) {
+        GstByteReader taic_data = GST_BYTE_READER_INIT (taic->data,
+            QT_UINT32 (taic->data));
+        guint64 time_uncertainty;
+        gint32 clock_resolution;
+        gint32 clock_drift_rate;
+        guint8 clock_type;
+
+        /* skip fullbox header */
+        if (gst_byte_reader_skip (&taic_data, 4 + 4 + 4) &&
+            gst_byte_reader_get_uint64_be (&taic_data, &time_uncertainty) &&
+            gst_byte_reader_get_int32_be (&taic_data, &clock_resolution) &&
+            gst_byte_reader_get_int32_be (&taic_data, &clock_drift_rate) &&
+            gst_byte_reader_get_uint8 (&taic_data, &clock_type)) {
+          const gchar *clock_type_str;
+
+          clock_type >>= 6;
+
+          switch (clock_type) {
+            case 0:
+              clock_type_str = "unknown";
+              break;
+            case 1:
+              clock_type_str = "cannot-sync-to-tai";
+              break;
+            case 2:
+              clock_type_str = "can-sync-to-tai";
+              break;
+            default:
+              clock_type_str = NULL;
+              break;
+          }
+
+          if (clock_type_str)
+            gst_tag_list_add (stream->stream_tags,
+                GST_TAG_MERGE_REPLACE,
+                GST_QT_DEMUX_PRECISION_CLOCK_TYPE, clock_type_str,
+                GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY, time_uncertainty,
+                NULL);
+        }
+
       }
 
       if (esds) {
@@ -17841,6 +18847,12 @@ qtdemux_parse_trak (GstQTDemux * qtdemux, GNode * trak, guint32 * mvhd_matrix)
   /* Check for UDTA tags */
   if ((udta = qtdemux_tree_get_child_by_type (trak, FOURCC_udta))) {
     qtdemux_parse_udta (qtdemux, stream->stream_tags, udta);
+  }
+
+  /* Check for meta tags */
+  if ((meta = qtdemux_tree_get_child_by_type (trak, FOURCC_meta))) {
+    if (!qtdemux_parse_track_meta (qtdemux, stream->stream_tags, meta))
+      goto corrupt_file;
   }
 
   /* Insert and sort new stream in track-id order.
@@ -20575,4 +21587,272 @@ gst_qtdemux_append_protection_system_id (GstQTDemux * qtdemux,
   GST_DEBUG_OBJECT (qtdemux, "Adding cenc protection system ID %s", system_id);
   g_ptr_array_add (qtdemux->protection_system_ids, g_ascii_strdown (system_id,
           -1));
+}
+
+/* Returns the nth property of the item with item_id in the iprp box,
+ * or NULL if not found.
+ *
+ * The caller should call it with 0 and then iterate with increasing
+ * nth_property until it returns NULL to get all properties of the item.
+ */
+static GNode *
+qtdemux_parse_iprp_get_nth_property (GstQTDemux * qtdemux, GNode * iprp,
+    guint item_id, gint nth_property, gboolean * essential)
+{
+  GNode *ipco;
+  GNode *ipma;
+  guint32 entry_count;
+  GstByteReader ipma_data;
+  guint8 version;
+  guint32 i;
+  guint flags;
+
+  if (!iprp)
+    return NULL;
+
+  *essential = FALSE;
+
+  ipco = qtdemux_tree_get_child_by_type (iprp, FOURCC_ipco);
+  if (!ipco) {
+    GST_WARNING_OBJECT (qtdemux, "iprp box missing ipco child");
+    return NULL;
+  }
+
+  ipma = qtdemux_tree_get_child_by_type_full (iprp, FOURCC_ipma, &ipma_data);
+  if (!ipma) {
+    GST_WARNING_OBJECT (qtdemux, "iprp box missing ipma child");
+    return NULL;
+  }
+
+  if (!gst_byte_reader_get_uint8 (&ipma_data, &version)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain version");
+    return NULL;
+  }
+  if (!gst_byte_reader_get_uint24_be (&ipma_data, &flags)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain flags");
+    return NULL;
+  }
+  if (!gst_byte_reader_get_uint32_be (&ipma_data, &entry_count)) {
+    GST_WARNING_OBJECT (qtdemux, "ipma box too short to contain entry count");
+    return NULL;
+  }
+
+  for (i = 0; i++ < entry_count;) {
+    guint32 item_id_in_ipma;
+    guint8 association_count;
+    GNode *ipco_entry;
+    guint16 property_index;
+
+    if (version == 0) {
+      guint16 tmp16;
+      if (!gst_byte_reader_get_uint16_be (&ipma_data, &tmp16))  /* item_id */
+        return NULL;
+      item_id_in_ipma = tmp16;
+    } else {
+      if (!gst_byte_reader_get_uint32_be (&ipma_data, &item_id_in_ipma))        /* item_id */
+        return NULL;
+    }
+
+    if (!gst_byte_reader_get_uint8 (&ipma_data, &association_count)) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma box too short to contain association count");
+      return NULL;
+    }
+    if (association_count == 0) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma entry with zero associations, skipping");
+      continue;
+    }
+
+    if (item_id_in_ipma != item_id) {
+      /* We're only looking for item_id */
+      if (!gst_byte_reader_skip (&ipma_data, association_count *
+              (flags & 1 ? 2 : 1)))
+        return NULL;
+      continue;
+    }
+
+    if (nth_property >= association_count) {
+      return NULL;
+    }
+
+    if (flags & 1) {
+      if (!gst_byte_reader_skip (&ipma_data, (nth_property) * 2))
+        return NULL;
+      if (!gst_byte_reader_get_uint16_be (&ipma_data, &property_index))
+        return NULL;
+      *essential = (property_index & 0x8000) != 0;
+      property_index = property_index & 0x7fff;
+    } else {
+      guint8 property_index_8;
+
+      if (!gst_byte_reader_skip (&ipma_data, (nth_property)))
+        return NULL;
+      if (!gst_byte_reader_get_uint8 (&ipma_data, &property_index_8))
+        return NULL;
+      *essential = (property_index_8 & 0x80) != 0;
+      property_index = property_index_8 & 0x7f;
+    }
+
+    ipco_entry = qtdemux_tree_get_child_by_index (ipco, property_index - 1);
+    if (!ipco_entry) {
+      GST_WARNING_OBJECT (qtdemux,
+          "ipma association index %u out of bounds", property_index);
+      return NULL;
+    }
+
+    return ipco_entry;
+  }
+
+  return NULL;
+}
+
+static void
+qtdemux_parse_file_meta (GstQTDemux * qtdemux, const guint8 * buffer,
+    gint length)
+{
+  GNode *meta, *cstb;
+  GstByteReader cstb_data;
+  GNode *idat;
+  GstByteReader idat_data;
+  GNode *iinf;
+  GNode *iprp = NULL;
+  static guint8 CONTENT_ID_UUID[] = { 0x26, 0x1e, 0xf3, 0x74, 0x1d, 0x97,
+    0x5b, 0xba, 0xac, 0xbd, 0x9d, 0x2c, 0x8e, 0xa7, 0x35, 0x22
+  };
+
+  meta = g_node_new ((gpointer) buffer);
+  qtdemux_parse_node (qtdemux, meta, buffer, length);
+
+  /* Parse ONVIF Export File Format CorrectStartTime box if available */
+  if ((cstb =
+          qtdemux_tree_get_child_by_type_full (meta, FOURCC_cstb,
+              &cstb_data))) {
+    qtdemux_parse_cstb (qtdemux, &cstb_data);
+  }
+
+  idat = qtdemux_tree_get_child_by_type_full (meta, FOURCC_idat, &idat_data);
+
+  if (!idat)
+    goto end;
+
+  iinf = qtdemux_tree_get_child_by_type (meta, FOURCC_iinf);
+
+  iprp = qtdemux_tree_get_child_by_type (meta, FOURCC_iprp);
+
+  while (iinf) {
+    GNode *infe;
+    GstByteReader infe_data;
+
+    infe = qtdemux_tree_get_child_by_type_full (iinf, FOURCC_infe, &infe_data);
+    while (infe) {
+      guint32 infe_item_type = 0;
+      const gchar *infe_uri_or_type = NULL;
+      guint32 infe_item_id;
+
+      if (!qtdemux_parse_infe (qtdemux, &infe_item_type, &infe_uri_or_type,
+              &infe_item_id, infe, &infe_data))
+        goto end;
+
+      if (infe_item_type == FOURCC_mime) {
+        if (!strcmp (infe_uri_or_type, "application/nga-gimi-ism+xml")) {
+          const guint8 *item_data = NULL;
+          guint item_size = 0;
+          guint property_index = 0;
+
+          /* GIMI Security Markings XML */
+          if (!qtdemux_find_iloc_item_id (qtdemux, meta, &idat_data,
+                  infe_item_id, &item_data, &item_size))
+            goto end;
+
+          if (item_size < 2) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Security Markings XML item size is too small");
+            goto skip_infe;
+          }
+
+          if (item_data[item_size - 1] != 0) {
+            GST_WARNING_OBJECT (qtdemux,
+                "GIMI Security Markings XML is not nul-terminated, skipping");
+            goto skip_infe;
+          }
+
+          for (property_index = 0;; property_index++) {
+            GNode *ipco_entry;
+            gboolean essential = FALSE;
+            guint8 *prop_data;
+            guint32 prop_length, prop_fourcc, prop_offset;
+            guint8 *cid_data;
+            guint32 cid_length;
+
+            ipco_entry = qtdemux_parse_iprp_get_nth_property (qtdemux, iprp,
+                infe_item_id, property_index, &essential);
+            if (essential) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Security Markings XML property %u is essential,"
+                  " but we don't know how to handle it, skipping item",
+                  property_index);
+              goto skip_infe;
+            }
+            if (!ipco_entry)
+              break;
+
+            prop_data = (guint8 *) ipco_entry->data;
+            prop_length = QT_UINT32 (prop_data);
+            prop_fourcc = QT_FOURCC (prop_data + 4);
+
+            if (prop_length <= 4 + 4 + 16) {
+              GST_DEBUG_OBJECT (qtdemux, "uuid atom is too short, skipping");
+              continue;
+            }
+
+            if (prop_fourcc != FOURCC_uuid)
+              continue;
+
+            prop_offset = 4 + 4;
+
+            if (memcmp (prop_data + prop_offset, CONTENT_ID_UUID, 16) != 0)
+              continue;
+
+            prop_offset += 16;
+
+            cid_data = prop_data + prop_offset;
+            cid_length = prop_length - prop_offset;
+
+            if (cid_length < 2) {
+              GST_DEBUG_OBJECT (qtdemux, "GIMI Security Markings XML Content"
+                  " ID is empty, skipping");
+              continue;
+            }
+
+            if (cid_data[cid_length - 1] != 0) {
+              GST_WARNING_OBJECT (qtdemux,
+                  "GIMI Security Markings XML Content ID is not nul-terminated,"
+                  " skipping");
+              continue;
+            }
+
+            gst_tag_list_add (qtdemux->tag_list, GST_TAG_MERGE_APPEND,
+                GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID, cid_data, NULL);
+          }
+          gst_tag_list_add (qtdemux->tag_list, GST_TAG_MERGE_APPEND,
+              GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML, item_data, NULL);
+
+
+        } else {
+          GST_WARNING_OBJECT (qtdemux,
+              "Mime define meta %s handling not implemented", infe_uri_or_type);
+        }
+      }
+    skip_infe:
+      infe = qtdemux_tree_get_sibling_by_type_full (infe, FOURCC_infe,
+          &infe_data);
+    }
+
+    iinf = qtdemux_tree_get_sibling_by_type (iinf, FOURCC_iinf);
+  }
+
+end:
+
+  g_node_destroy (meta);
 }

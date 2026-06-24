@@ -47,6 +47,14 @@ G_BEGIN_DECLS
 #define GST_QT_DEMUX_PRIVATE_TAG "private-qt-tag"
 #define GST_QT_DEMUX_CLASSIFICATION_TAG "classification"
 
+#define GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID "gimi-track-content-id"
+#define GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID "gimi-component-content-id"
+#define GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML "gimi-security-markings-xml"
+#define GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID "gimi-security-markings-content-id"
+
+#define GST_QT_DEMUX_PRECISION_CLOCK_TYPE "precision-clock-type"
+#define GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY "precision-clock-time-uncertainty-nanoseconds"
+
 typedef struct _GstQTDemux GstQTDemux;
 typedef struct _GstQTDemuxClass GstQTDemuxClass;
 typedef struct _QtDemuxStream QtDemuxStream;
@@ -55,6 +63,32 @@ typedef struct _QtDemuxSegment QtDemuxSegment;
 typedef struct _QtDemuxRandomAccessEntry QtDemuxRandomAccessEntry;
 typedef struct _QtDemuxStreamStsdEntry QtDemuxStreamStsdEntry;
 typedef struct _QtDemuxGaplessAudioInfo QtDemuxGaplessAudioInfo;
+
+/* Per-sample auxiliary information parsed from saiz/saio boxes.
+ * Used for STAI (TAI timestamps), SUID (GIMI Content ID) etc. */
+typedef struct
+{
+  gboolean present;
+  guint8 *sample_sizes;         /* per-sample data sizes from saiz */
+  guint32 sample_count;         /* number of samples */
+  guint64 *chunk_offsets;       /* per-chunk file offsets from saio */
+  guint32 n_chunk_offsets;      /* number of chunk offsets */
+  guint32 *first_sample_in_chunk;       /* first sample index per chunk */
+} QtDemuxAuxInfo;
+
+/* Holds a buffer and its decoration parameters for deferred push
+ * (used when auxiliary data arrives after the sample in push mode) */
+typedef struct
+{
+  GstBuffer *buf;
+  guint64 dts;
+  guint64 pts;
+  guint64 duration;
+  gboolean round_up_duration;
+  gboolean keyframe;
+  guint64 position;
+  guint64 byte_position;
+} QtDemuxAuxPendingBuffer;
 
 typedef GstBuffer * (*QtDemuxProcessFunc)(GstQTDemux * qtdemux, QtDemuxStream * stream, GstBuffer * buf, guint64 dts, guint64 pts, guint64 duration, gboolean round_up_duration);
 
@@ -581,6 +615,20 @@ struct _QtDemuxStream
 
   /* KEY_UNITS trickmode with an interval */
   GstClockTime last_keyframe_pts;
+
+  /* TAI precision timestamps (STAI aux info) */
+  QtDemuxAuxInfo aux_stai;
+  gboolean stai_pending_valid;         /* pending TAI data for decorate */
+  guint64 stai_pending_tai_ts;         /* TAI nanoseconds since 1958-01-01 */
+  guint8 stai_pending_flags;           /* STAI flags byte */
+
+  /* GIMI per-sample Content ID (SUID aux info) */
+  QtDemuxAuxInfo aux_suid;
+  gboolean suid_pending_valid;  /* pending suid data for decorate */
+  gchar *suid_pending_content_id;       /* content-id string (owned) */
+
+  /* Push mode: queued buffers awaiting auxiliary data at end of chunk */
+  GQueue aux_pending_buffers;  /* of QtDemuxAuxPendingBuffer* */
 
   gint ref_count;               /* atomic */
 };

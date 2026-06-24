@@ -270,6 +270,14 @@ static const QtNodeType qt_node_types[] = {
   {FOURCC_resv, "Restricted Video Sample Entry", 0},
   {FOURCC_rinf, "Restricted Scheme Info Box", QT_FLAG_CONTAINER},
   {FOURCC_cmpC, "Compression Configuration Box", 0},
+  {FOURCC_iinf, "Item Information Box", 0, 0},
+  {FOURCC_infe, "Item Information Entry", 0, 0},
+  {FOURCC_iloc, "Item Location Box", 0, 0},
+  {FOURCC_idat, "Item Data Box", 0, 0},
+  {FOURCC_taic, "TAI clock information box", 0, 0},
+  {FOURCC_iprp, "Item Property box", QT_FLAG_CONTAINER},
+  {FOURCC_ipco, "Item Property Container box", QT_FLAG_CONTAINER},
+  {FOURCC_ipma, "Item Property Association box", 0},
   {0, "unknown", 0,},
 };
 

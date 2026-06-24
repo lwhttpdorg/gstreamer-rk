@@ -50,6 +50,48 @@ isomp4_element_init (GstPlugin * plugin)
         G_TYPE_STRING, GST_QT_DEMUX_CLASSIFICATION_TAG,
         "content classification", gst_tag_merge_use_first);
 
+    if (!gst_tag_exists (GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID))
+      gst_tag_register_static (GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID,
+          GST_TAG_FLAG_META, G_TYPE_STRING, GST_QT_DEMUX_GIMI_TRACK_CONTENT_ID,
+          "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
+          " and Reconnaissance (ISR) (GIMI) Track ContentID", NULL);
+
+    if (!gst_tag_exists (GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID))
+      gst_tag_register_static (GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID,
+          GST_TAG_FLAG_META, GST_TYPE_STRUCTURE,
+          GST_QT_DEMUX_GIMI_COMPONENT_CONTENT_ID,
+          "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
+          " and Reconnaissance (ISR) (GIMI) Component ContentID", NULL);
+
+    if (!gst_tag_exists (GST_QT_DEMUX_PRECISION_CLOCK_TYPE))
+      gst_tag_register_static (GST_QT_DEMUX_PRECISION_CLOCK_TYPE,
+          GST_TAG_FLAG_META, G_TYPE_STRING, GST_QT_DEMUX_PRECISION_CLOCK_TYPE,
+          "ISO/IEC 23001-17 TAI Clock type information", NULL);
+
+    if (!gst_tag_exists (GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY))
+      gst_tag_register_static (GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY,
+          GST_TAG_FLAG_META, G_TYPE_UINT64,
+          GST_QT_DEMUX_PRECISION_TIME_UNCERTAINTY,
+          "ISO/IEC 23001-17 TAI Clock time uncertainty (in nanoseconds) information",
+          NULL);
+
+    if (!gst_tag_exists (GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML))
+      gst_tag_register_static (GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML,
+          GST_TAG_FLAG_META, G_TYPE_STRING,
+          GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_XML,
+          "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
+          " and Reconnaissance (ISR) (GIMI) Security Markings XML", NULL);
+
+    if (!gst_tag_exists (GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID))
+      gst_tag_register_static (GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID,
+          GST_TAG_FLAG_META, G_TYPE_STRING,
+          GST_QT_DEMUX_GIMI_SECURITY_MARKINGS_CONTENT_ID,
+          "NGA.STND.0076 GEOINT Imagery Media for Intelligence, Surveillance,"
+          " and Reconnaissance (ISR) (GIMI) Security Markings XML Content ID",
+          NULL);
+
+    gst_meta_register_custom_simple ("GimiContentID");
+
     g_once_init_leave (&res, TRUE);
   }
 }
