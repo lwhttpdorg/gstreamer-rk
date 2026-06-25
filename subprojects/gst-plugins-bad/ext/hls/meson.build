@@ -27,8 +27,6 @@ plugin_sources += {
   'hls': pathsep.join(doc_sources)
 }
 
-hls_dep = declare_dependency(include_directories : include_directories('.'))
-
 hls_cargs = ['-DGST_USE_UNSTABLE_API']
 
 hls_crypto = get_option('hls-crypto')
@@ -84,3 +82,4 @@ gsthls = library('gsthls',
   install_dir : plugins_install_dir,
 )
 plugins += [gsthls]
+hls_dep = declare_dependency(include_directories : include_directories('.'))
