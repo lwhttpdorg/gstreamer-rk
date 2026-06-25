@@ -24,7 +24,7 @@
 #ifndef __GST_OBJECT_DETECTION_OVERLAY_H__
 #define __GST_OBJECT_DETECTION_OVERLAY_H__
 
-#include <gst/video/gstvideofilter.h>
+#include "gstanalyticsoverlay.h"
 
 G_BEGIN_DECLS
 
@@ -32,7 +32,7 @@ G_BEGIN_DECLS
   (gst_object_detection_overlay_get_type())
 
 G_DECLARE_FINAL_TYPE (GstObjectDetectionOverlay, gst_object_detection_overlay,
-    GST, OBJECT_DETECTION_OVERLAY, GstVideoFilter)
+    GST, OBJECT_DETECTION_OVERLAY, GstAnalyticsOverlay)
 
 GST_ELEMENT_REGISTER_DECLARE (objectdetectionoverlay);
 
