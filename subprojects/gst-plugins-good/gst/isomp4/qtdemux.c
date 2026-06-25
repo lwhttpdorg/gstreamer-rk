@@ -84,7 +84,7 @@
 #endif
 
 /* if the sample index is larger than this, something is likely wrong */
-#define QTDEMUX_MAX_SAMPLE_INDEX_SIZE (200*1024*1024)
+#define QTDEMUX_MAX_SAMPLE_INDEX_SIZE (2048UL*1024*1024)  /* Increased to 2GB for large audiobooks */
 
 /* For converting qt creation times to unix epoch times */
 #define QTDEMUX_SECONDS_PER_DAY (60 * 60 * 24)
