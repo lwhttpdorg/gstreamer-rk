@@ -873,6 +873,81 @@ gst_analytics_modelinfo_get_dims_order (GstAnalyticsModelInfo * modelinfo,
 }
 
 /**
+ * gst_analytics_modelinfo_get_par:
+ * @modelinfo: Instance of #GstAnalyticsModelInfo
+ * @tensor_name: The name of the tensor
+ * @par_n: (out): Pixel aspect ratio numerator
+ * @par_d: (out): Pixel aspect ratio denominator
+ *
+ * Retrieve the pixel aspect ratio expected for a given tensor.
+ *
+ * If not specified in the modelinfo, defaults to 1:1.
+ *
+ * Returns: TRUE on success, otherwise FALSE
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_analytics_modelinfo_get_par (GstAnalyticsModelInfo * modelinfo,
+    const gchar * tensor_name, guint * par_n, guint * par_d)
+{
+  GKeyFile *kf = (GKeyFile *) modelinfo;
+  gchar *par_str;
+  gchar **par_parts = NULL;
+  gsize len;
+  guint64 v;
+  gboolean ret = TRUE;
+
+  g_return_val_if_fail (par_n != NULL, FALSE);
+  g_return_val_if_fail (par_d != NULL, FALSE);
+
+  par_str = g_key_file_get_string (kf, tensor_name, "par", NULL);
+
+  /* Default to 1:1 if not specified */
+  if (par_str) {
+
+    /* Check for placeholder */
+    if (g_str_has_prefix (par_str, "PLACEHOLDER")) {
+      GST_ERROR
+          ("Modelinfo file contains unresolved placeholder for par in tensor '%s'. "
+          "Please regenerate the modelinfo file using modelinfo-generator.py --prompt "
+          "and provide the correct values.", tensor_name);
+      ret = FALSE;
+      goto exit;
+    }
+
+    /* Parse par: column separated numerator:denominator */
+    par_parts = g_strsplit (par_str, ":", 2);
+    len = g_strv_length (par_parts);
+
+    if (len != 2)
+      goto fail;
+
+    v = g_ascii_strtoull (par_parts[0], NULL, 10);
+    if (v > G_MAXUINT)
+      goto fail;
+    *par_n = v;
+    v = g_ascii_strtoull (par_parts[1], NULL, 10);
+    if (v > G_MAXUINT)
+      goto fail;
+    *par_d = v;
+  } else {
+    *par_n = 1;
+    *par_d = 1;
+  }
+
+exit:
+  g_strfreev (par_parts);
+  g_free (par_str);
+  return ret;
+
+fail:
+  GST_DEBUG ("Invalid par format in tensor '%s': %s", tensor_name, par_str);
+  ret = FALSE;
+  goto exit;
+}
+
+/**
  * gst_analytics_modelinfo_get_version:
  * @modelinfo: Instance of #GstAnalyticsModelInfo
  *

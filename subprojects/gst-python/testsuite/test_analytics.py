@@ -688,6 +688,81 @@ ranges=-1.0,1.0;-1.0,1.0;-1.0,1.0
             if os.path.exists(model_filename):
                 os.unlink(model_filename)
 
+    def test_modelinfo_get_par_default(self):
+        """Test that get_par defaults to 1:1 when par field is absent"""
+        import tempfile
+        import os
+
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=test-model-par
+
+[input_tensor]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,255.0
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            result = modelinfo.get_par("input_tensor")
+            self.assertTrue(result[0])
+            self.assertEqual(result[1], 1)  # par_n
+            self.assertEqual(result[2], 1)  # par_d
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
+    def test_modelinfo_get_par_explicit(self):
+        """Test that get_par correctly reads an explicit par field"""
+        import tempfile
+        import os
+
+        modelinfo_content = """[modelinfo]
+version=1.1
+group-id=test-model-par
+
+[input_tensor]
+dims=1,224,224,3
+dir=input
+type=uint8
+ranges=0.0,255.0
+par=16:15
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.modelinfo',
+                                         delete=False) as f:
+            f.write(modelinfo_content)
+            temp_modelinfo = f.name
+
+        try:
+            model_filename = temp_modelinfo[:-10]
+            modelinfo = GstAnalytics.ModelInfo.load(model_filename)
+            self.assertIsNotNone(modelinfo)
+
+            result = modelinfo.get_par("input_tensor")
+            self.assertTrue(result[0])
+            self.assertEqual(result[1], 16)  # par_n
+            self.assertEqual(result[2], 15)  # par_d
+
+            modelinfo.free()
+        finally:
+            if os.path.exists(temp_modelinfo):
+                os.unlink(temp_modelinfo)
+            if os.path.exists(model_filename):
+                os.unlink(model_filename)
+
     def test_modelinfo_version_minor_upgrade_accepted(self):
         """Test that modelinfo with same major version but higher minor version is accepted"""
         import tempfile

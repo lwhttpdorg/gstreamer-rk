@@ -44,7 +44,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_MINOR (0)
+#define GST_MODELINFO_VERSION_MINOR (1)
 
 /**
  * GST_MODELINFO_VERSION_STR:
@@ -54,7 +54,7 @@
  *
  * Since: 1.28
  */
-#define GST_MODELINFO_VERSION_STR "1.0"
+#define GST_MODELINFO_VERSION_STR "1.1"
 
 /**
  * GST_MODELINFO_SECTION_NAME:
@@ -146,6 +146,11 @@ GST_ANALYTICS_META_API
 GstTensorDimOrder
 gst_analytics_modelinfo_get_dims_order (GstAnalyticsModelInfo * modelinfo,
     const gchar * tensor_name);
+
+GST_ANALYTICS_META_API
+gboolean
+gst_analytics_modelinfo_get_par (GstAnalyticsModelInfo * modelinfo,
+    const gchar * tensor_name, guint * par_n, guint * par_d);
 
 GST_ANALYTICS_META_API
 gchar *
