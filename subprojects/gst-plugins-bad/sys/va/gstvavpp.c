@@ -2141,6 +2141,37 @@ gst_va_vpp_sink_event (GstBaseTransform * trans, GstEvent * event)
   return GST_BASE_TRANSFORM_CLASS (parent_class)->sink_event (trans, event);
 }
 
+static gboolean
+gst_va_vpp_accept_caps (GstBaseTransform * trans,
+    GstPadDirection direction, GstCaps * caps)
+{
+  gboolean ret =
+      GST_BASE_TRANSFORM_CLASS (parent_class)->accept_caps (trans, direction,
+      caps);
+
+  if (ret) {
+    return ret;
+  }
+
+  if (gst_video_is_dma_drm_caps (caps)) {
+    GstVideoInfoDmaDrm drm_info;
+    GstCaps *without_modifiers;
+
+    if (!gst_video_info_dma_drm_from_caps (&drm_info, caps)) {
+      return FALSE;
+    }
+
+    drm_info.drm_modifier = 0;
+    without_modifiers = gst_video_info_dma_drm_to_caps (&drm_info);
+
+    ret =
+        GST_BASE_TRANSFORM_CLASS (parent_class)->accept_caps (trans, direction,
+        without_modifiers);
+    gst_caps_unref (without_modifiers);
+  }
+  return ret;
+}
+
 static void
 _install_static_properties (GObjectClass * klass)
 {
@@ -2269,6 +2300,7 @@ gst_va_vpp_class_init (gpointer g_class, gpointer class_data)
   trans_class->sink_event = GST_DEBUG_FUNCPTR (gst_va_vpp_sink_event);
   trans_class->prepare_output_buffer =
       GST_DEBUG_FUNCPTR (gst_va_vpp_prepare_output_buffer);
+  trans_class->accept_caps = GST_DEBUG_FUNCPTR (gst_va_vpp_accept_caps);
 
   trans_class->transform_ip_on_passthrough = FALSE;
 
