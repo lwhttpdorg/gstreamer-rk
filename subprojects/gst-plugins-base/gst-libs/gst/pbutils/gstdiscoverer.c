@@ -209,7 +209,7 @@ static GVariant *gst_discoverer_info_to_variant_recurse (GstDiscovererStreamInfo
 static GstDiscovererStreamInfo *_parse_discovery (GVariant * variant,
     GstDiscovererInfo * info);
 static GstDiscovererInfo *load_serialized_info (GstDiscoverer * dc,
-    gchar * uri);
+    const gchar * uri);
 
 static gboolean
 _gst_discoverer_info_accumulator (GSignalInvocationHint * ihint,
@@ -1809,7 +1809,7 @@ handle_current_sync (GstDiscoverer * dc)
 }
 
 static gchar *
-_serialized_info_get_path (GstDiscoverer * dc, gchar * uri)
+_serialized_info_get_path (GstDiscoverer * dc, const gchar * uri)
 {
   GChecksum *cs = NULL;
   GStatBuf file_status;
@@ -1891,7 +1891,7 @@ _get_info_from_cachefile (GstDiscoverer * dc, gchar * cachefile)
 }
 
 static GstDiscovererInfo *
-load_serialized_info (GstDiscoverer * dc, gchar * uri)
+load_serialized_info (GstDiscoverer * dc, const gchar * uri)
 {
   GstDiscovererInfo *res = NULL;
 
