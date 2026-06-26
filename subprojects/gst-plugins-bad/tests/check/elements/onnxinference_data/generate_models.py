@@ -170,6 +170,90 @@ def make_model_uint8_to_f32():
     return model
 
 
+def make_model_grayscale_f32_f32():
+    """[1,4,4,1] float32 → reshape → [1,16] float32"""
+    input_name = "input_gray_f32"
+    output_name = "output_gray_flat_f32"
+
+    input_tensor = helper.make_tensor_value_info(
+        input_name, TensorProto.FLOAT, [1, 4, 4, 1]
+    )
+    output_tensor = helper.make_tensor_value_info(
+        output_name, TensorProto.FLOAT, [1, 16]
+    )
+
+    reshape_node = helper.make_node(
+        "Reshape",
+        inputs=[input_name, "shape_const"],
+        outputs=[output_name],
+    )
+
+    shape_const = helper.make_tensor(
+        name="shape_const",
+        data_type=TensorProto.INT64,
+        dims=[2],
+        vals=[1, 16]
+    )
+
+    graph = helper.make_graph(
+        [reshape_node],
+        "grayscale_f32_f32",
+        [input_tensor],
+        [output_tensor],
+        [shape_const]
+    )
+
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 11)])
+    model.ir_version = 10
+    return model
+
+
+def make_model_grayscale_uint8_to_f32():
+    """[1,4,4,1] uint8 → cast float32 → reshape → [1,16] float32"""
+    input_name = "input_gray_u8"
+    cast_output = "cast_out"
+    output_name = "output_gray_flat_f32"
+
+    input_tensor = helper.make_tensor_value_info(
+        input_name, TensorProto.UINT8, [1, 4, 4, 1]
+    )
+    output_tensor = helper.make_tensor_value_info(
+        output_name, TensorProto.FLOAT, [1, 16]
+    )
+
+    cast_node = helper.make_node(
+        "Cast",
+        inputs=[input_name],
+        outputs=[cast_output],
+        to=TensorProto.FLOAT
+    )
+
+    reshape_node = helper.make_node(
+        "Reshape",
+        inputs=[cast_output, "shape_const"],
+        outputs=[output_name],
+    )
+
+    shape_const = helper.make_tensor(
+        name="shape_const",
+        data_type=TensorProto.INT64,
+        dims=[2],
+        vals=[1, 16]
+    )
+
+    graph = helper.make_graph(
+        [cast_node, reshape_node],
+        "grayscale_uint8_to_f32",
+        [input_tensor],
+        [output_tensor],
+        [shape_const]
+    )
+
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 11)])
+    model.ir_version = 10
+    return model
+
+
 def make_model_int32_out():
     """[1,4,4,3] float32 → cast int32 → [1,4,4,3] int32"""
     input_name = "input_f32"
@@ -527,6 +611,8 @@ def main():
     models = [
         ("flatten_float32in_float32out.onnx", make_model_flatten_f32_f32()),
         ("flatten_uint8in_float32out.onnx", make_model_uint8_to_f32()),
+        ("grayscale_float32in_float32out.onnx", make_model_grayscale_f32_f32()),
+        ("grayscale_uint8in_float32out.onnx", make_model_grayscale_uint8_to_f32()),
         ("int32out.onnx", make_model_int32_out()),
         ("dynamic_batch.onnx", make_model_dynamic_batch()),
         ("multi_output.onnx", make_model_multi_output()),

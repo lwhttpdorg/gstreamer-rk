@@ -192,14 +192,14 @@ static GstStaticPadTemplate gst_onnx_inference_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA }"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA,GRAY8 }"))
     );
 
 static GstStaticPadTemplate gst_onnx_inference_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA }"))
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ RGB,RGBA,BGR,BGRA,GRAY8 }"))
     );
 
 
@@ -500,6 +500,14 @@ get_tensor_type_size (GstTensorDataType data_type)
   };
 }
 
+static gboolean
+remove_tensors_from_struct (GstCapsFeatures * features, GstStructure * s,
+    gpointer user_data)
+{
+  gst_structure_remove_field (s, "tensors");
+  return TRUE;
+}
+
 static GstCaps *
 gst_onnx_inference_transform_caps (GstBaseTransform *
     trans, GstPadDirection direction, GstCaps * caps, GstCaps * filter_caps)
@@ -541,10 +549,7 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
     /* Remove tensors from caps to prevent upstream propagation. */
     GstCaps *tmp_caps = gst_caps_copy (caps);
 
-    if (!gst_caps_is_empty (tmp_caps)) {
-      GstStructure *tstruct = gst_caps_get_structure (tmp_caps, 0);
-      gst_structure_remove_field (tstruct, "tensors");
-    }
+    gst_caps_map_in_place (tmp_caps, remove_tensors_from_struct, NULL);
 
     other_caps = gst_caps_intersect_full (tmp_caps, restrictions,
         GST_CAPS_INTERSECT_FIRST);
@@ -1117,9 +1122,20 @@ gst_onnx_inference_start (GstBaseTransform * trans)
   }
 
   if (self->input_data_type == GST_TENSOR_DATA_TYPE_UINT8 && gst_format &&
-      is_passthrough)
+      is_passthrough) {
     gst_caps_set_simple (self->input_tensors_caps, "format", G_TYPE_STRING,
         gst_format, NULL);
+  } else if (self->channels == 1) {
+    gst_caps_set_simple (self->input_tensors_caps, "format", G_TYPE_STRING,
+        "GRAY8", NULL);
+  } else if (self->channels == 3) {
+    GstCaps *rgb_caps = gst_caps_from_string ("video/x-raw, format=(string)"
+        "{ RGB, RGBA, BGR, BGRA, ARGB, ABGR }");
+    GstCaps *tmp = gst_caps_intersect (self->input_tensors_caps, rgb_caps);
+    gst_caps_unref (rgb_caps);
+    gst_caps_replace (&self->input_tensors_caps, tmp);
+    gst_caps_unref (tmp);
+  }
   if (self->fixedInputImageSize)
     gst_caps_set_simple (self->input_tensors_caps, "width", G_TYPE_INT,
         self->width, "height", G_TYPE_INT, self->height, NULL);
@@ -1648,6 +1664,9 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
       srcPtr[0] = frame_data + 2;
       srcPtr[1] = frame_data + 1;
       srcPtr[2] = frame_data + 0;
+      break;
+    case GST_VIDEO_FORMAT_GRAY8:
+      srcPtr[0] = frame_data;
       break;
     default:
       g_assert_not_reached ();
