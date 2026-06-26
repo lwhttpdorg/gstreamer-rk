@@ -591,6 +591,136 @@ GST_START_TEST (test_accept_caps_dimension_mismatch)
 
 GST_END_TEST;
 
+/* Test that buffers with GstVideoMeta and non-default strides are read correctly on the float32 conversion path. */
+GST_START_TEST (test_padded_stride_with_videometa)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "flatten_float32in_float32out.onnx",
+      "0.0,255.0;0.0,255.0;0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstVideoInfo vinfo;
+  gint padded_stride;
+  gsize buf_size;
+  gsize offsets[4] = { 0, 0, 0, 0 };
+  gint strides[4] = { 0, 0, 0, 0 };
+  GstBuffer *in, *out;
+  GstMapInfo map;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  gfloat expected[TEST_NUM_PIXELS * TEST_NUM_CHANNELS];
+  guint8 *row;
+  gint j, i;
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=RGB,width=4,height=4,framerate=30/1");
+
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_RGB,
+      TEST_WIDTH, TEST_HEIGHT);
+  padded_stride = GST_VIDEO_INFO_COMP_STRIDE (&vinfo, 0) + 16;
+  buf_size = padded_stride * TEST_HEIGHT;
+
+  in = gst_buffer_new_allocate (NULL, buf_size, NULL);
+
+  gst_buffer_map (in, &map, GST_MAP_WRITE);
+  memset (map.data, 0xAA, buf_size);
+  for (j = 0; j < TEST_HEIGHT; j++) {
+    row = map.data + j * padded_stride;
+    for (i = 0; i < TEST_WIDTH; i++) {
+      row[i * 3 + 0] = 11;
+      row[i * 3 + 1] = 22;
+      row[i * 3 + 2] = 33;
+    }
+  }
+  gst_buffer_unmap (in, &map);
+
+  strides[0] = padded_stride;
+  gst_buffer_add_video_meta_full (in, GST_VIDEO_FRAME_FLAG_NONE,
+      GST_VIDEO_FORMAT_RGB, TEST_WIDTH, TEST_HEIGHT, 1, offsets, strides);
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out != NULL);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+
+  fill_expected_flat_rgb_f32 (expected, TEST_NUM_PIXELS, 11, 22, 33);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
+/* Test that the uint8 passthrough fast path falls back to the convert path when GstVideoMeta advertises a padded stride. */
+GST_START_TEST (test_padded_stride_with_videometa_uint8)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "flatten_uint8in_float32out.onnx",
+      "0.0,255.0;0.0,255.0;0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstVideoInfo vinfo;
+  gint padded_stride;
+  gsize buf_size;
+  gsize offsets[4] = { 0, 0, 0, 0 };
+  gint strides[4] = { 0, 0, 0, 0 };
+  GstBuffer *in, *out;
+  GstMapInfo map;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  gfloat expected[TEST_NUM_PIXELS * TEST_NUM_CHANNELS];
+  guint8 *row;
+  gint j, i;
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=RGB,width=4,height=4,framerate=30/1");
+
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_RGB,
+      TEST_WIDTH, TEST_HEIGHT);
+  padded_stride = GST_VIDEO_INFO_COMP_STRIDE (&vinfo, 0) + 16;
+  buf_size = padded_stride * TEST_HEIGHT;
+
+  in = gst_buffer_new_allocate (NULL, buf_size, NULL);
+
+  gst_buffer_map (in, &map, GST_MAP_WRITE);
+  memset (map.data, 0xAA, buf_size);
+  for (j = 0; j < TEST_HEIGHT; j++) {
+    row = map.data + j * padded_stride;
+    for (i = 0; i < TEST_WIDTH; i++) {
+      row[i * 3 + 0] = 11;
+      row[i * 3 + 1] = 22;
+      row[i * 3 + 2] = 33;
+    }
+  }
+  gst_buffer_unmap (in, &map);
+
+  strides[0] = padded_stride;
+  gst_buffer_add_video_meta_full (in, GST_VIDEO_FRAME_FLAG_NONE,
+      GST_VIDEO_FORMAT_RGB, TEST_WIDTH, TEST_HEIGHT, 1, offsets, strides);
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out != NULL);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+
+  fill_expected_flat_rgb_f32 (expected, TEST_NUM_PIXELS, 11, 22, 33);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
 static Suite *
 onnxinference_suite (void)
 {
@@ -612,6 +742,8 @@ onnxinference_suite (void)
   tcase_add_test (tc, test_timestamp_and_flags_propagation);
   tcase_add_test (tc, test_transform_caps_and_accept_caps);
   tcase_add_test (tc, test_accept_caps_dimension_mismatch);
+  tcase_add_test (tc, test_padded_stride_with_videometa);
+  tcase_add_test (tc, test_padded_stride_with_videometa_uint8);
 
   return s;
 }

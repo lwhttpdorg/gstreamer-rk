@@ -107,6 +107,7 @@
 #include "gstonnxinference.h"
 
 #include <gst/gst.h>
+#include <gst/video/video.h>
 #include <gst/analytics/analytics.h>
 
 #include <onnxruntime_c_api.h>
@@ -547,6 +548,7 @@ gst_onnx_inference_transform_caps (GstBaseTransform *
 
     other_caps = gst_caps_intersect_full (tmp_caps, restrictions,
         GST_CAPS_INTERSECT_FIRST);
+
     gst_caps_unref (tmp_caps);
   } else {
     other_caps = gst_caps_intersect_full (caps, restrictions,
@@ -1519,7 +1521,11 @@ static GstFlowReturn
 gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
 {
   GstOnnxInference *self = GST_ONNX_INFERENCE (trans);
-  GstMapInfo info;
+  GstVideoFrame frame;
+  gboolean frame_mapped = FALSE;
+  guint8 *frame_data;
+  guint32 frame_stride;
+  guint8 frame_pstride;
   OrtStatus *status = NULL;
   OrtTypeInfo *input_type_info = NULL;
   OrtValue *input_tensor = NULL;
@@ -1533,11 +1539,15 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   GstTensorMeta *tmeta = NULL;
   OrtTensorTypeAndShapeInfo *output_tensor_info = NULL;
 
-  if (!gst_buffer_map (buf, &info, GST_MAP_READ)) {
+  if (!gst_video_frame_map (&frame, &self->video_info, buf, GST_MAP_READ)) {
     GST_ELEMENT_ERROR (trans, STREAM, FAILED, (NULL),
         ("Could not map input buffer"));
     return GST_FLOW_ERROR;
   }
+  frame_mapped = TRUE;
+  frame_data = GST_VIDEO_FRAME_PLANE_DATA (&frame, 0);
+  frame_stride = GST_VIDEO_FRAME_PLANE_STRIDE (&frame, 0);
+  frame_pstride = GST_VIDEO_FRAME_COMP_PSTRIDE (&frame, 0);
 
   status =
       api->SessionGetInputName (self->session, 0, self->allocator, input_names);
@@ -1610,34 +1620,34 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   // copy video frame
   switch (self->video_info.finfo->format) {
     case GST_VIDEO_FORMAT_RGBA:
-      srcPtr[0] = info.data;
-      srcPtr[1] = info.data + 1;
-      srcPtr[2] = info.data + 2;
+      srcPtr[0] = frame_data;
+      srcPtr[1] = frame_data + 1;
+      srcPtr[2] = frame_data + 2;
       break;
     case GST_VIDEO_FORMAT_BGRA:
-      srcPtr[0] = info.data + 2;
-      srcPtr[1] = info.data + 1;
-      srcPtr[2] = info.data + 0;
+      srcPtr[0] = frame_data + 2;
+      srcPtr[1] = frame_data + 1;
+      srcPtr[2] = frame_data + 0;
       break;
     case GST_VIDEO_FORMAT_ARGB:
-      srcPtr[0] = info.data + 1;
-      srcPtr[1] = info.data + 2;
-      srcPtr[2] = info.data + 3;
+      srcPtr[0] = frame_data + 1;
+      srcPtr[1] = frame_data + 2;
+      srcPtr[2] = frame_data + 3;
       break;
     case GST_VIDEO_FORMAT_ABGR:
-      srcPtr[0] = info.data + 3;
-      srcPtr[1] = info.data + 2;
-      srcPtr[2] = info.data + 1;
+      srcPtr[0] = frame_data + 3;
+      srcPtr[1] = frame_data + 2;
+      srcPtr[2] = frame_data + 1;
       break;
     case GST_VIDEO_FORMAT_RGB:
-      srcPtr[0] = info.data;
-      srcPtr[1] = info.data + 1;
-      srcPtr[2] = info.data + 2;
+      srcPtr[0] = frame_data;
+      srcPtr[1] = frame_data + 1;
+      srcPtr[2] = frame_data + 2;
       break;
     case GST_VIDEO_FORMAT_BGR:
-      srcPtr[0] = info.data + 2;
-      srcPtr[1] = info.data + 1;
-      srcPtr[2] = info.data + 0;
+      srcPtr[0] = frame_data + 2;
+      srcPtr[1] = frame_data + 1;
+      srcPtr[2] = frame_data + 0;
       break;
     default:
       g_assert_not_reached ();
@@ -1661,15 +1671,15 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   switch (self->input_data_type) {
     case GST_TENSOR_DATA_TYPE_UINT8:{
       uint8_t *src_data;
+      gboolean is_tight_packed =
+          (frame_stride == self->width * frame_pstride * self->channels);
 
-      if (is_passthrough_transform) {
-        src_data = info.data;
+      if (is_passthrough_transform && is_tight_packed) {
+        src_data = frame_data;
       } else {
         convert_image_scale_offset_u8 (self->dest, self->width, self->height,
             self->channels, self->planar, srcPtr,
-            GST_VIDEO_INFO_COMP_PSTRIDE (&self->video_info, 0),
-            GST_VIDEO_INFO_PLANE_STRIDE (&self->video_info, 0),
-            self->scales, self->offsets);
+            frame_pstride, frame_stride, self->scales, self->offsets);
         src_data = self->dest;
       }
 
@@ -1682,9 +1692,7 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
       convert_image_scale_offset_f32 ((float *) self->dest, self->width,
           self->height,
           self->channels, self->planar, srcPtr,
-          GST_VIDEO_INFO_COMP_PSTRIDE (&self->video_info, 0),
-          GST_VIDEO_INFO_PLANE_STRIDE (&self->video_info, 0),
-          self->scales, self->offsets);
+          frame_pstride, frame_stride, self->scales, self->offsets);
 
       status = api->CreateTensorWithDataAsOrtValue (self->memory_info,
           (float *) self->dest,
@@ -1719,6 +1727,11 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
 
   self->allocator->Free (self->allocator, input_names[0]);
   api->ReleaseValue (input_tensor);
+  input_tensor = NULL;
+  input_names[0] = NULL;
+
+  gst_video_frame_unmap (&frame);
+  frame_mapped = FALSE;
 
   if (!output_tensors || self->output_count == 0) {
     GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
@@ -1823,7 +1836,6 @@ gst_onnx_inference_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   g_free (output_tensors);
 
   GST_TRACE_OBJECT (trans, "Num tensors:%zu", self->output_count);
-  gst_buffer_unmap (buf, &info);
 
   return GST_FLOW_OK;
 
@@ -1851,7 +1863,8 @@ error:
     gst_buffer_remove_meta (buf, (GstMeta *) tmeta);
 
 
-  gst_buffer_unmap (buf, &info);
+  if (frame_mapped)
+    gst_video_frame_unmap (&frame);
 
   return GST_FLOW_ERROR;
 }
