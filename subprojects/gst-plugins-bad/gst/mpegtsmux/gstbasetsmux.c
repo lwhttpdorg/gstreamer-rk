@@ -1663,21 +1663,22 @@ gst_base_ts_mux_prepare_and_accumulate_buffer (GstBaseTsMux * mux,
 
   GST_DEBUG_OBJECT (mux, "Pads collected");
 
-  if (buf && gst_buffer_get_size (buf) == 0
-      && GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP)) {
+  if (buf && gst_buffer_get_size (buf) == 0) {
+    if (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP)) {
+      GST_DEBUG_OBJECT (mux, "Dropping GAP buffer");
+      gst_buffer_unref (buf);
+      return GST_FLOW_OK;
+    }
+    GST_ERROR_OBJECT (mux, "Received non-GAP empty buffer");
     gst_buffer_unref (buf);
-    return GST_FLOW_OK;
+    return GST_FLOW_ERROR;
   }
 
   g_mutex_lock (&mux->lock);
   if (G_UNLIKELY (mux->first)) {
     ret = gst_base_ts_mux_create_streams (mux);
-    if (G_UNLIKELY (ret != GST_FLOW_OK)) {
-      if (buf)
-        gst_buffer_unref (buf);
-      g_mutex_unlock (&mux->lock);
-      return ret;
-    }
+    if (G_UNLIKELY (ret != GST_FLOW_OK))
+      goto error_unlock_out;
 
     mux->first = FALSE;
   }
@@ -1687,12 +1688,8 @@ gst_base_ts_mux_prepare_and_accumulate_buffer (GstBaseTsMux * mux,
     GList *cur;
 
     ret = gst_base_ts_mux_create_pad_stream (mux, GST_PAD (best), FALSE);
-    if (G_UNLIKELY (ret != GST_FLOW_OK)) {
-      if (buf)
-        gst_buffer_unref (buf);
-      g_mutex_unlock (&mux->lock);
-      return ret;
-    }
+    if (G_UNLIKELY (ret != GST_FLOW_OK))
+      goto error_unlock_out;
     tsmux_resend_pat (mux->tsmux);
     tsmux_resend_si (mux->tsmux);
     prog = best->prog;
@@ -1712,7 +1709,11 @@ gst_base_ts_mux_prepare_and_accumulate_buffer (GstBaseTsMux * mux,
     GstBuffer *tmp;
 
     tmp = best->prepare_func (buf, best, mux);
-    g_assert (tmp);
+    if (tmp == NULL) {
+      GST_ERROR_OBJECT (best, "Error preparing buffer");
+      ret = GST_FLOW_ERROR;
+      goto error_unlock_out;
+    }
     gst_buffer_unref (buf);
     buf = tmp;
   }
@@ -1732,6 +1733,13 @@ gst_base_ts_mux_prepare_and_accumulate_buffer (GstBaseTsMux * mux,
   }
 
   return gst_base_ts_mux_output_buffer_locked (mux, best, buf, best->dts);
+
+error_unlock_out:{
+    if (buf)
+      gst_buffer_unref (buf);
+    g_mutex_unlock (&mux->lock);
+    return ret;
+  }
 }
 
 /* GstElement implementation */
@@ -2856,11 +2864,26 @@ gst_base_ts_mux_aggregate (GstAggregator * agg, gboolean timeout)
         /* We might have gotten a flush event after we picked the pad */
         goto maybe_eos;
       }
+      if (gst_buffer_get_size (buffer) == 0) {
+        if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_GAP)) {
+          GST_DEBUG_OBJECT (mux, "Dropping GAP buffer");
+        } else {
+          GST_ERROR_OBJECT (mux, "Received non-GAP empty buffer");
+          ret = GST_FLOW_ERROR;
+        }
+        gst_buffer_unref (buffer);
+        goto done;
+      }
 
       if (best->prepare_func) {
         tmp = best->prepare_func (buffer, best, mux);
         gst_buffer_unref (buffer);
         buffer = tmp;
+        if (buffer == NULL) {
+          GST_ERROR_OBJECT (best, "Error preparing buffer");
+          ret = GST_FLOW_ERROR;
+          goto done;
+        }
       }
 
       GST_LOG_OBJECT (best,
