@@ -116,7 +116,11 @@ struct _GstRTSPStreamPrivate
   /* SRTP encoder/decoder */
   GstElement *srtpenc;
   GstElement *srtpdec;
+  guint receive_ssrc;
   GHashTable *keys;
+
+  /* client proposes encryption keys */
+  gboolean client_managed_mikey;
 
   /* for UDP unicast */
   GstElement *udpsrc_v4[2];
@@ -248,6 +252,7 @@ struct _GstRTSPStreamPrivate
 #define DEFAULT_BIND_MCAST_ADDRESS FALSE
 #define DEFAULT_DO_RATE_CONTROL TRUE
 #define DEFAULT_ENABLE_RTCP TRUE
+#define DEFAULT_CLIENT_MANAGED_MIKEY FALSE
 
 enum
 {
@@ -255,6 +260,7 @@ enum
   PROP_CONTROL,
   PROP_PROFILES,
   PROP_PROTOCOLS,
+  PROP_CLIENT_MANAGED_MIKEY,
   PROP_LAST
 };
 
@@ -312,6 +318,22 @@ gst_rtsp_stream_class_init (GstRTSPStreamClass * klass)
           "Allowed lower transport protocols", GST_TYPE_RTSP_LOWER_TRANS,
           DEFAULT_PROTOCOLS, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+   /**
+   * GstRTSPStream:client-managed-mikey
+   *
+   * When this mode is enabled, the client is expected to provide the
+   * key for both the client (SRTCP/RR) and the server (SRTP/SRTCP SR).
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_CLIENT_MANAGED_MIKEY,
+      g_param_spec_boolean ("client-managed-mikey",
+          "Client-managed MIKEY",
+          "Enable client-managed MIKEY mode",
+          DEFAULT_CLIENT_MANAGED_MIKEY,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gst_rtsp_stream_signals[SIGNAL_NEW_RTP_ENCODER] =
       g_signal_new ("new-rtp-encoder", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, GST_TYPE_ELEMENT);
@@ -367,6 +389,8 @@ gst_rtsp_stream_init (GstRTSPStream * stream)
   priv->block_early_rtcp_probe_ipv6 = 0;
   priv->drop_delta_units = FALSE;
   priv->remove_drop_probe = FALSE;
+
+  priv->client_managed_mikey = DEFAULT_CLIENT_MANAGED_MIKEY;
 }
 
 typedef struct _UdpClientAddrInfo UdpClientAddrInfo;
@@ -482,6 +506,10 @@ gst_rtsp_stream_get_property (GObject * object, guint propid,
     case PROP_PROTOCOLS:
       g_value_set_flags (value, gst_rtsp_stream_get_protocols (stream));
       break;
+    case PROP_CLIENT_MANAGED_MIKEY:
+      g_value_set_boolean (value,
+          gst_rtsp_stream_is_client_managed_mikey (stream));
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, propid, pspec);
   }
@@ -502,6 +530,10 @@ gst_rtsp_stream_set_property (GObject * object, guint propid,
       break;
     case PROP_PROTOCOLS:
       gst_rtsp_stream_set_protocols (stream, g_value_get_flags (value));
+      break;
+    case PROP_CLIENT_MANAGED_MIKEY:
+      gst_rtsp_stream_set_client_managed_mikey (stream,
+          g_value_get_boolean (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, propid, pspec);
@@ -616,6 +648,59 @@ gst_rtsp_stream_get_sinkpad (GstRTSPStream * stream)
     return NULL;
 
   return gst_object_ref (stream->priv->sinkpad);
+}
+
+/**
+ * gst_rtsp_stream_is_client_managed_mikey:
+ * @stream: a #GstRTSPStream
+ *
+ * Check if client-managed-mikey mode is enabled.
+ *
+ * Returns: %TRUE if this mode is enabled.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_rtsp_stream_is_client_managed_mikey (GstRTSPStream * stream)
+{
+  GstRTSPStreamPrivate *priv;
+  gboolean result;
+
+  g_return_val_if_fail (GST_IS_RTSP_STREAM (stream), FALSE);
+
+  priv = stream->priv;
+
+  g_mutex_lock (&priv->lock);
+  result = priv->client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
+
+  return result;
+}
+
+/**
+ * gst_rtsp_stream_set_client_managed_mikey:
+ * @stream: a #GstRTSPStream
+ * @client_managed_mikey: the new value
+ *
+ * Set client-managed-mikey mode for @stream.
+ * In this mode the client is expected to provide the keys both for encrypting
+ * and decrypting SRTP data.
+ *
+ * Since: 1.30
+ */
+void
+gst_rtsp_stream_set_client_managed_mikey (GstRTSPStream * stream,
+    gboolean client_managed_mikey)
+{
+  GstRTSPStreamPrivate *priv;
+
+  g_return_if_fail (GST_IS_RTSP_STREAM (stream));
+
+  priv = stream->priv;
+
+  g_mutex_lock (&priv->lock);
+  priv->client_managed_mikey = client_managed_mikey;
+  g_mutex_unlock (&priv->lock);
 }
 
 /**
@@ -2957,7 +3042,7 @@ request_rtp_rtcp_decoder (GstElement * rtpbin, guint session,
 
     g_signal_emit (stream, gst_rtsp_stream_signals[SIGNAL_NEW_RTP_RTCP_DECODER],
         0, priv->srtpdec);
-
+    priv->receive_ssrc = G_MAXUINT;
   }
   return gst_object_ref (priv->srtpdec);
 }
@@ -6168,6 +6253,10 @@ handle_mikey_data (GstRTSPStream * stream, guint8 * data, gsize size)
   GstMIKEYPayloadKEMAC *kemac;
   const GstMIKEYPayloadKeyData *pkd;
   GstBuffer *key;
+  GstBuffer *mki = NULL;
+  GstRTSPStreamPrivate *priv;
+
+  priv = stream->priv;
 
   /* the MIKEY message contains a CSB or crypto session bundle. It is a
    * set of Crypto Sessions protected with the same master key.
@@ -6202,21 +6291,53 @@ handle_mikey_data (GstRTSPStream * stream, guint8 * data, gsize size)
 
   key = gst_buffer_new_memdup (pkd->key_data, pkd->key_len);
 
+  /* get optional SPI/MKI */
+  if (priv->client_managed_mikey && pkd->kv_type == GST_MIKEY_KV_SPI
+      && pkd->kv_len[0] > 0)
+    mki = gst_buffer_new_memdup (pkd->kv_data[0], (gsize) pkd->kv_len[0]);
+
   /* go over all crypto sessions and create the security policy for each
    * SSRC */
   for (i = 0; i < n_cs; i++) {
     const GstMIKEYMapSRTP *map = gst_mikey_message_get_cs_srtp (msg, i);
+    guint ssrc;
+
+    if (priv->client_managed_mikey) {
+      if (stream->priv->receive_ssrc == G_MAXUINT) {
+        /* we store the initial ssrc which representens the receiver */
+        stream->priv->receive_ssrc = map->ssrc;
+      }
+      ssrc = stream->priv->receive_ssrc;
+    } else {
+      ssrc = map->ssrc;
+    }
 
     caps = gst_caps_new_simple ("application/x-srtp",
-        "ssrc", G_TYPE_UINT, map->ssrc,
+        "ssrc", G_TYPE_UINT, ssrc,
         "roc", G_TYPE_UINT, map->roc, "srtp-key", GST_TYPE_BUFFER, key, NULL);
+
     mikey_apply_policy (caps, msg, map->policy);
 
-    gst_rtsp_stream_update_crypto (stream, map->ssrc, caps);
+    if (priv->client_managed_mikey) {
+      if (mki) {
+        gst_caps_set_simple (caps, "mki", GST_TYPE_BUFFER, mki, NULL);
+      }
+      g_object_set (G_OBJECT (stream->priv->srtpenc), "mki", mki, NULL);
+      g_object_set (G_OBJECT (stream->priv->srtpenc), "key", key, NULL);
+      /* store new policy and trigger srtpdec to request it */
+      gst_rtsp_stream_update_crypto (stream, ssrc, NULL);
+      gst_rtsp_stream_update_crypto (stream, ssrc, caps);
+      g_signal_emit_by_name (stream->priv->srtpdec, "invalidate-key", ssrc,
+          NULL);
+    } else
+      gst_rtsp_stream_update_crypto (stream, ssrc, caps);
+
     gst_caps_unref (caps);
   }
   gst_mikey_message_unref (msg);
   gst_buffer_unref (key);
+  if (mki)
+    gst_buffer_unref (mki);
 
   return TRUE;
 

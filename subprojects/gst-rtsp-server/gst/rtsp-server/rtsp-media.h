@@ -457,6 +457,12 @@ void                  gst_rtsp_media_set_rate_control (GstRTSPMedia * media, gbo
 GST_RTSP_SERVER_API
 gboolean              gst_rtsp_media_get_rate_control (GstRTSPMedia * media);
 
+GST_RTSP_SERVER_API
+gboolean              gst_rtsp_media_is_client_managed_mikey (GstRTSPMedia * media);
+
+GST_RTSP_SERVER_API
+void                  gst_rtsp_media_set_client_managed_mikey (GstRTSPMedia * media, gboolean client_managed_mikey);
+
 #ifdef G_DEFINE_AUTOPTR_CLEANUP_FUNC
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstRTSPMedia, gst_object_unref)
 #endif

@@ -26,7 +26,7 @@
 #define __GST_RTSP_PARAMS_H__
 
 #include "rtsp-client.h"
-#include "rtsp-session.h"
+#include "rtsp-context.h"
 
 G_BEGIN_DECLS
 
