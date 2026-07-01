@@ -235,9 +235,9 @@ typedef struct
    * collection is active */
   gboolean all_streams_present;
 
-  /* TRUE if this collection is an update of the previous one.  i.e. it only
+  /* TRUE if this collection is deprecated. i.e. received collection which only
    * *adds* new streams. */
-  gboolean is_update;
+  gboolean is_deprecated;
 } DecodebinCollection;
 
 typedef struct
@@ -281,6 +281,11 @@ struct _GstDecodebin3
   GList *output_streams;        /* List of DecodebinOutputStream used for output */
   GList *slots;                 /* List of MultiQueueSlot */
   guint slot_id;
+
+  /* Whether decodebin is currently posting a stream selection on the bus */
+  gboolean posting_selection;
+  /* GCond to block against and know when posting_selection changed */
+  GCond posting_selection_cond;
 
   /* List of DecodebinCollection in existence. ordered by oldest (i.e. first is
    * currently outputted, last is most recent incoming */
@@ -739,7 +744,9 @@ gst_decodebin3_init (GstDecodebin3 * dbin)
   g_mutex_init (&dbin->selection_lock);
   g_mutex_init (&dbin->input_lock);
   g_cond_init (&dbin->posting_cond);
+  g_cond_init (&dbin->posting_selection_cond);
   dbin->posting_collection = FALSE;
+  dbin->posting_selection = FALSE;
 
   dbin->caps = gst_static_caps_get (&default_raw_caps);
 
@@ -839,6 +846,7 @@ gst_decodebin3_finalize (GObject * object)
   g_mutex_clear (&dbin->selection_lock);
   g_mutex_clear (&dbin->input_lock);
   g_cond_clear (&dbin->posting_cond);
+  g_cond_clear (&dbin->posting_selection_cond);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -2641,7 +2649,8 @@ find_collection_for_stream (GstDecodebin3 * dbin, gchar * stream_id)
   for (tmp = dbin->collections; tmp; tmp = tmp->next) {
     DecodebinCollection *collection = tmp->data;
     GST_DEBUG_OBJECT (dbin, "Trying on DBCollection %p", collection);
-    if (stream_in_collection (collection->collection, stream_id))
+    if (!collection->is_deprecated &&
+        stream_in_collection (collection->collection, stream_id))
       return collection;
   }
 
@@ -2680,6 +2689,7 @@ db_collection_new (GstStreamCollection * collection)
 
   db_collection->collection = collection;
   db_collection->seqnum = GST_SEQNUM_INVALID;
+  db_collection->is_deprecated = FALSE;
 
   GST_DEBUG ("Created new collection %p for %" GST_PTR_FORMAT, db_collection,
       collection);
@@ -2729,7 +2739,7 @@ handle_stream_collection_locked (GstDecodebin3 * dbin,
     GstStreamCollection * collection, DecodebinInput * input)
 {
   GstMessage *message = NULL;
-  gboolean is_update = FALSE;
+  gboolean is_deprecated = FALSE;
 #ifndef GST_DISABLE_GST_DEBUG
   const gchar *upstream_id;
   guint i;
@@ -2793,23 +2803,24 @@ handle_stream_collection_locked (GstDecodebin3 * dbin,
     if (gst_stream_collection_get_size (collection) >
         gst_stream_collection_get_size (previous)) {
       guint i;
-      is_update = TRUE;
+      is_deprecated = TRUE;
       for (i = 0; i < gst_stream_collection_get_size (previous); i++) {
         GstStream *stream = gst_stream_collection_get_stream (previous, i);
         const gchar *sid = gst_stream_get_stream_id (stream);
         if (!stream_in_collection (collection, (gchar *) sid)) {
-          is_update = FALSE;
+          is_deprecated = FALSE;
           break;
         }
       }
+      GST_DEBUG_OBJECT (dbin, "DBCollection %p (is_deprecated:%d)",
+          dbin->input_collection, is_deprecated);
+      dbin->input_collection->is_deprecated = is_deprecated;
     }
   }
 
   /* We have a new collection, store it */
-  GST_DEBUG_OBJECT (dbin, "Switching to new input collection (is_update:%d)",
-      is_update);
+  GST_DEBUG_OBJECT (dbin, "Switching to new input collection");
   dbin->input_collection = db_collection_new (collection);
-  dbin->input_collection->is_update = is_update;
   dbin->collections = g_list_append (dbin->collections, dbin->input_collection);
   message = gst_message_new_stream_collection ((GstObject *) dbin, collection);
 
@@ -3268,9 +3279,20 @@ mq_slot_check_reconfiguration (MultiQueueSlot * slot)
   GstMessage *selection_msg = is_selection_done (dbin);
   /* We reconfigured the associated output. Check if we're done with
    * the current selection */
-  SELECTION_UNLOCK (dbin);
-  if (selection_msg)
+  if (selection_msg) {
+    while (dbin->posting_selection)
+      g_cond_wait (&dbin->posting_selection_cond, &dbin->selection_lock);
+    GST_WARNING_OBJECT (dbin, "Posting selection");
+    dbin->posting_selection = TRUE;
+    SELECTION_UNLOCK (dbin);
     gst_element_post_message ((GstElement *) slot->dbin, selection_msg);
+    SELECTION_LOCK (dbin);
+    dbin->posting_selection = FALSE;
+    GST_WARNING_OBJECT (dbin, "Done post selection");
+    g_cond_broadcast (&dbin->posting_selection_cond);
+  }
+
+  SELECTION_UNLOCK (dbin);
 }
 
 /* Update the `all_streams_present` state of the provided collection by checking
@@ -3421,13 +3443,13 @@ mq_slot_handle_stream_start (MultiQueueSlot * slot, GstEvent * stream_event)
     if (candidate == dbin->output_collection)
       continue;
     GST_DEBUG_OBJECT (dbin,
-        "Dropping intermediary collection %p is_update:%d %" GST_PTR_FORMAT,
-        candidate, candidate->is_update, candidate->collection);
+        "Dropping intermediary collection %p is_deprecated:%d %" GST_PTR_FORMAT,
+        candidate, candidate->is_deprecated, candidate->collection);
 
     /* Dropping an intermediate collection is only possible if there wasn't any
      * previous output collection or it was an update of the previous one
      */
-    g_assert (candidate->is_update || dbin->output_collection == NULL);
+    g_assert (candidate->is_deprecated || dbin->output_collection == NULL);
     dbin->collections = g_list_remove (dbin->collections, candidate);
     db_collection_free (candidate);
   }
@@ -3438,8 +3460,9 @@ mq_slot_handle_stream_start (MultiQueueSlot * slot, GstEvent * stream_event)
     goto check_for_switch;
   }
 
-  /* If the new collection is fully present, we can switch */
-  if (collection->all_streams_present) {
+  /* If the new collection is fully present or ourput collection
+     is deprecated, we can switch */
+  if (collection->all_streams_present || dbin->output_collection->is_deprecated) {
     GST_DEBUG_OBJECT (dbin, "Switching to new output collection");
     dbin->collections =
         g_list_remove (dbin->collections, dbin->output_collection);
