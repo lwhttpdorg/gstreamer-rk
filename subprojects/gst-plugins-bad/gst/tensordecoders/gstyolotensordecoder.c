@@ -156,9 +156,11 @@ static GstFlowReturn gst_yolo_tensor_decoder_transform_ip (GstBaseTransform *
     trans, GstBuffer * buf);
 static void gst_yolo_tensor_decoder_finalize (GObject * object);
 
+static gfloat gst_yolo_tensor_decoder_iou (GstYoloTensorDecoder * self,
+    BBox * bb1, BBox * bb2);
 static void gst_yolo_tensor_decoder_object_found (GstYoloTensorDecoder * self,
     GstAnalyticsRelationMeta * rmeta, BBox * bb, gfloat confidence,
-    GQuark class_quark, const gfloat * candidate_masks, gsize offset,
+    GQuark class_quark, const gfloat * candidate_extras, gsize offset,
     guint count);
 
 G_DEFINE_TYPE (GstYoloTensorDecoder, gst_yolo_tensor_decoder,
@@ -348,8 +350,8 @@ gst_yolo_tensor_decoder_class_init (GstYoloTensorDecoderClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass),
       PROP_MAX_DETECTION,
       g_param_spec_uint ("max-detections",
-          "Maximum object/masks detections.",
-          "Maximum object/masks detections.",
+          "Maximum object detections.",
+          "Maximum object detections.",
           1, G_MAXUINT, DEFAULT_MAX_DETECTION,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
@@ -389,6 +391,7 @@ gst_yolo_tensor_decoder_class_init (GstYoloTensorDecoderClass * klass)
   gobject_class->finalize = gst_yolo_tensor_decoder_finalize;
 
   klass->object_found = gst_yolo_tensor_decoder_object_found;
+  klass->iou = gst_yolo_tensor_decoder_iou;
 
   /* Calculate the class id placeholder (also a quark) that will be set
    * as label if object if labels are not provided via label-file. */
@@ -504,26 +507,26 @@ gst_yolo_tensor_decoder_finalize (GObject * object)
 /* Extract bounding box from tensor data */
 static void
 gst_yolo_tensor_decoder_convert_bbox (const gfloat * candidate,
-    const gsize * offset, BBox * bbox)
+    const gsize * offsets, BBox * bbox)
 {
-  gfloat w = *(candidate + offset[2]);
-  gfloat h = *(candidate + offset[3]);
-  bbox->x = *(candidate + offset[0]) - (w / 2);
-  bbox->y = *(candidate + offset[1]) - (h / 2);
+  gfloat w = *(candidate + offsets[2]);
+  gfloat h = *(candidate + offsets[3]);
+  bbox->x = *(candidate + offsets[0]) - (w / 2);
+  bbox->y = *(candidate + offsets[1]) - (h / 2);
   bbox->w = w + 0.5;
   bbox->h = h + 0.5;
+  if (offsets[4])
+    bbox->r = *(candidate + offsets[4]);
 }
 
 /* Calculate iou between boundingbox of candidate c1 and c2
  */
 static gfloat
-gst_yolo_tensor_decoder_iou (const gfloat * c1, const gfloat * c2,
-    const gsize * offset, BBox * bb1, BBox * bb2)
+gst_yolo_tensor_decoder_iou (GstYoloTensorDecoder * self,
+    BBox * bb1, BBox * bb2)
 {
-  gst_yolo_tensor_decoder_convert_bbox (c1, offset, bb1);
-  gst_yolo_tensor_decoder_convert_bbox (c2, offset, bb2);
-  return gst_analytics_image_util_iou_int (bb1->x, bb1->y, bb1->w, bb1->h,
-      bb2->x, bb2->y, bb2->w, bb2->h);
+  return gst_analytics_image_util_iou_int (bb1->x,
+      bb1->y, bb1->w, bb1->h, bb2->x, bb2->y, bb2->w, bb2->h);
 }
 
 /* Utility function to find maxmum confidence value across classes
@@ -587,16 +590,20 @@ gst_yolo_tensor_decoder_decode_valid_bb (GstYoloTensorDecoder * self,
   return TRUE;
 }
 
+/*
+ * The extras from num_extras can be the angle of rotation for OBB, the
+ * segmentation masks coefficients, or the keypoints for the pose variant.
+ */
 gboolean
 gst_yolo_tensor_decoder_decode_f32 (GstYoloTensorDecoder * self,
     GstAnalyticsRelationMeta * rmeta, const GstTensor * detections_tensor,
-    guint num_masks)
+    guint num_extras)
 {
   GstMapInfo map_info_detections;
   gfloat iou;
   gboolean rv, keep;
-  gsize offset, x_offset, y_offset, w_offset, h_offset, offsets[4];
-  BBox bb1, bb2;
+  gsize offset, x_offset, y_offset, w_offset, h_offset, offsets[5];
+  BBox bb;
   ConfidenceRange c_range;
   gsize max_class_offset = 0, class_index;
   GQuark class_quark = OOI_CLASS_ID;
@@ -648,13 +655,15 @@ gst_yolo_tensor_decoder_decode_f32 (GstYoloTensorDecoder * self,
   /* first index that contain confidence level */
   c_range.start = 4 * offset;
   /* Last index that contains confidence level */
-  c_range.end = (detections_tensor->dims[1] - num_masks - 1) * offset;
+  c_range.end = (detections_tensor->dims[1] - num_extras - 1) * offset;
   /* Step between class confidence level */
   c_range.step = offset;
   offsets[0] = x_offset;
   offsets[1] = y_offset;
   offsets[2] = w_offset;
   offsets[3] = h_offset;
+  if (num_extras)
+    offsets[4] = (detections_tensor->dims[1] - num_extras) * offset;
 
 #define BB_X(candidate) candidate[x_offset]
 #define BB_Y(candidate) candidate[y_offset]
@@ -720,30 +729,34 @@ gst_yolo_tensor_decoder_decode_f32 (GstYoloTensorDecoder * self,
     }
   }
 
+  float (*iou_func) (GstYoloTensorDecoder * self, BBox * bb1, BBox * bb2);
+
+  iou_func = GST_YOLO_TENSOR_DECODER_GET_CLASS (self)->iou;
+
   /* Algorithm in part inspired by OpenCV NMSBoxes */
   for (i = 0; i < self->sel_candidates->len; i++) {
     const struct Candidate *c = &g_array_index (self->sel_candidates,
         struct Candidate, i);
     keep = TRUE;
 
+    gst_yolo_tensor_decoder_convert_bbox (c->candidate, offsets, &bb);
+
     /* We only want to a NMS using IoU between candidates we've decided to
      * keep and the new one we considering to keep. selected array contain
      * the candidates we decided to keep and candidates[c] is the candidate
      * we're considering to keep or reject */
+
     for (gsize s = 0; s < self->selected->len && keep; s++) {
       const float *candidate2 = g_ptr_array_index (self->selected, s);
-      iou = gst_yolo_tensor_decoder_iou (c->candidate, candidate2,
-          offsets, &bb1, &bb2);
+      BBox bb2;
+
+      gst_yolo_tensor_decoder_convert_bbox (candidate2, offsets, &bb2);
+
+      iou = iou_func (self, &bb, &bb2);
       keep = (iou <= self->iou_thresh);
     }
 
     if (keep) {
-      if (self->selected->len == 0) {
-        /* The first bounding-box always get in as there's no others bbox
-         * to filter on based on IoU */
-        gst_yolo_tensor_decoder_convert_bbox (c->candidate, offsets, &bb1);
-      }
-
       g_ptr_array_add (self->selected, (gpointer) c->candidate);
 
       if (self->labels) {
@@ -753,29 +766,29 @@ gst_yolo_tensor_decoder_decode_f32 (GstYoloTensorDecoder * self,
           class_quark = g_array_index (self->labels, GQuark, class_index);
       }
 
-      const gfloat *candidate_masks = NULL;
-      if (num_masks) {
-        /* detections weight will be stored in last `num_masks`
+      const gfloat *candidate_extras = NULL;
+      if (num_extras) {
+        /* detections weight will be stored in last `num_extras`
          * row of detections_tensor, so mask offset
          * will start at the end of the detections_tensor minus
-         * `num_masks`
+         * `num_extras`
          */
-        candidate_masks = c->candidate +
-            ((detections_tensor->dims[1] - num_masks) * offset);
+        candidate_extras = c->candidate + offsets[4];
 
-        if (candidate_masks + num_masks + offset >
+        if (candidate_extras + (offset * (num_extras - 1)) >
             (gfloat *) (map_info_detections.data + map_info_detections.size)) {
           GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
               ("Mask tensor data size %zu is smaller than expected (%zu)",
-                  (candidate_masks - (gfloat *) map_info_detections.data) +
-                  offset + num_masks, map_info_detections.size));
+                  map_info_detections.size / sizeof (gfloat),
+                  (candidate_extras - (gfloat *) map_info_detections.data) +
+                  (((num_extras - 1) * offset))));
           ret = FALSE;
           break;
         }
       }
 
-      GST_YOLO_TENSOR_DECODER_GET_CLASS (self)->object_found (self, rmeta, &bb1,
-          c->max_confidence, class_quark, candidate_masks, offset,
+      GST_YOLO_TENSOR_DECODER_GET_CLASS (self)->object_found (self, rmeta, &bb,
+          c->max_confidence, class_quark, candidate_extras, offset,
           self->selected->len);
 
       /* If the maximum number of candidate selected is reached exit the
@@ -797,7 +810,7 @@ gst_yolo_tensor_decoder_decode_f32 (GstYoloTensorDecoder * self,
 static void
 gst_yolo_tensor_decoder_object_found (GstYoloTensorDecoder * self,
     GstAnalyticsRelationMeta * rmeta, BBox * bb, gfloat confidence,
-    GQuark class_quark, const gfloat * candidate_masks, gsize offset,
+    GQuark class_quark, const gfloat * candidate_extras, gsize offset,
     guint count)
 {
   gst_analytics_relation_meta_add_od_mtd (rmeta, class_quark, bb->x, bb->y,

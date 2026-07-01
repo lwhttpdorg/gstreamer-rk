@@ -392,10 +392,48 @@ struct _GstValidateActionPrivate
   gboolean pending_set_done;
 
   GMainContext *context;
+  GstTraceSpanId trace_span_id;
 
   GValue it_value;
   GWeakRef sub_pipeline;
 };
+
+GST_DEFINE_TRACE_FORMAT (gst_validate_action,
+    "type", STRING,
+    "name", STRING,
+    "filename", STRING,
+    "lineno", INT,
+    "repeat", INT,
+    "action-number", UINT, "playback-time", INT64, "structure", STRING);
+
+static void
+gst_validate_action_trace_span_begin (GstValidateAction * action)
+{
+  GstTraceFormat *format = gst_validate_action ();
+  gchar *action_structure;
+
+  if (G_LIKELY (!gst_trace_format_is_enabled (format)))
+    return;
+
+  gst_trace_span_end_and_clear (&action->priv->trace_span_id);
+
+  action_structure = action->structure ?
+      gst_structure_to_string (action->structure) : NULL;
+
+  action->priv->trace_span_id =
+      gst_trace_span_begin (format,
+      GST_TRACE_VALUES (STRING (action->type),
+          STRING (action->name),
+          STRING (GST_VALIDATE_ACTION_FILENAME (action)),
+          INT (GST_VALIDATE_ACTION_LINENO (action)),
+          INT (action->repeat),
+          UINT (action->action_number),
+          INT64 (GST_CLOCK_TIME_IS_VALID (action->playback_time)
+              ? (gint64) action->playback_time : -1),
+          STRING (action_structure)));
+
+  g_free (action_structure);
+}
 
 static JsonNode *
 gst_validate_action_serialize (GstValidateAction * action)
@@ -505,6 +543,8 @@ gst_validate_action_return_get_name (GstValidateActionReturn r)
 static void
 _action_free (GstValidateAction * action)
 {
+  gst_trace_span_end_and_clear (&action->priv->trace_span_id);
+
   if (action->structure)
     gst_structure_free (action->structure);
 
@@ -2991,7 +3031,12 @@ gst_validate_execute_action (GstValidateActionType * action_type,
   action->priv->execution_time = gst_util_get_timestamp ();
   action->priv->state = GST_VALIDATE_EXECUTE_ACTION_IN_PROGRESS;
   action_type->priv->n_calls++;
+  gst_validate_action_trace_span_begin (action);
   res = action_type->execute (scenario, action);
+  if (res != GST_VALIDATE_EXECUTE_ACTION_ASYNC &&
+      res != GST_VALIDATE_EXECUTE_ACTION_NON_BLOCKING &&
+      res != GST_VALIDATE_EXECUTE_ACTION_IN_PROGRESS)
+    gst_trace_span_end_and_clear (&action->priv->trace_span_id);
   gst_object_unref (scenario);
 
   return res;
@@ -3709,6 +3754,8 @@ _execute_dot_pipeline (GstValidateScenario * scenario,
   gchar *dotname;
   gint details = GST_DEBUG_GRAPH_SHOW_ALL;
   const gchar *name = gst_structure_get_string (action->structure, "name");
+  const gchar *dot_dir =
+      gst_structure_get_string (action->structure, "dot-dir");
   DECLARE_AND_GET_PIPELINE (scenario, action);
 
   gst_structure_get_int (action->structure, "details", &details);
@@ -3717,7 +3764,50 @@ _execute_dot_pipeline (GstValidateScenario * scenario,
   else
     dotname = g_strdup ("validate.action.unnamed");
 
-  GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline), details, dotname);
+  if (dot_dir) {
+    const gchar *base_dir = g_getenv ("GST_DEBUG_DUMP_DOT_DIR");
+
+    if (!base_dir) {
+      GST_VALIDATE_REPORT_ACTION (scenario, action,
+          SCENARIO_ACTION_EXECUTION_ERROR,
+          "`dot-dir` requires the GST_DEBUG_DUMP_DOT_DIR environment variable"
+          " to be set");
+      g_free (dotname);
+      gst_object_unref (pipeline);
+      return FALSE;
+    }
+
+    gchar *full_dir = g_build_filename (base_dir, dot_dir, NULL);
+    if (g_mkdir_with_parents (full_dir, 0755) < 0) {
+      GST_VALIDATE_REPORT_ACTION (scenario, action,
+          SCENARIO_ACTION_EXECUTION_ERROR,
+          "Could not create dot directory '%s': %s", full_dir,
+          g_strerror (errno));
+      g_free (full_dir);
+      g_free (dotname);
+      gst_object_unref (pipeline);
+      return FALSE;
+    }
+
+    GstClockTime now = gst_util_get_timestamp ();
+    gchar *ts_name = g_strdup_printf ("%u.%02u.%02u.%09u-%s.dot",
+        GST_TIME_ARGS (now), dotname);
+    gchar *full_path = g_build_filename (full_dir, ts_name, NULL);
+
+    GError *err = NULL;
+    gchar *buf = gst_debug_bin_to_dot_data (GST_BIN (pipeline), details);
+    if (!g_file_set_contents (full_path, buf, -1, &err)) {
+      GST_WARNING_OBJECT (scenario, "Failed to write dot file '%s': %s",
+          full_path, err->message);
+      g_clear_error (&err);
+    }
+    g_free (buf);
+    g_free (full_path);
+    g_free (ts_name);
+    g_free (full_dir);
+  } else {
+    GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (pipeline), details, dotname);
+  }
 
   g_free (dotname);
   gst_object_unref (pipeline);
@@ -5205,8 +5295,16 @@ handle_bus_message (MessageData * d)
       if (old_state == GST_STATE_PAUSED && state == GST_STATE_READY)
         gst_validate_scenario_reset (scenario);
 
-      if (reached_state && gst_validate_scenario_is_flush_seeking (scenario))
-        gst_validate_action_set_done (priv->current_seek->action);
+      if (reached_state && gst_validate_scenario_is_flush_seeking (scenario)) {
+        if (priv->actions) {
+          GstClockTime position = GST_CLOCK_TIME_NONE;
+          gdouble rate;
+
+          _check_position (scenario, priv->current_seek->action, &position,
+              &rate);
+          gst_validate_action_set_done (priv->current_seek->action);
+        }
+      }
 
       if (priv->changing_state && priv->target_state == state) {
         priv->changing_state = FALSE;
@@ -7254,6 +7352,8 @@ _action_set_done (GstValidateAction * action)
   if (scenario == NULL || !action->priv->pending_set_done)
     return G_SOURCE_REMOVE;
 
+  gst_trace_span_end_and_clear (&action->priv->trace_span_id);
+
   action->priv->execution_duration =
       gst_util_get_timestamp () - action->priv->execution_time;
 
@@ -7302,20 +7402,46 @@ _action_set_done (GstValidateAction * action)
       break;
   }
 
+  const gchar *endcolor =
+      gst_validate_has_colored_output ()? GST_VALIDATE_END_COLOR : "";
+  gchar *name_color =
+      gst_validate_get_term_color (GST_DEBUG_FG_GREEN | GST_DEBUG_BOLD);
+  gchar *loc_color = gst_validate_get_term_color (GST_DEBUG_FG_MAGENTA);
+  gchar *state_color = gst_validate_get_term_color (action->priv->state ==
+      GST_VALIDATE_EXECUTE_ACTION_ERROR ? GST_DEBUG_FG_RED | GST_DEBUG_BOLD :
+      GST_DEBUG_FG_CYAN);
+
   if (GST_VALIDATE_ACTION_N_REPEATS (action))
     repeat_message =
         g_strdup_printf ("[%d/%d]", action->repeat,
         GST_VALIDATE_ACTION_N_REPEATS (action));
 
   gst_validate_printf (NULL,
-      "%*c⇨ Action `%s` at %s:%d done '%s' %s (duration: %" GST_TIME_FORMAT
-      ")\n\n", (action->priv->subaction_level * 2) - 1, ' ',
-      gst_structure_get_name (action->priv->main_structure),
-      GST_VALIDATE_ACTION_FILENAME (action),
-      GST_VALIDATE_ACTION_LINENO (action),
-      gst_validate_action_return_get_name (action->priv->state),
-      repeat_message ? repeat_message : "",
+      "%*c⇨ Action %s`%s`%s at %s%s:%d%s done '%s%s%s' %s (duration: %"
+      GST_TIME_FORMAT ")\n\n", (action->priv->subaction_level * 2) - 1, ' ',
+      name_color, gst_structure_get_name (action->priv->main_structure),
+      endcolor, loc_color, GST_VALIDATE_ACTION_FILENAME (action),
+      GST_VALIDATE_ACTION_LINENO (action), endcolor,
+      state_color, gst_validate_action_return_get_name (action->priv->state),
+      endcolor, repeat_message ? repeat_message : "",
       GST_TIME_ARGS (action->priv->execution_duration));
+
+  g_free (name_color);
+  g_free (loc_color);
+  g_free (state_color);
+
+  GstClockTime max_execution_duration;
+  if (gst_validate_action_get_clocktime (scenario, action,
+          "max-execution-duration", &max_execution_duration)) {
+    if (action->priv->execution_duration > max_execution_duration) {
+      GST_VALIDATE_REPORT_ACTION (scenario, action,
+          SCENARIO_ACTION_EXECUTION_ERROR,
+          "Action execution duration (%" GST_TIME_FORMAT
+          ") is longer than the expected max execution duration (%"
+          GST_TIME_FORMAT ")", GST_TIME_ARGS (action->priv->execution_duration),
+          GST_TIME_ARGS (max_execution_duration));
+    }
+  }
   g_free (repeat_message);
 
   g_signal_emit (scenario, scenario_signals[ACTION_DONE], 0, action);
@@ -8504,10 +8630,39 @@ register_action_types (void)
       "Waits for signal 'signal-name', message 'message-type', or during 'duration' seconds",
       GST_VALIDATE_ACTION_TYPE_DOESNT_NEED_PIPELINE);
 
-  REGISTER_ACTION_TYPE ("dot-pipeline", _execute_dot_pipeline, NULL,
+  REGISTER_ACTION_TYPE ("dot-pipeline", _execute_dot_pipeline,
+      ((GstValidateActionParameter []) {
+        {
+          .name = "name",
+          .description = "Used as the suffix of the generated dot filename "
+                         "(prefixed with `validate.action.`).",
+          .mandatory = FALSE,
+          .types = "string",
+          NULL
+        },
+        {
+          .name = "details",
+          .description = "A #GstDebugGraphDetails bitmask describing what to dump.",
+          .mandatory = FALSE,
+          .types = "int",
+          NULL
+        },
+        {
+          .name = "dot-dir",
+          .description = "Subdirectory of `GST_DEBUG_DUMP_DOT_DIR` in which "
+                         "to write the dot file. Created if it does not "
+                         "exist. `GST_DEBUG_DUMP_DOT_DIR` must still be set.",
+          .mandatory = FALSE,
+          .types = "string",
+          NULL
+        },
+        {NULL}
+      }),
       "Dots the pipeline (the 'name' property will be used in the dot filename).\n"
       "For more information have a look at the GST_DEBUG_BIN_TO_DOT_FILE documentation.\n"
-      "Note that the GST_DEBUG_DUMP_DOT_DIR env variable needs to be set",
+      "Note that the GST_DEBUG_DUMP_DOT_DIR env variable needs to be set.\n"
+      "When `dot-dir` is set, the file is written into that subdirectory of\n"
+      "`GST_DEBUG_DUMP_DOT_DIR` (created if missing).",
       GST_VALIDATE_ACTION_TYPE_NONE);
 
   REGISTER_ACTION_TYPE ("set-rank", _execute_set_rank_or_disable_feature,

@@ -1129,7 +1129,8 @@ gst_h264_parse_process_nal (GstH264Parse * h264parse, GstH264NalUnit * nalu)
       h264parse->picture_start = TRUE;
 
       /* don't need to parse the whole slice (header) here */
-      if (*(nalu->data + nalu->offset + nalu->header_bytes) & 0x80) {
+      if (nalu->size > nalu->header_bytes &&
+          *(nalu->data + nalu->offset + nalu->header_bytes) & 0x80) {
         /* means first_mb_in_slice == 0 */
         /* real frame data */
         GST_DEBUG_OBJECT (h264parse, "first_mb_in_slice = 0");
@@ -1955,8 +1956,9 @@ get_compatible_profile_caps (GstH264SPS * sps)
       g_value_unset (&value);
     }
     gst_caps_set_value (caps, "profile", &compat_profiles);
-    g_value_unset (&compat_profiles);
   }
+
+  g_value_unset (&compat_profiles);
 
   return caps;
 }
