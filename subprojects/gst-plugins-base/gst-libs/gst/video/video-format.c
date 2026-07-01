@@ -5487,6 +5487,28 @@ pack_NV12_10LE32 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
   }
 }
 
+#define PACK_NV12_10LE32_TILED GST_VIDEO_FORMAT_AYUV64, unpack_NV12_10LE32_TILED, 1, pack_NV12_10LE32_TILED
+static void
+unpack_NV12_10LE32_TILED (const GstVideoFormatInfo * info,
+    GstVideoPackFlags flags, gpointer dest,
+    const gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], gint x, gint y, gint width)
+{
+  unpack_TILED (GST_VIDEO_FORMAT_NV12_10LE32, info, flags, dest, data, stride,
+      x, y, width);
+}
+
+static void
+pack_NV12_10LE32_TILED (const GstVideoFormatInfo * info,
+    GstVideoPackFlags flags, const gpointer src, gint sstride,
+    gpointer data[GST_VIDEO_MAX_PLANES],
+    const gint stride[GST_VIDEO_MAX_PLANES], GstVideoChromaSite chroma_site,
+    gint y, gint width)
+{
+  pack_TILED (GST_VIDEO_FORMAT_NV12_10LE32, info, flags, src, sstride, data,
+      stride, chroma_site, y, width);
+}
+
 #define PACK_NV16_10LE32 GST_VIDEO_FORMAT_AYUV64, unpack_NV16_10LE32, 1, pack_NV16_10LE32
 static void
 unpack_NV16_10LE32 (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
@@ -7897,9 +7919,11 @@ typedef struct
 #define TILE_32x32(mode) GST_VIDEO_TILE_MODE_ ##mode, 5, 5, { {32, 32, 32, 1024}, {16, 32, 32, 1024}, }
 #define TILE_64x32(mode) GST_VIDEO_TILE_MODE_ ##mode, 6, 5, { {64, 32, 64, 2048}, {32, 32, 64, 2048}, }
 #define TILE_8x128(mode) GST_VIDEO_TILE_MODE_ ##mode, 3, 7, { {8, 128, 8, 1024}, {4, 128, 8, 1024}, }
+#define TILE_128x8(mode) GST_VIDEO_TILE_MODE_ ##mode, 7, 3, { {128, 8, 128, 1024}, {64, 4, 128, 512}, }
 #define TILE_10bit_16x32s(mode) GST_VIDEO_TILE_MODE_ ##mode, 4, 5, { {16, 32, 20, 640}, {8, 16, 20, 320}, }
 #define TILE_10bit_8x128(mode) GST_VIDEO_TILE_MODE_ ##mode, 3, 7, { {0, 128, 8, 1024}, {0, 128, 8, 1024}, }
 #define TILE_10bit_4x4(mode) GST_VIDEO_TILE_MODE_ ##mode, 2, 2, { {4, 4, 5, 20}, {2, 4, 5, 20}, }
+#define TILE_10bit_128x8(mode) GST_VIDEO_TILE_MODE_ ##mode, 0, 0, { {96, 8, 128, 1024}, {96, 4, 128, 512}, }
 
 #define MAKE_YUV_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub, pack ) \
  { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV, depth, pstride, plane, offs, sub, pack } }
@@ -7921,6 +7945,8 @@ typedef struct
  { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV | GST_VIDEO_FORMAT_FLAG_COMPLEX | GST_VIDEO_FORMAT_FLAG_TILED, depth, pstride, plane, offs, sub, pack, tile } }
 #define MAKE_YUV_ST_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub, pack, tile) \
  { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV | GST_VIDEO_FORMAT_FLAG_COMPLEX | GST_VIDEO_FORMAT_FLAG_TILED | GST_VIDEO_FORMAT_FLAG_SUBTILES, depth, pstride, plane, offs, sub, pack, tile } }
+#define MAKE_YUV_C_LE_ST_FORMAT(name, desc, fourcc, depth, pstride, plane, offs, sub, pack, tile) \
+ { fourcc, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_YUV | GST_VIDEO_FORMAT_FLAG_COMPLEX | GST_VIDEO_FORMAT_FLAG_LE | GST_VIDEO_FORMAT_FLAG_TILED | GST_VIDEO_FORMAT_FLAG_SUBTILES, depth, pstride, plane, offs, sub, pack, tile } }
 
 #define MAKE_RGB_FORMAT(name, desc, depth, pstride, plane, offs, sub, pack) \
  { 0x00000000, {GST_VIDEO_FORMAT_ ##name, G_STRINGIFY(name), desc, GST_VIDEO_FORMAT_FLAG_RGB, depth, pstride, plane, offs, sub, pack } }
@@ -8269,6 +8295,12 @@ static const VideoFormat formats[] = {
       PLANE0, OFFS0, SUB4444, PACK_BGR10A2_LE),
   MAKE_RGB_LE_FORMAT (RGB10x2_LE, "raw video", DPTH10_10_10, PSTR444,
       PLANE0, OFFS0, SUB4444, PACK_RGB10A2_LE),
+  MAKE_YUV_ST_FORMAT (NV12_128C8, "raw video",
+      GST_MAKE_FOURCC ('N', 'c', '1', '2'), DPTH888, PSTR122, PLANE011,
+      OFFS001, SUB420, PACK_NV12_TILED, TILE_128x8 (COLUMN)),
+  MAKE_YUV_C_LE_ST_FORMAT (NV12_10LE32_128C8, "raw video",
+      GST_MAKE_FOURCC ('N', 'c', '3', '0'), DPTH10_10_10, PSTR122, PLANE011,
+      OFFS001, SUB420, PACK_NV12_10LE32_TILED, TILE_10bit_128x8 (COLUMN)),
 };
 
 G_STATIC_ASSERT (G_N_ELEMENTS (formats) == GST_VIDEO_FORMAT_LAST);

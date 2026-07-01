@@ -633,8 +633,18 @@ get_egl_stride (const GstVideoInfo * info, gint plane)
   if (!GST_VIDEO_FORMAT_INFO_IS_TILED (finfo))
     return stride;
 
-  return GST_VIDEO_TILE_X_TILES (stride) *
-      GST_VIDEO_FORMAT_INFO_TILE_STRIDE (finfo, plane);
+  switch (finfo->tile_mode) {
+    case GST_VIDEO_TILE_MODE_ZFLIPZ_2X2:
+    case GST_VIDEO_TILE_MODE_LINEAR:
+      return GST_VIDEO_TILE_X_TILES (stride) *
+          GST_VIDEO_FORMAT_INFO_TILE_STRIDE (finfo, plane);
+    case GST_VIDEO_TILE_MODE_COLUMN:
+      return GST_VIDEO_TILE_Y_TILES (stride) *
+          GST_VIDEO_FORMAT_INFO_TILE_HEIGHT (finfo, plane);
+    default:
+      g_assert_not_reached ();
+      return 0;
+  }
 }
 
 /**

@@ -4399,8 +4399,15 @@ gst_video_decoder_decide_allocation_default (GstVideoDecoder * decoder,
 
   gst_query_parse_allocation (query, &outcaps, NULL);
   gst_video_info_init (&vinfo);
-  if (outcaps)
-    gst_video_info_from_caps (&vinfo, outcaps);
+  if (outcaps) {
+    if (gst_video_is_dma_drm_caps (outcaps)) {
+      GstVideoInfoDmaDrm drm_info;
+      if (gst_video_info_dma_drm_from_caps (&drm_info, outcaps))
+        vinfo = drm_info.vinfo;
+    } else {
+      gst_video_info_from_caps (&vinfo, outcaps);
+    }
+  }
 
   /* we got configuration from our peer or the decide_allocation method,
    * parse them */

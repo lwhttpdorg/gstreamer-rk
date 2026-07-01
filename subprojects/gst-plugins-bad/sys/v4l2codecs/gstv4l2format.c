@@ -53,6 +53,8 @@ static const GstV4l2FormatDesc gst_v4l2_descriptions[] = {
   {V4L2_PIX_FMT_MM21,             GST_VIDEO_FORMAT_NV12_16L32S,     DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
   {V4L2_PIX_FMT_SUNXI_TILED_NV12, GST_VIDEO_FORMAT_NV12_32L32,      DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
   {V4L2_PIX_FMT_NV12_4L4,         GST_VIDEO_FORMAT_NV12_4L4,        DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
+  {V4L2_PIX_FMT_NV12MT_COL128,    GST_VIDEO_FORMAT_NV12_128C8,      DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
+  {V4L2_PIX_FMT_NV12MT_10_COL128, GST_VIDEO_FORMAT_NV12_10LE32_128C8,DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
   {V4L2_PIX_FMT_NC12,             GST_VIDEO_FORMAT_UNKNOWN,         DRM_FORMAT_NV12,    DRM_FORMAT_MOD_BROADCOM_SAND128, 2},
   {V4L2_PIX_FMT_NV12,             GST_VIDEO_FORMAT_NV12,            DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
   {V4L2_PIX_FMT_YUV420M,          GST_VIDEO_FORMAT_I420,            DRM_FORMAT_INVALID, DRM_FORMAT_MOD_INVALID, 0},
@@ -203,8 +205,7 @@ gst_v4l2_format_to_dma_drm_info (struct v4l2_format *fmt,
     n_planes = 1;
   }
 
-  if (drm_fourcc == DRM_FORMAT_NV12
-      && drm_mod == DRM_FORMAT_MOD_BROADCOM_SAND128) {
+  if (pix_mp->pixelformat == V4L2_PIX_FMT_NC12) {
     out_drm_info->vinfo.offset[1] = pix_mp->height * 128;
     out_drm_info->vinfo.stride[0] = pix_mp->plane_fmt[0].bytesperline;
     out_drm_info->vinfo.stride[1] = pix_mp->plane_fmt[0].bytesperline;

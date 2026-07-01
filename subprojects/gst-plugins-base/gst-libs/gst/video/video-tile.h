@@ -117,6 +117,8 @@ typedef struct _GstVideoTileInfo GstVideoTileInfo;
  * @GST_VIDEO_TILE_MODE_LINEAR: Tiles are in row order. (Since: 1.18)
  * @GST_VIDEO_TILE_MODE_LINEAR_SUBSAMPLED: Tiles are in row order, with
  *   variable tile size according to subsampling. (Since: 1.20)
+ * @GST_VIDEO_TILE_MODE_COLUMN: Tiles are a full column of the image
+ *   (Since: 1.28)
  *
  * Enum value describing the available tiling modes.
  */
@@ -132,6 +134,14 @@ typedef enum
    * Since: 1.18
    */
   GST_VIDEO_TILE_MODE_LINEAR = GST_VIDEO_TILE_MAKE_MODE (2, INDEXED),
+  /**
+   * GST_VIDEO_TILE_MODE_COLUMN:
+   *
+   * Tiles are in column order.
+   *
+   * Since: 1.28
+   */
+  GST_VIDEO_TILE_MODE_COLUMN = GST_VIDEO_TILE_MAKE_MODE (3, INDEXED),
 } GstVideoTileMode;
 
 
