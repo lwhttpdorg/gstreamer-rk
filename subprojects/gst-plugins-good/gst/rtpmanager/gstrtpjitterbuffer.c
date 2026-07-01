@@ -313,6 +313,7 @@ struct _GstRtpJitterBufferPrivate
   gboolean active;
   guint64 out_offset;
   guint32 segment_seqnum;
+  gboolean have_first_packet;
 
   gboolean timer_running;
   GThread *timer_thread;
@@ -1976,6 +1977,7 @@ gst_rtp_jitter_buffer_change_state (GstElement * element,
       /* block until we go to PLAYING */
       priv->blocked = TRUE;
       priv->timer_running = TRUE;
+      priv->have_first_packet = FALSE;
       priv->srcresult = GST_FLOW_OK;
       priv->timer_thread =
           g_thread_new ("timer", (GThreadFunc) wait_next_timeout, jitterbuffer);
@@ -3375,11 +3377,21 @@ gst_rtp_jitter_buffer_chain (GstPad * pad, GstObject * parent,
     gap = gst_rtp_buffer_compare_seqnum (priv->seqnum_base, seqnum);
 
     if (gap < 0) {
-      GST_DEBUG_OBJECT (jitterbuffer,
-          "packet seqnum #%d before seqnum-base #%d", seqnum,
-          priv->seqnum_base);
-      gst_buffer_unref (buffer);
-      goto finished;
+      /* Some sources send a bogus seqnum_base. If the gap between the first
+       * packet we receive and the seqnum_base is too large, we assume the base
+       * is bogus and ignore it. Otherwise, we drop the early packet as usual. */
+      if (G_LIKELY (priv->have_first_packet || (gap > -500))) {
+        GST_DEBUG_OBJECT (jitterbuffer,
+            "packet seqnum #%d before seqnum-base #%d", seqnum,
+            priv->seqnum_base);
+        gst_buffer_unref (buffer);
+        goto finished;
+      } else {
+        GST_INFO_OBJECT (jitterbuffer, "seqnum-base #%d likely bogus because "
+            "gap of the first packet seqnum #%d is too large; ignoring it",
+            priv->seqnum_base, seqnum);
+        priv->seqnum_base = -1;
+      }
     } else if (gap > 16384) {
       /* From now on don't compare against the seqnum base anymore as
        * at some point in the future we will wrap around and also that
@@ -3725,6 +3737,8 @@ gst_rtp_jitter_buffer_chain (GstPad * pad, GstObject * parent,
   msg = check_buffering_percent (jitterbuffer, percent);
 
 finished:
+  priv->have_first_packet = TRUE;
+
   update_current_timer (jitterbuffer);
   JBUF_UNLOCK (priv);
 
