@@ -1244,6 +1244,28 @@ gst_gl_context_create_thread (GstGLContext * context)
     goto failure;
   }
 
+  /* When sharing with another (e.g. application-provided or wrapped) context,
+   * the platform requires the new context to use the *same* client API as the
+   * context it shares with.  eglCreateContext() returns EGL_BAD_CONTEXT for a
+   * share context of a different client API (the NVIDIA EGL implementation
+   * enforces this strictly; Mesa happens to tolerate the mismatch).  The other
+   * context already knows its real API, so constrain our selection to it rather
+   * than leaving it unconstrained and letting the backend pick a different API
+   * (e.g. GLES2 for a desktop-GL share context) which then fails to create. */
+  if (other_context) {
+    GstGLAPI other_api = gst_gl_context_get_gl_api (other_context);
+
+    if (other_api != GST_GL_API_NONE) {
+      if ((display_api & other_api) == GST_GL_API_NONE) {
+        g_set_error (error, GST_GL_CONTEXT_ERROR, GST_GL_CONTEXT_ERROR_WRONG_API,
+            "Cannot share with a context whose GL API is not provided by "
+            "the display");
+        goto failure;
+      }
+      display_api &= other_api;
+    }
+  }
+
   if (window_class->open) {
     if (!window_class->open (context->window, error)) {
       GST_WARNING_OBJECT (context, "Failed to open window");
