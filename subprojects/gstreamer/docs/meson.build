@@ -53,15 +53,6 @@ gst_plugins_doc_dep = custom_target('build-doc-cache',
     build_always_stale: true,
 )
 
-if static_build
-    if get_option('doc').enabled()
-        error('Documentation enabled but not supported when building statically.')
-    endif
-
-    message('Building statically, can\'t build the documentation')
-    subdir_done()
-endif
-
 if not build_gir
     if get_option('doc').enabled()
         error('Documentation enabled but introspection not built.')
