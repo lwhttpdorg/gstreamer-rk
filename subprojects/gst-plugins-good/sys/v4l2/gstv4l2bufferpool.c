@@ -990,6 +990,11 @@ gst_v4l2_buffer_pool_start (GstBufferPool * bpool)
         g_signal_connect_swapped (pool->vallocator, "group-released",
         G_CALLBACK (gst_v4l2_buffer_pool_group_released), pool);
     ret = gst_v4l2_buffer_pool_streamon (pool);
+    if (!ret) {
+      pool->streaming = TRUE;
+      gst_v4l2_buffer_pool_streamoff (pool);
+      pclass->stop (bpool);
+    }
   }
 
   return ret;
