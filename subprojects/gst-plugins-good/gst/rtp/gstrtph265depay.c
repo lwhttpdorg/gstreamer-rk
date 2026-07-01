@@ -1289,11 +1289,26 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
 
   if (rtph265depay->merge) {
     gboolean start = FALSE, complete = FALSE;
+    gboolean first_slice_segment_in_pic = FALSE;
 
     if (NAL_TYPE_IS_CODED_SLICE_SEGMENT (nal_type)) {
-      /* A NAL unit (X) ends an access unit if the next-occurring VCL NAL unit (Y) has the high-order bit of the first byte after its NAL unit header equal to 1 */
+      /* first_slice_segment_in_pic_flag is the MSB of the byte immediately
+       * after the 2-byte NAL unit header (i.e. map.data[4] for byte-stream
+       * where bytes 0-3 are the sync/length prefix, or map.data[6] for the
+       * hvc1/hev1 length-prefix format where bytes 0-3 are the length and
+       * bytes 4-5 are the NAL header). In the assembled buffer as passed here
+       * the NAL header is always at bytes 4-5 (after the 4-byte
+       * sync/length prefix), so the slice header starts at byte 6. */
+      first_slice_segment_in_pic = ((map.data[6] >> 7) & 0x01) == 1;
+
+      /* A NAL unit (X) ends an access unit if the next-occurring VCL NAL
+       * unit (Y) has first_slice_segment_in_pic_flag equal to 1, indicating
+       * it belongs to a new picture (see H.265 spec section 7.4.2.4.4).
+       * We detect this by checking first_slice_segment_in_pic_flag on the
+       * *current* NAL: if it is 1, the *previous* picture (if any) is
+       * complete. */
       start = TRUE;
-      if (((map.data[6] >> 7) & 0x01) == 1) {
+      if (first_slice_segment_in_pic) {
         complete = TRUE;
       }
     } else if ((nal_type >= 32 && nal_type <= 35)
@@ -1305,11 +1320,39 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
     GST_DEBUG_OBJECT (depayload, "start %d, complete %d", start, complete);
 
     /* marker bit isn't mandatory so in the following code we try to detect
-     * an AU boundary (see H.265 spec section 7.4.2.4.4) */
+     * an AU boundary (see H.265 spec section 7.4.2.4.4).
+     *
+     * Some non-compliant senders (e.g. certain RTSP servers based on old
+     * versions of Live555) incorrectly set the RTP marker bit on the last
+     * RTP packet of every slice rather than only on the last packet of the
+     * final slice of an access unit. To handle this, we do not rely solely
+     * on the marker bit to signal AU completion. Instead we use
+     * first_slice_segment_in_pic_flag as the authoritative signal: when a
+     * new VCL NAL arrives with first_slice_segment_in_pic_flag=1 we know
+     * the previous AU is complete, regardless of what the marker bit said.
+     * The marker bit is still used as a fallback for non-VCL NALs. */
     if (!marker) {
       if (complete && rtph265depay->picture_start)
         outbuf = gst_rtp_h265_complete_au (rtph265depay, &out_timestamp,
             &out_keyframe);
+    } else if (NAL_TYPE_IS_CODED_SLICE_SEGMENT (nal_type)) {
+      /* Marker bit is set on a VCL NAL. Only complete the AU if this is the
+       * first slice of a new picture (first_slice_segment_in_pic_flag=1),
+       * which means the previous picture is done. If this NAL is a
+       * continuation slice (first_slice_segment_in_pic_flag=0), the marker
+       * bit is spurious (non-compliant sender) and we must not complete the
+       * AU yet as more slices belonging to this picture may follow. */
+      if (first_slice_segment_in_pic && rtph265depay->picture_start) {
+        GST_DEBUG_OBJECT (depayload,
+            "marker bit set and first_slice_segment_in_pic_flag=1: "
+            "completing previous AU");
+        outbuf = gst_rtp_h265_complete_au (rtph265depay, &out_timestamp,
+            &out_keyframe);
+      } else if (!first_slice_segment_in_pic) {
+        GST_DEBUG_OBJECT (depayload,
+            "marker bit set but first_slice_segment_in_pic_flag=0: "
+            "ignoring spurious marker bit, NAL is a continuation slice");
+      }
     }
 
     /* add to adapter */
@@ -1326,7 +1369,9 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
     rtph265depay->last_keyframe |= keyframe;
     rtph265depay->picture_start |= start;
 
-    if (marker)
+    /* For non-VCL NALs with marker bit set, complete the AU as before.
+     * For VCL NALs the completion logic is handled above. */
+    if (marker && !NAL_TYPE_IS_CODED_SLICE_SEGMENT (nal_type))
       outbuf = gst_rtp_h265_complete_au (rtph265depay, &out_timestamp,
           &out_keyframe);
   } else {
