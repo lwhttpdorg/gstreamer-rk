@@ -88,6 +88,10 @@ struct _GstFdkAacEnc {
   gboolean afterburner;
 
   GstClockTime encoder_delay;
+  guint delay_samples;
+  guint64 pending_trim_start;
+  guint64 samples_in;
+  guint64 samples_out;
   GstFdkAacRateControl rate_control;
   GstFdkAacVbrPreset vbr_preset;
 };
