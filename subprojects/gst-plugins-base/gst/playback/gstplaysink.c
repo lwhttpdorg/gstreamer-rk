@@ -4558,7 +4558,7 @@ text_set_blocked (GstPlaySink * playsink, gboolean blocked)
       playsink->vis_pad_block_id = 0;
 
       playsink->text_block_id =
-          gst_pad_add_probe (opad, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
+          gst_pad_add_probe (opad, GST_PAD_PROBE_TYPE_IDLE,
           sinkpad_blocked_cb, playsink, NULL);
     } else if (!blocked && playsink->text_block_id) {
       gst_pad_remove_probe (opad, playsink->text_block_id);
