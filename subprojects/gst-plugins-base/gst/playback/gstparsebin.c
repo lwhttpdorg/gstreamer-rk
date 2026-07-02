@@ -3607,7 +3607,12 @@ retry:
           missing_plugin_details, &last_group, &uncollected_streams)) {
     g_list_free_full (endpads, (GDestroyNotify) gst_object_unref);
     g_string_free (missing_plugin_details, TRUE);
-    GST_ERROR_OBJECT (parsebin, "Broken chain/group tree");
+    /* This is not necessarily fatal: a chain can be temporarily non-exposable
+     * while it is still settling (for example a parser pad that has been
+     * retargeted and is waiting for its new stream-start before it can be
+     * exposed). All callers treat a FALSE return as "try again later", so log
+     * at DEBUG and let a subsequent expose attempt succeed. */
+    GST_DEBUG_OBJECT (parsebin, "Chain/group tree not exposable yet");
     CHAIN_MUTEX_UNLOCK (parsebin->parse_chain);
     return FALSE;
   }
@@ -3895,7 +3900,11 @@ build_fallback_collection (GstParseChain * chain,
           GstStreamType type = guess_stream_type_from_caps (caps);
           if (type != GST_STREAM_TYPE_UNKNOWN) {
             gst_stream_set_stream_type (p->active_stream, type);
-            gst_stream_set_caps (p->active_stream, caps);
+            /* Only store fixed caps on the stream: an unfixed caps (for
+             * example a not-yet-negotiated parser output) is not usable
+             * downstream to select a decoder. */
+            if (gst_caps_is_fixed (caps))
+              gst_stream_set_caps (p->active_stream, caps);
           }
           gst_caps_unref (caps);
         }
