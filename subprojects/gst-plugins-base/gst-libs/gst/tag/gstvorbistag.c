@@ -318,7 +318,7 @@ gst_vorbis_tag_add (GstTagList * list, const gchar * tag, const gchar * value)
 
 static void
 gst_vorbis_tag_add_coverart (GstTagList * tags, gchar * img_data_base64,
-    gint base64_len)
+    gsize base64_len)
 {
   GstSample *img;
   gsize img_len;
@@ -369,13 +369,16 @@ convert_failed:
  */
 static void
 gst_vorbis_tag_add_metadata_block_picture (GstTagList * tags,
-    gchar * value, gint value_len)
+    gchar * value, gsize value_len)
 {
   GstByteReader reader;
   guint32 img_len = 0, img_type = 0;
   guint32 img_mimetype_len = 0, img_description_len = 0;
   gsize decoded_len;
   const guint8 *data = NULL;
+
+  if (value_len < 2)
+    goto not_enough_data;
 
   /* img_data_base64 points to a temporary copy of the base64 encoded data, so
    * it's safe to do inpace decoding here
@@ -414,13 +417,25 @@ gst_vorbis_tag_add_metadata_block_picture (GstTagList * tags,
 
   return;
 
+/* ERRORS */
+not_enough_data:
+  {
+    GST_WARNING
+        ("METADATA_BLOCK_PICTURE tag with too little base64-encoded data");
+    return;
+  }
 error:
-  GST_WARNING
-      ("Couldn't extract image or image type from METADATA_BLOCK_PICTURE tag");
-  return;
+  {
+    GST_WARNING
+        ("Couldn't extract image or image type from METADATA_BLOCK_PICTURE tag");
+    return;
+  }
 decode_failed:
-  GST_WARNING ("Failed to decode Base64 data from METADATA_BLOCK_PICTURE tag");
-  return;
+  {
+    GST_WARNING
+        ("Failed to decode Base64 data from METADATA_BLOCK_PICTURE tag");
+    return;
+  }
 }
 
 /**
@@ -455,7 +470,7 @@ gst_tag_list_from_vorbiscomment (const guint8 * data, gsize size,
   gchar *cur, *value;
   guint cur_size;
   guint iterations;
-  guint value_len;
+  gsize value_len;
   GstTagList *list;
 
   g_return_val_if_fail (data != NULL, NULL);
@@ -490,7 +505,8 @@ gst_tag_list_from_vorbiscomment (const guint8 * data, gsize size,
     *value = '\0';
     value++;
     value_len = strlen (value);
-    if (value_len == 0 || !g_utf8_validate (value, value_len, NULL)) {
+    if (value_len == 0 || value_len > G_MAXSSIZE
+        || !g_utf8_validate (value, value_len, NULL)) {
       g_free (cur);
       continue;
     }

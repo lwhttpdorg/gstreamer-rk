@@ -628,16 +628,23 @@ get_stream_from_caps (GstSrtpDec * filter, GstCaps * caps, guint32 ssrc)
     goto error;
   }
 
+  /* RFC 3711 says in "5.2. Message Authentication/Integrity: HMAC-SHA1" that
+   * SRTCP authentication tag MUST NOT be smaller than 80 bits.
+   */
+  if (stream->rtcp_auth == GST_SRTP_AUTH_HMAC_SHA1_32) {
+    GST_WARNING_OBJECT (filter,
+        "SRTCP authentication MUST NOT be smaller than HMAC-SHA1-80 (RFC 3711 Section 5.2).");
+  }
+
   /* RFC 3711 says in "3. SRTP Framework" that SRTCP message authentication
    * is MANDATORY. In case of GCM let the pipeline handle any errors.
    */
   if (stream->rtcp_cipher != GST_SRTP_CIPHER_AES_128_GCM
       && stream->rtcp_cipher != GST_SRTP_CIPHER_AES_256_GCM
-      && stream->rtcp_cipher != GST_SRTP_CIPHER_NULL
       && stream->rtcp_auth == GST_SRTP_AUTH_NULL) {
     GST_WARNING_OBJECT (filter,
-        "Cannot have SRTP NULL authentication with a not-NULL encryption"
-        " cipher.");
+        "Cannot have SRTCP NULL authentication unless using GCM / AEAD (RFC 7714). "
+        "SRTCP message authentication is MANDATORY (RFC 3711).");
     goto error;
   }
 

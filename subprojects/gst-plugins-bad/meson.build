@@ -1,5 +1,5 @@
 project('gst-plugins-bad', 'c', 'cpp',
-  version : '1.29.1.1',
+  version : '1.29.2.1',
   meson_version : '>= 1.4',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized',
@@ -74,7 +74,10 @@ if cc.get_id() == 'msvc'
       '/wd4244', # lossy type conversion (e.g. double -> int)
       '/wd4305', # truncating type conversion (e.g. double -> float)
       '/wd5051', # attribute 'attribute-name' requires at least 'standard-level'; ignored
-      cc.get_supported_arguments(['/utf-8']), # set the input encoding to utf-8
+      cc.get_supported_arguments([
+        '/utf-8', # set the input encoding to utf-8
+        '/Zc:preprocessor', # enable preprocessor conformance mode (disable legacy preprocessor)
+      ]),
   ]
 
   if gst_version_is_dev
