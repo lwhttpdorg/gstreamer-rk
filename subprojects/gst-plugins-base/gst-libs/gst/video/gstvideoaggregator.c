@@ -1368,22 +1368,17 @@ gst_video_aggregator_default_negotiated_src_caps (GstAggregator * agg,
   GST_OBJECT_LOCK (vagg);
   vagg->info = info;
   GST_OBJECT_UNLOCK (vagg);
+  GST_VIDEO_AGGREGATOR_PAD (agg->srcpad)->info = info;
 
   /* Then browse the sinks once more, setting or unsetting conversion if needed */
   gst_element_foreach_sink_pad (GST_ELEMENT_CAST (vagg),
       _update_conversion_info, NULL);
 
-  if (vagg->priv->current_caps == NULL ||
-      gst_caps_is_equal (caps, vagg->priv->current_caps) == FALSE) {
-    GstClockTime latency;
+  gst_caps_replace (&vagg->priv->current_caps, caps);
 
-    gst_caps_replace (&vagg->priv->current_caps, caps);
-
-    gst_aggregator_set_src_caps (agg, caps);
-    latency = gst_util_uint64_scale (GST_SECOND,
-        GST_VIDEO_INFO_FPS_D (&info), GST_VIDEO_INFO_FPS_N (&info));
-    gst_aggregator_set_latency (agg, latency, latency);
-  }
+  GstClockTime latency = gst_util_uint64_scale (GST_SECOND,
+      GST_VIDEO_INFO_FPS_D (&info), GST_VIDEO_INFO_FPS_N (&info));
+  gst_aggregator_set_latency (agg, latency, latency);
 
   ret = TRUE;
 
