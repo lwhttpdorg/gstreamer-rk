@@ -415,6 +415,10 @@ GST_START_TEST (test_planar_chw_input)
   GstBuffer *out;
   GstTensorMeta *tmeta;
   const GstTensor *tensor;
+  GstPad *sinkpad;
+  GstCaps *queried;
+  GstCaps *probe;
+  GstCaps *accept;
   gfloat expected[TEST_NUM_PIXELS * TEST_NUM_CHANNELS];
 
   gst_harness_set_src_caps_str (h,
@@ -437,6 +441,21 @@ GST_START_TEST (test_planar_chw_input)
   fill_expected_chw_rgb_f32 (expected, TEST_NUM_PIXELS, 11.f, 22.f, 33.f);
   ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
       G_N_ELEMENTS (expected), 1e-6f);
+
+  /* A 3-channel planar (RGBP) model must not advertise or accept GRAY8. */
+  sinkpad = gst_element_get_static_pad (h->element, "sink");
+  queried = gst_pad_query_caps (sinkpad, NULL);
+  probe = gst_caps_from_string ("video/x-raw,format=GRAY8");
+  fail_if (gst_caps_can_intersect (queried, probe),
+      "Expected planar 3-channel sink caps to NOT advertise GRAY8");
+  gst_caps_unref (probe);
+  gst_caps_unref (queried);
+
+  accept = gst_caps_from_string ("video/x-raw,format=GRAY8,width=4,height=4,"
+      "framerate=30/1");
+  fail_if (gst_pad_query_accept_caps (sinkpad, accept));
+  gst_caps_unref (accept);
+  gst_object_unref (sinkpad);
 
   gst_buffer_unref (out);
   gst_harness_teardown (h);
@@ -536,6 +555,7 @@ GST_START_TEST (test_transform_caps_and_accept_caps)
   GstPad *sinkpad = gst_element_get_static_pad (h->element, "sink");
   GstCaps *filter = gst_caps_from_string ("video/x-raw,format=RGB");
   GstCaps *caps = gst_pad_query_caps (sinkpad, filter);
+  GstCaps *probe;
 
   fail_unless (caps != NULL);
   fail_if (gst_caps_is_empty (caps));
@@ -552,6 +572,19 @@ GST_START_TEST (test_transform_caps_and_accept_caps)
   caps =
       gst_caps_from_string
       ("video/x-raw,format=I420,width=4,height=4,framerate=30/1");
+  fail_if (gst_pad_query_accept_caps (sinkpad, caps));
+  gst_caps_unref (caps);
+
+  /* A 3-channel passthrough model must not advertise or accept GRAY8. */
+  caps = gst_pad_query_caps (sinkpad, NULL);
+  probe = gst_caps_from_string ("video/x-raw,format=GRAY8");
+  fail_if (gst_caps_can_intersect (caps, probe),
+      "Expected 3-channel sink caps to NOT advertise GRAY8");
+  gst_caps_unref (probe);
+  gst_caps_unref (caps);
+
+  caps = gst_caps_from_string ("video/x-raw,format=GRAY8,width=4,height=4,"
+      "framerate=30/1");
   fail_if (gst_pad_query_accept_caps (sinkpad, caps));
   gst_caps_unref (caps);
 
@@ -591,6 +624,277 @@ GST_START_TEST (test_accept_caps_dimension_mismatch)
 
 GST_END_TEST;
 
+/* Test that buffers with GstVideoMeta and non-default strides are read correctly on the float32 conversion path. */
+GST_START_TEST (test_padded_stride_with_videometa)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "flatten_float32in_float32out.onnx",
+      "0.0,255.0;0.0,255.0;0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstVideoInfo vinfo;
+  gint padded_stride;
+  gsize buf_size;
+  gsize offsets[4] = { 0, 0, 0, 0 };
+  gint strides[4] = { 0, 0, 0, 0 };
+  GstBuffer *in, *out;
+  GstMapInfo map;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  gfloat expected[TEST_NUM_PIXELS * TEST_NUM_CHANNELS];
+  guint8 *row;
+  gint j, i;
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=RGB,width=4,height=4,framerate=30/1");
+
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_RGB,
+      TEST_WIDTH, TEST_HEIGHT);
+  padded_stride = GST_VIDEO_INFO_COMP_STRIDE (&vinfo, 0) + 16;
+  buf_size = padded_stride * TEST_HEIGHT;
+
+  in = gst_buffer_new_allocate (NULL, buf_size, NULL);
+
+  gst_buffer_map (in, &map, GST_MAP_WRITE);
+  memset (map.data, 0xAA, buf_size);
+  for (j = 0; j < TEST_HEIGHT; j++) {
+    row = map.data + j * padded_stride;
+    for (i = 0; i < TEST_WIDTH; i++) {
+      row[i * 3 + 0] = 11;
+      row[i * 3 + 1] = 22;
+      row[i * 3 + 2] = 33;
+    }
+  }
+  gst_buffer_unmap (in, &map);
+
+  strides[0] = padded_stride;
+  gst_buffer_add_video_meta_full (in, GST_VIDEO_FRAME_FLAG_NONE,
+      GST_VIDEO_FORMAT_RGB, TEST_WIDTH, TEST_HEIGHT, 1, offsets, strides);
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out != NULL);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+
+  fill_expected_flat_rgb_f32 (expected, TEST_NUM_PIXELS, 11, 22, 33);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
+/* Test that the uint8 passthrough fast path falls back to the convert path when GstVideoMeta advertises a padded stride. */
+GST_START_TEST (test_padded_stride_with_videometa_uint8)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "flatten_uint8in_float32out.onnx",
+      "0.0,255.0;0.0,255.0;0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstVideoInfo vinfo;
+  gint padded_stride;
+  gsize buf_size;
+  gsize offsets[4] = { 0, 0, 0, 0 };
+  gint strides[4] = { 0, 0, 0, 0 };
+  GstBuffer *in, *out;
+  GstMapInfo map;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  gfloat expected[TEST_NUM_PIXELS * TEST_NUM_CHANNELS];
+  guint8 *row;
+  gint j, i;
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=RGB,width=4,height=4,framerate=30/1");
+
+  gst_video_info_set_format (&vinfo, GST_VIDEO_FORMAT_RGB,
+      TEST_WIDTH, TEST_HEIGHT);
+  padded_stride = GST_VIDEO_INFO_COMP_STRIDE (&vinfo, 0) + 16;
+  buf_size = padded_stride * TEST_HEIGHT;
+
+  in = gst_buffer_new_allocate (NULL, buf_size, NULL);
+
+  gst_buffer_map (in, &map, GST_MAP_WRITE);
+  memset (map.data, 0xAA, buf_size);
+  for (j = 0; j < TEST_HEIGHT; j++) {
+    row = map.data + j * padded_stride;
+    for (i = 0; i < TEST_WIDTH; i++) {
+      row[i * 3 + 0] = 11;
+      row[i * 3 + 1] = 22;
+      row[i * 3 + 2] = 33;
+    }
+  }
+  gst_buffer_unmap (in, &map);
+
+  strides[0] = padded_stride;
+  gst_buffer_add_video_meta_full (in, GST_VIDEO_FRAME_FLAG_NONE,
+      GST_VIDEO_FORMAT_RGB, TEST_WIDTH, TEST_HEIGHT, 1, offsets, strides);
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out != NULL);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+
+  fill_expected_flat_rgb_f32 (expected, TEST_NUM_PIXELS, 11, 22, 33);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
+/* Test that a 1-channel float32 model accepts GRAY8 input, exercises the convert path, and advertises GRAY8 (not RGB) on its sink pad. */
+GST_START_TEST (test_gray8_input_conversion)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "grayscale_float32in_float32out.onnx", "0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstBuffer *in = create_solid_gray_buffer (GST_VIDEO_FORMAT_GRAY8, NULL,
+      TEST_WIDTH, TEST_HEIGHT, 42);
+  GstBuffer *out;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  GstPad *sinkpad;
+  GstCaps *queried;
+  GstCaps *probe;
+  GstCaps *accept;
+  gfloat expected[TEST_NUM_PIXELS];
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=GRAY8,width=4,height=4,framerate=30/1");
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  fail_unless_equals_int (tmeta->num_tensors, 1);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+  fail_unless_equals_int (tensor->data_type, GST_TENSOR_DATA_TYPE_FLOAT32);
+  fail_unless_equals_int ((gint) tensor->num_dims, 2);
+  fail_unless_equals_int ((gint) tensor->dims[0], 1);
+  fail_unless_equals_int ((gint) tensor->dims[1], 16);
+
+  fill_expected_gray_f32 (expected, G_N_ELEMENTS (expected), 42.f);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  sinkpad = gst_element_get_static_pad (h->element, "sink");
+  queried = gst_pad_query_caps (sinkpad, NULL);
+
+  probe = gst_caps_from_string ("video/x-raw,format=GRAY8");
+  fail_unless (gst_caps_can_intersect (queried, probe),
+      "Expected 1-channel sink caps to advertise GRAY8");
+  gst_caps_unref (probe);
+
+  probe = gst_caps_from_string ("video/x-raw,format=RGB");
+  fail_if (gst_caps_can_intersect (queried, probe),
+      "Expected 1-channel sink caps to NOT advertise any RGB format");
+  gst_caps_unref (probe);
+
+  gst_caps_unref (queried);
+
+  accept = gst_caps_from_string ("video/x-raw,format=GRAY8,width=4,height=4,"
+      "framerate=30/1");
+  fail_unless (gst_pad_query_accept_caps (sinkpad, accept));
+  gst_caps_unref (accept);
+
+  accept = gst_caps_from_string ("video/x-raw,format=RGB,width=4,height=4,"
+      "framerate=30/1");
+  fail_if (gst_pad_query_accept_caps (sinkpad, accept));
+  gst_caps_unref (accept);
+
+  gst_object_unref (sinkpad);
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
+/* Test that a 1-channel uint8 model with passthrough scaling reads GRAY8 input via the zero-copy fast path and advertises GRAY8 only. */
+GST_START_TEST (test_gray8_input_passthrough)
+{
+  gchar *tmp_model = setup_model_with_ranges (GST_ONNX_TEST_DATA_PATH,
+      "onnxinference", "grayscale_uint8in_float32out.onnx", "0.0,255.0");
+  GstHarness *h = harness_new_with_model (tmp_model);
+  GstBuffer *in = create_solid_gray_buffer (GST_VIDEO_FORMAT_GRAY8, NULL,
+      TEST_WIDTH, TEST_HEIGHT, 42);
+  GstBuffer *out;
+  GstTensorMeta *tmeta;
+  const GstTensor *tensor;
+  GstPad *sinkpad;
+  GstCaps *queried;
+  GstCaps *probe;
+  GstCaps *accept;
+  gfloat expected[TEST_NUM_PIXELS];
+
+  gst_harness_set_src_caps_str (h,
+      "video/x-raw,format=GRAY8,width=4,height=4,framerate=30/1");
+
+  out = gst_harness_push_and_pull (h, in);
+  fail_unless (out);
+
+  tmeta = gst_buffer_get_tensor_meta (out);
+  fail_unless (tmeta != NULL);
+  fail_unless_equals_int (tmeta->num_tensors, 1);
+  tensor = gst_tensor_meta_get (tmeta, 0);
+  fail_unless (tensor != NULL);
+  fail_unless_equals_int (tensor->data_type, GST_TENSOR_DATA_TYPE_FLOAT32);
+  fail_unless_equals_int ((gint) tensor->num_dims, 2);
+  fail_unless_equals_int ((gint) tensor->dims[0], 1);
+  fail_unless_equals_int ((gint) tensor->dims[1], 16);
+
+  fill_expected_gray_f32 (expected, G_N_ELEMENTS (expected), 42.f);
+  ONNX_TEST_ASSERT_TENSOR_VALUES_F32 (tensor, expected,
+      G_N_ELEMENTS (expected), 1e-6f);
+
+  sinkpad = gst_element_get_static_pad (h->element, "sink");
+  queried = gst_pad_query_caps (sinkpad, NULL);
+
+  probe = gst_caps_from_string ("video/x-raw,format=GRAY8");
+  fail_unless (gst_caps_can_intersect (queried, probe),
+      "Expected 1-channel uint8 passthrough sink caps to advertise GRAY8");
+  gst_caps_unref (probe);
+
+  probe = gst_caps_from_string ("video/x-raw,format=RGB");
+  fail_if (gst_caps_can_intersect (queried, probe),
+      "Expected 1-channel uint8 passthrough sink caps to NOT advertise any "
+      "RGB format");
+  gst_caps_unref (probe);
+
+  gst_caps_unref (queried);
+
+  accept = gst_caps_from_string ("video/x-raw,format=GRAY8,width=4,height=4,"
+      "framerate=30/1");
+  fail_unless (gst_pad_query_accept_caps (sinkpad, accept));
+  gst_caps_unref (accept);
+
+  accept = gst_caps_from_string ("video/x-raw,format=RGB,width=4,height=4,"
+      "framerate=30/1");
+  fail_if (gst_pad_query_accept_caps (sinkpad, accept));
+  gst_caps_unref (accept);
+
+  gst_object_unref (sinkpad);
+  gst_buffer_unref (out);
+  gst_harness_teardown (h);
+  cleanup_temp_model (tmp_model);
+}
+
+GST_END_TEST;
+
 static Suite *
 onnxinference_suite (void)
 {
@@ -612,6 +916,10 @@ onnxinference_suite (void)
   tcase_add_test (tc, test_timestamp_and_flags_propagation);
   tcase_add_test (tc, test_transform_caps_and_accept_caps);
   tcase_add_test (tc, test_accept_caps_dimension_mismatch);
+  tcase_add_test (tc, test_padded_stride_with_videometa);
+  tcase_add_test (tc, test_padded_stride_with_videometa_uint8);
+  tcase_add_test (tc, test_gray8_input_conversion);
+  tcase_add_test (tc, test_gray8_input_passthrough);
 
   return s;
 }
