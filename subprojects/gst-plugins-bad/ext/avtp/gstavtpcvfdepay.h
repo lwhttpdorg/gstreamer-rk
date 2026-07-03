@@ -41,10 +41,14 @@ typedef struct _GstAvtpCvfDepayClass GstAvtpCvfDepayClass;
 
 struct _GstAvtpCvfDepay
 {
-  GstAvtpVfDepayBaseClass vfdepayload;
+  GstAvtpVfDepayBase vfdepayload;
 
   guint8 seqnum;
+  guint8 format_subtype;
   GstBuffer *fragments;
+
+  /* MJPEG state: cached standard quantization tables, indexed by Q value */
+  guint8 *qtables[255];
 };
 
 struct _GstAvtpCvfDepayClass
