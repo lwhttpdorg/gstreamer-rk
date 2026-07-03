@@ -106,6 +106,7 @@ enum
   PROP_MAX_SIZE_BYTES,
   PROP_MAX_SIZE_TIMECODE,
   PROP_SEND_KEYFRAME_REQUESTS,
+  PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE,
   PROP_MAX_FILES,
   PROP_MUXER_OVERHEAD,
   PROP_USE_ROBUST_MUXING,
@@ -128,6 +129,7 @@ enum
 #define DEFAULT_MAX_FILES           0
 #define DEFAULT_MUXER_OVERHEAD      0.02
 #define DEFAULT_SEND_KEYFRAME_REQUESTS FALSE
+#define DEFAULT_SPLIT_AT_RT_IMMEDIATE FALSE
 #define DEFAULT_ALIGNMENT_THRESHOLD 0
 #define DEFAULT_MUXER "mp4mux"
 #define DEFAULT_SINK "filesink"
@@ -386,6 +388,28 @@ gst_splitmux_sink_class_init (GstSplitMuxSinkClass * klass)
           DEFAULT_SEND_KEYFRAME_REQUESTS,
           G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
           G_PARAM_STATIC_STRINGS));
+  /**
+   * GstSplitMuxSink:split-at-running-time-immediate:
+   *
+   * When %TRUE, a fragment cut requested via the
+   * #GstSplitMuxSink::split-at-running-time action signal is finished as
+   * soon as the GOP starting at/after the requested running time begins,
+   * instead of when that GOP completes (one keyframe interval later).
+   * Fragment boundaries and file contents are unchanged; only the
+   * finalization timing differs.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE,
+      g_param_spec_boolean ("split-at-running-time-immediate",
+          "Finish split-at-running-time fragments immediately",
+          "Finish a fragment cut by split-at-running-time as soon as the GOP "
+          "at/after the requested time begins, instead of when that GOP "
+          "completes (one keyframe interval later).",
+          DEFAULT_SPLIT_AT_RT_IMMEDIATE,
+          G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
+          G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_MAX_FILES,
       g_param_spec_uint ("max-files", "Max files",
           "Maximum number of files to keep on disk. Once the maximum is reached,"
@@ -637,6 +661,7 @@ gst_splitmux_sink_init (GstSplitMuxSink * splitmux)
   splitmux->threshold_bytes = DEFAULT_MAX_SIZE_BYTES;
   splitmux->max_files = DEFAULT_MAX_FILES;
   splitmux->send_keyframe_requests = DEFAULT_SEND_KEYFRAME_REQUESTS;
+  splitmux->split_at_rt_immediate = DEFAULT_SPLIT_AT_RT_IMMEDIATE;
   splitmux->alignment_threshold = DEFAULT_ALIGNMENT_THRESHOLD;
   splitmux->use_robust_muxing = DEFAULT_USE_ROBUST_MUXING;
   splitmux->reset_muxer = DEFAULT_RESET_MUXER;
@@ -839,6 +864,11 @@ gst_splitmux_sink_set_property (GObject * object, guint prop_id,
       splitmux->send_keyframe_requests = g_value_get_boolean (value);
       GST_OBJECT_UNLOCK (splitmux);
       break;
+    case PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE:
+      GST_OBJECT_LOCK (splitmux);
+      splitmux->split_at_rt_immediate = g_value_get_boolean (value);
+      GST_OBJECT_UNLOCK (splitmux);
+      break;
     case PROP_MAX_FILES:
       GST_OBJECT_LOCK (splitmux);
       splitmux->max_files = g_value_get_uint (value);
@@ -992,6 +1022,11 @@ gst_splitmux_sink_get_property (GObject * object, guint prop_id,
     case PROP_SEND_KEYFRAME_REQUESTS:
       GST_OBJECT_LOCK (splitmux);
       g_value_set_boolean (value, splitmux->send_keyframe_requests);
+      GST_OBJECT_UNLOCK (splitmux);
+      break;
+    case PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE:
+      GST_OBJECT_LOCK (splitmux);
+      g_value_set_boolean (value, splitmux->split_at_rt_immediate);
       GST_OBJECT_UNLOCK (splitmux);
       break;
     case PROP_MAX_FILES:
@@ -2761,6 +2796,37 @@ video_time_code_replace (GstVideoTimeCode ** old_tc, GstVideoTimeCode * new_tc)
 }
 
 /* Called with splitmux lock held */
+/* Send a finish-fragment command to the output side and reset the
+ * fragment accounting so that @gop starts the next fragment */
+static void
+finish_fragment_and_reset (GstSplitMuxSink * splitmux, const InputGop * gop)
+{
+  SplitMuxOutputCommand *cmd;
+
+  g_atomic_int_set (&(splitmux->do_split_next_gop), FALSE);
+
+  /* Tell the output side to start a new fragment */
+  cmd = out_cmd_buf_new_finish_fragment ();
+  g_queue_push_head (&splitmux->out_cmd_q, cmd);
+  GST_SPLITMUX_BROADCAST_OUTPUT (splitmux);
+
+  splitmux->fragment_start_time = gop->start_time;
+  splitmux->fragment_start_time_pts = gop->start_time_pts;
+  splitmux->fragment_total_bytes = 0;
+  splitmux->fragment_reference_bytes = 0;
+
+  video_time_code_replace (&splitmux->fragment_start_tc, gop->start_tc);
+  splitmux->next_fragment_start_tc_time =
+      calculate_next_max_timecode (splitmux, splitmux->fragment_start_tc,
+      splitmux->fragment_start_time, NULL);
+  if (splitmux->tc_interval && splitmux->fragment_start_tc
+      && !GST_CLOCK_TIME_IS_VALID (splitmux->next_fragment_start_tc_time)) {
+    GST_WARNING_OBJECT (splitmux,
+        "Couldn't calculate next fragment start time for timecode mode");
+  }
+}
+
+/* Called with splitmux lock held */
 /* Called when entering ProcessingCompleteGop state
  * Assess if mq contents overflowed the current file
  *   -> If yes, need to switch to new file
@@ -2822,30 +2888,11 @@ handle_gathered_gop (GstSplitMuxSink * splitmux, const InputGop * gop,
   /* Check for overrun - have we output at least one byte and overrun
    * either threshold? */
   if (need_new_fragment (splitmux, queued_time, queued_gop_time, queued_bytes)) {
-    g_atomic_int_set (&(splitmux->do_split_next_gop), FALSE);
-    /* Tell the output side to start a new fragment */
     GST_INFO_OBJECT (splitmux,
         "This GOP (dur %" GST_STIME_FORMAT
         ") would overflow the fragment, Sending start_new_fragment cmd",
         GST_STIME_ARGS (queued_gop_time));
-    cmd = out_cmd_buf_new_finish_fragment ();
-    g_queue_push_head (&splitmux->out_cmd_q, cmd);
-    GST_SPLITMUX_BROADCAST_OUTPUT (splitmux);
-
-    splitmux->fragment_start_time = gop->start_time;
-    splitmux->fragment_start_time_pts = gop->start_time_pts;
-    splitmux->fragment_total_bytes = 0;
-    splitmux->fragment_reference_bytes = 0;
-
-    video_time_code_replace (&splitmux->fragment_start_tc, gop->start_tc);
-    splitmux->next_fragment_start_tc_time =
-        calculate_next_max_timecode (splitmux, splitmux->fragment_start_tc,
-        splitmux->fragment_start_time, NULL);
-    if (splitmux->tc_interval && splitmux->fragment_start_tc
-        && !GST_CLOCK_TIME_IS_VALID (splitmux->next_fragment_start_tc_time)) {
-      GST_WARNING_OBJECT (splitmux,
-          "Couldn't calculate next fragment start time for timecode mode");
-    }
+    finish_fragment_and_reset (splitmux, gop);
   }
 
   /* And set up to collect the next GOP */
@@ -3006,6 +3053,40 @@ check_completed_gop (GstSplitMuxSink * splitmux, MqStreamCtx * ctx)
         if (g_atomic_int_compare_and_exchange (&(splitmux->split_requested),
                 TRUE, FALSE)) {
           g_atomic_int_set (&(splitmux->do_split_next_gop), TRUE);
+        }
+
+        /* A split-at-running-time boundary is already known once the GOP
+         * starting at/after it has begun: everything belonging to the current
+         * fragment was released above. Finish the fragment now instead of one
+         * GOP later, when the new GOP completes. */
+        gop = g_queue_peek_head (&splitmux->pending_input_gops);
+        if (gop && splitmux->split_at_rt_immediate
+            && splitmux->fragment_reference_bytes > 0) {
+          GstClockTime time_to_split = GST_CLOCK_TIME_NONE;
+          GstClockTime *ptr_to_time;
+          gboolean do_split = FALSE;
+
+          GST_OBJECT_LOCK (splitmux);
+          ptr_to_time = (GstClockTime *)
+              gst_vec_deque_peek_head_struct (splitmux->times_to_split);
+          while (ptr_to_time) {
+            time_to_split = *ptr_to_time;
+            if (gop->start_time < time_to_split)
+              break;
+            gst_vec_deque_pop_head_struct (splitmux->times_to_split);
+            ptr_to_time = (GstClockTime *)
+                gst_vec_deque_peek_head_struct (splitmux->times_to_split);
+            do_split = TRUE;
+          }
+          GST_OBJECT_UNLOCK (splitmux);
+
+          if (do_split) {
+            GST_INFO_OBJECT (splitmux,
+                "New GOP start %" GST_STIME_FORMAT " passed requested split "
+                "point, finishing fragment immediately",
+                GST_STIME_ARGS (gop->start_time));
+            finish_fragment_and_reset (splitmux, gop);
+          }
         }
       }
     }
