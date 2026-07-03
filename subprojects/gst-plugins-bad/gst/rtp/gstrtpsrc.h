@@ -52,6 +52,7 @@ struct _GstRtpSrc
   gchar *encoding_name;
   gchar *multi_iface;
   GstCaps *caps;
+  gboolean loopback;
 
   /* Internal elements */
   GstElement *rtpbin;
