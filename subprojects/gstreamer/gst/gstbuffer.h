@@ -652,6 +652,11 @@ GstCustomMeta * gst_buffer_add_custom_meta      (GstBuffer *buffer,
                                                  const gchar *name);
 
 GST_API
+GstCustomMeta * gst_buffer_add_custom_meta_with_structure (GstBuffer * buffer,
+                                                            const gchar * name,
+                                                            GstStructure * structure);
+
+GST_API
 GstCustomMeta * gst_buffer_get_custom_meta      (GstBuffer *buffer,
                                                  const gchar *name);
 
