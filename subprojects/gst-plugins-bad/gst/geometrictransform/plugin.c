@@ -37,6 +37,7 @@
 #include "gstmirror.h"
 #include "gstfisheye.h"
 #include "gstperspective.h"
+#include "gstmagnify.h"
 
 static gboolean
 plugin_init (GstPlugin * plugin)
@@ -59,6 +60,7 @@ plugin_init (GstPlugin * plugin)
   ret |= GST_ELEMENT_REGISTER (mirror, plugin);
   ret |= GST_ELEMENT_REGISTER (fisheye, plugin);
   ret |= GST_ELEMENT_REGISTER (perspective, plugin);
+  ret |= GST_ELEMENT_REGISTER (magnify, plugin);
 
   return ret;
 }

@@ -19,6 +19,7 @@ geotr_sources = [
   'gstmirror.c',
   'gstfisheye.c',
   'gstperspective.c',
+  'gstmagnify.c',
 ]
 
 geotr_headers = [
@@ -41,6 +42,7 @@ geotr_headers = [
   'geometricmath.h',
   'gstcirclegeometrictransform.h',
   'gstmirror.h',
+  'gstmagnify.h',
 ]
 
 doc_sources = []
