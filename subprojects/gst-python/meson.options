@@ -7,3 +7,5 @@ option('python-exe', type : 'string', value : 'python3', yield: true,
        description: 'Path or name of the Python interpreter to build for.')
 option('tests', type : 'feature', value : 'auto', yield : true)
 option('plugin', type : 'feature', value : 'auto')
+option('qt6', type : 'feature', value : 'auto', yield : true,
+       description: 'Enable Qt6 element overrides')

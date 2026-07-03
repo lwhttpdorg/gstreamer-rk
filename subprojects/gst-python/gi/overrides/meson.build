@@ -30,6 +30,17 @@ gstanalyticspython = python.extension_module ('_gi_gst_analytics',
   dependencies : [gst_dep_for_gi, python_dep, pygobject_dep, gstbad_dep],
 )
 
+if not get_option('qt6').disabled()
+    gstqt6 = python.extension_module('_gi_gstqt6',
+        sources: ['gstqt6.c'],
+        install: true,
+        install_dir : pygi_override_dir,
+        install_tag: 'python-runtime',
+        include_directories : [configinc],
+        dependencies : [gst_dep_for_gi, python_dep, pygobject_dep],
+    )
+endif
+
 env = environment()
 env.prepend('_GI_OVERRIDES_PATH', [meson.current_source_dir(), meson.current_build_dir()])
 env.prepend('PYGI_OVERRIDES_PATH', [meson.current_source_dir(), meson.current_build_dir()])

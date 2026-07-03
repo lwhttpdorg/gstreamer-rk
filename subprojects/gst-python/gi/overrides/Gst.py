@@ -35,6 +35,7 @@ gi.require_version('GLib', '2.0')
 gi.require_version('GObject', '2.0')
 from gi.repository import GLib, GObject
 from gi.overrides import override
+from gi.types import GObjectMeta
 
 # Typing relies on https://github.com/pygobject/pygobject-stubs.
 if typing.TYPE_CHECKING:
@@ -98,7 +99,54 @@ override(URIHandler)
 __all__.append('URIHandler')
 
 
-class Element(Gst.Element):
+class ElementMeta(GObjectMeta):
+    def __new__(cls, name, bases, attrs):
+        if name in ("GstQml6GLOverlay", "GstQml6GLSink"):
+            from gi.overrides import _gi_gstqt6
+
+            def get_widget(element):
+                return _gi_gstqt6.get_widget(element)
+
+            def set_widget(element, widget):
+                _gi_gstqt6.set_widget(element, widget)
+
+            attrs = attrs | {
+                "get_widget": get_widget,
+                "set_widget": set_widget,
+                "widget": GObject.Property(type=object, default=None, getter=get_widget, setter=set_widget),
+            }
+        if name in ("GstQml6GLMixer", "GstQml6GLOverlay"):
+            from gi.overrides import _gi_gstqt6
+
+            def get_root_item(element):
+                return _gi_gstqt6.get_root_item(element)
+
+            def set_root_item(element, root_item):
+                _gi_gstqt6.set_root_item(element, root_item)
+
+            attrs = attrs | {
+                "get_root_item": get_root_item,
+                "set_root_item": set_root_item,
+                "root_item": GObject.Property(type=object, default=None, getter=get_root_item, setter=set_root_item),
+            }
+        if name == "GstQml6GLSrc":
+            from gi.overrides import _gi_gstqt6
+
+            def get_window(element):
+                return _gi_gstqt6.get_window(element)
+
+            def set_window(element, window):
+                _gi_gstqt6.set_window(element, window)
+
+            attrs = attrs | {
+                "get_window": get_window,
+                "set_window": set_window,
+                "window": GObject.Property(type=object, default=None, getter=get_window, setter=set_window),
+            }
+        return GObjectMeta.__new__(cls, name, bases, attrs)
+
+
+class Element(Gst.Element, metaclass=ElementMeta):
     @staticmethod
     def link_many(*args: Element) -> None:  # type: ignore[override]
         '''
