@@ -310,6 +310,10 @@ G_DEFINE_TYPE (GstAutoDeinterlace, gst_auto_deinterlace,
 GST_ELEMENT_REGISTER_DEFINE (autodeinterlace, "autodeinterlace",
     GST_RANK_NONE, gst_auto_deinterlace_get_type ());
 
+/* `deinterlace` claims to support ANY feature but does not, enforce only
+ * negotiating raw caps */
+#define DEINTERLACE_FORCE_SYSMEM { "capsfilter caps=\"video/x-raw\" ! deinterlace ! capsfilter caps=\"video/x-raw\"", NULL}
+
 static void
 gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
 {
@@ -326,40 +330,40 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
         .first_elements = { "bayer2rgb", NULL},
         .colorspace_converters = { "videoconvert", NULL },
         .last_elements = { NULL } ,
-        .filters = { "deinterlace", NULL},
+        .filters = DEINTERLACE_FORCE_SYSMEM,
         .rank = GST_RANK_SECONDARY,
       },
       {
-        .first_elements = { NULL, },
+        .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
         .colorspace_converters = { "videoconvert", NULL },
         .last_elements = { "rgb2bayer", NULL },
-        .filters = { "deinterlace", NULL },
+        .filters = DEINTERLACE_FORCE_SYSMEM,
         .rank = GST_RANK_SECONDARY,
       },
       {
-        .first_elements = { NULL, },
+        .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
         .colorspace_converters = { "videoconvert", NULL },
         .last_elements = { NULL, },
-        .filters = { "deinterlace", NULL },
+        .filters = DEINTERLACE_FORCE_SYSMEM,
         .rank = GST_RANK_SECONDARY,
       },
       {
         .first_elements = { NULL, },
-        .colorspace_converters = { "glcolorconvert", "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert", NULL },
         .last_elements = { NULL, },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_PRIMARY,
       },
       {
         .first_elements = { "glupload", },
-        .colorspace_converters = { "glcolorconvert", "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert", NULL },
         .last_elements = { NULL, },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_PRIMARY,
       },
       { /* Worst case we upload/download as required */
         .first_elements = { "glupload", "gldownload", NULL },
-        .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert",  NULL },
         .last_elements = { "glupload", "gldownload", NULL },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_MARGINAL,
@@ -380,14 +384,14 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
       },
       { /* CUDA -> GL */
         .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-        .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert",  NULL },
         .last_elements = { NULL },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_PRIMARY - 1,
       },
       { /* CUDA -> CUDA */
         .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-        .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert",  NULL },
         .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_SECONDARY - 1,
@@ -401,7 +405,7 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
       },
       { /* CUDA -> Software */
         .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-        .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+        .colorspace_converters = { "glcolorconvert", NULL },
         .last_elements = { "gldownload", NULL },
         .filters = { "gldeinterlace", NULL },
         .rank = GST_RANK_MARGINAL,
@@ -422,66 +426,66 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
           .first_elements = { "bayer2rgb", NULL},
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { NULL } ,
-          .filters = { "deinterlace", NULL},
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_SECONDARY,
         },
         {
-          .first_elements = { NULL, },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "rgb2bayer", NULL },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_SECONDARY,
         },
         {
-          .first_elements = { NULL, },
-          .colorspace_converters = { "videoconvertscale", NULL },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
+          .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { NULL, },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_SECONDARY,
         },
         { /* Worst case we upload/download as required */
-          .first_elements = { "gldownload", NULL },
-          .colorspace_converters = { "videoconvert", NULL },
-          .last_elements = { "glupload", NULL },
-          .filters = { "deinterlace", NULL },
+          .first_elements = { "glcolorconvert", "gldownload", NULL },
+          .colorspace_converters = { NULL },
+          .last_elements = { "glupload", "glcolorconvert", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_MARGINAL,
         },
         { /* Cuda -> Cuda */
           .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_SECONDARY + 1,
         },
         { /* Cuda -> software */
           .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "glupload", NULL },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_MARGINAL,
         },
         { /* Cuda -> software */
           .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { NULL },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_MARGINAL,
         },
         { /* Software -> cuda */
-          .first_elements = { NULL },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
-          .filters = { "deinterlace", NULL },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_MARGINAL,
         },
         {
           .first_elements = { "d3d11upload", "d3d11download" },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "d3d11upload", "d3d11download" },
-          .filters = { "deinterlace" },
+          .filters = DEINTERLACE_FORCE_SYSMEM,
           .rank = GST_RANK_MARGINAL,
         },
-        { /* Worst case we upload/download as required */
+        {
           .first_elements = { NULL},
           .colorspace_converters = { NULL },
           .last_elements = { NULL },
@@ -782,7 +786,7 @@ gst_auto_deinterlace_class_init (GstAutoDeinterlaceClass * klass)
 
   gst_element_class_set_static_metadata (gstelement_class,
       "Select deinterlacer, and converters based on caps",
-      "Bin/Colorspace/Scale/Video/Converter/Deinterlace",
+      "Bin/Colorspace/Video/Converter/Deinterlace",
       "Selects the right deinterlacer based on caps",
       "Thibault Saunier <tsaunier@igalia.com>");
 
