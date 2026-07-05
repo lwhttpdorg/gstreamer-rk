@@ -182,7 +182,6 @@ gst_video_info_dma_drm_to_caps (const GstVideoInfoDmaDrm * drm_info)
 
   g_return_val_if_fail (drm_info != NULL, NULL);
   g_return_val_if_fail (drm_info->drm_fourcc != DRM_FORMAT_INVALID, NULL);
-  g_return_val_if_fail (drm_info->drm_modifier != DRM_FORMAT_MOD_INVALID, NULL);
 
   caps = gst_video_info_to_caps (&drm_info->vinfo);
   if (!caps) {
@@ -251,11 +250,6 @@ gst_video_info_dma_drm_from_caps (GstVideoInfoDmaDrm * drm_info,
   fourcc = gst_video_dma_drm_fourcc_from_string (str, &modifier);
   if (fourcc == DRM_FORMAT_INVALID) {
     GST_DEBUG ("Can not parse fourcc in caps %" GST_PTR_FORMAT, caps);
-    ret = FALSE;
-    goto out;
-  }
-  if (modifier == DRM_FORMAT_MOD_INVALID) {
-    GST_DEBUG ("Can not parse modifier in caps %" GST_PTR_FORMAT, caps);
     ret = FALSE;
     goto out;
   }
@@ -341,8 +335,6 @@ gst_video_info_dma_drm_from_video_info (GstVideoInfoDmaDrm * drm_info,
   g_return_val_if_fail (drm_info != NULL, FALSE);
   g_return_val_if_fail (info != NULL, FALSE);
 
-  if (modifier == DRM_FORMAT_MOD_INVALID)
-    return FALSE;
   format = GST_VIDEO_INFO_FORMAT (info);
   fourcc = gst_video_dma_drm_fourcc_from_format (format);
   if (fourcc == DRM_FORMAT_INVALID)
@@ -511,7 +503,6 @@ gst_video_dma_drm_fourcc_to_string (guint32 fourcc, guint64 modifier)
   gchar *s;
 
   g_return_val_if_fail (fourcc != DRM_FORMAT_INVALID, NULL);
-  g_return_val_if_fail (modifier != DRM_FORMAT_MOD_INVALID, NULL);
 
   if (fourcc & DRM_FORMAT_BIG_ENDIAN) {
     big_endian = TRUE;

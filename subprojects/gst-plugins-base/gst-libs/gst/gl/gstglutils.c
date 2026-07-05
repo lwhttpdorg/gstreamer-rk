@@ -1074,7 +1074,8 @@ _get_video_format_from_drm_format (GstGLContext * context,
   if (gst_format == GST_VIDEO_FORMAT_UNKNOWN)
     return GST_VIDEO_FORMAT_UNKNOWN;
 
-  if (!gst_gl_context_egl_format_supports_modifier (context, fourcc, modifier,
+  if (modifier != DRM_FORMAT_MOD_INVALID &&
+      !gst_gl_context_egl_format_supports_modifier (context, fourcc, modifier,
           flags & GST_GL_DRM_FORMAT_INCLUDE_EXTERNAL) &&
       !(flags & GST_GL_DRM_FORMAT_INCLUDE_EMULATED &&
           gst_egl_image_can_emulate (context, gst_format)))

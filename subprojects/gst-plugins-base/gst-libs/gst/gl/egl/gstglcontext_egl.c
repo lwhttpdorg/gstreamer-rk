@@ -1718,6 +1718,9 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
       num_formats);
   g_array_set_clear_func (dma_formats, _free_dma_formats);
 
+  const gchar *env = g_getenv("GST_GL_ALLOW_IMPLICIT_MODIFIER");
+  gboolean allow_implicit_modifier = env && g_str_has_prefix (env, "1");
+
   for (i = 0; i < num_formats; i++) {
     EGLint num_mods = 0;
     GstGLDmaFormat dma_frmt;
@@ -1734,6 +1737,10 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
     }
 
     if (num_mods > 0) {
+
+      if (allow_implicit_modifier) {
+          num_mods++;
+      }
 
       if (mods_len == 0) {
         modifiers = g_new (EGLuint64KHR, num_mods);
@@ -1754,6 +1761,11 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
         continue;
       }
 
+      if (allow_implicit_modifier) {
+          modifiers[num_mods - 1] = DRM_FORMAT_MOD_INVALID;
+          ext_only[num_mods - 1] = FALSE;
+      }
+
       dma_frmt.modifiers = g_array_sized_new (FALSE, FALSE,
           sizeof (GstGLDmaModifier), num_mods);
       dma_frmt.modifiers = g_array_set_size (dma_frmt.modifiers, num_mods);
@@ -1764,6 +1776,14 @@ gst_gl_context_egl_fetch_dma_formats (GstGLContext * context)
         modifier->modifier = modifiers[j];
         modifier->external_only = ext_only[j];
       }
+    } else if (allow_implicit_modifier) {
+      dma_frmt.modifiers = g_array_sized_new (FALSE, FALSE,
+          sizeof (GstGLDmaModifier), 1);
+      dma_frmt.modifiers = g_array_set_size (dma_frmt.modifiers, 1);
+      GstGLDmaModifier *modifier =
+          &g_array_index (dma_frmt.modifiers, GstGLDmaModifier, 0);
+      modifier->modifier = DRM_FORMAT_MOD_INVALID;
+      modifier->external_only = FALSE;
     }
 
     g_array_append_val (dma_formats, dma_frmt);
