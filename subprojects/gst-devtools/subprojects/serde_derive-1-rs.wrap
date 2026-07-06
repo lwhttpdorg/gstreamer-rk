@@ -1,0 +1,7 @@
+[wrap-file]
+directory = serde_derive-1.0.228
+source_url = https://crates.io/api/v1/crates/serde_derive/1.0.228/download
+source_filename = serde_derive-1.0.228.tar.gz
+source_hash = d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79
+method = cargo
+diff_files = serde_derive-1.0.228.patch

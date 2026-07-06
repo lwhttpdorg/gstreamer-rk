@@ -1,0 +1,12 @@
+[wrap-file]
+directory = mime_guess-2.0.5
+source_url = https://crates.io/api/v1/crates/mime_guess/2.0.5/download
+source_filename = mime_guess-2.0.5.tar.gz
+source_hash = f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e
+method = cargo
+# build.rs generates src/mime_types_generated.rs (the reverse mime<->ext
+# table) into OUT_DIR; Meson cannot pass OUT_DIR on stable, so ship the
+# generated table as an overlay and redirect the include! to it (keeping the
+# crate's reverse-lookup API intact).
+diff_files = mime_guess-2.0.5.patch
+patch_directory = mime_guess-2-rs

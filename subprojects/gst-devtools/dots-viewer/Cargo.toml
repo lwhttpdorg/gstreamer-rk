@@ -3,14 +3,16 @@ name = "gst-dots-viewer"
 version = "0.1.0"
 edition = "2021"
 default-run = "gst-dots-viewer"
-
-[workspace]
+# Member of the gst-devtools cargo workspace (../Cargo.toml); the resolved
+# Cargo.lock lives at the workspace root so Meson's rust module can drive it.
 
 [dependencies]
 actix = "0.13"
-actix-web = "4.0"
+# Trim the heavy default features (compression pulls in the C-compiling
+# zstd-sys, brotli, flate2, cookies, http2). "ws" is required by
+# actix-web-actors for the websocket transport.
+actix-web = { version = "4.0", default-features = false, features = ["macros", "ws"] }
 actix-web-actors = "4.0"
-actix-files = "0.6"
 notify = "8.0"
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
@@ -21,7 +23,6 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 actix-web-static-files = { version = "4.0", features = ["static-files-03"] }
 static-files = { version = "0.3", features = ["sort"] }
-glob = "0.3"
 single-instance = "0.3.3"
 opener = "0.8"
 anyhow = "1.0"

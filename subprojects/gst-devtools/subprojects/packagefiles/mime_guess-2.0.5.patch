@@ -1,0 +1,11 @@
+--- a/src/impl_bin_search.rs
++++ b/src/impl_bin_search.rs
+@@ -1,7 +1,7 @@
+ use unicase::UniCase;
+ 
+ include!("mime_types.rs");
+-include!(env!("MIME_TYPES_GENERATED_PATH"));
++include!("mime_types_generated.rs");
+ 
+ #[cfg(feature = "rev-mappings")]
+ #[derive(Copy, Clone)]

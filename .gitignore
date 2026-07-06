@@ -38,9 +38,14 @@ subprojects/icu.wrap
 subprojects/libepoxy.wrap
 subprojects/libsass.wrap
 subprojects/libtiff.wrap
+subprojects/mime_guess-2-rs.wrap
 subprojects/nasm.wrap
 subprojects/pythoncapi-compat.wrap
 subprojects/sassc.wrap
+subprojects/serde-1-rs.wrap
+subprojects/serde_core-1-rs.wrap
+subprojects/serde_derive-1-rs.wrap
+subprojects/serde_json-1-rs.wrap
 subprojects/sysprof.wrap
 
 subprojects/*/
