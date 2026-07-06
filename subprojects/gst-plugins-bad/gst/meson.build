@@ -13,6 +13,6 @@ foreach plugin : ['accurip', 'adpcmdec', 'adpcmenc', 'aiff', 'asfmux',
                   'segmentclip', 'siren', 'smooth', 'speed', 'subenc', 'switchbin',
                   'tensordecoders', 'timecode', 'transcode', 'unixfd', 'videofilters',
                   'videoframe_audiolevel', 'videoparsers', 'videosignal',
-                  'vmnc']
+                  'vmnc', 'archive']
   subdir(plugin)
 endforeach

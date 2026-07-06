@@ -97,6 +97,8 @@ base_tests = [
   [['elements/av1parse.c'], false, [gstcodecparsers_dep]],
   [['elements/wasapi.c'], host_machine.system() != 'windows', ],
   [['elements/wasapi2.c'], host_machine.system() != 'windows', ],
+  [['elements/zipfilesrc.c'], get_option('archive').disabled(), [],
+    ['../../gst/archive/gstzipparser.c']],
   [['libs/h264parser.c'], false, [gstcodecparsers_dep]],
   [['libs/h265parser.c'], false, [gstcodecparsers_dep]],
   [['libs/h266parser.c'], false, [gstcodecparsers_dep]],
