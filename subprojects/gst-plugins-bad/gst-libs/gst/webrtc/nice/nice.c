@@ -56,11 +56,14 @@ enum
   PROP_ICE_UDP,
   PROP_MIN_RTP_PORT,
   PROP_MAX_RTP_PORT,
+  PROP_CONSENT_FRESHNESS,
 };
 
 struct _GstWebRTCNicePrivate
 {
   NiceAgent *nice_agent;
+
+  gboolean consent_freshness;
 
   GArray *nice_stream_map;
 
@@ -1745,6 +1748,9 @@ gst_webrtc_nice_set_property (GObject * object, guint prop_id,
         g_warning ("Set max-rtp-port to %u which is smaller than"
             " min-rtp-port %u", ice->max_rtp_port, ice->min_rtp_port);
       break;
+    case PROP_CONSENT_FRESHNESS:
+      nice->priv->consent_freshness = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1775,6 +1781,9 @@ gst_webrtc_nice_get_property (GObject * object, guint prop_id,
       break;
     case PROP_MAX_RTP_PORT:
       g_value_set_uint (value, ice->max_rtp_port);
+      break;
+    case PROP_CONSENT_FRESHNESS:
+      g_value_set_boolean (value, nice->priv->consent_freshness);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1832,7 +1841,15 @@ gst_webrtc_nice_constructed (GObject * object)
   options |= NICE_AGENT_OPTION_ICE_TRICKLE;
   options |= NICE_AGENT_OPTION_REGULAR_NOMINATION;
   options |= NICE_AGENT_OPTION_CLOSE_FORCED;
-  options |= NICE_AGENT_OPTION_CONSENT_FRESHNESS;
+
+  /* Consent freshness (RFC 7675) makes libnice send STUN binding *requests* on
+   * the selected pair and fail the component if it gets no *response*. Certain
+   * implementations, like AWS KVS, keep connections alive with keepalive binding
+   * indications and do not answer consent requests. Keep it on by default, but
+   * allow disabling it (e.g. for AWS KVS) via the "consent-freshness"
+   * property. */
+  if (ice->priv->consent_freshness)
+    options |= NICE_AGENT_OPTION_CONSENT_FRESHNESS;
 
   ice->priv->nice_agent = nice_agent_new_full (ice->priv->main_context,
       NICE_COMPATIBILITY_RFC5245, options);
@@ -1901,6 +1918,29 @@ gst_webrtc_nice_class_init (GstWebRTCNiceClass * klass)
           "Whether the agent should use ICE-UDP when gathering candidates",
           TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstWebRTCNice:consent-freshness:
+   *
+   * Whether the ICE agent should perform consent freshness checks as specified
+   * in RFC 7675. When enabled (the default), libnice periodically sends STUN
+   * binding requests on the selected pair and fails the component if it gets
+   * no response. Some peers (e.g. AWS KVS) keep the connection alive with
+   * binding indications and do not answer consent requests, in which case this
+   * should be disabled.
+   *
+   * This is a construct-only property as the underlying option can only be set
+   * when the ICE agent is created.
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_CONSENT_FRESHNESS,
+      g_param_spec_boolean ("consent-freshness", "ICE consent freshness",
+          "Whether the agent should perform ICE consent freshness checks "
+          "(RFC 7675)",
+          TRUE,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
+
   g_signal_override_class_handler ("add-local-ip-address",
       G_TYPE_FROM_CLASS (klass),
       G_CALLBACK (gst_webrtc_nice_add_local_ip_address));
@@ -1910,6 +1950,8 @@ static void
 gst_webrtc_nice_init (GstWebRTCNice * ice)
 {
   ice->priv = gst_webrtc_nice_get_instance_private (ice);
+
+  ice->priv->consent_freshness = TRUE;
 
   g_mutex_init (&ice->priv->lock);
   g_cond_init (&ice->priv->cond);
