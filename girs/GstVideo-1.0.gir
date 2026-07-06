@@ -6481,6 +6481,10 @@ values and can be scaled for other bit depths.</doc>
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-color.h">[16..235] for 8 bit components. Chroma has
                 [16..240] range.</doc>
       </member>
+      <member name="0_1" value="3" c:identifier="GST_VIDEO_COLOR_RANGE_0_1" version="1.30" glib:nick="0-1" glib:name="GST_VIDEO_COLOR_RANGE_0_1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-color.h">[0.0..1.0] for floating point components, the default range of
+floating point formats.</doc>
+      </member>
       <function name="offsets" c:identifier="gst_video_color_range_offsets">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/video/video-color.c">Compute the offset and scale values for each component of @info. For each
 component, (c[i] - offset[i]) / scale[i] will scale the component c[i] to the
@@ -11515,12 +11519,13 @@ components describes the size of the floating point type in bits
 
 Component values are normalized: 0.0 and 1.0 correspond to 0 and the
 maximum value of a full-range integer format with the same colorimetry.
-Float formats are always full-range. Values outside [0.0, 1.0] are
-valid; their meaning follows from the colorimetry (with a linear
-transfer function, values above 1.0 represent luminance above reference
-white and negative values represent colors outside the gamut of the
-primaries). Elements processing floats natively should preserve
-out-of-range values; converting to an integer format clamps them.</doc>
+The default color range of float formats is
+%GST_VIDEO_COLOR_RANGE_0_1. Values outside [0.0, 1.0] are valid; their
+meaning follows from the colorimetry (with a linear transfer function,
+values above 1.0 represent luminance above reference white and negative
+values represent colors outside the gamut of the primaries). Elements
+processing floats natively should preserve out-of-range values;
+converting to an integer format clamps them.</doc>
       </member>
     </bitfield>
     <record name="VideoFormatInfo" c:type="GstVideoFormatInfo">
