@@ -106,7 +106,6 @@ enum
   PROP_MAX_SIZE_BYTES,
   PROP_MAX_SIZE_TIMECODE,
   PROP_SEND_KEYFRAME_REQUESTS,
-  PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE,
   PROP_MAX_FILES,
   PROP_MUXER_OVERHEAD,
   PROP_USE_ROBUST_MUXING,
@@ -129,7 +128,6 @@ enum
 #define DEFAULT_MAX_FILES           0
 #define DEFAULT_MUXER_OVERHEAD      0.02
 #define DEFAULT_SEND_KEYFRAME_REQUESTS FALSE
-#define DEFAULT_SPLIT_AT_RT_IMMEDIATE FALSE
 #define DEFAULT_ALIGNMENT_THRESHOLD 0
 #define DEFAULT_MUXER "mp4mux"
 #define DEFAULT_SINK "filesink"
@@ -388,28 +386,6 @@ gst_splitmux_sink_class_init (GstSplitMuxSinkClass * klass)
           DEFAULT_SEND_KEYFRAME_REQUESTS,
           G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
           G_PARAM_STATIC_STRINGS));
-  /**
-   * GstSplitMuxSink:split-at-running-time-immediate:
-   *
-   * When %TRUE, a fragment cut requested via the
-   * #GstSplitMuxSink::split-at-running-time action signal is finished as
-   * soon as the GOP starting at/after the requested running time begins,
-   * instead of when that GOP completes (one keyframe interval later).
-   * Fragment boundaries and file contents are unchanged; only the
-   * finalization timing differs.
-   *
-   * Since: 1.30
-   */
-  g_object_class_install_property (gobject_class,
-      PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE,
-      g_param_spec_boolean ("split-at-running-time-immediate",
-          "Finish split-at-running-time fragments immediately",
-          "Finish a fragment cut by split-at-running-time as soon as the GOP "
-          "at/after the requested time begins, instead of when that GOP "
-          "completes (one keyframe interval later).",
-          DEFAULT_SPLIT_AT_RT_IMMEDIATE,
-          G_PARAM_READWRITE | GST_PARAM_MUTABLE_READY |
-          G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_MAX_FILES,
       g_param_spec_uint ("max-files", "Max files",
           "Maximum number of files to keep on disk. Once the maximum is reached,"
@@ -661,7 +637,6 @@ gst_splitmux_sink_init (GstSplitMuxSink * splitmux)
   splitmux->threshold_bytes = DEFAULT_MAX_SIZE_BYTES;
   splitmux->max_files = DEFAULT_MAX_FILES;
   splitmux->send_keyframe_requests = DEFAULT_SEND_KEYFRAME_REQUESTS;
-  splitmux->split_at_rt_immediate = DEFAULT_SPLIT_AT_RT_IMMEDIATE;
   splitmux->alignment_threshold = DEFAULT_ALIGNMENT_THRESHOLD;
   splitmux->use_robust_muxing = DEFAULT_USE_ROBUST_MUXING;
   splitmux->reset_muxer = DEFAULT_RESET_MUXER;
@@ -864,11 +839,6 @@ gst_splitmux_sink_set_property (GObject * object, guint prop_id,
       splitmux->send_keyframe_requests = g_value_get_boolean (value);
       GST_OBJECT_UNLOCK (splitmux);
       break;
-    case PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE:
-      GST_OBJECT_LOCK (splitmux);
-      splitmux->split_at_rt_immediate = g_value_get_boolean (value);
-      GST_OBJECT_UNLOCK (splitmux);
-      break;
     case PROP_MAX_FILES:
       GST_OBJECT_LOCK (splitmux);
       splitmux->max_files = g_value_get_uint (value);
@@ -1022,11 +992,6 @@ gst_splitmux_sink_get_property (GObject * object, guint prop_id,
     case PROP_SEND_KEYFRAME_REQUESTS:
       GST_OBJECT_LOCK (splitmux);
       g_value_set_boolean (value, splitmux->send_keyframe_requests);
-      GST_OBJECT_UNLOCK (splitmux);
-      break;
-    case PROP_SPLIT_AT_RUNNING_TIME_IMMEDIATE:
-      GST_OBJECT_LOCK (splitmux);
-      g_value_set_boolean (value, splitmux->split_at_rt_immediate);
       GST_OBJECT_UNLOCK (splitmux);
       break;
     case PROP_MAX_FILES:
@@ -3060,8 +3025,7 @@ check_completed_gop (GstSplitMuxSink * splitmux, MqStreamCtx * ctx)
          * fragment was released above. Finish the fragment now instead of one
          * GOP later, when the new GOP completes. */
         gop = g_queue_peek_head (&splitmux->pending_input_gops);
-        if (gop && splitmux->split_at_rt_immediate
-            && splitmux->fragment_reference_bytes > 0) {
+        if (gop && splitmux->fragment_reference_bytes > 0) {
           GstClockTime time_to_split = GST_CLOCK_TIME_NONE;
           GstClockTime *ptr_to_time;
           gboolean do_split = FALSE;

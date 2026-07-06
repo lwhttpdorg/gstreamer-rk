@@ -167,7 +167,6 @@ struct _GstSplitMuxSink
   guint64 threshold_bytes;
   guint max_files;
   gboolean send_keyframe_requests;
-  gboolean split_at_rt_immediate;
   gchar *threshold_timecode_str;
   /* created from threshold_timecode_str */
   GstVideoTimeCodeInterval *tc_interval;

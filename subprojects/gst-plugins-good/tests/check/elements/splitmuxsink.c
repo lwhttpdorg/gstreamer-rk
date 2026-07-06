@@ -961,8 +961,7 @@ GST_START_TEST (test_splitmuxsink_split_at_running_time_immediate)
   guint i;
 
   pipeline = gst_parse_launch ("splitmuxsink name=splitsink "
-      "muxer=matroskamux split-at-running-time-immediate=true "
-      "appsrc name=src format=time ! splitsink.video", NULL);
+      "muxer=matroskamux appsrc name=src format=time ! splitsink.video", NULL);
   fail_if (pipeline == NULL);
 
   src = gst_bin_get_by_name (GST_BIN (pipeline), "src");
