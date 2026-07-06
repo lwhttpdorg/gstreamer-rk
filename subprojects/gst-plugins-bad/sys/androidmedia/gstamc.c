@@ -53,7 +53,7 @@ GST_DEBUG_CATEGORY (gst_amc_debug);
 #define GST_CAT_DEFAULT gst_amc_debug
 
 /* Should be advanced whenever the codec cache structure changes */
-#define GST_AMC_CODEC_CACHE_VERSION 1
+#define GST_AMC_CODEC_CACHE_VERSION 2
 
 GQuark gst_amc_codec_info_quark = 0;
 
@@ -131,7 +131,6 @@ scan_codecs (GstPlugin * plugin)
         const GValue *plarr;
         guint k, n3;
         GstAmcCodecType *gst_codec_type = &gst_codec_info->supported_types[j];
-        const GValue *range, *frac;
 
         mime = gst_structure_get_string (sts, "mime");
         gst_codec_type->mime = g_strdup (mime);
@@ -167,21 +166,26 @@ scan_codecs (GstPlugin * plugin)
         }
 
         if (g_str_has_prefix (mime, "video/")) {
-          range = gst_structure_get_value (sts, "width");
-          gst_codec_type->width.lower = gst_value_get_int_range_min (range);
-          gst_codec_type->width.upper = gst_value_get_int_range_max (range);
+          const GValue *video_caps;
 
-          range = gst_structure_get_value (sts, "height");
-          gst_codec_type->height.lower = gst_value_get_int_range_min (range);
-          gst_codec_type->height.upper = gst_value_get_int_range_max (range);
+          video_caps = gst_structure_get_value (sts, "video-capabilities");
+          GArray *supported_video_capabilities =
+              g_array_new (FALSE, FALSE, sizeof (GstAmcVideoCapability));
+          guint n = gst_value_array_get_size (video_caps);
 
-          range = gst_structure_get_value (sts, "framerate");
-          frac = gst_value_get_fraction_range_min (range);
-          gst_codec_type->framerate.lower =
-              gst_value_get_fraction_numerator (frac);
-          frac = gst_value_get_fraction_range_max (range);
-          gst_codec_type->framerate.upper =
-              gst_value_get_fraction_numerator (frac);
+          for (k = 0; k < n; k++) {
+            GstAmcVideoCapability cap;
+            const GstStructure *video_cap =
+                gst_value_get_structure (gst_value_array_get_value (video_caps,
+                    k));
+
+            gst_structure_get_int (video_cap, "width", &cap.width);
+            gst_structure_get_int (video_cap, "height", &cap.height);
+            gst_structure_get_fraction (video_cap, "framerate", &cap.fps_n,
+                &cap.fps_d);
+
+            g_array_append_val (supported_video_capabilities, cap);
+          }
         }
       }
 
@@ -194,6 +198,7 @@ scan_codecs (GstPlugin * plugin)
   if (!gst_amc_codeclist_get_count (&codec_count, &error)) {
     GST_ERROR ("Failed to get number of available codecs: %s",
         error ? error->message : "unknown error");
+    g_clear_error (&error);
     ret = FALSE;
     goto done;
   }
@@ -217,6 +222,7 @@ scan_codecs (GstPlugin * plugin)
       GST_ERROR ("Failed to get codec info %d: %s", i,
           error ? error->message : "unknown error");
       valid_codec = FALSE;
+      g_clear_error (&error);
       goto next_codec;
     }
 
@@ -225,6 +231,7 @@ scan_codecs (GstPlugin * plugin)
       GST_ERROR ("Failed to get codec name: %s",
           error ? error->message : "unknown error");
       valid_codec = FALSE;
+      g_clear_error (&error);
       goto next_codec;
     }
 
@@ -280,6 +287,7 @@ scan_codecs (GstPlugin * plugin)
       GST_ERROR ("Failed to detect if codec is an encoder: %s",
           error ? error->message : "unknown error");
       valid_codec = FALSE;
+      g_clear_error (&error);
       goto next_codec;
     }
     gst_codec_info->is_encoder = is_encoder;
@@ -307,6 +315,7 @@ scan_codecs (GstPlugin * plugin)
       GST_ERROR ("Failed to get supported types: %s",
           error ? error->message : "unknown error");
       valid_codec = FALSE;
+      g_clear_error (&error);
       goto next_codec;
     }
 
@@ -343,24 +352,111 @@ scan_codecs (GstPlugin * plugin)
         GST_ERROR ("Failed to get capabilities for supported type: %s",
             error ? error->message : "unknown error");
         valid_codec = FALSE;
+        g_clear_error (&error);
         goto next_supported_type;
       }
 
       if (g_str_has_prefix (gst_codec_type->mime, "video/")) {
+        const struct
+        {
+          gint width, height;
+        } probe_resolutions[] = {
+          {320, 240},
+          {720, 576},
+          {1280, 720},
+          {1920, 1080},
+          {3840, 2160},
+          {7680, 4320},
+        };
         GstAmcVideoCapabilitiesHandle *vid_caps = NULL;
+        GArray *supported_video_capabilities =
+            g_array_new (FALSE, FALSE, sizeof (GstAmcVideoCapability));
 
         vid_caps =
             gst_amc_capabilities_get_video_capabilities (capabilities, &error);
-        gst_codec_type->width =
-            gst_amc_video_capabilities_get_widths (vid_caps, &error);
-        gst_codec_type->height =
-            gst_amc_video_capabilities_get_heights (vid_caps, &error);
-        gst_codec_type->framerate =
-            gst_amc_video_capabilities_get_framerates (vid_caps, &error);
-        gst_amc_capabilities_video_capabilities_handle_free (vid_caps);
+        if (vid_caps) {
+          for (gsize l = 0; l < G_N_ELEMENTS (probe_resolutions); l++) {
+            GstAmcDoubleRange framerates;
 
-        // Ignore framerate lower bound and always allow 0/1.
-        gst_codec_type->framerate.lower = 0;
+            framerates =
+                gst_amc_video_capabilities_get_achievable_framerates_for
+                (vid_caps, probe_resolutions[l].width,
+                probe_resolutions[l].height, &error);
+            if (framerates.upper == G_MAXDOUBLE) {
+              g_clear_error (&error);
+            } else if (framerates.upper >= 1.0 && framerates.upper <= 32000.0) {
+              GstAmcVideoCapability cap;
+
+              cap.width = probe_resolutions[l].width;
+              cap.height = probe_resolutions[l].height;
+
+              gst_util_double_to_fraction (framerates.upper, &cap.fps_n,
+                  &cap.fps_d);
+              g_array_append_val (supported_video_capabilities, cap);
+            }
+          }
+
+          // Add the following as fallback if the above failed
+          if (supported_video_capabilities->len == 0) {
+            GstAmcVideoCapability cap;
+            GstAmcValueRange width, height, framerate;
+
+            width =
+                gst_amc_video_capabilities_get_supported_widths (vid_caps,
+                &error);
+            if (error) {
+              GST_ERROR ("Failed to get video capabilities width: %s",
+                  error ? error->message : "unknown error");
+              g_clear_error (&error);
+            } else {
+              height =
+                  gst_amc_video_capabilities_get_supported_heights (vid_caps,
+                  &error);
+              if (error) {
+                GST_ERROR ("Failed to get video capabilities height: %s",
+                    error ? error->message : "unknown error");
+                g_clear_error (&error);
+              } else {
+                framerate =
+                    gst_amc_video_capabilities_get_supported_framerates
+                    (vid_caps, &error);
+                if (error) {
+                  GST_ERROR ("Failed to get video capabilities framerates: %s",
+                      error ? error->message : "unknown error");
+                  g_clear_error (&error);
+                } else {
+                  cap.width = width.upper;
+                  cap.height = height.upper;
+                  cap.fps_n = framerate.upper;
+                  cap.fps_d = 1;
+                  g_array_append_val (supported_video_capabilities, cap);
+                }
+              }
+            }
+          }
+
+          gst_amc_capabilities_video_capabilities_handle_free (vid_caps);
+        }
+
+        if (supported_video_capabilities->len == 0) {
+          GstAmcVideoCapability cap;
+
+          GST_ERROR ("Failed to get video capabilities: %s",
+              error ? error->message : "unknown error");
+
+          g_clear_error (&error);
+
+          cap.width = 4096;
+          cap.height = 4096;
+          cap.fps_n = G_MAXINT;
+          cap.fps_d = 1;
+          g_array_append_val (supported_video_capabilities, cap);
+        }
+
+        gst_codec_type->n_supported_video_capabilities =
+            supported_video_capabilities->len;
+        gst_codec_type->supported_video_capabilities =
+            (gpointer) g_array_free (supported_video_capabilities, FALSE);
 
         gst_codec_type->color_formats =
             gst_amc_codec_capabilities_handle_get_color_formats (capabilities,
@@ -369,6 +465,7 @@ scan_codecs (GstPlugin * plugin)
           GST_ERROR ("Failed to get color format elements: %s",
               error ? error->message : "unknown error");
           valid_codec = FALSE;
+          g_clear_error (&error);
           goto next_supported_type;
         }
 
@@ -400,6 +497,7 @@ scan_codecs (GstPlugin * plugin)
         GST_ERROR ("Failed to get profile/levels: %s",
             error ? error->message : "unknown error");
         valid_codec = FALSE;
+        g_clear_error (&error);
         goto next_supported_type;
       }
 
@@ -479,6 +577,7 @@ scan_codecs (GstPlugin * plugin)
         g_free (gst_codec_type->mime);
         g_free (gst_codec_type->color_formats);
         g_free (gst_codec_type->profile_levels);
+        g_free (gst_codec_type->supported_video_capabilities);
       }
       g_free (gst_codec_info->supported_types);
       g_free (gst_codec_info->name);
@@ -553,23 +652,28 @@ scan_codecs (GstPlugin * plugin)
         gst_structure_take_value (sts, "profile-levels", &tmparr);
 
         if (g_str_has_prefix (gst_codec_type->mime, "video/")) {
-          GValue tmprange = G_VALUE_INIT;
+          GValue video_caps = G_VALUE_INIT;
 
-          g_value_init (&tmprange, GST_TYPE_INT_RANGE);
-          gst_value_set_int_range (&tmprange,
-              gst_codec_type->width.lower, gst_codec_type->width.upper);
-          gst_structure_take_value (sts, "width", &tmprange);
+          g_value_init (&video_caps, GST_TYPE_ARRAY);
+          for (j = 0; j < gst_codec_type->n_supported_video_capabilities; j++) {
+            GValue video_cap = G_VALUE_INIT;
+            GstStructure *video_cap_s;
 
-          g_value_init (&tmprange, GST_TYPE_INT_RANGE);
-          gst_value_set_int_range (&tmprange,
-              gst_codec_type->height.lower, gst_codec_type->height.upper);
-          gst_structure_take_value (sts, "height", &tmprange);
+            video_cap_s = gst_structure_new ("video-capability",
+                "width", G_TYPE_INT,
+                gst_codec_type->supported_video_capabilities[j].width, "height",
+                G_TYPE_INT,
+                gst_codec_type->supported_video_capabilities[j].height,
+                "framerate", GST_TYPE_FRACTION,
+                gst_codec_type->supported_video_capabilities[j].fps_n,
+                gst_codec_type->supported_video_capabilities[j].fps_d, NULL);
 
-          g_value_init (&tmprange, GST_TYPE_FRACTION_RANGE);
-          gst_value_set_fraction_range_full (&tmprange,
-              gst_codec_type->framerate.lower, 1,
-              gst_codec_type->framerate.upper, 1);
-          gst_structure_take_value (sts, "framerate", &tmprange);
+            g_value_init (&video_cap, GST_TYPE_STRUCTURE);
+            g_value_take_boxed (&video_cap, video_cap_s);
+            gst_value_array_append_and_take_value (&video_caps, &video_cap);
+          }
+
+          gst_structure_take_value (sts, "video-capabilities", &video_caps);
         }
 
         g_value_init (&stv, GST_TYPE_STRUCTURE);
@@ -2104,6 +2208,30 @@ plugin_init (GstPlugin * plugin)
   return init_ok;
 }
 
+static GstCaps *
+gst_amc_codec_add_video_constraints_to_caps (const GstAmcCodecType * type,
+    GstCaps * caps, GstStructure * s)
+{
+
+  for (guint i = 0; i < type->n_supported_video_capabilities; i++) {
+    GstStructure *tmp = gst_structure_copy (s);
+
+    gst_structure_set (tmp,
+        "width", GST_TYPE_INT_RANGE, 1,
+        type->supported_video_capabilities[i].width, "height",
+        GST_TYPE_INT_RANGE, 1, type->supported_video_capabilities[i].height,
+        "framerate", GST_TYPE_FRACTION_RANGE, 0, 1,
+        type->supported_video_capabilities[i].fps_n,
+        type->supported_video_capabilities[i].fps_d, NULL);
+
+    caps = gst_caps_merge_structure (caps, tmp);
+  }
+
+  gst_structure_free (s);
+
+  return caps;
+}
+
 void
 gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
     GstCaps ** sink_caps, GstCaps ** src_caps)
@@ -2127,7 +2255,7 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
 
   for (i = 0; i < codec_info->n_supported_types; i++) {
     const GstAmcCodecType *type = &codec_info->supported_types[i];
-    GstStructure *tmp, *tmp2, *tmp3;
+    GstStructure *tmp, *tmp2;
 
     if (g_str_has_prefix (type->mime, "audio/")) {
       if (raw_ret) {
@@ -2161,7 +2289,6 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
           encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
         } else if (strcmp (type->mime, "audio/mp4a-latm") == 0) {
           gint j;
-          gboolean have_profile = FALSE;
           GValue va = G_VALUE_INIT;
           GValue v = G_VALUE_INIT;
 
@@ -2180,30 +2307,30 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
               "framed", G_TYPE_BOOLEAN, TRUE, NULL);
           gst_structure_take_value (tmp, "stream-format", &va);
 
-          for (j = 0; j < type->n_profile_levels; j++) {
-            const gchar *profile;
+          if (type->n_profile_levels) {
+            g_value_init (&va, GST_TYPE_LIST);
+            for (j = 0; j < type->n_profile_levels; j++) {
+              const gchar *profile;
 
-            profile =
-                gst_amc_aac_profile_to_string (type->profile_levels[j].profile);
+              profile =
+                  gst_amc_aac_profile_to_string (type->
+                  profile_levels[j].profile);
 
-            if (!profile) {
-              GST_ERROR ("Unable to map AAC profile 0x%08x",
-                  type->profile_levels[j].profile);
-              continue;
+              if (!profile) {
+                GST_ERROR ("Unable to map AAC profile 0x%08x",
+                    type->profile_levels[j].profile);
+                continue;
+              }
+
+              g_value_init (&v, G_TYPE_STRING);
+              g_value_set_static_string (&v, profile);
+              gst_value_list_append_and_take_value (&va, &v);
             }
 
-            tmp2 = gst_structure_copy (tmp);
-            gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
-
-            have_profile = TRUE;
+            gst_structure_take_value (tmp, "profile", &va);
           }
 
-          if (!have_profile) {
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
-          } else {
-            gst_structure_free (tmp);
-          }
+          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
         } else if (strcmp (type->mime, "audio/g711-alaw") == 0) {
           tmp = gst_structure_new ("audio/x-alaw",
               "rate", GST_TYPE_INT_RANGE, 1, G_MAXINT,
@@ -2269,6 +2396,13 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
     } else if (g_str_has_prefix (type->mime, "video/")) {
       if (raw_ret) {
         gint j;
+        GValue va = G_VALUE_INIT;
+        GValue v = G_VALUE_INIT;
+        /* There are multiple Android formats that map to these so
+         * let's make sure to only add them once */
+        gboolean added_i420 = FALSE, added_nv12 = FALSE;
+
+        g_value_init (&va, GST_TYPE_LIST);
 
         for (j = 0; j < type->n_color_formats; j++) {
           GstVideoFormat format;
@@ -2285,381 +2419,692 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
             GST_WARNING ("Unknown color format 0x%08x for codec %s",
                 type->color_formats[j], type->mime);
             continue;
+          } else if (format == GST_VIDEO_FORMAT_I420) {
+            if (added_i420)
+              continue;
+            added_i420 = TRUE;
+          } else if (format == GST_VIDEO_FORMAT_NV12) {
+            if (added_nv12)
+              continue;
+            added_nv12 = TRUE;
           }
 
-          tmp = gst_structure_new ("video/x-raw",
-              "format", G_TYPE_STRING, gst_video_format_to_string (format),
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, NULL);
-
-          raw_ret = gst_caps_merge_structure (raw_ret, tmp);
+          g_value_init (&v, G_TYPE_STRING);
+          g_value_set_static_string (&v, gst_video_format_to_string (format));
+          gst_value_list_append_and_take_value (&va, &v);
         }
+
+        tmp = gst_structure_new_empty ("video/x-raw");
+        gst_structure_take_value (tmp, "format", &va);
+        raw_ret =
+            gst_amc_codec_add_video_constraints_to_caps (type, raw_ret, tmp);
       }
 
       if (encoded_ret) {
         if (strcmp (type->mime, "video/mp4v-es") == 0
             || strcmp (type->mime, "video/mp43") == 0) {
           gint j;
-          gboolean have_profile_level = FALSE;
 
           tmp = gst_structure_new ("video/mpeg",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, "mpegversion",
+              "mpegversion",
               G_TYPE_INT, 4, "systemstream", G_TYPE_BOOLEAN, FALSE, "parsed",
               G_TYPE_BOOLEAN, TRUE, NULL);
 
           if (type->n_profile_levels) {
-            for (j = type->n_profile_levels - 1; j >= 0; j--) {
-              const gchar *profile;
-
-              profile =
-                  gst_amc_mpeg4_profile_to_string (type->profile_levels[j].
-                  profile);
-              if (!profile) {
-                GST_ERROR ("Unable to map MPEG4 profile 0x%08x",
-                    type->profile_levels[j].profile);
-                continue;
+            gboolean all_same_level = TRUE;
+            for (j = 1; j < type->n_profile_levels; j++) {
+              if (type->profile_levels[j - 1].level !=
+                  type->profile_levels[j].level) {
+                all_same_level = FALSE;
+                break;
               }
+            }
 
-              tmp2 = gst_structure_copy (tmp);
-              gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
+            if (all_same_level || !codec_info->is_encoder) {
+              GValue va = G_VALUE_INIT;
+              GValue va2 = G_VALUE_INIT;
+              GValue v = G_VALUE_INIT;
 
-              /* Don't put the level restrictions on the sinkpad caps for decoders,
-               * see 2b94641a4 */
-              if (codec_info->is_encoder) {
-                gint k;
-                GValue va = G_VALUE_INIT;
+              g_value_init (&va, GST_TYPE_LIST);
+              g_value_init (&va2, GST_TYPE_LIST);
 
-                g_value_init (&va, GST_TYPE_LIST);
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile;
 
-                for (k = 1; k <= type->profile_levels[j].level && k != 0;
-                    k <<= 1) {
-                  const gchar *level;
-                  GValue v = G_VALUE_INIT;
-
-                  level = gst_amc_mpeg4_level_to_string (k);
-                  if (!level)
-                    continue;
-
-                  g_value_init (&v, G_TYPE_STRING);
-                  g_value_set_static_string (&v, level);
-                  gst_value_list_append_and_take_value (&va, &v);
+                profile =
+                    gst_amc_mpeg4_profile_to_string (type->profile_levels[j].
+                    profile);
+                if (!profile) {
+                  GST_ERROR ("Unable to map MPEG4 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
                 }
 
-                gst_structure_take_value (tmp2, "level", &va);
+                g_value_init (&v, G_TYPE_STRING);
+                g_value_set_static_string (&v, profile);
+                gst_value_list_append_and_take_value (&va, &v);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder
+                    && gst_value_list_get_size (&va2) == 0) {
+                  gint k;
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+
+                    level = gst_amc_mpeg4_level_to_string (k);
+                    if (!level)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+                }
               }
 
-              encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
-              have_profile_level = TRUE;
-            }
-          }
+              gst_structure_take_value (tmp, "profile", &va);
+              if (!codec_info->is_encoder
+                  || gst_value_list_get_size (&va2) == 0) {
+                g_value_unset (&va2);
+              } else {
+                gst_structure_take_value (tmp, "level", &va2);
+              }
 
-          if (!have_profile_level) {
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+              encoded_ret =
+                  gst_amc_codec_add_video_constraints_to_caps (type,
+                  encoded_ret, tmp);
+            } else {
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile;
+
+                profile =
+                    gst_amc_mpeg4_profile_to_string (type->profile_levels[j].
+                    profile);
+                if (!profile) {
+                  GST_ERROR ("Unable to map MPEG4 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                tmp2 = gst_structure_copy (tmp);
+                gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile,
+                    NULL);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder) {
+                  GValue v = G_VALUE_INIT;
+                  GValue va2 = G_VALUE_INIT;
+                  gint k;
+
+                  g_value_init (&va2, GST_TYPE_LIST);
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+
+                    level = gst_amc_mpeg4_level_to_string (k);
+                    if (!level)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+
+                  if (gst_value_list_get_size (&va2) == 0)
+                    g_value_unset (&va2);
+                  else
+                    gst_structure_take_value (tmp2, "level", &va2);
+                }
+
+                encoded_ret =
+                    gst_amc_codec_add_video_constraints_to_caps (type,
+                    encoded_ret, tmp2);
+              }
+
+              gst_structure_free (tmp);
+            }
           } else {
-            gst_structure_free (tmp);
+            encoded_ret =
+                gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+                tmp);
           }
 
           tmp = gst_structure_new ("video/x-divx",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1,
               "divxversion", GST_TYPE_INT_RANGE, 3, 5,
               "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/3gpp") == 0) {
           gint j;
-          gboolean have_profile_level = FALSE;
 
           tmp = gst_structure_new ("video/x-h263",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, "parsed",
+              "parsed",
               G_TYPE_BOOLEAN, TRUE, "variant", G_TYPE_STRING, "itu", NULL);
 
           if (type->n_profile_levels) {
-            for (j = type->n_profile_levels - 1; j >= 0; j--) {
-              gint profile;
-
-              profile =
-                  gst_amc_h263_profile_to_gst_id (type->profile_levels[j].
-                  profile);
-
-              if (profile == -1) {
-                GST_ERROR ("Unable to map h263 profile 0x%08x",
-                    type->profile_levels[j].profile);
-                continue;
+            gboolean all_same_level = TRUE;
+            for (j = 1; j < type->n_profile_levels; j++) {
+              if (type->profile_levels[j - 1].level !=
+                  type->profile_levels[j].level) {
+                all_same_level = FALSE;
+                break;
               }
+            }
 
-              tmp2 = gst_structure_copy (tmp);
-              gst_structure_set (tmp2, "profile", G_TYPE_UINT, profile, NULL);
+            if (all_same_level || !codec_info->is_encoder) {
+              GValue va = G_VALUE_INIT;
+              GValue va2 = G_VALUE_INIT;
+              GValue v = G_VALUE_INIT;
 
-              if (codec_info->is_encoder) {
-                gint k;
-                gint level;
-                GValue va = G_VALUE_INIT;
+              g_value_init (&va, GST_TYPE_LIST);
+              g_value_init (&va2, GST_TYPE_LIST);
 
-                g_value_init (&va, GST_TYPE_LIST);
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                gint profile;
 
-                for (k = 1; k <= type->profile_levels[j].level && k != 0;
-                    k <<= 1) {
-                  GValue v = G_VALUE_INIT;
+                profile =
+                    gst_amc_h263_profile_to_gst_id (type->profile_levels[j].
+                    profile);
 
-                  level = gst_amc_h263_level_to_gst_id (k);
-                  if (level == -1)
-                    continue;
-
-                  g_value_init (&v, G_TYPE_UINT);
-                  g_value_set_uint (&v, level);
-                  gst_value_list_append_and_take_value (&va, &v);
+                if (profile == -1) {
+                  GST_ERROR ("Unable to map h263 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
                 }
 
-                gst_structure_take_value (tmp2, "level", &va);
+                g_value_init (&v, G_TYPE_UINT);
+                g_value_set_uint (&v, profile);
+                gst_value_list_append_and_take_value (&va, &v);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder
+                    && gst_value_list_get_size (&va2) == 0) {
+                  gint k;
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    gint level;
+
+                    level = gst_amc_h263_level_to_gst_id (k);
+                    if (level == -1)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_UINT);
+                    g_value_set_uint (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+                }
               }
 
-              encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
-              have_profile_level = TRUE;
-            }
-          }
+              gst_structure_take_value (tmp, "profile", &va);
+              if (!codec_info->is_encoder
+                  || gst_value_list_get_size (&va2) == 0) {
+                g_value_unset (&va2);
+              } else {
+                gst_structure_take_value (tmp, "level", &va2);
+              }
 
-          if (!have_profile_level) {
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+              encoded_ret =
+                  gst_amc_codec_add_video_constraints_to_caps (type,
+                  encoded_ret, tmp);
+            } else {
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                gint profile;
+
+                profile =
+                    gst_amc_h263_profile_to_gst_id (type->profile_levels[j].
+                    profile);
+
+                if (profile == -1) {
+                  GST_ERROR ("Unable to map h263 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                tmp2 = gst_structure_copy (tmp);
+                gst_structure_set (tmp2, "profile", G_TYPE_UINT, profile, NULL);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder) {
+                  GValue v = G_VALUE_INIT;
+                  GValue va2 = G_VALUE_INIT;
+                  gint k;
+
+                  g_value_init (&va2, GST_TYPE_LIST);
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    gint level;
+
+                    level = gst_amc_h263_level_to_gst_id (k);
+                    if (level == -1)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_UINT);
+                    g_value_set_uint (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+
+                  if (gst_value_list_get_size (&va2) == 0)
+                    g_value_unset (&va2);
+                  else
+                    gst_structure_take_value (tmp2, "level", &va2);
+                }
+
+                encoded_ret =
+                    gst_amc_codec_add_video_constraints_to_caps (type,
+                    encoded_ret, tmp2);
+              }
+
+              gst_structure_free (tmp);
+            }
           } else {
-            gst_structure_free (tmp);
+            encoded_ret =
+                gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+                tmp);
           }
         } else if (strcmp (type->mime, "video/avc") == 0) {
           gint j;
-          gboolean have_profile_level = FALSE;
-          gboolean have_baseline_profile = FALSE;
-          gboolean have_constrained_baseline_profile = FALSE;
 
           tmp = gst_structure_new ("video/x-h264",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, "parsed",
+              "parsed",
               G_TYPE_BOOLEAN, TRUE, "stream-format", G_TYPE_STRING,
               "byte-stream", "alignment", G_TYPE_STRING, "au", NULL);
 
           if (type->n_profile_levels) {
-            for (j = type->n_profile_levels - 1; j >= 0; j--) {
-              const gchar *profile, *alternative = NULL;
+            gboolean all_same_level = TRUE;
+            gboolean have_constrained_baseline_profile = FALSE;
 
-              profile =
-                  gst_amc_avc_profile_to_string (type->profile_levels[j].
-                  profile, &alternative);
-
-              if (!profile) {
-                GST_ERROR ("Unable to map H264 profile 0x%08x",
-                    type->profile_levels[j].profile);
-                continue;
+            for (j = 1; j < type->n_profile_levels; j++) {
+              if (type->profile_levels[j - 1].level !=
+                  type->profile_levels[j].level) {
+                all_same_level = FALSE;
               }
+            }
 
+            for (j = 0; j < type->n_profile_levels; j++) {
               if (type->profile_levels[j].profile ==
-                  AVCProfileConstrainedBaseline)
+                  AVCProfileConstrainedBaseline) {
                 have_constrained_baseline_profile = TRUE;
-              else if (type->profile_levels[j].profile == AVCProfileBaseline)
-                have_baseline_profile = TRUE;
-
-              tmp2 = gst_structure_copy (tmp);
-              gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
-
-              if (alternative) {
-                tmp3 = gst_structure_copy (tmp);
-                gst_structure_set (tmp3, "profile", G_TYPE_STRING, alternative,
-                    NULL);
-              } else {
-                tmp3 = NULL;
+                break;
               }
+            }
 
-              if (codec_info->is_encoder) {
-                gint k;
-                GValue va = G_VALUE_INIT;
+            if (all_same_level || !codec_info->is_encoder) {
+              GValue va = G_VALUE_INIT;
+              GValue va2 = G_VALUE_INIT;
+              GValue v = G_VALUE_INIT;
 
-                g_value_init (&va, GST_TYPE_LIST);
-                for (k = 1; k <= type->profile_levels[j].level && k != 0;
-                    k <<= 1) {
-                  const gchar *level;
-                  GValue v = G_VALUE_INIT;
+              g_value_init (&va, GST_TYPE_LIST);
+              g_value_init (&va2, GST_TYPE_LIST);
 
-                  level = gst_amc_avc_level_to_string (k);
-                  if (!level)
-                    continue;
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile, *alternative = NULL;
 
+                profile =
+                    gst_amc_avc_profile_to_string (type->profile_levels[j].
+                    profile, &alternative);
+
+                if (!profile) {
+                  GST_ERROR ("Unable to map H264 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                g_value_init (&v, G_TYPE_STRING);
+                g_value_set_static_string (&v, profile);
+                gst_value_list_append_and_take_value (&va, &v);
+
+                if (alternative) {
                   g_value_init (&v, G_TYPE_STRING);
-                  g_value_set_static_string (&v, level);
+                  g_value_set_static_string (&v, alternative);
                   gst_value_list_append_and_take_value (&va, &v);
                 }
 
-                if (tmp3)
-                  gst_structure_set_value (tmp3, "level", &va);
-                gst_structure_take_value (tmp2, "level", &va);
+                if (type->profile_levels[j].profile == AVCProfileBaseline
+                    && !have_constrained_baseline_profile) {
+                  g_value_init (&v, G_TYPE_STRING);
+                  g_value_set_static_string (&v, "constrained-baseline");
+                  gst_value_list_append_and_take_value (&va, &v);
+                }
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder
+                    && gst_value_list_get_size (&va2) == 0) {
+                  gint k;
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+
+                    level = gst_amc_avc_level_to_string (k);
+                    if (!level)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+                }
               }
 
-              encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
-              if (tmp3)
-                encoded_ret = gst_caps_merge_structure (encoded_ret, tmp3);
-              have_profile_level = TRUE;
-            }
-          }
+              gst_structure_take_value (tmp, "profile", &va);
+              if (!codec_info->is_encoder
+                  || gst_value_list_get_size (&va2) == 0) {
+                g_value_unset (&va2);
+              } else {
+                gst_structure_take_value (tmp, "level", &va2);
+              }
 
-          if (!have_profile_level) {
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
-          } else {
-            if (have_baseline_profile && !have_constrained_baseline_profile) {
-              tmp2 = gst_structure_copy (tmp);
-              gst_structure_set (tmp2, "profile", G_TYPE_STRING,
-                  "constrained-baseline", NULL);
-              encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
+              encoded_ret =
+                  gst_amc_codec_add_video_constraints_to_caps (type,
+                  encoded_ret, tmp);
+            } else {
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile, *alternative;
+
+                profile =
+                    gst_amc_avc_profile_to_string (type->profile_levels[j].
+                    profile, &alternative);
+                if (!profile) {
+                  GST_ERROR ("Unable to map H264 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                if (alternative
+                    || (type->profile_levels[j].profile == AVCProfileBaseline
+                        && !have_constrained_baseline_profile)
+                    ) {
+                  GValue v = G_VALUE_INIT;
+                  GValue va = G_VALUE_INIT;
+
+                  g_value_init (&va, GST_TYPE_LIST);
+                  g_value_init (&v, G_TYPE_STRING);
+                  g_value_set_static_string (&v, profile);
+                  gst_value_list_append_and_take_value (&va, &v);
+
+                  if (alternative) {
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, alternative);
+                    gst_value_list_append_and_take_value (&va, &v);
+                  }
+
+                  if (type->profile_levels[j].profile == AVCProfileBaseline
+                      && !have_constrained_baseline_profile) {
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, "constrained-baseline");
+                    gst_value_list_append_and_take_value (&va, &v);
+                  }
+
+                  tmp2 = gst_structure_copy (tmp);
+                  gst_structure_take_value (tmp2, "profile", &va);
+                } else {
+                  tmp2 = gst_structure_copy (tmp);
+                  gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile,
+                      NULL);
+                }
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder) {
+                  GValue v = G_VALUE_INIT;
+                  GValue va2 = G_VALUE_INIT;
+                  gint k;
+
+                  g_value_init (&va2, GST_TYPE_LIST);
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+
+                    level = gst_amc_avc_level_to_string (k);
+                    if (!level)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                  }
+
+                  if (gst_value_list_get_size (&va2) == 0)
+                    g_value_unset (&va2);
+                  else
+                    gst_structure_take_value (tmp2, "level", &va2);
+                }
+
+                encoded_ret =
+                    gst_amc_codec_add_video_constraints_to_caps (type,
+                    encoded_ret, tmp2);
+              }
+
+              gst_structure_free (tmp);
             }
-            gst_structure_free (tmp);
+          } else {
+            encoded_ret =
+                gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+                tmp);
           }
         } else if (strcmp (type->mime, "video/hevc") == 0) {
           gint j;
-          gboolean have_profile_level = FALSE;
 
           tmp = gst_structure_new ("video/x-h265",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, "parsed",
+              "parsed",
               G_TYPE_BOOLEAN, TRUE, "stream-format", G_TYPE_STRING,
               "byte-stream", "alignment", G_TYPE_STRING, "au", NULL);
 
           if (type->n_profile_levels) {
-            for (j = type->n_profile_levels - 1; j >= 0; j--) {
-              const gchar *profile;
+            gboolean all_same_level = TRUE;
 
-              profile =
-                  gst_amc_hevc_profile_to_string (type->profile_levels[j].
-                  profile);
-
-              if (!profile) {
-                GST_ERROR ("Unable to map H265 profile 0x%08x",
-                    type->profile_levels[j].profile);
-                continue;
-              }
-
-              tmp2 = gst_structure_copy (tmp);
-              gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile, NULL);
-
-              if (codec_info->is_encoder) {
-                gint k;
-
-                for (k = 1; k <= type->profile_levels[j].level && k != 0;
-                    k <<= 1) {
-                  const gchar *level, *tier;
-                  GValue v = G_VALUE_INIT;
-
-                  level = gst_amc_hevc_tier_level_to_string (k, &tier);
-                  if (!level || !tier)
-                    continue;
-
-                  tmp3 = gst_structure_copy (tmp2);
-
-                  g_value_init (&v, G_TYPE_STRING);
-                  g_value_set_static_string (&v, tier);
-                  gst_structure_take_value (tmp3, "tier", &v);
-
-                  g_value_init (&v, G_TYPE_STRING);
-                  g_value_set_static_string (&v, level);
-                  gst_structure_take_value (tmp3, "level", &v);
-
-                  encoded_ret = gst_caps_merge_structure (encoded_ret, tmp3);
-                  have_profile_level = TRUE;
-                }
-                gst_structure_free (tmp2);
-              } else {
-                encoded_ret = gst_caps_merge_structure (encoded_ret, tmp2);
-                have_profile_level = TRUE;
+            for (j = 1; j < type->n_profile_levels; j++) {
+              if (type->profile_levels[j - 1].level !=
+                  type->profile_levels[j].level) {
+                all_same_level = FALSE;
+                break;
               }
             }
-          }
 
-          if (!have_profile_level) {
-            encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+            if (all_same_level || !codec_info->is_encoder) {
+              GValue va = G_VALUE_INIT;
+              GValue va2 = G_VALUE_INIT;
+              GValue va3 = G_VALUE_INIT;
+              GValue v = G_VALUE_INIT;
+
+              g_value_init (&va, GST_TYPE_LIST);
+              g_value_init (&va2, GST_TYPE_LIST);
+              g_value_init (&va3, GST_TYPE_LIST);
+
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile;
+
+                profile =
+                    gst_amc_hevc_profile_to_string (type->profile_levels[j].
+                    profile);
+                if (!profile) {
+                  GST_ERROR ("Unable to map H265 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                g_value_init (&v, G_TYPE_STRING);
+                g_value_set_static_string (&v, profile);
+                gst_value_list_append_and_take_value (&va, &v);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder
+                    && gst_value_list_get_size (&va2) == 0) {
+                  gint k;
+
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+                    const gchar *tier;
+
+                    level = gst_amc_hevc_tier_level_to_string (k, &tier);
+                    if (!level || !tier)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, tier);
+                    gst_value_list_append_and_take_value (&va3, &v);
+                  }
+                }
+              }
+
+              gst_structure_take_value (tmp, "profile", &va);
+              if (!codec_info->is_encoder
+                  || gst_value_list_get_size (&va2) == 0) {
+                g_value_unset (&va2);
+              } else {
+                gst_structure_take_value (tmp, "level", &va2);
+              }
+              if (!codec_info->is_encoder
+                  || gst_value_list_get_size (&va3) == 0) {
+                g_value_unset (&va3);
+              } else {
+                gst_structure_take_value (tmp, "tier", &va3);
+              }
+
+              encoded_ret =
+                  gst_amc_codec_add_video_constraints_to_caps (type,
+                  encoded_ret, tmp);
+            } else {
+              for (j = type->n_profile_levels - 1; j >= 0; j--) {
+                const gchar *profile;
+
+                profile =
+                    gst_amc_hevc_profile_to_string (type->profile_levels[j].
+                    profile);
+                if (!profile) {
+                  GST_ERROR ("Unable to map H265 profile 0x%08x",
+                      type->profile_levels[j].profile);
+                  continue;
+                }
+
+                tmp2 = gst_structure_copy (tmp);
+                gst_structure_set (tmp2, "profile", G_TYPE_STRING, profile,
+                    NULL);
+
+                /* Don't put the level restrictions on the sinkpad caps for decoders,
+                 * see 2b94641a4 */
+                if (codec_info->is_encoder) {
+                  GValue v = G_VALUE_INIT;
+                  GValue va2 = G_VALUE_INIT;
+                  GValue va3 = G_VALUE_INIT;
+                  gint k;
+
+                  g_value_init (&va2, GST_TYPE_LIST);
+                  g_value_init (&va3, GST_TYPE_LIST);
+                  for (k = 1; k <= type->profile_levels[j].level && k != 0;
+                      k <<= 1) {
+                    const gchar *level;
+                    const gchar *tier;
+
+                    level = gst_amc_hevc_tier_level_to_string (k, &tier);
+                    if (!level || !tier)
+                      continue;
+
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, level);
+                    gst_value_list_append_and_take_value (&va2, &v);
+                    g_value_init (&v, G_TYPE_STRING);
+                    g_value_set_static_string (&v, tier);
+                    gst_value_list_append_and_take_value (&va3, &v);
+                  }
+
+                  if (gst_value_list_get_size (&va2) == 0)
+                    g_value_unset (&va2);
+                  else
+                    gst_structure_take_value (tmp2, "level", &va2);
+                  if (gst_value_list_get_size (&va3) == 0)
+                    g_value_unset (&va3);
+                  else
+                    gst_structure_take_value (tmp2, "tier", &va3);
+                }
+
+                encoded_ret =
+                    gst_amc_codec_add_video_constraints_to_caps (type,
+                    encoded_ret, tmp2);
+              }
+
+              gst_structure_free (tmp);
+            }
           } else {
-            gst_structure_free (tmp);
+            encoded_ret =
+                gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+                tmp);
           }
         } else if (strcmp (type->mime, "video/x-vnd.on2.vp8") == 0) {
-          tmp = gst_structure_new ("video/x-vp8",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, NULL);
+          tmp = gst_structure_new_empty ("video/x-vp8");
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/x-vnd.on2.vp9") == 0) {
-          tmp = gst_structure_new ("video/x-vp9",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, NULL);
+          tmp = gst_structure_new_empty ("video/x-vp9");
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/av01") == 0) {
           tmp = gst_structure_new ("video/x-av1",
               "stream-format", G_TYPE_STRING, "obu-stream",
-              "alignment", G_TYPE_STRING, "tu",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, NULL);
+              "alignment", G_TYPE_STRING, "tu", NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/mpeg2") == 0) {
           tmp = gst_structure_new ("video/mpeg",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1, "mpegversion",
+              "mpegversion",
               GST_TYPE_INT_RANGE, 1, 2, "systemstream", G_TYPE_BOOLEAN, FALSE,
               "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/wvc1") == 0) {
           tmp = gst_structure_new ("video/x-wmv",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1,
               "format", G_TYPE_STRING, "WVC1", NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/x-ms-wmv") == 0) {
           tmp = gst_structure_new ("video/x-wmv",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1,
               "format", G_TYPE_STRING, "WMV3",
               "wmvversion", G_TYPE_INT, 3, NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/x-ms-wmv8") == 0) {
           tmp = gst_structure_new ("video/x-wmv",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1,
               "wmvversion", G_TYPE_INT, 2, NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else if (strcmp (type->mime, "video/x-ms-wmv7") == 0) {
           tmp = gst_structure_new ("video/x-wmv",
-              "width", GST_TYPE_INT_RANGE, type->width.lower, type->width.upper,
-              "height", GST_TYPE_INT_RANGE, type->height.lower,
-              type->height.upper, "framerate", GST_TYPE_FRACTION_RANGE,
-              type->framerate.lower, 1, type->framerate.upper, 1,
               "wmvversion", G_TYPE_INT, 1, NULL);
 
-          encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
+          encoded_ret =
+              gst_amc_codec_add_video_constraints_to_caps (type, encoded_ret,
+              tmp);
         } else {
           GST_WARNING ("Unsupported mimetype '%s'", type->mime);
         }
