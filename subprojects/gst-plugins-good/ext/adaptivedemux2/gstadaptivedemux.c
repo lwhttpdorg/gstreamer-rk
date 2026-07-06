@@ -923,6 +923,7 @@ gst_adaptive_demux_update_collection (GstAdaptiveDemux * demux,
 {
   GstStreamCollection *collection;
   GList *iter;
+  GstAdaptiveDemuxClass *demux_class = GST_ADAPTIVE_DEMUX_GET_CLASS (demux);
 
   GST_DEBUG_OBJECT (demux, "tracks_changed : %d", period->tracks_changed);
 
@@ -941,6 +942,11 @@ gst_adaptive_demux_update_collection (GstAdaptiveDemux * demux,
         "Streams still have pending tracks, not creating/updating collection");
     return FALSE;
   }
+
+  /* Give the subclass a chance to register variant streams before building
+   * the collection */
+  if (demux_class->register_variants)
+    demux_class->register_variants (demux);
 
   /* Update collection */
   collection = gst_stream_collection_new ("adaptivedemux");

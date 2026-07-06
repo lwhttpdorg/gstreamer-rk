@@ -445,6 +445,15 @@ struct _GstAdaptiveDemuxClass
    * Return: %TRUE if the playlist needs to be refreshed periodically by the demuxer.
    */
   gboolean (*requires_periodical_playlist_update) (GstAdaptiveDemux * demux);
+
+  /**
+   * register_variants:
+   * @demux: #GstAdaptiveDemux
+   *
+   * Called before the stream collection is built to give the subclass
+   * a chance to register GstStream variants on parent tracks.
+   */
+  void (*register_variants) (GstAdaptiveDemux * demux);
 };
 
 GType    gst_adaptive_demux_ng_get_type (void);

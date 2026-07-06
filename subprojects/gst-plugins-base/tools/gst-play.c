@@ -726,6 +726,46 @@ play_bus_msg (GstBus * bus, GstMessage * msg, gpointer user_data)
           gst_object_unref (play->collection);
         play->collection = collection;
         g_mutex_unlock (&play->selection_lock);
+
+        /* Print variant info */
+        {
+          guint len = gst_stream_collection_get_size (collection);
+          guint i;
+          for (i = 0; i < len; i++) {
+            GstStream *stream = gst_stream_collection_get_stream (collection, i);
+            if (stream && gst_stream_has_variants (stream)) {
+              guint nb = gst_stream_get_nb_variants (stream);
+              const gchar *sid = gst_stream_get_stream_id (stream);
+              /* Extract just the stream-id suffix for readability */
+              const gchar *label = g_strrstr (sid, "/");
+              label = label ? label + 1 : sid;
+              gst_print ("Stream '%s' has %u variant%s\n",
+                  label, nb, nb == 1 ? "" : "s");
+              guint j;
+              for (j = 0; j < nb; j++) {
+                GstStream *variant = gst_stream_get_nth_variant (stream, j);
+                if (variant) {
+                  const gchar *vsid = gst_stream_get_stream_id (variant);
+                  const gchar *vlabel = g_strrstr (vsid, "/");
+                  vlabel = vlabel ? vlabel + 1 : vsid;
+                  GstCaps *caps = gst_stream_get_caps (variant);
+                  gst_print ("  [%u] %s", j, vlabel);
+                  if (caps) {
+                    gint w = 0, h = 0;
+                    if (gst_structure_get_int (gst_caps_get_structure (caps, 0),
+                            "width", &w) &&
+                        gst_structure_get_int (gst_caps_get_structure (caps, 0),
+                            "height", &h)) {
+                      gst_print (" (%dx%d)", w, h);
+                    }
+                    gst_caps_unref (caps);
+                  }
+                  gst_print ("\n");
+                }
+              }
+            }
+          }
+        }
       }
       break;
     }

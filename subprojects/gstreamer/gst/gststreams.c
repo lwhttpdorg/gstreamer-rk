@@ -29,11 +29,13 @@
  * @title: GstStreams
  * @short_description: Base class for stream objects
  *
- * A #GstStream is a high-level object defining a stream of data which is, or
- * can be, present in a #GstPipeline.
+ * A #GstStream is a high-level object defining a stream (or "logical content")
+ * of data which may or may not be backed by an actual flow on a #GstPad.
  *
- * It is defined by a unique identifier, a "Stream ID". A #GstStream does not
- * automatically imply the stream is present within a pipeline or element.
+ * Stream IDs follow demuxer conventions: "input" for a parent and
+ * "input:video", "input:audio_1" for elementary streams. Variants use the same
+ * pattern with ":" as separator (e.g. "input:video", "input:video:320",
+ * "input:video:1080").
  *
  * Any element that can introduce new streams in a pipeline should create the
  * appropriate #GstStream object, and can convey that object via the
@@ -61,6 +63,7 @@ struct _GstStreamPrivate
   GstStreamType type;
   GstTagList *tags;
   GstCaps *caps;
+  GPtrArray *variant_streams;   /* (element-type GstStream) */
 };
 
 /* stream signals and properties */
@@ -190,6 +193,9 @@ gst_stream_finalize (GObject * object)
   gst_mini_object_replace ((GstMiniObject **) & stream->priv->tags,
       (GstMiniObject *) NULL);
   gst_caps_replace (&stream->priv->caps, NULL);
+  if (stream->priv->variant_streams) {
+    g_ptr_array_unref (stream->priv->variant_streams);
+  }
   g_free ((gchar *) stream->stream_id);
   stream->stream_id = NULL;
 
@@ -600,4 +606,141 @@ gst_stream_type_get_name (GstStreamType stype)
   }
 
   g_return_val_if_reached ("invalid");
+}
+
+/**
+ * gst_stream_has_variants:
+ * @stream: a #GstStream
+ *
+ * Check whether @stream has any variant streams attached to it. A stream with
+ * variants means that the specific content is one of the variant streams which
+ * may change at runtime.
+ *
+ * Returns: %TRUE if @stream has variants, %FALSE otherwise.
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_stream_has_variants (GstStream * stream)
+{
+  return gst_stream_get_nb_variants (stream) != 0;
+}
+
+/**
+ * gst_stream_get_nb_variants:
+ * @stream: a #GstStream
+ *
+ * Returns the number of variant streams attached to @stream.
+ *
+ * Returns: the number of variants.
+ *
+ * Since: 1.30
+ */
+guint
+gst_stream_get_nb_variants (GstStream * stream)
+{
+  g_return_val_if_fail (GST_IS_STREAM (stream), 0);
+
+  guint res;
+  GST_OBJECT_LOCK (stream);
+  res = stream->priv->variant_streams ? stream->priv->variant_streams->len : 0;
+  GST_OBJECT_UNLOCK (stream);
+  return res;
+}
+
+/**
+ * gst_stream_get_nth_variant:
+ * @stream: a #GstStream
+ * @nth: the index of the variant to retrieve
+ *
+ * Returns the variant stream at position @nth. The returned entry is unowned;
+ * it remains valid only as long as @stream exists.
+ *
+ * Returns: (transfer none): the variant at @nth, or %NULL if @nth is out of
+ *   range.
+ *
+ * Since: 1.30
+ */
+GstStream *
+gst_stream_get_nth_variant (GstStream * stream, guint nth)
+{
+  g_return_val_if_fail (GST_IS_STREAM (stream), NULL);
+
+  GstStream *res;
+  GST_OBJECT_LOCK (stream);
+  if (stream->priv->variant_streams && nth < stream->priv->variant_streams->len) {
+    res = (GstStream *) stream->priv->variant_streams->pdata[nth];
+  } else {
+    res = NULL;
+  }
+  GST_OBJECT_UNLOCK (stream);
+  return res;
+}
+
+/**
+ * gst_stream_add_variant:
+ * @stream: a #GstStream
+ * @variant: (transfer full): a variant #GstStream representing
+ *   the same logical content as @stream (e.g., a lower-resolution variant of
+ *   the same video).
+ *
+ * Attaches @variant as one of the alternatives that can be selected instead
+ * of @stream's default selection.
+ *
+ * By convention, the variant's stream-id follows the format
+ * "<parent-stream-id>:<suffix>" (e.g. parent "video", variants
+ * "video:320", "video:1080"). This mirrors the demuxer convention where
+ * individual elementary streams are named by appending ":<number>" to the
+ * parent stream-id, e.g. "input" → "input:0", "input:1".
+ *
+ * Since: 1.30
+ */
+void
+gst_stream_add_variant (GstStream * stream, GstStream * variant)
+{
+  g_return_if_fail (GST_IS_STREAM (stream));
+  g_return_if_fail (GST_IS_STREAM (variant));
+
+  GST_OBJECT_LOCK (stream);
+  if (!stream->priv->variant_streams) {
+    stream->priv->variant_streams = g_ptr_array_new_with_free_func
+        ((GDestroyNotify) gst_object_unref);
+  }
+  /* Add variant to array; caller's ref is consumed by GDestroyNotify on free */
+  g_ptr_array_add (stream->priv->variant_streams, variant);
+  GST_OBJECT_UNLOCK (stream);
+}
+
+/**
+ * gst_stream_id_has_parent:
+ * @stream_id: a stream-id to check
+ * @parent_stream_id: the expected parent's stream-id
+ *
+ * Checks whether @stream_id follows the naming convention of being a variant
+ * of @parent_stream_id, namely "<parent-stream-id>:<suffix>" where ":" is
+ * the separator (e.g. "video:320" and "video:1080" are variants of "video").
+ *
+ * This mirrors the demuxer convention where individual elementary streams
+ * are named by appending a colon and unique suffix to the parent stream-id,
+ * e.g. "input" → "input:0", "input:1".
+ *
+ * This function only checks ID patterns — it does not verify that the two
+ * streams actually share a parent-child relationship through the API. Use
+ * this as a sanity check when parsing DASH/HLS manifests to validate that
+ * variant stream-ids reference their parent correctly before calling
+ * {@link gst_stream_add_variant}.
+ *
+ * Returns: %TRUE if @stream_id starts with @parent_stream_id followed by ":".
+ *
+ * Since: 1.30
+ */
+gboolean
+gst_stream_id_has_parent (const gchar * stream_id,
+    const gchar * parent_stream_id)
+{
+  g_return_val_if_fail (stream_id != NULL && stream_id[0] != '\0', FALSE);
+  g_return_val_if_fail (parent_stream_id != NULL
+      && parent_stream_id[0] != '\0', FALSE);
+
+  return g_str_has_prefix (stream_id, parent_stream_id);
 }

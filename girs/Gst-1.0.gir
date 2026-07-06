@@ -44821,8 +44821,10 @@ on the returned caps to modify it.</doc>
       </method>
     </record>
     <class name="Stream" c:symbol-prefix="stream" c:type="GstStream" version="1.10" parent="Object" glib:type-name="GstStream" glib:get-type="gst_stream_get_type" glib:type-struct="StreamClass">
-      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.h">A high-level object representing a single stream. It might be backed, or
-not, by an actual flow of data in a pipeline (#GstPad).
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.h">A high-level object representing a single stream (or "logical content") that
+can be present in a #GstPipeline. It might be backed by an actual flow of data
+on a #GstPad, or it may be a virtual/abstract stream not yet materialized as
+a pad (e.g. DASH/HLS variants awaiting selection).
 
 A #GstStream does not care about data changes (such as decoding, encoding,
 parsing,...) as long as the underlying data flow corresponds to the same
@@ -44832,7 +44834,22 @@ A #GstStream contains all the information pertinent to a stream, such as
 stream-id, tags, caps, type, ...
 
 Elements can subclass a #GstStream for internal usage (to contain information
-pertinent to streams of data).</doc>
+pertinent to streams of data).
+
+## Variants
+
+A #GstStream can have zero or more **variant** streams attached via
+`gst_stream_add_variant()`. Variants represent the same logical content at
+different qualities (bitrates, resolutions, languages) and are used for
+example for adaptive streaming (HLS/DASH). Variant stream-ids follow the
+convention "&lt;parent-stream-id&gt;:&lt;suffix&gt;" (e.g. "video" &#8594; "video:320",
+"video:1080"), mirroring demuxer elementary stream naming ("input" &#8594;
+"input:0", "input:1").
+
+Variants are independent #GstStream objects &#8212; they do NOT depend on the parent
+for decoding. Automatic systems (playbin3, decodebin3) use the **parent**
+stream-id in %GST_EVENT_STREAM_START and %GST_MESSAGE_SELECTED_STREAMS until
+a specific variant is explicitly selected by the application.</doc>
       <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
       <constructor name="new" c:identifier="gst_stream_new" version="1.10">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Create a new #GstStream for the given @stream_id, @caps, @type
@@ -44862,6 +44879,62 @@ a new one will be automatically generated</doc>
           </parameter>
         </parameters>
       </constructor>
+      <function name="id_has_parent" c:identifier="gst_stream_id_has_parent" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Checks whether @stream_id follows the naming convention of being a variant
+of @parent_stream_id, namely "&lt;parent-stream-id&gt;:&lt;suffix&gt;" where ":" is
+the separator (e.g. "video:320" and "video:1080" are variants of "video").
+
+This mirrors the demuxer convention where individual elementary streams
+are named by appending a colon and unique suffix to the parent stream-id,
+e.g. "input" &#8594; "input:0", "input:1".
+
+This function only checks ID patterns &#8212; it does not verify that the two
+streams actually share a parent-child relationship through the API. Use
+this as a sanity check when parsing DASH/HLS manifests to validate that
+variant stream-ids reference their parent correctly before calling
+{@link gst_stream_add_variant}.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">%TRUE if @stream_id starts with @parent_stream_id followed by ":".</doc>
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <parameter name="stream_id" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a stream-id to check</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="parent_stream_id" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the expected parent's stream-id</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+        </parameters>
+      </function>
+      <method name="add_variant" c:identifier="gst_stream_add_variant" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Attaches @variant as one of the alternatives that can be selected instead
+of @stream's default selection.
+
+By convention, the variant's stream-id follows the format
+"&lt;parent-stream-id&gt;:&lt;suffix&gt;" (e.g. parent "video", variants
+"video:320", "video:1080"). This mirrors the demuxer convention where
+individual elementary streams are named by appending ":&lt;number&gt;" to the
+parent stream-id, e.g. "input" &#8594; "input:0", "input:1".</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="stream" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstStream</doc>
+            <type name="Stream" c:type="GstStream*"/>
+          </instance-parameter>
+          <parameter name="variant" transfer-ownership="full">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a variant #GstStream representing
+  the same logical content as @stream (e.g., a lower-resolution variant of
+  the same video).</doc>
+            <type name="Stream" c:type="GstStream*"/>
+          </parameter>
+        </parameters>
+      </method>
       <method name="get_caps" c:identifier="gst_stream_get_caps" glib:get-property="caps" version="1.10">
         <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Retrieve the caps for @stream, if any</doc>
         <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
@@ -44874,6 +44947,40 @@ a new one will be automatically generated</doc>
             <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstStream</doc>
             <type name="Stream" c:type="GstStream*"/>
           </instance-parameter>
+        </parameters>
+      </method>
+      <method name="get_nb_variants" c:identifier="gst_stream_get_nb_variants" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Returns the number of variant streams attached to @stream.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the number of variants.</doc>
+          <type name="guint" c:type="guint"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="stream" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstStream</doc>
+            <type name="Stream" c:type="GstStream*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="get_nth_variant" c:identifier="gst_stream_get_nth_variant" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Returns the variant stream at position @nth. The returned entry is unowned;
+it remains valid only as long as @stream exists.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the variant at @nth, or %NULL if @nth is out of
+  range.</doc>
+          <type name="Stream" c:type="GstStream*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="stream" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstStream</doc>
+            <type name="Stream" c:type="GstStream*"/>
+          </instance-parameter>
+          <parameter name="nth" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">the index of the variant to retrieve</doc>
+            <type name="guint" c:type="guint"/>
+          </parameter>
         </parameters>
       </method>
       <method name="get_stream_flags" c:identifier="gst_stream_get_stream_flags" glib:get-property="stream-flags" version="1.10">
@@ -44925,6 +45032,22 @@ during the lifetime of @stream.</doc>
         <return-value transfer-ownership="full" nullable="1">
           <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">The #GstTagList for @stream</doc>
           <type name="TagList" c:type="GstTagList*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="stream" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">a #GstStream</doc>
+            <type name="Stream" c:type="GstStream*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <method name="has_variants" c:identifier="gst_stream_has_variants" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">Check whether @stream has any variant streams attached to it. A stream with
+variants means that the specific content is one of the variant streams which
+may change at runtime.</doc>
+        <source-position filename="../subprojects/gstreamer/gst/gststreams.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">%TRUE if @stream has variants, %FALSE otherwise.</doc>
+          <type name="gboolean" c:type="gboolean"/>
         </return-value>
         <parameters>
           <instance-parameter name="stream" transfer-ownership="none">
@@ -59000,11 +59123,13 @@ set their source pad caps according to the `original-media-type` received on
 their sink pad.</doc>
     </docsection>
     <docsection name="gststreams">
-      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">A #GstStream is a high-level object defining a stream of data which is, or
-can be, present in a #GstPipeline.
+      <doc xml:space="preserve" filename="../subprojects/gstreamer/gst/gststreams.c">A #GstStream is a high-level object defining a stream (or "logical content")
+of data which may or may not be backed by an actual flow on a #GstPad.
 
-It is defined by a unique identifier, a "Stream ID". A #GstStream does not
-automatically imply the stream is present within a pipeline or element.
+Stream IDs follow demuxer conventions: "input" for a parent and
+"input:video", "input:audio_1" for elementary streams. Variants use the same
+pattern with ":" as separator (e.g. "input:video", "input:video:320",
+"input:video:1080").
 
 Any element that can introduce new streams in a pipeline should create the
 appropriate #GstStream object, and can convey that object via the

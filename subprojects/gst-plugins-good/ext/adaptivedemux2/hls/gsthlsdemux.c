@@ -92,6 +92,7 @@ static GstClockTime gst_hls_demux_get_duration (GstAdaptiveDemux * demux);
 static gboolean gst_hls_demux_process_initial_manifest (GstAdaptiveDemux *
     demux, GstBuffer * buf);
 static GstFlowReturn gst_hls_demux_update_manifest (GstAdaptiveDemux * demux);
+static void gst_hls_demux_register_variants (GstAdaptiveDemux * demux);
 
 static void gst_hls_prune_time_mappings (GstHLSDemux * demux);
 
@@ -214,6 +215,7 @@ gst_hls_demux2_class_init (GstHLSDemux2Class * klass)
   adaptivedemux_class->reset = gst_hls_demux_reset;
   adaptivedemux_class->update_manifest = gst_hls_demux_update_manifest;
   adaptivedemux_class->seek = gst_hls_demux_seek;
+  adaptivedemux_class->register_variants = gst_hls_demux_register_variants;
 }
 
 static void
@@ -639,6 +641,69 @@ gst_hls_demux_setup_streams (GstAdaptiveDemux * demux)
   create_main_variant_stream (hlsdemux);
 
   return TRUE;
+}
+
+static void
+gst_hls_demux_register_variants (GstAdaptiveDemux * demux)
+{
+  GstHLSDemux *hlsdemux = GST_HLS_DEMUX_CAST (demux);
+  GstAdaptiveDemuxPeriod *period = demux->input_period;
+  GList *variants = hlsdemux->master->variants;
+  GList *tmp;
+
+  if (variants == NULL || variants->next == NULL)
+    return;                     /* Single-variant HLS, nothing to do */
+
+  GST_DEBUG_OBJECT (demux, "Registering HLS variants as GstStream variants");
+
+  /* For each track in the period, find the corresponding HLS variants and
+   * attach them as GstStream variants. */
+  for (tmp = period->tracks; tmp; tmp = tmp->next) {
+    GstAdaptiveDemuxTrack *track = tmp->data;
+    GstStream *parent = track->stream_object;
+
+    /* Only attach variants to tracks that have video or audio content */
+    if (!(track->type & (GST_STREAM_TYPE_VIDEO | GST_STREAM_TYPE_AUDIO)))
+      continue;
+
+    for (GList * v = variants; v; v = v->next) {
+      GstHLSVariantStream *variant = v->data;
+      GstStreamType variant_types = variant->codecs_stream_type;
+
+      /* Only attach variants that match the track's stream type */
+      if (!(variant_types & track->type))
+        continue;
+
+      /* Skip the currently active variant — it IS the parent */
+      if (variant == hlsdemux->current_variant)
+        continue;
+
+      /* Build variant stream-id: parent_id:bandwidth */
+      gchar *variant_id = g_strdup_printf ("%s:%d", track->stream_id,
+          variant->bandwidth);
+
+      /* Create caps from variant info */
+      GstCaps *caps = gst_caps_copy (variant->caps);
+      if (variant->width > 0 && variant->height > 0) {
+        gst_caps_set_simple (caps,
+            "width", G_TYPE_INT, variant->width,
+            "height", G_TYPE_INT, variant->height, NULL);
+      }
+
+      /* Create the variant GstStream */
+      GstStream *variant_stream =
+          gst_stream_new (variant_id, caps, track->type, track->flags);
+
+      /* Attach as variant of the parent. Caller keeps its ref, array also keeps one. */
+      gst_stream_add_variant (parent, variant_stream);
+
+      GST_DEBUG_OBJECT (demux, "Added variant '%s' (bw=%d) to parent '%s'",
+          variant_id, variant->bandwidth, track->stream_id);
+
+      /* Caller retains its own ref as documented */
+      g_free (variant_id);
+    }
+  }
 }
 
 static void

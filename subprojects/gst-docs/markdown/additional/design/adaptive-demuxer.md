@@ -135,8 +135,12 @@ The main components of the new adaptive demuxers are:
 
 ## Track(s) and Stream(s)
 
-Adaptive Demuxers provide one or more *Track* of elementary streams. They are
-each unique in terms of:
+Adaptive Demuxers provide one or more *Track* of elementary streams. Each track
+corresponds to a **parent** #GstStream added to the GstStreamCollection.
+Download streams (different quality levels) become **variant** streams attached
+to their parent track via {@link gst_stream_add_variant}.
+
+Tracks are each unique in terms of:
 
 * Their type (audio, video, text, ..). Ex : `GST_STREAM_TYPE_AUDIO`
 * Optional: Their codec. Ex : `video/x-h264`
@@ -200,6 +204,30 @@ Subclasses can also decide, before passing the downloaded data over, to:
 * rewrite the content altogether (for example webvtt fragments which require
   timing to be re-computed)
 
+
+### Relationship to GstStream variants
+
+The `GstAdaptiveDemuxTrack` concept maps directly to **parent** `GstStream`
+objects. Each track is added to a `GstStreamCollection` as a parent stream with
+a unique `stream_id` (e.g. "video", "audio-eng").
+
+Download streams (`GstAdaptiveDemuxStream`) that provide different qualities of
+the same track correspond to **variant** `GstStream` objects, attached via
+{@link gst_stream_add_variant}. For example:
+
+```
+Track "video" (parent GstStream):
+  ├── Variant "video:320"   (download stream → 320p fragment)
+  ├── Variant "video:720"   (download stream → 720p fragment)
+  └── Variant "video:1080"  (download stream → 1080p fragment)
+```
+
+The adaptive demuxer selects which variant to download based on bandwidth and
+buffering, but always exposes only the parent `GstStream` in events and messages.
+This allows downstream elements (decodebin3, playbin3) to operate at the logical
+content level without needing to understand quality variants.
+
+---
 
 ## Timeline, position, playout
 

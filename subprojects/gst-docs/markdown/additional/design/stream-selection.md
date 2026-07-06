@@ -20,7 +20,7 @@ Since 1.22:
 
 Initial version: June 2015 (Edward Hervey)
 
-Last reviewed: March 2022 (Edward Hervey)
+Last reviewed: March 2022 / May 2026 (Edward Hervey)
 
 
 ##  Background
@@ -99,6 +99,54 @@ This new API is *intended* to address the use cases described in this section:
    streams it can select, and only the required streams will be downloaded. This
    is independent of the bitrate selection mechanism.
 
+
+## Variants
+
+Variants are **virtual streams** that represent the same logical content at
+different qualities (bitrates, resolutions, languages). They enable adaptive
+streaming (HLS/DASH) without requiring separate `GstStream` entries in a
+collection for each quality level.
+
+### Naming convention
+
+Variant stream-ids follow the format `"<parent-stream-id>:<suffix>"`, using `:`
+as separator — mirroring demuxer elementary stream naming:
+
+```
+Parent:     "video"
+Variants:   "video:320",  "video:720",  "video:1080"
+```
+
+### How variants work
+
+1. A parent `GstStream` is created for each logical content track and added to
+   the `GstStreamCollection`.
+2. Variant streams are attached to their parent via `gst_stream_add_variant()`.
+3. Variants are **independent** — they do NOT depend on the parent (virtual)
+   stream being active for decoding.
+
+### Selection semantics
+
+- **Automatic systems** (playbin3, decodebin3) use the **parent** stream-id in
+  `GST_EVENT_STREAM_START`, `GST_EVENT_SELECT_STREAMS`, and
+  `GST_MESSAGE_SELECTED_STREAMS`.
+- The adaptive demuxer internally selects which variant to download/play based on
+  bandwidth, buffering, and user preferences.
+- **Applications should NOT select variants directly** — they select parent
+  streams, and the demuxer resolves the appropriate variant. But this system
+  opens the way for application to eventually select specific variants.
+
+### API for working with variants
+
+| Function                       | Purpose                                                         |
+|--------------------------------|-----------------------------------------------------------------|
+| `gst_stream_has_variants()`    | Check if a stream has any variants                              |
+| `gst_stream_get_nb_variants()` | Count attached variants                                         |
+| `gst_stream_get_nth_variant()` | Retrieve variant by index (unowned pointer)                     |
+| `gst_stream_add_variant()`     | Attach a variant to its parent (`transfer full`)                |
+| `gst_stream_id_has_parent()`   | Validate that a stream-id follows the variant naming convention |
+
+---
 
 ## Design Overview
 
