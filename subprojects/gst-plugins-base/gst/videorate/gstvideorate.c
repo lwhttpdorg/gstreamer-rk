@@ -733,6 +733,8 @@ done:
     gst_caps_replace (&videorate->in_caps, in_caps);
   }
 
+  gst_base_transform_set_passthrough (trans, TRUE);
+
   return ret;
 
 no_framerate:
