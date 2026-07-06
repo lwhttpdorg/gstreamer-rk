@@ -2694,7 +2694,7 @@ gst_flv_demux_parse_tag_video (GstFlvDemux * demux, GstBuffer * buffer)
     track->need_discont = FALSE;
   }
 
-  demux->segment.position = GST_BUFFER_TIMESTAMP (outbuf);
+  demux->segment.position = GST_BUFFER_DTS_OR_PTS (outbuf);
 
   /* Do we need a newsegment event ? */
   if (G_UNLIKELY (track->need_segment)) {
@@ -2724,8 +2724,8 @@ gst_flv_demux_parse_tag_video (GstFlvDemux * demux, GstBuffer * buffer)
   if (!GST_CLOCK_TIME_IS_VALID (track->start)) {
     track->start = GST_BUFFER_TIMESTAMP (outbuf);
   }
-  if (!GST_CLOCK_TIME_IS_VALID (demux->audio_first_ts)) {
-    demux->video_first_ts = GST_BUFFER_TIMESTAMP (outbuf);
+  if (!GST_CLOCK_TIME_IS_VALID (demux->video_first_ts)) {
+    demux->video_first_ts = GST_BUFFER_PTS (outbuf);
   }
 
   if (G_UNLIKELY (!demux->streams_aware && !demux->no_more_pads
