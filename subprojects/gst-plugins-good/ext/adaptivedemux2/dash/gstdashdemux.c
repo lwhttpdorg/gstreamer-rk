@@ -401,6 +401,9 @@ static gboolean gst_dash_demux_has_next_period (GstAdaptiveDemux * demux);
 
 /* GstDashDemux2 */
 static gboolean gst_dash_demux_setup_all_streams (GstDashDemux2 * demux);
+static void
+gst_dash_demux_stream_create (GstDashDemux2 * demux, gchar * track_id,
+    GstActiveStream * active_stream, GstStreamType streamtype, gint index);
 
 static GstCaps *gst_dash_demux_get_input_caps (GstDashDemux2 * demux,
     GstActiveStream * stream);
@@ -821,7 +824,7 @@ static gboolean
 gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
 {
   GstAdaptiveDemux *parent = (GstAdaptiveDemux *) demux;
-  guint i;
+  guint i, j;
 
   GST_DEBUG_OBJECT (demux, "Setting up streams for period %d",
       gst_mpd_client2_get_period_index (demux->client));
@@ -836,18 +839,15 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
   if (!gst_adaptive_demux_start_new_period (parent))
     return FALSE;
 
-  GST_DEBUG_OBJECT (demux, "Creating stream objects");
+  GST_DEBUG_OBJECT (demux, "Creating stream objects. Active streams: %d",
+      gst_mpd_client2_get_nb_active_stream (demux->client));
   for (i = 0; i < gst_mpd_client2_get_nb_active_stream (demux->client); i++) {
-    GstDashDemux2Stream *stream;
-    GstAdaptiveDemuxTrack *track = NULL;
     GstStreamType streamtype;
     GstActiveStream *active_stream;
-    GstCaps *caps, *codec_caps;
-    gchar *stream_id;
-    GstStructure *s;
-    gchar *lang = NULL;
-    GstTagList *tags = NULL;
     gchar *track_id = NULL;
+    GList *preselections, *iter;
+    gboolean has_preselections = FALSE;
+
 
     active_stream =
         gst_mpd_client2_get_active_stream_by_index (demux->client, i);
@@ -883,6 +883,7 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
 
       /* Content of the id attribute in the ContentComponent or AdaptationSet
        * element. */
+      GstMPDAdaptationSetNode *adp_set = active_stream->cur_adapt_set;
       if (active_stream->cur_adapt_set->id) {
         track_id = g_strdup_printf ("%d", active_stream->cur_adapt_set->id);
       } else {
@@ -897,59 +898,36 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
           }
         }
       }
-    }
-    if (track_id) {
-      tags = gst_tag_list_new (GST_TAG_CONTAINER_SPECIFIC_TRACK_ID, track_id,
-          NULL);
-      g_free (track_id);
-    }
 
-    stream_id =
-        g_strdup_printf ("%s-%d", gst_stream_type_get_name (streamtype), i);
-
-    caps = gst_dash_demux_get_input_caps (demux, active_stream);
-    codec_caps = gst_mpd_client2_get_codec_caps (active_stream);
-    GST_LOG_OBJECT (demux,
-        "Creating stream %d %" GST_PTR_FORMAT " / codec %" GST_PTR_FORMAT, i,
-        caps, codec_caps);
-
-    if (active_stream->cur_adapt_set) {
-      GstMPDAdaptationSetNode *adp_set = active_stream->cur_adapt_set;
-      lang = adp_set->lang;
-
-      /* Fallback to the language in ContentComponent node */
-      if (lang == NULL) {
-        GList *it;
-
-        for (it = adp_set->ContentComponents; it; it = it->next) {
-          GstMPDContentComponentNode *cc_node = it->data;
-          if (cc_node->lang) {
-            lang = cc_node->lang;
-            break;
+      /* Check whether we have preselections for this adaptation set */
+      if (gst_mpd_client2_get_nb_preselections (demux->client)
+          && active_stream->mimeType == GST_STREAM_AUDIO) {
+        preselections = gst_mpd_client2_get_preselections (demux->client);
+        GST_ERROR_OBJECT (demux, "Track id: %s, type: %d", track_id,
+            streamtype);
+        for (iter = preselections; iter; iter = g_list_next (iter)) {
+          // We need to create a track for each preselection
+          GstMPDPreselectionNode *preselection = iter->data;
+          gchar **components_split =
+              g_strsplit (preselection->preselectionComponents, " ", -1);
+          const guint count = g_strv_length (components_split);
+          for (j = 0; j < count; j++) {
+            if (atoi (components_split[j]) == adp_set->id) {
+              GST_DEBUG_OBJECT (demux,
+                  "Preselection match with id: %d. Preselection id: %d",
+                  adp_set->id, preselection->id);
+              active_stream->cur_preselection = preselection;
+              has_preselections = TRUE;
+              gchar *preselection_id =
+                  g_strdup_printf ("%d", active_stream->cur_preselection->id);
+              gst_dash_demux_stream_create (demux, g_strconcat (track_id,
+                      preselection_id, NULL), active_stream, streamtype, i);
+              g_free (preselection_id);
+            }
           }
+          g_strfreev (components_split);
         }
       }
-    }
-
-    if (lang) {
-      if (!tags)
-        tags = gst_tag_list_new_empty ();
-
-      if (gst_tag_check_language_code (lang))
-        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_LANGUAGE_CODE,
-            lang, NULL);
-      else
-        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_LANGUAGE_NAME,
-            lang, NULL);
-    }
-
-    stream = gst_dash_demux_stream_new (demux->client->period_idx, stream_id);
-    GST_ADAPTIVE_DEMUX2_STREAM_CAST (stream)->stream_type = streamtype;
-
-    /* Maybe there are multiple tracks in one stream such as some mpeg-ts
-     * streams, need create track by stream->stream_collection lately */
-    if (!codec_caps) {
-      GST_ADAPTIVE_DEMUX2_STREAM_CAST (stream)->pending_tracks = TRUE;
     } else {
       /* Create the track this stream provides */
       track = gst_adaptive_demux_track_new (GST_ADAPTIVE_DEMUX_CAST (demux),
@@ -995,9 +973,185 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
           (active_stream->cur_adapt_set)->ContentProtection,
           gst_dash_demux_send_content_protection_event, stream);
     }
+    // Each preselection will create each own adaptive stream
+    if (has_preselections) {
+      if (track_id) {
+        g_free (track_id);
+      }
+      return TRUE;
+    }
+
+    gst_dash_demux_stream_create (demux, track_id, active_stream,
+        streamtype, i);
   }
 
   return TRUE;
+}
+
+
+static void
+gst_dash_demux_stream_create (GstDashDemux2 * demux, gchar * track_id,
+    GstActiveStream * active_stream, GstStreamType streamtype, gint index)
+{
+  GstDashDemux2Stream *stream;
+  GstAdaptiveDemuxTrack *track = NULL;
+  gchar *stream_id;
+  GstCaps *caps, *codec_caps;
+  GstTagList *tags = NULL;
+  GstStructure *s;
+
+  GST_DEBUG_OBJECT (demux, "Active stream is: %p, with track id %s",
+      active_stream, track_id);
+
+  stream_id =
+      g_strdup_printf ("%s-%d", gst_stream_type_get_name (streamtype),
+      active_stream->cur_preselection ? active_stream->
+      cur_preselection->id : 0);
+
+
+  caps = gst_dash_demux_get_input_caps (demux, active_stream);
+  codec_caps = gst_mpd_client2_get_codec_caps (active_stream);
+  GST_DEBUG_OBJECT (demux,
+      "Creating stream with index %d %" GST_PTR_FORMAT " / codec %"
+      GST_PTR_FORMAT ". With stream-id: %s", index, caps, codec_caps,
+      stream_id);
+
+  gchar *lang = NULL;
+  if (!tags)
+    tags = gst_tag_list_new_empty ();
+
+  if (active_stream->cur_preselection) {
+    if (active_stream->cur_preselection->parent_instance.Label) {
+      for (GList * iter =
+          active_stream->cur_preselection->parent_instance.Label; iter != NULL;
+          iter = g_list_next (iter)) {
+        GstMPDTextualDescriptorNode *label =
+            (GstMPDTextualDescriptorNode *) iter->data;
+        gchar *desc_str =
+            g_strdup_printf ("(%s)%s", label->lang, label->content);
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_DESCRIPTION,
+            desc_str, NULL);
+        g_free (desc_str);
+      }
+    }
+
+    if (active_stream->cur_preselection->Accessibility) {
+      for (GList * iter = active_stream->cur_preselection->Accessibility;
+          iter != NULL; iter = g_list_next (iter)) {
+        GstMPDDescriptorTypeNode *accessibility =
+            (GstMPDDescriptorTypeNode *) iter->data;
+        gchar *accessibility_str =
+            g_strdup_printf ("(%s)%s", accessibility->schemeIdUri,
+            accessibility->value);
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_ACCESSIBILITY,
+            accessibility_str, NULL);
+        g_free (accessibility_str);
+      }
+    }
+
+    if (active_stream->cur_preselection->Role) {
+      for (GList * iter = active_stream->cur_preselection->Role;
+          iter != NULL; iter = g_list_next (iter)) {
+        GstMPDDescriptorTypeNode *role =
+            (GstMPDDescriptorTypeNode *) iter->data;
+        gchar *role_str =
+            g_strdup_printf ("(%s)%s", role->schemeIdUri, role->value);
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_ROLE, role_str,
+            NULL);
+        g_free (role_str);
+      }
+    }
+
+    if (active_stream->cur_preselection->tag) {
+      gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE,
+          GST_TAG_CONTAINER_SPECIFIC_TRACK_ID,
+          active_stream->cur_preselection->tag, NULL);
+    }
+
+    lang = active_stream->cur_preselection->lang;
+  }
+
+  if (NULL == lang && active_stream->cur_adapt_set) {
+    GstMPDAdaptationSetNode *adp_set = active_stream->cur_adapt_set;
+    lang = adp_set->lang;
+
+    /* Fallback to the language in ContentComponent node */
+    if (lang == NULL) {
+      GList *it;
+
+      for (it = adp_set->ContentComponents; it; it = it->next) {
+        GstMPDContentComponentNode *cc_node = it->data;
+        if (cc_node->lang) {
+          lang = cc_node->lang;
+          break;
+        }
+      }
+    }
+  } else if (active_stream->cur_preselection->lang) {
+
+    lang = active_stream->cur_preselection->lang;
+  }
+
+  if (lang) {
+    if (gst_tag_check_language_code (lang))
+      gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_LANGUAGE_CODE,
+          lang, NULL);
+    else
+      gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE, GST_TAG_LANGUAGE_NAME,
+          lang, NULL);
+  }
+
+  stream = gst_dash_demux_stream_new (demux->client->period_idx, stream_id);
+  GST_ADAPTIVE_DEMUX2_STREAM_CAST (stream)->stream_type = streamtype;
+
+  /* Maybe there are multiple tracks in one stream such as some mpeg-ts
+   * streams, need create track by stream->stream_collection lately */
+  if (!codec_caps) {
+    GST_ADAPTIVE_DEMUX2_STREAM_CAST (stream)->pending_tracks = TRUE;
+  } else {
+    /* Create the track this stream provides */
+    track = gst_adaptive_demux_track_new (GST_ADAPTIVE_DEMUX_CAST (demux),
+        streamtype, GST_STREAM_FLAG_NONE, stream_id, codec_caps, tags);
+  }
+
+  g_free (stream_id);
+  if (tags)
+    gst_adaptive_demux2_stream_set_tags (GST_ADAPTIVE_DEMUX2_STREAM_CAST
+        (stream), gst_tag_list_ref (tags));
+
+  gst_adaptive_demux2_add_stream (GST_ADAPTIVE_DEMUX_CAST (demux),
+      GST_ADAPTIVE_DEMUX2_STREAM_CAST (stream));
+  if (track) {
+    gst_adaptive_demux2_stream_add_track (GST_ADAPTIVE_DEMUX2_STREAM_CAST
+        (stream), track);
+    stream->track = track;
+  }
+  stream->active_stream = active_stream;
+
+  if (active_stream->cur_representation) {
+    stream->last_representation_id =
+        g_strdup (stream->active_stream->cur_representation->id);
+  } else {
+    stream->last_representation_id = NULL;
+  }
+
+  s = gst_caps_get_structure (caps, 0);
+  stream->allow_sidx =
+      gst_mpd_client2_has_isoff_ondemand_profile (demux->client);
+  stream->is_isobmff = gst_structure_has_name (s, "video/quicktime")
+      || gst_structure_has_name (s, "audio/x-m4a");
+  gst_adaptive_demux2_stream_set_caps (GST_ADAPTIVE_DEMUX2_STREAM_CAST
+      (stream), caps);
+  stream->index = index;
+
+  if (active_stream->cur_adapt_set &&
+      GST_MPD_REPRESENTATION_BASE_NODE (active_stream->
+          cur_adapt_set)->ContentProtection) {
+    GST_DEBUG_OBJECT (demux, "Adding ContentProtection events to source pad");
+    g_list_foreach (GST_MPD_REPRESENTATION_BASE_NODE
+        (active_stream->cur_adapt_set)->ContentProtection,
+        gst_dash_demux_send_content_protection_event, stream);
+  }
 }
 
 static void

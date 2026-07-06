@@ -2589,6 +2589,23 @@ select_streams_done:
   demux_update_buffering_locked (demux);
   demux_post_buffering_locked (demux);
 
+  GList *trackiter;
+  for (trackiter = tracks; trackiter; trackiter = trackiter->next) {
+    GstAdaptiveDemuxTrack *track = (GstAdaptiveDemuxTrack *) trackiter->data;
+
+    GstTagList *taglist = gst_stream_get_tags (track->stream_object);
+
+    GstStructure *s =
+        gst_structure_new ("preselection", "properties", GST_TYPE_TAG_LIST,
+        taglist, NULL);
+
+    GstEvent *preselection_event =
+        gst_event_new_custom (GST_EVENT_CUSTOM_DOWNSTREAM_STICKY, s);
+
+    gst_event_store_insert_event (&track->sticky_events, preselection_event,
+        FALSE);
+  }
+
   TRACKS_UNLOCK (demux);
   GST_ADAPTIVE_SCHEDULER_UNLOCK (demux);
 

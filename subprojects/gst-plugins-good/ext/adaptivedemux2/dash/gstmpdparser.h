@@ -59,6 +59,8 @@
 #include "gstmpddescriptortypenode.h"
 #include "gstmpdrepresentationbasenode.h"
 #include "gstmpdmultsegmentbasenode.h"
+#include "gstmpdtextualdescriptornode.h"
+#include "gstmpdpreselectionnode.h"
 
 G_BEGIN_DECLS
 
@@ -139,6 +141,7 @@ struct _GstActiveStream
   GstMPDAdaptationSetNode *cur_adapt_set;        /* active adaptation set */
   gint representation_idx;                    /* index of current representation */
   GstMPDRepresentationNode *cur_representation;  /* active representation */
+  GstMPDPreselectionNode *cur_preselection;  /* active preselection */
   GstMPDSegmentBaseNode *cur_segment_base;       /* active segment base */
   GstMPDSegmentListNode *cur_segment_list;       /* active segment list */
   GstMPDSegmentTemplateNode *cur_seg_template;   /* active segment template */

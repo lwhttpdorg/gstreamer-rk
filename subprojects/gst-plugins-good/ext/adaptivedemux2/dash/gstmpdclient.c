@@ -1608,6 +1608,32 @@ gst_mpd_client2_get_adaptation_sets (GstMPDClient2 * client)
   return gst_mpd_client2_get_adaptation_sets_for_period (client, stream_period);
 }
 
+guint
+gst_mpd_client2_get_nb_preselections (GstMPDClient2 * client)
+{
+  GstStreamPeriod *stream_period;
+
+  stream_period = gst_mpd_client2_get_stream_period (client);
+  g_return_val_if_fail (stream_period != NULL, 0);
+  g_return_val_if_fail (stream_period->period != NULL, 0);
+
+  return g_list_length (stream_period->period->Preselections);
+}
+
+GList *
+gst_mpd_client2_get_preselections (GstMPDClient2 * client)
+{
+  GstStreamPeriod *stream_period;
+
+  stream_period = gst_mpd_client2_get_stream_period (client);
+  if (stream_period == NULL || stream_period->period == NULL) {
+    GST_DEBUG ("No more Period nodes in the MPD file, terminating...");
+    return NULL;
+  }
+
+  return stream_period->period->Preselections;
+}
+
 gboolean
 gst_mpd_client2_setup_streaming (GstMPDClient2 * client,
     GstMPDAdaptationSetNode * adapt_set, gint64 max_bandwidth,
@@ -2767,16 +2793,20 @@ gst_mpd_client2_get_codec_caps (GstActiveStream * stream)
   }
 
   /* Iterate over the current adaptation set representation */
-  for (iter = stream->cur_adapt_set->Representations; iter; iter = iter->next) {
-    GstMPDRepresentationBaseNode *rep =
-        (GstMPDRepresentationBaseNode *) iter->data;
+  if (stream->cur_preselection) {
+    ret = gst_caps_copy (stream->cur_preselection->parent_instance.caps);
+  } else {
+    for (iter = stream->cur_adapt_set->Representations; iter; iter = iter->next) {
+      GstMPDRepresentationBaseNode *rep =
+          (GstMPDRepresentationBaseNode *) iter->data;
 
-    if (rep->caps) {
-      GST_DEBUG ("Adding representation caps %" GST_PTR_FORMAT, rep->caps);
-      if (ret)
-        ret = gst_caps_merge (ret, gst_caps_ref (rep->caps));
-      else
-        ret = gst_caps_copy (rep->caps);
+      if (rep->caps) {
+        GST_DEBUG ("Adding representation caps %" GST_PTR_FORMAT, rep->caps);
+        if (ret)
+          ret = gst_caps_merge (ret, gst_caps_ref (rep->caps));
+        else
+          ret = gst_caps_copy (rep->caps);
+      }
     }
   }
 
