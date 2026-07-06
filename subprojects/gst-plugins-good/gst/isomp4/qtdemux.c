@@ -5723,6 +5723,8 @@ gst_qtdemux_stream_update_segment (GstQTDemux * qtdemux, QtDemuxStream * stream,
     event = gst_event_new_segment (&stream->segment);
     if (qtdemux->segment_seqnum != GST_SEQNUM_INVALID) {
       gst_event_set_seqnum (event, qtdemux->segment_seqnum);
+    } else {
+      qtdemux->segment_seqnum = gst_event_get_seqnum (event);
     }
     gst_pad_push_event (stream->pad, event);
     /* assume we can send more data now */
@@ -6144,8 +6146,11 @@ gst_qtdemux_sync_streams (GstQTDemux * demux)
           GST_PAD_NAME (stream->pad));
       stream->sent_eos = TRUE;
       event = gst_event_new_eos ();
-      if (demux->segment_seqnum != GST_SEQNUM_INVALID)
+      if (demux->segment_seqnum != GST_SEQNUM_INVALID) {
         gst_event_set_seqnum (event, demux->segment_seqnum);
+      } else {
+        demux->segment_seqnum = gst_event_get_seqnum (event);
+      }
       gst_pad_push_event (stream->pad, event);
     }
   }

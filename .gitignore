@@ -9,6 +9,7 @@ prefix/
 .helix/
 .vscode/
 .vscode-server/
+compile_commands.json
 
 # Symlinks
 /gstreamer
