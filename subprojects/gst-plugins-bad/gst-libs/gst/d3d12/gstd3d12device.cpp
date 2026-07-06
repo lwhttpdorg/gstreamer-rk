@@ -110,9 +110,14 @@ enum
   PROP_HARDWARE,
   PROP_DESCRIPTION,
   PROP_DEVICE_REMOVED_REASON,
+  PROP_MEMORY_BUDGET,
+  PROP_RESIDENT_MEMORY_SIZE,
+  PROP_OVER_BUDGET_FACTOR,
 };
 
 static GParamSpec *pspec_removed_reason = nullptr;
+
+#define DEFAULT_OVER_BUDGET_FACTOR 0.8
 
 /* *INDENT-OFF* */
 using namespace Microsoft::WRL;
@@ -153,8 +158,19 @@ struct DeviceInner
     gamma_lut_rs = nullptr;
     mipmap_cache.clear ();
 
+    if (adapter3) {
+      adapter3->UnregisterVideoMemoryBudgetChangeNotification (budget_change_cb_cookie);
+      SetEvent (cancellable);
+      g_clear_pointer (&budget_monitor_thread, g_thread_join);
+
+      CloseHandle (budget_change_event);
+      CloseHandle (cancellable);
+    }
+
     factory = nullptr;
     adapter = nullptr;
+    adapter3 = nullptr;
+    device3 = nullptr;
 
     if (removed_reason == S_OK)
       ReportLiveObjects ();
@@ -241,7 +257,9 @@ struct DeviceInner
   }
 
   ComPtr<ID3D12Device> device;
+  ComPtr<ID3D12Device3> device3;
   ComPtr<IDXGIAdapter1> adapter;
+  ComPtr<IDXGIAdapter3> adapter3;
   ComPtr<IDXGIFactory2> factory;
   ComPtr<ID3D11On12Device> device11on12;
   std::unordered_map<GstVideoFormat, GstD3D12Format> format_table;
@@ -291,6 +309,18 @@ struct DeviceInner
   HANDLE dev_removed_event;
   ComPtr<ID3D12Fence> dev_removed_fence;
   std::atomic<HRESULT> removed_reason = { S_OK };
+
+  std::mutex make_resident_lock;
+  ComPtr<ID3D12Fence> make_resident_fence;
+  guint64 make_resident_fence_val = 1;
+  HANDLE budget_change_event = nullptr;
+  HANDLE cancellable = nullptr;
+  GThread *budget_monitor_thread = nullptr;
+  DWORD budget_change_cb_cookie = 0;
+  std::atomic<guint64> current_budget = { 0 };
+  std::atomic<gint64> resident_size = { 0 };
+  std::atomic<double> overbudget_factor = { DEFAULT_OVER_BUDGET_FACTOR };
+  std::atomic<bool> is_over_budget = { false };
 
   std::vector<GstD3D12Device*> clients;
 
@@ -672,6 +702,8 @@ static void gst_d3d12_device_dispose (GObject * object);
 static void gst_d3d12_device_finalize (GObject * object);
 static void gst_d3d12_device_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
+static void gst_d3d12_device_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
 static void gst_d3d12_device_setup_format_table (GstD3D12Device * self);
 
 static void
@@ -684,6 +716,7 @@ gst_d3d12_device_class_init (GstD3D12DeviceClass * klass)
   gobject_class->dispose = gst_d3d12_device_dispose;
   gobject_class->finalize = gst_d3d12_device_finalize;
   gobject_class->get_property = gst_d3d12_device_get_property;
+  gobject_class->set_property = gst_d3d12_device_set_property;
 
   g_object_class_install_property (gobject_class, PROP_ADAPTER_INDEX,
       g_param_spec_uint ("adapter-index", "Adapter Index",
@@ -713,6 +746,48 @@ gst_d3d12_device_class_init (GstD3D12DeviceClass * klass)
       G_MININT32, G_MAXINT32, 0, readable_flags);
   g_object_class_install_property (gobject_class, PROP_DEVICE_REMOVED_REASON,
       pspec_removed_reason);
+
+  /**
+   * GstD3D12Device:memory-budget:
+   *
+   * Current local video memory budget
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_MEMORY_BUDGET,
+      g_param_spec_uint64 ("memory-budget", "Memory Budget",
+          "Current local video memory budget in bytes",
+          0, G_MAXUINT64, 0, readable_flags));
+
+  /**
+   * GstD3D12Device:resident-memory-size:
+   *
+   * Currently resident video memory size
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_RESIDENT_MEMORY_SIZE,
+      g_param_spec_uint64 ("resident-memory-size", "Resident Memory Size",
+          "Tracked total size of resident resources in bytes",
+          0, G_MAXUINT64, 0, readable_flags));
+
+  /**
+   * GstD3D12Device:over-budget-factor:
+   *
+   * The factor applied to the memory budget to determine whether
+   * the device is over budget. D3D12 elements may try to evict unused
+   * resources when the device is over budget
+   *
+   * Since: 1.30
+   */
+  g_object_class_install_property (gobject_class, PROP_OVER_BUDGET_FACTOR,
+      g_param_spec_double ("over-budget-factor", "Over Budget Factor",
+          "Factor applied to the \"memory-budget\" for over-budget detection "
+          "(0.0 = always try to evict, "
+          "1.0 = try to evict when \"resident-memory-size\" is greater than "
+          "or equal to \"memory-budget\")",
+          0.0, 1.0, DEFAULT_OVER_BUDGET_FACTOR,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 }
 
 static void
@@ -771,6 +846,35 @@ gst_d3d12_device_get_property (GObject * object, guint prop_id,
       break;
     case PROP_DEVICE_REMOVED_REASON:
       g_value_set_int (value, priv->removed_reason);
+      break;
+    case PROP_MEMORY_BUDGET:
+      g_value_set_uint64 (value, priv->current_budget.load ());
+      break;
+    case PROP_RESIDENT_MEMORY_SIZE:
+    {
+      auto size = priv->resident_size.load ();
+      g_value_set_uint64 (value, size > 0 ? (guint64) size : 0);
+      break;
+    }
+    case PROP_OVER_BUDGET_FACTOR:
+      g_value_set_double (value, priv->overbudget_factor.load ());
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_d3d12_device_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  auto self = GST_D3D12_DEVICE (object);
+  auto priv = self->priv->inner;
+
+  switch (prop_id) {
+    case PROP_OVER_BUDGET_FACTOR:
+      priv->overbudget_factor = g_value_get_double (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1119,6 +1223,55 @@ struct TestFormatInfo
   D3D12_FORMAT_SUPPORT2 support2;
 };
 
+static gpointer
+gst_d3d12_device_budget_monitor_thread (DeviceInner * priv)
+{
+  HANDLE waitables[] = { priv->budget_change_event, priv->cancellable };
+  bool running = true;
+
+  GST_DEBUG ("Enter budget monitor thread");
+
+  while (running) {
+    auto wait_ret = WaitForMultipleObjects (G_N_ELEMENTS (waitables),
+        waitables, FALSE, INFINITE);
+
+    switch (wait_ret) {
+      case WAIT_OBJECT_0:
+      {
+        DXGI_QUERY_VIDEO_MEMORY_INFO info = { };
+        auto hr = priv->adapter3->QueryVideoMemoryInfo (0,
+            DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info);
+
+        if (SUCCEEDED (hr)) {
+          GST_DEBUG ("Budget updated, adapter-index: %u, vendor-id: 0x%04x, "
+              "device-id: 0x%04x, Budget: %" G_GUINT64_FORMAT
+              " MB, Current: %" G_GUINT64_FORMAT " MB, "
+              "AvailableForReservation: %" G_GUINT64_FORMAT " MB, "
+              "CurrentReservation: %" G_GUINT64_FORMAT " MB",
+              priv->adapter_index, priv->vendor_id, priv->device_id,
+              info.Budget / 1024 / 1024, info.CurrentUsage / 1024 / 1024,
+              info.AvailableForReservation / 1024 / 1024,
+              info.CurrentReservation / 1024 / 1024);
+          priv->current_budget = info.Budget;
+        }
+        break;
+      }
+      case WAIT_OBJECT_0 + 1:
+        GST_DEBUG ("Cancelled");
+        running = false;
+        break;
+      default:
+        GST_WARNING ("Unexpected wait ret %u", (guint) wait_ret);
+        running = false;
+        break;
+    }
+  }
+
+  GST_DEBUG ("Leave budget monitor thread");
+
+  return nullptr;
+}
+
 static GstD3D12Device *
 gst_d3d12_device_new_internal (const GstD3D12DeviceConstructData * data)
 {
@@ -1418,6 +1571,56 @@ gst_d3d12_device_new_internal (const GstD3D12DeviceConstructData * data)
     priv->rtv_heap_pool = gst_d3d12_desc_heap_pool_new (device.Get (),
         &rtv_desc);
     GST_OBJECT_FLAG_SET (priv->rtv_heap_pool, GST_OBJECT_FLAG_MAY_BE_LEAKED);
+  }
+
+  priv->device.As (&priv->device3);
+  if (priv->device3) {
+    device->CreateFence (0,
+        D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS (&priv->make_resident_fence));
+    if (!priv->make_resident_fence) {
+      GST_ERROR_OBJECT (self, "Couldn't create fence");
+      gst_object_unref (self);
+      return nullptr;
+    }
+
+
+    priv->adapter.As (&priv->adapter3);
+    if (priv->adapter3) {
+      DXGI_QUERY_VIDEO_MEMORY_INFO info = { };
+      hr = priv->adapter3->QueryVideoMemoryInfo (0,
+          DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info);
+      if (FAILED (hr)) {
+        priv->adapter3 = nullptr;
+      } else {
+        GST_INFO_OBJECT (self, "Current budget, adapter-index: %u, "
+            "vendor-id: 0x%04x, device-id: 0x%04x, Budget: %" G_GUINT64_FORMAT
+            " MB, Current: %" G_GUINT64_FORMAT " MB, "
+            "AvailableForReservation: %" G_GUINT64_FORMAT " MB, "
+            "CurrentReservation: %" G_GUINT64_FORMAT " MB",
+            priv->adapter_index, priv->vendor_id, priv->device_id,
+            info.Budget / 1024 / 1024,
+            info.CurrentUsage / 1024 / 1024,
+            info.AvailableForReservation / 1024 / 1024,
+            info.CurrentReservation / 1024 / 1024);
+
+        priv->current_budget = info.Budget;
+
+        priv->budget_change_event =
+            CreateEventW (nullptr, FALSE, FALSE, nullptr);
+        priv->cancellable = CreateEventW (nullptr, FALSE, FALSE, nullptr);
+        hr = priv->adapter3->RegisterVideoMemoryBudgetChangeNotificationEvent
+            (priv->budget_change_event, &priv->budget_change_cb_cookie);
+        if (FAILED (hr)) {
+          CloseHandle (priv->budget_change_event);
+          CloseHandle (priv->cancellable);
+          priv->adapter3 = nullptr;
+        } else {
+          priv->budget_monitor_thread = g_thread_new ("d3d12-mem-budget",
+              (GThreadFunc) gst_d3d12_device_budget_monitor_thread,
+              priv.get ());
+        }
+      }
+    }
   }
 
   return self;
@@ -2717,4 +2920,78 @@ gst_d3d12_device_acquire_mipmap_texture (GstD3D12Device * device,
   priv->mipmap_cache[key] = entry;
 
   return entry;
+}
+
+/**
+ * gst_d3d12_device_enqueue_make_resident:
+ * @device: a #GstD3D12Device
+ * @flags: a D3D12_RESIDENCY_FLAGS value
+ * @num_objects: the number of objects in @objects
+ * @objects: an array of ID3D12Pageable objects
+ * @fence: (out) (transfer full): a ID3D12Fence signalled when the residency operation completes
+ * @fence_value: (out): the fence value to wait for
+ *
+ * A utility wrapper around ID3D12Device3::EnqueueMakeResident using
+ * a fence managed by #GstD3D12Device.
+ *
+ * Returns: an HRESULT code
+ *
+ * Since: 1.30
+ */
+HRESULT
+gst_d3d12_device_enqueue_make_resident (GstD3D12Device * device,
+    D3D12_RESIDENCY_FLAGS flags, guint num_objects, ID3D12Pageable ** objects,
+    ID3D12Fence ** fence, guint64 * fence_value)
+{
+  g_return_val_if_fail (GST_IS_D3D12_DEVICE (device), E_INVALIDARG);
+  g_return_val_if_fail (num_objects > 0, E_INVALIDARG);
+  g_return_val_if_fail (objects, E_INVALIDARG);
+  g_return_val_if_fail (fence, E_INVALIDARG);
+  g_return_val_if_fail (fence_value, E_INVALIDARG);
+
+  auto priv = device->priv->inner;
+  if (!priv->device3)
+    return E_NOINTERFACE;
+
+  std::lock_guard < std::mutex > lk (priv->make_resident_lock);
+  auto hr = priv->device3->EnqueueMakeResident (flags, num_objects,
+      objects, priv->make_resident_fence.Get (), priv->make_resident_fence_val);
+  if (SUCCEEDED (hr)) {
+    *fence = priv->make_resident_fence.Get ();
+    (*fence)->AddRef ();
+    *fence_value = priv->make_resident_fence_val;
+    priv->make_resident_fence_val++;
+  }
+
+  return hr;
+}
+
+void
+gst_d3d12_device_update_resident_size (GstD3D12Device * device, gint64 size)
+{
+  auto priv = device->priv->inner;
+  priv->resident_size += size;
+
+  auto cur_s = priv->resident_size.load ();
+  auto cur_b = priv->current_budget.load ();
+
+  priv->is_over_budget = cur_b > 0 &&
+      (double) cur_s >= cur_b * priv->overbudget_factor;
+
+#ifndef GST_DISABLE_GST_DEBUG
+  if (gst_debug_category_get_threshold (GST_CAT_DEFAULT) >= GST_LEVEL_TRACE) {
+    auto cur_size = cur_s / 1024 / 1024;
+    auto cur_budget = cur_b / 1024 / 1024;
+    GST_TRACE_OBJECT (device, "Budget: %" G_GUINT64_FORMAT
+        " MB, Current: %" G_GINT64_FORMAT " MB", cur_budget, cur_size);
+  }
+#endif
+}
+
+gboolean
+gst_d3d12_device_is_over_budget (GstD3D12Device * device)
+{
+  g_return_val_if_fail (GST_IS_D3D12_DEVICE (device), FALSE);
+
+  return device->priv->inner->is_over_budget.load ();
 }
