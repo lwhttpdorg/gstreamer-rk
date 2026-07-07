@@ -233,6 +233,8 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (NV42, UNKNOWN),                     MAP_DRM (NV42, LINEAR),             GST_V4L2_RAW},
   {MAP_FMT (MM21, NV12_16L32S),                 KNOWN_DRM_MAP,                      GST_V4L2_RAW},
   {MAP_FMT (P010, P010_10LE),                   KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (QC08C, UNKNOWN),                    MAP_DRM (NV12, QCOM_COMPRESSED),    GST_V4L2_RAW},
+  {MAP_FMT (QC10C, UNKNOWN),                    MAP_DRM (P010, QCOM_COMPRESSED),    GST_V4L2_RAW},
 
   /* Bayer formats - see http://www.siliconimaging.com/RGB%20Bayer.htm */
   {MAP_ENC_FMT (SBGGR8,  ENCODED),   GST_V4L2_BAYER},
@@ -4388,6 +4390,9 @@ gst_v4l2_object_set_format_full (GstV4l2Object * v4l2object, GstCaps * caps,
     align.padding_left = 0;
     align.padding_right = format.fmt.pix.width - width;
   }
+
+  if (GST_VIDEO_INFO_FORMAT (&info.vinfo) == GST_VIDEO_FORMAT_DMA_DRM)
+    n_v4l_planes = format.fmt.pix_mp.num_planes;
 
   if (is_mplane && format.fmt.pix_mp.num_planes != n_v4l_planes)
     goto invalid_planes;
