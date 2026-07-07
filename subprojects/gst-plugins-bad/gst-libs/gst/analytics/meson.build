@@ -9,6 +9,8 @@ analytics_sources = files( 'gstanalyticsmeta.c',
                               'gstanalyticstensormtd.c',
                               'gsttensormeta.c',
                               'gsttensor.c',
+                              'gstanalyticsclaimedregions.c',
+                              'gstanalyticsoverlaylabels.c',
                               'gstanalytics_image_util.c',
                               'modelinfo.c')
 
@@ -25,6 +27,8 @@ analytics_headers = files(    'analytics.h',
                               'gstanalyticsbatchmeta.h',
                               'gsttensormeta.h',
                               'gsttensor.h',
+                              'gstanalyticsclaimedregions.h',
+                              'gstanalyticsoverlaylabels.h',
                               'gstanalytics_image_util.h',
                               'modelinfo.h')
 

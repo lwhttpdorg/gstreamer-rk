@@ -22,6 +22,7 @@
 
 #include <gst/check/gstcheck.h>
 #include <gst/analytics/analytics.h>
+#include <gst/video/video.h>
 
 GST_START_TEST (test_add_classification_meta)
 {
@@ -3399,6 +3400,161 @@ GST_START_TEST (test_mtd_semantic_tag_survives_copy)
 
 GST_END_TEST;
 
+GST_START_TEST (test_claimed_regions_add_and_get)
+{
+  GstBuffer *buf;
+  GstAnalyticsClaimedRegionsMeta *meta;
+  const GstAnalyticsClaimedRegion *region;
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_analytics_claimed_regions_meta (buf);
+  fail_unless (meta != NULL);
+  fail_unless_equals_int (gst_analytics_claimed_regions_meta_get_size (meta),
+      0);
+
+  gst_analytics_claimed_regions_meta_add_region (meta, 10, 20, 30, 40,
+      GST_ANALYTICS_CLAIM_KIND_OCCLUDE, g_quark_from_static_string ("od"), 5);
+  gst_analytics_claimed_regions_meta_add_region (meta, 100, 5, 50, 12,
+      GST_ANALYTICS_CLAIM_KIND_AVOID, g_quark_from_static_string ("seg"), 7);
+
+  /* A second add returns the same meta, so successive producers append. */
+  fail_unless (gst_buffer_add_analytics_claimed_regions_meta (buf) == meta);
+  fail_unless_equals_int (gst_analytics_claimed_regions_meta_get_size (meta),
+      2);
+
+  region = gst_analytics_claimed_regions_meta_get_region (meta, 0);
+  fail_unless_equals_int (region->x, 10);
+  fail_unless_equals_int (region->y, 20);
+  fail_unless_equals_int (region->w, 30);
+  fail_unless_equals_int (region->h, 40);
+  fail_unless_equals_int (region->kind, GST_ANALYTICS_CLAIM_KIND_OCCLUDE);
+  fail_unless_equals_int (region->priority, 5);
+  fail_unless (region->owner == g_quark_from_static_string ("od"));
+
+  region = gst_analytics_claimed_regions_meta_get_region (meta, 1);
+  fail_unless_equals_int (region->kind, GST_ANALYTICS_CLAIM_KIND_AVOID);
+  fail_unless (region->owner == g_quark_from_static_string ("seg"));
+
+  gst_buffer_unref (buf);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_claimed_regions_copy)
+{
+  GstBuffer *buf, *buf2;
+  GstAnalyticsClaimedRegionsMeta *meta, *meta2;
+  const GstAnalyticsClaimedRegion *region;
+  gboolean ret;
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_analytics_claimed_regions_meta (buf);
+  gst_analytics_claimed_regions_meta_add_region (meta, 10, 20, 30, 40,
+      GST_ANALYTICS_CLAIM_KIND_OCCLUDE, g_quark_from_static_string ("od"), 5);
+
+  buf2 = gst_buffer_new ();
+  ret = gst_buffer_copy_into (buf2, buf, GST_BUFFER_COPY_META, 0, -1);
+  fail_unless (ret);
+
+  meta2 = gst_buffer_get_analytics_claimed_regions_meta (buf2);
+  fail_unless (meta2 != NULL);
+  fail_unless (meta2 != meta);
+  fail_unless_equals_int (gst_analytics_claimed_regions_meta_get_size (meta2),
+      1);
+  region = gst_analytics_claimed_regions_meta_get_region (meta2, 0);
+  /* Plain copy carries the region verbatim. */
+  fail_unless_equals_int (region->x, 10);
+  fail_unless_equals_int (region->w, 30);
+  fail_unless_equals_int (region->priority, 5);
+
+  gst_buffer_unref (buf);
+  gst_buffer_unref (buf2);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_claimed_regions_scale_transform)
+{
+  GstBuffer *buf, *dest;
+  GstAnalyticsClaimedRegionsMeta *meta, *dmeta;
+  const GstAnalyticsClaimedRegion *region;
+  GstVideoInfo in_info, out_info;
+  GstVideoMetaTransform transform;
+  gboolean ret;
+
+  gst_video_info_set_format (&in_info, GST_VIDEO_FORMAT_RGBA, 100, 100);
+  gst_video_info_set_format (&out_info, GST_VIDEO_FORMAT_RGBA, 200, 200);
+  transform.in_info = &in_info;
+  transform.out_info = &out_info;
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_analytics_claimed_regions_meta (buf);
+  gst_analytics_claimed_regions_meta_add_region (meta, 10, 20, 30, 40,
+      GST_ANALYTICS_CLAIM_KIND_OCCLUDE, g_quark_from_static_string ("od"), 5);
+
+  dest = gst_buffer_new ();
+  ret = meta->meta.info->transform_func (dest, (GstMeta *) meta, buf,
+      gst_video_meta_transform_scale_get_quark (), &transform);
+  fail_unless (ret);
+
+  dmeta = gst_buffer_get_analytics_claimed_regions_meta (dest);
+  fail_unless (dmeta != NULL);
+  fail_unless_equals_int (gst_analytics_claimed_regions_meta_get_size (dmeta),
+      1);
+  region = gst_analytics_claimed_regions_meta_get_region (dmeta, 0);
+  /* 100x100 -> 200x200 doubles every coordinate; kind/priority survive. */
+  fail_unless_equals_int (region->x, 20);
+  fail_unless_equals_int (region->y, 40);
+  fail_unless_equals_int (region->w, 60);
+  fail_unless_equals_int (region->h, 80);
+  fail_unless_equals_int (region->kind, GST_ANALYTICS_CLAIM_KIND_OCCLUDE);
+  fail_unless_equals_int (region->priority, 5);
+
+  gst_buffer_unref (buf);
+  gst_buffer_unref (dest);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_overlay_labels_add_get_and_copy)
+{
+  GstBuffer *buf, *buf2;
+  GstAnalyticsOverlayLabelsMeta *meta, *meta2;
+  const GstAnalyticsOverlayLabel *label;
+  gboolean ret;
+
+  buf = gst_buffer_new ();
+  meta = gst_buffer_add_analytics_overlay_labels_meta (buf);
+  fail_unless (meta != NULL);
+  gst_analytics_overlay_labels_meta_add_label (meta, "person", 0xFFFFFFFF,
+      10, 20, 40, 30, 10, 8, 80, 12, GST_ANALYTICS_LABEL_CANDIDATE_BOX,
+      g_quark_from_static_string ("odoverlay"), 5);
+
+  fail_unless_equals_int (gst_analytics_overlay_labels_meta_get_size (meta), 1);
+  label = gst_analytics_overlay_labels_meta_get_label (meta, 0);
+  fail_unless_equals_string (label->text, "person");
+  fail_unless_equals_int (label->color, 0xFFFFFFFF);
+  fail_unless_equals_int (label->anchor_x, 10);
+  fail_unless_equals_int (label->preferred_w, 80);
+  fail_unless_equals_int (label->kind, GST_ANALYTICS_LABEL_CANDIDATE_BOX);
+  fail_unless_equals_int (label->priority, 5);
+
+  /* Copy duplicates the owned text. */
+  buf2 = gst_buffer_new ();
+  ret = gst_buffer_copy_into (buf2, buf, GST_BUFFER_COPY_META, 0, -1);
+  fail_unless (ret);
+  meta2 = gst_buffer_get_analytics_overlay_labels_meta (buf2);
+  fail_unless (meta2 != NULL);
+  label = gst_analytics_overlay_labels_meta_get_label (meta2, 0);
+  fail_unless_equals_string (label->text, "person");
+  fail_unless_equals_int (label->preferred_w, 80);
+
+  gst_buffer_unref (buf);
+  gst_buffer_unref (buf2);
+}
+
+GST_END_TEST;
+
 static Suite *
 analyticmeta_suite (void)
 {
@@ -3416,6 +3572,8 @@ analyticmeta_suite (void)
   TCase *tc_chain_group;
   TCase *tc_chain_keypoint;
   TCase *tc_chain_semantic_tag;
+  TCase *tc_chain_claimed_regions;
+  TCase *tc_chain_overlay_labels;
 
   s = suite_create ("Analytic Meta Library");
 
@@ -3511,6 +3669,18 @@ analyticmeta_suite (void)
   tcase_add_test (tc_chain_semantic_tag,
       test_mtd_semantic_tag_multiple_on_same_buffer);
   tcase_add_test (tc_chain_semantic_tag, test_mtd_semantic_tag_survives_copy);
+
+  tc_chain_claimed_regions = tcase_create ("Claimed Regions Meta");
+  suite_add_tcase (s, tc_chain_claimed_regions);
+  tcase_add_test (tc_chain_claimed_regions, test_claimed_regions_add_and_get);
+  tcase_add_test (tc_chain_claimed_regions, test_claimed_regions_copy);
+  tcase_add_test (tc_chain_claimed_regions,
+      test_claimed_regions_scale_transform);
+
+  tc_chain_overlay_labels = tcase_create ("Overlay Labels Meta");
+  suite_add_tcase (s, tc_chain_overlay_labels);
+  tcase_add_test (tc_chain_overlay_labels,
+      test_overlay_labels_add_get_and_copy);
 
   return s;
 }

@@ -36,6 +36,8 @@
 #include <gst/analytics/gstanalyticstensormtd.h>
 #include <gst/analytics/gsttensormeta.h>
 #include <gst/analytics/gstanalyticsbatchmeta.h>
+#include <gst/analytics/gstanalyticsclaimedregions.h>
+#include <gst/analytics/gstanalyticsoverlaylabels.h>
 #include <gst/analytics/gstanalytics_image_util.h>
 #include <gst/analytics/modelinfo.h>
 

@@ -135,6 +135,155 @@ from the parent buffer of this meta.</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsbatchmeta.h"/>
       <type name="utf8" c:type="gchar*"/>
     </constant>
+    <enumeration name="ClaimKind" version="1.30" c:type="GstAnalyticsClaimKind">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">How strongly a claimed region should be honoured by downstream overlays.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <member name="occlude" value="0" c:identifier="GST_ANALYTICS_CLAIM_KIND_OCCLUDE">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">a hard claim; downstream overlays must not
+  draw over this region (e.g. another overlay's rendered, opaque content).</doc>
+      </member>
+      <member name="avoid" value="1" c:identifier="GST_ANALYTICS_CLAIM_KIND_AVOID">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">a soft claim; downstream overlays prefer not
+  to draw here but may when no better location exists (e.g. a segmentation
+  mask or an outline-only box).</doc>
+      </member>
+    </enumeration>
+    <record name="ClaimedRegion" c:type="GstAnalyticsClaimedRegion" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">A single rectangular region an overlay element claimed on a frame.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <field name="x" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">left edge of the region, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="y" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">top edge of the region, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="w" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">width of the region, in pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="h" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">height of the region, in pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="kind" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">how strongly the region should be honoured</doc>
+        <type name="ClaimKind" c:type="GstAnalyticsClaimKind"/>
+      </field>
+      <field name="priority" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">importance of the claim; a consumer respects claims of priority
+  greater than or equal to its own and may overdraw lower-priority ones</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="owner" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">a #GQuark naming the producing element, so a consumer can skip its
+  own claims</doc>
+        <type name="GLib.Quark" c:type="GQuark"/>
+      </field>
+    </record>
+    <record name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">A #GstMeta carrying the frame regions overlay elements have drawn into, so
+composable overlays can avoid occluding each other. Regions are expressed in
+the negotiated frame's pixel coordinate space and are rescaled/cropped with
+the frame by the meta's transform (like #GstVideoRegionOfInterestMeta).</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="num_regions" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">number of regions in @regions</doc>
+        <type name="gsize" c:type="gsize"/>
+      </field>
+      <field name="regions" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h">the claimed regions</doc>
+        <array length="1" zero-terminated="0" c:type="GstAnalyticsClaimedRegion*">
+          <type name="ClaimedRegion" c:type="GstAnalyticsClaimedRegion"/>
+        </array>
+      </field>
+      <method name="add_region" c:identifier="gst_analytics_claimed_regions_meta_add_region" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">Appends a claimed region to @meta.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a #GstAnalyticsClaimedRegionsMeta</doc>
+            <type name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta*"/>
+          </instance-parameter>
+          <parameter name="x" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">left edge in frame pixels</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="y" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">top edge in frame pixels</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="w" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">width in pixels</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">height in pixels</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="kind" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">how strongly the region should be honoured:
+  %GST_ANALYTICS_CLAIM_KIND_OCCLUDE for a hard claim downstream overlays must
+  not draw over, or %GST_ANALYTICS_CLAIM_KIND_AVOID for a soft claim they
+  prefer to steer around but may use when no better placement exists.</doc>
+            <type name="ClaimKind" c:type="GstAnalyticsClaimKind"/>
+          </parameter>
+          <parameter name="owner" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a #GQuark naming the producing element</doc>
+            <type name="GLib.Quark" c:type="GQuark"/>
+          </parameter>
+          <parameter name="priority" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">importance of the claim</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_region" c:identifier="gst_analytics_claimed_regions_meta_get_region" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">the region at @index</doc>
+          <type name="ClaimedRegion" c:type="const GstAnalyticsClaimedRegion*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a #GstAnalyticsClaimedRegionsMeta</doc>
+            <type name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta*"/>
+          </instance-parameter>
+          <parameter name="index" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">index of the region, less than the value returned by
+  gst_analytics_claimed_regions_meta_get_size()</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_size" c:identifier="gst_analytics_claimed_regions_meta_get_size" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">the number of regions in @meta</doc>
+          <type name="gsize" c:type="gsize"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a #GstAnalyticsClaimedRegionsMeta</doc>
+            <type name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <function name="get_info" c:identifier="gst_analytics_claimed_regions_meta_get_info" version="1.30" introspectable="0">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+        </return-value>
+      </function>
+    </record>
     <record name="ClsMtd" c:type="GstAnalyticsClsMtd" version="1.24">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclassificationmtd.h">Handle containing data required to use gst_analytics_cls_mtd APIs. This type
 is generally expected to be allocated on the stack.</doc>
@@ -592,6 +741,19 @@ See #gst_analytics_relation_meta_add_keypoint_mtd for more details</doc>
   projected by the analysis.</doc>
       </member>
     </bitfield>
+    <enumeration name="LabelCandidateKind" version="1.30" c:type="GstAnalyticsLabelCandidateKind">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">How a downstream compositor should generate fallback positions when a deferred
+label's preferred location is taken.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <member name="box" value="0" c:identifier="GST_ANALYTICS_LABEL_CANDIDATE_BOX">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">the label is anchored to a bounding box;
+  fallback positions ring the box.</doc>
+      </member>
+      <member name="point" value="1" c:identifier="GST_ANALYTICS_LABEL_CANDIDATE_POINT">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">the label is anchored to a point (e.g. a
+  keypoint); fallback positions ring the point.</doc>
+      </member>
+    </enumeration>
     <constant name="MODELINFO_SECTION_NAME" value="modelinfo" c:type="GST_MODELINFO_SECTION_NAME" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h">The name of the modelinfo header section</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/modelinfo.h"/>
@@ -1298,6 +1460,186 @@ identified by @id is stored</doc>
         <return-value transfer-ownership="none">
           <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsobjectdetectionmtd.c">Opaque id of the #GstAnalyticsMtd type</doc>
           <type name="MtdType" c:type="GstAnalyticsMtdType"/>
+        </return-value>
+      </function>
+    </record>
+    <record name="OverlayLabel" c:type="GstAnalyticsOverlayLabel" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">A label an overlay element deferred for a downstream compositor to place and
+render, together with its anchor feature and preferred position.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <field name="text" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">the label text to draw</doc>
+        <type name="utf8" c:type="gchar*"/>
+      </field>
+      <field name="color" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">the text colour, as 0xAARRGGBB</doc>
+        <type name="guint32" c:type="guint32"/>
+      </field>
+      <field name="anchor_x" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">left edge of the labelled feature, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="anchor_y" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">top edge of the labelled feature, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="anchor_w" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">width of the labelled feature (0 for a point feature)</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="anchor_h" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">height of the labelled feature (0 for a point feature)</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="preferred_x" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">left edge of the preferred label position, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="preferred_y" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">top edge of the preferred label position, in frame pixels</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="preferred_w" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">width of the label box (also gives the label size)</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="preferred_h" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">height of the label box</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="kind" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">which fallback-candidate generator to use</doc>
+        <type name="LabelCandidateKind" c:type="GstAnalyticsLabelCandidateKind"/>
+      </field>
+      <field name="priority" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">importance of the label, for global ordering and avoidance</doc>
+        <type name="gint" c:type="gint"/>
+      </field>
+      <field name="owner" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">a #GQuark naming the producing element</doc>
+        <type name="GLib.Quark" c:type="GQuark"/>
+      </field>
+    </record>
+    <record name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">A #GstMeta carrying labels an overlay element deferred for a downstream
+compositor to place globally (avoiding claimed regions and each other) and
+render. Coordinates are in the negotiated frame's pixel space and are rescaled
+with the frame by the meta's transform.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <field name="meta" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">parent #GstMeta</doc>
+        <type name="Gst.Meta" c:type="GstMeta"/>
+      </field>
+      <field name="num_labels" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">number of labels in @labels</doc>
+        <type name="gsize" c:type="gsize"/>
+      </field>
+      <field name="labels" writable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h">the deferred labels</doc>
+        <array length="1" zero-terminated="0" c:type="GstAnalyticsOverlayLabel*">
+          <type name="OverlayLabel" c:type="GstAnalyticsOverlayLabel"/>
+        </array>
+      </field>
+      <method name="add_label" c:identifier="gst_analytics_overlay_labels_meta_add_label" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">Appends a deferred label to @meta. @text is copied.</doc>
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+        <return-value transfer-ownership="none">
+          <type name="none" c:type="void"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a #GstAnalyticsOverlayLabelsMeta</doc>
+            <type name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta*"/>
+          </instance-parameter>
+          <parameter name="text" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the label text (copied)</doc>
+            <type name="utf8" c:type="const gchar*"/>
+          </parameter>
+          <parameter name="color" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the text colour as 0xAARRGGBB</doc>
+            <type name="guint32" c:type="guint32"/>
+          </parameter>
+          <parameter name="anchor_x" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">left edge of the labelled feature</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="anchor_y" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">top edge of the labelled feature</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="anchor_w" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">width of the labelled feature (0 for a point)</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="anchor_h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">height of the labelled feature (0 for a point)</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="preferred_x" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">left edge of the preferred label position</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="preferred_y" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">top edge of the preferred label position</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="preferred_w" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">width of the label box</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="preferred_h" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">height of the label box</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+          <parameter name="kind" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">which fallback-candidate generator to use</doc>
+            <type name="LabelCandidateKind" c:type="GstAnalyticsLabelCandidateKind"/>
+          </parameter>
+          <parameter name="owner" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a #GQuark naming the producing element</doc>
+            <type name="GLib.Quark" c:type="GQuark"/>
+          </parameter>
+          <parameter name="priority" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">importance of the label</doc>
+            <type name="gint" c:type="gint"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_label" c:identifier="gst_analytics_overlay_labels_meta_get_label" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the label at @index</doc>
+          <type name="OverlayLabel" c:type="const GstAnalyticsOverlayLabel*"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a #GstAnalyticsOverlayLabelsMeta</doc>
+            <type name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta*"/>
+          </instance-parameter>
+          <parameter name="index" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">index of the label, less than the value returned by
+  gst_analytics_overlay_labels_meta_get_size()</doc>
+            <type name="gsize" c:type="gsize"/>
+          </parameter>
+        </parameters>
+      </method>
+      <method name="get_size" c:identifier="gst_analytics_overlay_labels_meta_get_size" version="1.30">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+        <return-value transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the number of labels in @meta</doc>
+          <type name="gsize" c:type="gsize"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="meta" transfer-ownership="none">
+            <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a #GstAnalyticsOverlayLabelsMeta</doc>
+            <type name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta*"/>
+          </instance-parameter>
+        </parameters>
+      </method>
+      <function name="get_info" c:identifier="gst_analytics_overlay_labels_meta_get_info" version="1.30" introspectable="0">
+        <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+        <return-value transfer-ownership="none">
+          <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
         </return-value>
       </function>
     </record>
@@ -3093,6 +3435,37 @@ Get the opaque id identifying the relatable type</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="buffer_add_analytics_claimed_regions_meta" c:identifier="gst_buffer_add_analytics_claimed_regions_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">Adds a #GstAnalyticsClaimedRegionsMeta to @buffer. If one is already present
+it is returned, so successive producers append to a shared list via
+gst_analytics_claimed_regions_meta_add_region().</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">the #GstAnalyticsClaimedRegionsMeta</doc>
+        <type name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a writable #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="buffer_add_analytics_overlay_labels_meta" c:identifier="gst_buffer_add_analytics_overlay_labels_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">Adds a #GstAnalyticsOverlayLabelsMeta to @buffer, or returns the existing one
+so successive producers append to a shared list.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <return-value transfer-ownership="none">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the #GstAnalyticsOverlayLabelsMeta</doc>
+        <type name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a writable #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="buffer_add_analytics_relation_meta" c:identifier="gst_buffer_add_analytics_relation_meta" version="1.24">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.c">Attach a analysis-results-meta-relation  meta (#GstAnalyticsRelationMeta)to @buffer.
 
@@ -3160,6 +3533,34 @@ analysis meta.</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="buffer_get_analytics_claimed_regions_meta" c:identifier="gst_buffer_get_analytics_claimed_regions_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">Gets the #GstAnalyticsClaimedRegionsMeta from @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <return-value transfer-ownership="none" nullable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">the meta, or %NULL if there is none</doc>
+        <type name="ClaimedRegionsMeta" c:type="GstAnalyticsClaimedRegionsMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
+    <function name="buffer_get_analytics_overlay_labels_meta" c:identifier="gst_buffer_get_analytics_overlay_labels_meta" version="1.30">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">Gets the #GstAnalyticsOverlayLabelsMeta from @buffer.</doc>
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <return-value transfer-ownership="none" nullable="1">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">the meta, or %NULL if there is none</doc>
+        <type name="OverlayLabelsMeta" c:type="GstAnalyticsOverlayLabelsMeta*"/>
+      </return-value>
+      <parameters>
+        <parameter name="buffer" transfer-ownership="none">
+          <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">a #GstBuffer</doc>
+          <type name="Gst.Buffer" c:type="GstBuffer*"/>
+        </parameter>
+      </parameters>
+    </function>
     <function name="buffer_get_analytics_relation_meta" c:identifier="gst_buffer_get_analytics_relation_meta" version="1.24">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.c">Retrives the meta or %NULL if it doesn't exist</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsmeta.h"/>
@@ -3188,6 +3589,18 @@ analysis meta.</doc>
         </parameter>
       </parameters>
     </function>
+    <function name="claimed_regions_meta_api_get_type" c:identifier="gst_analytics_claimed_regions_meta_api_get_type" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="claimed_regions_meta_get_info" c:identifier="gst_analytics_claimed_regions_meta_get_info" moved-to="ClaimedRegionsMeta.get_info" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
+      </return-value>
+    </function>
     <function name="cls_mtd_get_mtd_type" c:identifier="gst_analytics_cls_mtd_get_mtd_type" moved-to="ClsMtd.get_mtd_type" version="1.24">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclassificationmtd.c">Get an id identifying #GstAnalyticsMtd type.</doc>
       <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclassificationmtd.h"/>
@@ -3204,6 +3617,17 @@ analysis meta.</doc>
         <type name="MtdType" c:type="GstAnalyticsMtdType"/>
       </return-value>
     </function>
+    <docsection name="gstanalyticsclaimedregions">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclaimedregions.c">Composable overlay elements need to avoid drawing on top of each other. The
+#GstAnalyticsClaimedRegionsMeta is a per-buffer list of the frame regions an
+element has drawn into: each element that renders content *claims* the regions
+it used, and downstream overlay elements *read* the claims to steer clear.
+
+The regions are expressed in the negotiated frame's pixel coordinate space and
+follow the frame across scale/crop/aspect transforms via the meta's transform
+function (modelled on #GstVideoRegionOfInterestMeta), so coordinating elements
+may sit on either side of a scaler.</doc>
+    </docsection>
     <docsection name="gstanalyticsclassificationtd">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsclassificationmtd.c">This type of metadata holds classification, it is generally used in
 relationship with another metadata type to enhance its content. For example,
@@ -3226,6 +3650,14 @@ image, along with the probabily of each detection.</doc>
 desired to track an object across many frames. This type of metadata holds
 information about the tracking, for example, it can be used alongside a
 #GstAnalyticsODMtd to track an object.</doc>
+    </docsection>
+    <docsection name="gstanalyticsoverlaylabels">
+      <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.c">The #GstAnalyticsOverlayLabelsMeta lets an overlay element defer its labels
+for a downstream compositor to place globally &#8212; avoiding claimed regions (see
+#GstAnalyticsClaimedRegionsMeta) and each other &#8212; and render. Each label
+carries its text, colour, the anchor feature it belongs to and a preferred
+position; coordinates are in the negotiated frame's pixel space and follow the
+frame across scale/crop transforms via the meta's transform function.</doc>
     </docsection>
     <function name="image_util_iou_float" c:identifier="gst_analytics_image_util_iou_float" version="1.28">
       <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalytics_image_util.c">Calculate the intersection over the union (IoU) of the two areas defined by
@@ -3368,6 +3800,18 @@ when no longer needed.</doc>
       <return-value transfer-ownership="none">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsobjectdetectionmtd.c">Opaque id of the #GstAnalyticsMtd type</doc>
         <type name="MtdType" c:type="GstAnalyticsMtdType"/>
+      </return-value>
+    </function>
+    <function name="overlay_labels_meta_api_get_type" c:identifier="gst_analytics_overlay_labels_meta_api_get_type" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <return-value transfer-ownership="none">
+        <type name="GType" c:type="GType"/>
+      </return-value>
+    </function>
+    <function name="overlay_labels_meta_get_info" c:identifier="gst_analytics_overlay_labels_meta_get_info" moved-to="OverlayLabelsMeta.get_info" version="1.30" introspectable="0">
+      <source-position filename="../subprojects/gst-plugins-bad/gst-libs/gst/analytics/gstanalyticsoverlaylabels.h"/>
+      <return-value transfer-ownership="none">
+        <type name="Gst.MetaInfo" c:type="const GstMetaInfo*"/>
       </return-value>
     </function>
     <function name="relation_get_length" c:identifier="gst_analytics_relation_get_length" version="1.24">
