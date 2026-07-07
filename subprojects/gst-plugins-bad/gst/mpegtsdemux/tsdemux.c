@@ -263,6 +263,7 @@ struct _TSDemuxStream
       "mute = (boolean) { FALSE, TRUE }; " \
     "audio/x-ac3; audio/x-eac3;" \
     "audio/x-ac4;" \
+    "audio/x-dolby-e;" \
     "audio/x-dts;" \
     "audio/x-opus;" \
     "audio/x-private-ts-lpcm" \
@@ -1492,6 +1493,15 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
         GST_LOG_OBJECT (demux, "ac4 audio");
         is_audio = TRUE;
         caps = gst_caps_new_empty_simple ("audio/x-ac4");
+        break;
+      }
+
+      desc = mpegts_get_descriptor_from_stream_with_extension (bstream,
+          GST_MTS_DESC_DVB_EXTENSION, GST_MTS_DESC_EXT_DOLBY_E);
+      if (desc) {
+        GST_LOG_OBJECT (demux, "dolby-e audio");
+        is_audio = TRUE;
+        caps = gst_caps_new_empty_simple ("audio/x-dolby-e");
         break;
       }
 

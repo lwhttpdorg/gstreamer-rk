@@ -159,6 +159,7 @@ typedef enum {
   GST_MTS_DESC_EXT_DVB_T2MI                     = 0x11,
   GST_MTS_DESC_EXT_DVB_URI_LINKAGE              = 0x13,
   GST_MTS_DESC_EXT_DVB_AC4                      = 0x15,
+  GST_MTS_DESC_EXT_DOLBY_E                      = 0x16,
   /**
    * GST_MTS_DESC_EXT_DVB_AUDIO_PRESELECTION:
    *
