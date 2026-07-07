@@ -360,6 +360,8 @@ typedef enum
  * @GST_H266_SEI_SCALABLE_NETING: Scalable Nesting SEI Message.
  * @GST_H266_SEI_FRAME_FIELD_INFO: Frame Field Info SEI Message.
  * @GST_H266_SEI_SUBPIC_LEVEL_INFO: Subpicture Level Information SEI.
+ * @GST_H266_SEI_MASTERING_DISPLAY_COLOUR_VOLUME: Mastering display colour volume information SEI message. (Since: 1.30)
+ * @GST_H266_SEI_CONTENT_LIGHT_LEVEL: Content light level information SEI message. (Since: 1.30)
  * @GST_H266_SEI_DIGITALLY_SIGNED_CONTENT_INITIALIZATION: Digitally Signed Content Initialization SEI.
  * @GST_H266_SEI_DIGITALLY_SIGNED_CONTENT_SELECTION: Digitally Signed Content Selection SEI.
  * @GST_H266_SEI_DIGITALLY_SIGNED_CONTENT_VERIFICATION: Digitally Signed Content Verification SEI.
@@ -377,6 +379,8 @@ typedef enum
   GST_H266_SEI_USER_DATA_UNREGISTERED = 5,
   GST_H266_SEI_DU_INFO = 130,
   GST_H266_SEI_SCALABLE_NESTING = 133,
+  GST_H266_SEI_MASTERING_DISPLAY_COLOUR_VOLUME = 137,
+  GST_H266_SEI_CONTENT_LIGHT_LEVEL = 144,
   GST_H266_SEI_FRAME_FIELD_INFO = 168,
   GST_H266_SEI_SUBPIC_LEVEL_INFO = 203,
   /**
@@ -498,6 +502,8 @@ typedef struct _GstH266DUInfo                   GstH266DUInfo;
 typedef struct _GstH266ScalableNesting          GstH266ScalableNesting;
 typedef struct _GstH266SubPicLevelInfo          GstH266SubPicLevelInfo;
 typedef struct _GstH266FrameFieldInfo           GstH266FrameFieldInfo;
+typedef struct _GstH266MasteringDisplayColourVolume GstH266MasteringDisplayColourVolume;
+typedef struct _GstH266ContentLightLevel        GstH266ContentLightLevel;
 typedef struct _GstH266SEIMessage               GstH266SEIMessage;
 typedef struct _GstH266DecoderConfigRecordNalUnitArray GstH266DecoderConfigRecordNalUnitArray;
 typedef struct _GstH266PTLRecord                GstH266PTLRecord;
@@ -3258,6 +3264,36 @@ struct _GstH266FrameFieldInfo {
 };
 
 /**
+ * GstH266MasteringDisplayColourVolume:
+ * The colour volume (primaries, white point and luminance range) of display
+ * defined by SMPTE ST 2086.
+ *
+ * Since: 1.30
+ */
+struct _GstH266MasteringDisplayColourVolume
+{
+  guint16 display_primaries_x[3];
+  guint16 display_primaries_y[3];
+  guint16 white_point_x;
+  guint16 white_point_y;
+  guint32 max_display_mastering_luminance;
+  guint32 min_display_mastering_luminance;
+};
+
+/**
+ * GstH266ContentLightLevel:
+ * The upper bounds for the nominal target brightness light level
+ * as specified in CEA-861.3
+ *
+ * Since: 1.30
+ */
+struct _GstH266ContentLightLevel
+{
+  guint16 max_content_light_level;
+  guint16 max_pic_average_light_level;
+};
+
+/**
  * GstH266SEIMessage:
  * @payloadType: the payload type of #GstH266SEIPayloadType.
  * @buffering_period: buffering period sei of #GstH266BufferingPeriod.
@@ -3266,6 +3302,8 @@ struct _GstH266FrameFieldInfo {
  * @scalable_nesting: scalable nesting sei of #GstH266ScalableNesting.
  * @subpic_level_info: subpicture level info sei of #GstH266SubPicLevelInfo.
  * @frame_field_info: frame field info sei of #GstH266FrameFieldInfo.
+ * @mastering_display_colour_volume: mastering display colour volume sei of #GstH266MasteringDisplayColourVolume. (Since: 1.30)
+ * @content_light_level: content light level sei of #GstH266ContentLightLevel. (Since: 1.30)
  * @registered_user_data: registered user data sei of #GstH266RegisteredUserData. (Since: 1.28)
  * @user_data_unregistered: user data unregistered sei of #GstH274UserDataUnregistered. (Since: 1.30)
  * @dsc_initialization: digitally signed content initialization sei of #GstH274DigitallySignedContentInitialization. (Since: 1.30)
@@ -3287,6 +3325,25 @@ struct _GstH266SEIMessage
     GstH266ScalableNesting scalable_nesting;
     GstH266SubPicLevelInfo subpic_level_info;
     GstH266FrameFieldInfo frame_field_info;
+
+    /**
+     * GstH266SEIMessage.mastering_display_colour_volume:
+     *
+     * Mastering display colour volume sei of
+     * #GstH266MasteringDisplayColourVolume.
+     *
+     * Since: 1.30
+     */
+    GstH266MasteringDisplayColourVolume mastering_display_colour_volume;
+
+    /**
+     * GstH266SEIMessage.content_light_level:
+     *
+     * Content light level sei of #GstH266ContentLightLevel.
+     *
+     * Since: 1.30
+     */
+    GstH266ContentLightLevel content_light_level;
 
     /**
      * GstH266SEIMessage.registered_user_data:

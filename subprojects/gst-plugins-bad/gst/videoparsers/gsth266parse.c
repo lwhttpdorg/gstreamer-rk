@@ -645,6 +645,88 @@ gst_h266_parse_process_sei (GstH266Parse * h266parse, GstH266NalUnit * nalu)
       case GST_H266_SEI_SUBPIC_LEVEL_INFO:
         /* FIXME */
         break;
+      case GST_H266_SEI_MASTERING_DISPLAY_COLOUR_VOLUME:
+      {
+        /* Mastering display colour volume SEI message semantics as defined by
+         * Rec. ITU-T H.274. */
+        GstVideoMasteringDisplayInfo minfo;
+        gint j, k;
+
+        /* GstVideoMasteringDisplayInfo::display_primaries is rgb order but
+         * H.266 uses gbr order for display_primaries_x and display_primaries_y
+         */
+        for (j = 0, k = 2; j < G_N_ELEMENTS (minfo.display_primaries); j++, k++) {
+          minfo.display_primaries[j].x =
+              sei.payload.
+              mastering_display_colour_volume.display_primaries_x[k % 3];
+          minfo.display_primaries[j].y =
+              sei.payload.
+              mastering_display_colour_volume.display_primaries_y[k % 3];
+        }
+
+        minfo.white_point.x =
+            sei.payload.mastering_display_colour_volume.white_point_x;
+        minfo.white_point.y =
+            sei.payload.mastering_display_colour_volume.white_point_y;
+        minfo.max_display_mastering_luminance =
+            sei.payload.mastering_display_colour_volume.
+            max_display_mastering_luminance;
+        minfo.min_display_mastering_luminance =
+            sei.payload.mastering_display_colour_volume.
+            min_display_mastering_luminance;
+
+        GST_LOG_OBJECT (h266parse, "mastering display info found: "
+            "Red(%u, %u) "
+            "Green(%u, %u) "
+            "Blue(%u, %u) "
+            "White(%u, %u) "
+            "max_luminance(%u) "
+            "min_luminance(%u) ",
+            minfo.display_primaries[0].x, minfo.display_primaries[0].y,
+            minfo.display_primaries[1].x, minfo.display_primaries[1].y,
+            minfo.display_primaries[2].x, minfo.display_primaries[2].y,
+            minfo.white_point.x, minfo.white_point.y,
+            minfo.max_display_mastering_luminance,
+            minfo.min_display_mastering_luminance);
+
+        if (h266parse->mastering_display_info_state ==
+            GST_H266_PARSE_SEI_EXPIRED) {
+          h266parse->update_caps = TRUE;
+        } else if (!gst_video_mastering_display_info_is_equal
+            (&h266parse->mastering_display_info, &minfo)) {
+          h266parse->update_caps = TRUE;
+        }
+
+        h266parse->mastering_display_info_state = GST_H266_PARSE_SEI_PARSED;
+        h266parse->mastering_display_info = minfo;
+
+        break;
+      }
+      case GST_H266_SEI_CONTENT_LIGHT_LEVEL:
+      {
+        GstVideoContentLightLevel cll;
+
+        cll.max_content_light_level =
+            sei.payload.content_light_level.max_content_light_level;
+        cll.max_frame_average_light_level =
+            sei.payload.content_light_level.max_pic_average_light_level;
+
+        GST_LOG_OBJECT (h266parse, "content light level found: "
+            "maxCLL:(%u), maxFALL:(%u)", cll.max_content_light_level,
+            cll.max_frame_average_light_level);
+
+        if (h266parse->content_light_level_state == GST_H266_PARSE_SEI_EXPIRED) {
+          h266parse->update_caps = TRUE;
+        } else if (!gst_video_content_light_level_is_equal
+            (&h266parse->content_light_level, &cll)) {
+          h266parse->update_caps = TRUE;
+        }
+
+        h266parse->content_light_level_state = GST_H266_PARSE_SEI_PARSED;
+        h266parse->content_light_level = cll;
+
+        break;
+      }
       case GST_H266_SEI_REGISTERED_USER_DATA:
         gst_h266_parse_process_sei_user_data (h266parse,
             &sei.payload.registered_user_data);
