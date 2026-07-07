@@ -114,6 +114,7 @@ typedef struct {
   guint16       header_ext_bit_pattern;
   guint8        ntp64_ext_id;
   gboolean      have_ntp64_ext;
+  guint8        ecn_cp;
 } RTPPacketInfo;
 
 /**
@@ -305,5 +306,7 @@ void rtp_twcc_stats_free (RTPTWCCStats * stats);
 GstStructure * rtp_twcc_stats_process_packets (RTPTWCCStats * stats,
     GArray * twcc_packets);
 GstStructure * rtp_twcc_stats_get_packets_structure (GArray * twcc_packets);
+
+GstStructure * rtp_ccfb_stats_get_report_structure (GSList * report_blocks, guint32 report_timestamp);
 
 #endif /* __RTP_STATS_H__ */

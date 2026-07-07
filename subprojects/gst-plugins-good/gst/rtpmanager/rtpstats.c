@@ -22,6 +22,7 @@
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 
 #include "rtpstats.h"
+#include "rtpccfb.h"
 #include "rtptwcc.h"
 
 void
@@ -529,6 +530,73 @@ rtp_twcc_stats_calculate_stats (RTPTWCCStats * stats, GArray * twcc_packets)
 
   stats->packets_sent = twcc_packets->len;
   stats->packets_recv = packets_recv;
+}
+
+static void
+_append_structure_to_list (GValue * list, GstStructure * s)
+{
+  GValue val = G_VALUE_INIT;
+  g_value_init (&val, GST_TYPE_STRUCTURE);
+  gst_value_set_structure (&val, s);
+  gst_value_list_append_and_take_value (list, &val);
+}
+
+GstStructure *
+rtp_ccfb_stats_get_report_structure (GSList * report_blocks,
+    guint32 report_timestamp)
+{
+  GstStructure *ret = gst_structure_new ("RTPCCFBReport",
+      "report-timestamp", G_TYPE_UINT, report_timestamp, NULL);
+
+  GValue rb_list = G_VALUE_INIT;
+  g_value_init (&rb_list, GST_TYPE_LIST);
+
+  for (; report_blocks; report_blocks = g_slist_next (report_blocks)) {
+    RTPCCFBReportBlock *rblock = report_blocks->data;
+
+    GValue mb_list = G_VALUE_INIT;
+    g_value_init (&mb_list, GST_TYPE_LIST);
+
+    guint i;
+
+    GstStructure *rblock_s = gst_structure_new ("RTPCCFBReportBlock",
+        "ssrc", G_TYPE_UINT, rblock->ssrc,
+        "begin-seq", G_TYPE_UINT, rblock->begin_seq,
+        NULL);
+
+    for (i = 0; i != rblock->metric_blocks->len; ++i) {
+      RTPCCFBMetricBlock *mblock =
+          &g_array_index (rblock->metric_blocks, RTPCCFBMetricBlock, i);
+
+      GstStructure *mblock_s = gst_structure_new ("RTPCCFBMetricBlock",
+          "received", G_TYPE_BOOLEAN, mblock->received,
+          "ecn-cp", G_TYPE_UINT, mblock->ecn_cp,
+          NULL);
+
+      switch (mblock->ntp_arrival_time_status) {
+        case RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OK:
+          gst_structure_set (mblock_s, "ntp-arrival-time",
+              G_TYPE_UINT, mblock->ntp_arrival_time, NULL);
+          break;
+        case RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_OVER_RANGE:
+          gst_structure_set (mblock_s, "ntp-arrival-time-over-range",
+              G_TYPE_BOOLEAN, TRUE, NULL);
+          break;
+        case RTP_CCFB_NTP_ARRIVAL_TIME_STATUS_UNAVAILABLE:
+          break;
+      }
+
+      _append_structure_to_list (&mb_list, mblock_s);
+    }
+
+    gst_structure_take_value (rblock_s, "metric-blocks", &mb_list);
+
+    _append_structure_to_list (&rb_list, rblock_s);
+  }
+
+  gst_structure_take_value (ret, "report-blocks", &rb_list);
+
+  return ret;
 }
 
 static gint
