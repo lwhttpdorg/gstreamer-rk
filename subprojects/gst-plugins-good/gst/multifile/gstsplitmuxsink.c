@@ -766,7 +766,7 @@ update_muxer_properties (GstSplitMuxSink * sink)
   GST_LOG_OBJECT (sink, "Setting muxer reserved time to %" GST_TIME_FORMAT,
       GST_TIME_ARGS (sink->threshold_time));
   GST_OBJECT_LOCK (sink);
-  threshold_time = sink->threshold_time;
+  threshold_time = sink->threshold_time + sink->threshold_time_overshoot;
   GST_OBJECT_UNLOCK (sink);
 
   if (threshold_time > 0) {
@@ -803,6 +803,7 @@ gst_splitmux_sink_set_property (GObject * object, guint prop_id,
     case PROP_MAX_SIZE_TIME:
       GST_OBJECT_LOCK (splitmux);
       splitmux->threshold_time = g_value_get_uint64 (value);
+      splitmux->threshold_time_overshoot = 0;
       GST_OBJECT_UNLOCK (splitmux);
       break;
     case PROP_MAX_SIZE_TIMECODE:
@@ -2642,7 +2643,7 @@ need_new_fragment (GstSplitMuxSink * splitmux,
 
   GST_OBJECT_LOCK (splitmux);
   thresh_bytes = splitmux->threshold_bytes;
-  thresh_time = splitmux->threshold_time;
+  thresh_time = splitmux->threshold_time + splitmux->threshold_time_overshoot;
   ptr_to_time = (GstClockTime *)
       gst_vec_deque_peek_head_struct (splitmux->times_to_split);
   if (ptr_to_time)
@@ -2839,6 +2840,45 @@ handle_gathered_gop (GstSplitMuxSink * splitmux, const InputGop * gop,
     cmd = out_cmd_buf_new_finish_fragment ();
     g_queue_push_head (&splitmux->out_cmd_q, cmd);
     GST_SPLITMUX_BROADCAST_OUTPUT (splitmux);
+
+    GST_OBJECT_LOCK (splitmux);
+    /* Update overshoot allowance if a time threshold was set */
+    if (splitmux->threshold_time > 0) {
+      GstClockTime fragment_duration;
+
+      if (splitmux->reference_ctx->out_running_time != GST_CLOCK_STIME_NONE)
+        fragment_duration = splitmux->reference_ctx->out_running_time;
+      else
+        fragment_duration = gop->start_time;
+
+      if (fragment_duration > splitmux->fragment_start_time)
+        fragment_duration -= splitmux->fragment_start_time;
+      else
+        fragment_duration = 0;
+
+      GST_DEBUG_OBJECT (splitmux, "Fragment duration %" GST_TIME_FORMAT
+          ", time threshold %" GST_TIME_FORMAT ", overshoot allowance %"
+          GST_TIME_FORMAT, GST_TIME_ARGS (fragment_duration),
+          GST_TIME_ARGS (splitmux->threshold_time),
+          GST_TIME_ARGS (splitmux->threshold_time_overshoot));
+      if (fragment_duration >= splitmux->threshold_time) {
+        GstClockTime diff = fragment_duration - splitmux->threshold_time;
+
+        if (diff <= splitmux->threshold_time_overshoot)
+          splitmux->threshold_time_overshoot -= diff;
+        else
+          splitmux->threshold_time_overshoot = 0;
+      } else {
+        GstClockTime diff = splitmux->threshold_time - fragment_duration;
+
+        splitmux->threshold_time_overshoot += diff;
+      }
+
+      GST_DEBUG_OBJECT (splitmux,
+          "New time threshold overshoot allowance %" GST_TIME_FORMAT,
+          GST_TIME_ARGS (splitmux->threshold_time_overshoot));
+    }
+    GST_OBJECT_UNLOCK (splitmux);
 
     splitmux->fragment_start_time = gop->start_time;
     splitmux->fragment_start_time_pts = gop->start_time_pts;
@@ -4299,6 +4339,7 @@ gst_splitmux_sink_reset (GstSplitMuxSink * splitmux)
   splitmux->max_out_running_time = GST_CLOCK_STIME_NONE;
   splitmux->fragment_total_bytes = 0;
   splitmux->fragment_reference_bytes = 0;
+  splitmux->threshold_time_overshoot = 0;
   splitmux->muxed_out_bytes = 0;
   splitmux->ready_for_output = FALSE;
 
