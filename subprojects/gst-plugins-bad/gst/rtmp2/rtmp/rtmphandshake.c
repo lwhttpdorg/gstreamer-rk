@@ -309,3 +309,228 @@ gst_rtmp_client_handshake_finish (GIOStream * stream, GAsyncResult * result,
   g_return_val_if_fail (g_task_is_valid (result, stream), FALSE);
   return g_task_propagate_boolean (G_TASK (result), error);
 }
+
+/* ========== Server-side handshake implementation ========== */
+
+static void server_handshake1_done (GObject * source, GAsyncResult * result,
+    gpointer user_data);
+static void server_handshake2_done (GObject * source, GAsyncResult * result,
+    gpointer user_data);
+static void server_handshake3_done (GObject * source, GAsyncResult * result,
+    gpointer user_data);
+
+static GBytes *
+create_s0s1s2 (GBytes * server_random, const guint8 * c1)
+{
+  GByteArray *ba = g_byte_array_sized_new (SIZE_P0P1P2);
+  gint64 s1time = g_get_monotonic_time ();
+
+  /* S0 version */
+  serialize_u8 (ba, 3);
+
+  /* S1 time */
+  serialize_u32 (ba, s1time / 1000);
+
+  /* S1 zero */
+  serialize_u32 (ba, 0);
+
+  /* S1 random data */
+  gst_rtmp_byte_array_append_bytes (ba, server_random);
+
+  /* S2 = echo of C1 */
+  g_byte_array_set_size (ba, SIZE_P0P1P2);
+  memcpy (ba->data + SIZE_P0P1, c1, SIZE_P1);
+
+  /* S2 time2 */
+  GST_WRITE_UINT32_BE (ba->data + SIZE_P0P1 + 4, s1time / 1000);
+
+  GST_DEBUG ("Sending S0+S1+S2");
+  GST_MEMDUMP (">>> S0", ba->data, SIZE_P0);
+  GST_MEMDUMP (">>> S1", ba->data + SIZE_P0, SIZE_P1);
+  GST_MEMDUMP (">>> S2", ba->data + SIZE_P0P1, SIZE_P2);
+
+  return g_byte_array_free_to_bytes (ba);
+}
+
+void
+gst_rtmp_server_handshake (GIOStream * stream, gboolean strict,
+    GCancellable * cancellable, GAsyncReadyCallback callback,
+    gpointer user_data)
+{
+  GTask *task;
+  HandshakeData *data;
+
+  g_return_if_fail (G_IS_IO_STREAM (stream));
+
+  init_debug ();
+  GST_INFO ("Starting server handshake");
+
+  task = g_task_new (stream, cancellable, callback, user_data);
+  data = handshake_data_new (strict);
+  g_task_set_task_data (task, data, handshake_data_free);
+
+  /* Step 1: Read C0+C1 from client */
+  {
+    GInputStream *is = g_io_stream_get_input_stream (stream);
+
+    GST_DEBUG ("Waiting for C0+C1");
+    gst_rtmp_input_stream_read_all_bytes_async (is, SIZE_P0P1,
+        G_PRIORITY_DEFAULT, g_task_get_cancellable (task),
+        server_handshake1_done, task);
+  }
+}
+
+static void
+server_handshake1_done (GObject * source, GAsyncResult * result,
+    gpointer user_data)
+{
+  GInputStream *is = G_INPUT_STREAM (source);
+  GTask *task = user_data;
+  GIOStream *stream = g_task_get_source_object (task);
+  HandshakeData *data = g_task_get_task_data (task);
+  GError *error = NULL;
+  GBytes *res;
+  const guint8 *c0c1;
+  gsize size;
+
+  res = gst_rtmp_input_stream_read_all_bytes_finish (is, result, &error);
+  if (!res) {
+    GST_ERROR ("Failed to read C0+C1: %s", error->message);
+    g_task_return_error (task, error);
+    g_object_unref (task);
+    return;
+  }
+
+  c0c1 = g_bytes_get_data (res, &size);
+  if (size < SIZE_P0P1) {
+    GST_ERROR ("Short read (want %d have %" G_GSIZE_FORMAT ")", SIZE_P0P1,
+        size);
+    g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_PARTIAL_INPUT,
+        "Short read (want %d have %" G_GSIZE_FORMAT ")", SIZE_P0P1, size);
+    g_bytes_unref (res);
+    g_object_unref (task);
+    return;
+  }
+
+  GST_DEBUG ("Got C0+C1");
+  GST_MEMDUMP ("<<< C0", c0c1, SIZE_P0);
+  GST_MEMDUMP ("<<< C1", c0c1 + SIZE_P0, SIZE_P1);
+
+  /* Validate C0 version */
+  if (c0c1[0] != 3) {
+    if (data->strict) {
+      GST_ERROR ("Unsupported RTMP version: %d", c0c1[0]);
+      g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+          "Unsupported RTMP version: %d", c0c1[0]);
+      g_bytes_unref (res);
+      g_object_unref (task);
+      return;
+    }
+    GST_WARNING ("Unexpected RTMP version %d, continuing anyway", c0c1[0]);
+  }
+
+  /* Step 2: Send S0+S1+S2 */
+  {
+    GOutputStream *os = g_io_stream_get_output_stream (stream);
+    GBytes *s0s1s2 = create_s0s1s2 (data->random_bytes, c0c1 + SIZE_P0);
+
+    gst_rtmp_output_stream_write_all_bytes_async (os,
+        s0s1s2, G_PRIORITY_DEFAULT,
+        g_task_get_cancellable (task), server_handshake2_done, task);
+
+    g_bytes_unref (s0s1s2);
+  }
+
+  g_bytes_unref (res);
+}
+
+static void
+server_handshake2_done (GObject * source, GAsyncResult * result,
+    gpointer user_data)
+{
+  GOutputStream *os = G_OUTPUT_STREAM (source);
+  GTask *task = user_data;
+  GIOStream *stream = g_task_get_source_object (task);
+  GInputStream *is = g_io_stream_get_input_stream (stream);
+  GError *error = NULL;
+  gboolean res;
+
+  res = gst_rtmp_output_stream_write_all_bytes_finish (os, result, &error);
+  if (!res) {
+    GST_ERROR ("Failed to send S0+S1+S2: %s", error->message);
+    g_task_return_error (task, error);
+    g_object_unref (task);
+    return;
+  }
+
+  GST_DEBUG ("Sent S0+S1+S2, waiting for C2");
+
+  /* Step 3: Read C2 */
+  gst_rtmp_input_stream_read_all_bytes_async (is, SIZE_P2,
+      G_PRIORITY_DEFAULT, g_task_get_cancellable (task),
+      server_handshake3_done, task);
+}
+
+static void
+server_handshake3_done (GObject * source, GAsyncResult * result,
+    gpointer user_data)
+{
+  GInputStream *is = G_INPUT_STREAM (source);
+  GTask *task = user_data;
+  HandshakeData *data = g_task_get_task_data (task);
+  GError *error = NULL;
+  GBytes *res;
+  const guint8 *c2;
+  gsize size;
+
+  res = gst_rtmp_input_stream_read_all_bytes_finish (is, result, &error);
+  if (!res) {
+    GST_ERROR ("Failed to read C2: %s", error->message);
+    g_task_return_error (task, error);
+    g_object_unref (task);
+    return;
+  }
+
+  c2 = g_bytes_get_data (res, &size);
+  if (size < SIZE_P2) {
+    GST_ERROR ("Short read (want %d have %" G_GSIZE_FORMAT ")", SIZE_P2, size);
+    g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_PARTIAL_INPUT,
+        "Short read (want %d have %" G_GSIZE_FORMAT ")", SIZE_P2, size);
+    g_bytes_unref (res);
+    g_object_unref (task);
+    return;
+  }
+
+  GST_DEBUG ("Got C2");
+  GST_MEMDUMP ("<<< C2", c2, SIZE_P2);
+
+  /* Validate C2 contains our S1 random data */
+  if (handshake_data_check (data, c2)) {
+    GST_DEBUG ("C2 random data matches S1");
+  } else {
+    if (data->strict) {
+      GST_ERROR ("Handshake response data did not match");
+      g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+          "Handshake response data did not match");
+      g_bytes_unref (res);
+      g_object_unref (task);
+      return;
+    }
+
+    GST_WARNING ("Handshake response data did not match; continuing anyway");
+  }
+
+  g_bytes_unref (res);
+
+  GST_INFO ("Server handshake finished");
+  g_task_return_boolean (task, TRUE);
+  g_object_unref (task);
+}
+
+gboolean
+gst_rtmp_server_handshake_finish (GIOStream * stream, GAsyncResult * result,
+    GError ** error)
+{
+  g_return_val_if_fail (g_task_is_valid (result, stream), FALSE);
+  return g_task_propagate_boolean (G_TASK (result), error);
+}

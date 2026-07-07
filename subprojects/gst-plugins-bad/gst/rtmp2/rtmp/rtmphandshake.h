@@ -31,5 +31,12 @@ void gst_rtmp_client_handshake (GIOStream * stream, gboolean strict,
 gboolean gst_rtmp_client_handshake_finish (GIOStream * stream,
     GAsyncResult * result, GError ** error);
 
+/* Server-side handshake (receives C0+C1, sends S0+S1+S2, receives C2) */
+void gst_rtmp_server_handshake (GIOStream * stream, gboolean strict,
+    GCancellable * cancellable, GAsyncReadyCallback callback,
+    gpointer user_data);
+gboolean gst_rtmp_server_handshake_finish (GIOStream * stream,
+    GAsyncResult * result, GError ** error);
+
 G_END_DECLS
 #endif
