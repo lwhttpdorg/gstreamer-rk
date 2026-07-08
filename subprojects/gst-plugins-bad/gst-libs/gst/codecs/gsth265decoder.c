@@ -89,9 +89,6 @@ struct _GstH265DecoderPrivate
   const GstH265SPS *active_sps;
   const GstH265PPS *active_pps;
 
-  // Store extended sps for each sps ids
-  GArray *sps_ext;
-
   guint32 SpsMaxLatencyPictures;
 
   /* Picture currently being processed/decoded */
@@ -230,8 +227,6 @@ gst_h265_decoder_init (GstH265Decoder * self)
 
   self->priv = priv = gst_h265_decoder_get_instance_private (self);
 
-  priv->sps_ext = g_array_sized_new (FALSE, TRUE, sizeof (GstH265SPSEXT),
-      GST_H265_MAX_SPS_COUNT);
   priv->last_output_poc = G_MININT32;
 
   priv->ref_pic_list_tmp = g_array_sized_new (FALSE, TRUE,
@@ -262,7 +257,6 @@ gst_h265_decoder_finalize (GObject * object)
   g_array_unref (priv->ref_pic_list1);
   g_array_unref (priv->nalu);
   g_array_unref (priv->split_nalu);
-  g_array_unref (priv->sps_ext);
   gst_vec_deque_free (priv->output_queue);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -915,13 +909,12 @@ gst_h265_decoder_parse_slice (GstH265Decoder * self, GstH265NalUnit * nalu)
   GstH265DecoderPrivate *priv = self->priv;
   GstH265ParserResult pres;
   GstH265Slice slice;
-  GstH265SPSEXT sps_ext;
   GstH265DecoderNalUnit decoder_nalu;
 
   memset (&slice, 0, sizeof (GstH265Slice));
 
-  pres = gst_h265_parser_parse_slice_hdr_ext (priv->preproc_parser,
-      nalu, &slice.header, &sps_ext);
+  pres = gst_h265_parser_parse_slice_hdr (priv->preproc_parser,
+      nalu, &slice.header);
   if (pres != GST_H265_PARSER_OK)
     return pres;
 
@@ -969,10 +962,6 @@ gst_h265_decoder_parse_slice (GstH265Decoder * self, GstH265NalUnit * nalu)
 
   g_array_append_val (priv->nalu, decoder_nalu);
 
-  if (nalu->type == GST_H265_NAL_SPS)
-    g_array_index (priv->sps_ext, GstH265SPSEXT, decoder_nalu.unit.sps.id)
-        = sps_ext;
-
   return GST_H265_PARSER_OK;
 }
 
@@ -982,7 +971,6 @@ gst_h265_decoder_parse_nalu (GstH265Decoder * self, GstH265NalUnit * nalu)
   GstH265DecoderPrivate *priv = self->priv;
   GstH265VPS vps;
   GstH265SPS sps;
-  GstH265SPSEXT sps_ext;
   GstH265PPS pps;
   GstH265ParserResult ret = GST_H265_PARSER_OK;
   GstH265DecoderNalUnit decoder_nalu;
@@ -1015,14 +1003,11 @@ gst_h265_decoder_parse_nalu (GstH265Decoder * self, GstH265NalUnit * nalu)
       g_array_append_val (priv->nalu, decoder_nalu);
       break;
     case GST_H265_NAL_SPS:
-      ret =
-          gst_h265_parser_parse_sps_ext (priv->preproc_parser, nalu, &sps,
-          &sps_ext, TRUE);
+      ret = gst_h265_parser_parse_sps (priv->preproc_parser, nalu, &sps, TRUE);
       if (ret != GST_H265_PARSER_OK)
         break;
 
       decoder_nalu.unit.sps = sps;
-      g_array_index (priv->sps_ext, GstH265SPSEXT, sps.id) = sps_ext;
       g_array_append_val (priv->nalu, decoder_nalu);
       break;
     case GST_H265_NAL_PPS:
@@ -2288,22 +2273,4 @@ gst_h265_decoder_get_picture (GstH265Decoder * decoder,
     guint32 system_frame_number)
 {
   return gst_h265_dpb_get_picture (decoder->priv->dpb, system_frame_number);
-}
-
-/**
- * gst_h265_decoder_get_sps_ext:
- * @decoder: a #GstH265Decoder
- * @sps : the #GstH265SPS matching the requested #GstH265SPSEXT
- *
- * Retrieve the extended SPS values attached to the given #GstH265SPS
- *
- * Returns: (transfer none) (nullable): a #GstH265SPSEXT if successful, or %NULL otherwise
- *
- * Since: 1.28
- */
-const GstH265SPSEXT *
-gst_h265_decoder_get_sps_ext (const GstH265Decoder * decoder,
-    const GstH265SPS * sps)
-{
-  return &g_array_index (decoder->priv->sps_ext, GstH265SPSEXT, sps->id);
 }

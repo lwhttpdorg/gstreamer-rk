@@ -512,7 +512,6 @@ typedef struct _GstH265NalUnit                  GstH265NalUnit;
 typedef struct _GstH265VPS                      GstH265VPS;
 typedef struct _GstH265VPSExtensionParams       GstH265VPSExtensionParams;
 typedef struct _GstH265SPS                      GstH265SPS;
-typedef struct _GstH265SPSEXT                   GstH265SPSEXT;
 typedef struct _GstH265PPS                      GstH265PPS;
 typedef struct _GstH265ProfileTierLevel         GstH265ProfileTierLevel;
 typedef struct _GstH265SubLayerHRDParams        GstH265SubLayerHRDParams;
@@ -527,7 +526,6 @@ typedef struct _GstH265ScalingList              GstH265ScalingList;
 typedef struct _GstH265RefPicListModification   GstH265RefPicListModification;
 typedef struct _GstH265PredWeightTable          GstH265PredWeightTable;
 typedef struct _GstH265ShortTermRefPicSet       GstH265ShortTermRefPicSet;
-typedef struct _GstH265ShortTermRefPicSetExt    GstH265ShortTermRefPicSetExt;
 typedef struct _GstH265SliceHdr                 GstH265SliceHdr;
 
 typedef struct _GstH265PicTiming                GstH265PicTiming;
@@ -901,6 +899,16 @@ struct _GstH265VPS {
  *  the value of the variable deltaRps.
  * @abs_delta_rps_minus1: delta_rps_sign and abs_delta_rps_minus1 together specify
  *  the value of the variable deltaRps
+ * @use_delta_flag: Bit j equals to 1 specifies that the j-th entry in the source candidate
+ *  short-term RPS is included in this candidate short-term RPS (Since: 1.30)
+ * @used_by_curr_pic_flag: Bit j specifies if short-term RPS j is used by the current picture
+ *  (Since: 1.30)
+ * @delta_poc_s0_minus1: Specifies the negative picture order count delta for the i-th
+ *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
+ *  picture set semantics" of the specification (Since: 1.30)
+ * @delta_poc_s1_minus1: Specifies the positive picture order count delta for the i-th
+ *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
+ *  picture set semantics" of the specification (Since: 1.30)
  * @NumDeltaPocs: sum of @NumNegativePics and @NumPositivePics.
  * @NumNegativePics: Derived value depending on inter_ref_pic_set_prediction_flag.
  *  If inter_ref_pic_set_prediction_flag is equal to 0, this specifies
@@ -930,12 +938,54 @@ struct _GstH265VPS {
  *
  * Defines the #GstH265ShortTermRefPicSet params
  */
+
 struct _GstH265ShortTermRefPicSet
 {
   guint8 inter_ref_pic_set_prediction_flag;
   guint8 delta_idx_minus1;
   guint8 delta_rps_sign;
   guint16 abs_delta_rps_minus1;
+
+  /**
+   * GstH265ShortTermRefPicSet.use_delta_flag:
+   *
+   * Bit j equals to 1 specifies that the j-th entry in the source candidate
+   * short-term RPS is included in this candidate short-term RPS.
+   *
+   * Since: 1.30
+   */
+  guint8 use_delta_flag[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.used_by_curr_pic_flag:
+   *
+   * Bit j specifies if short-term RPS j is used by the current picture.
+   *
+   * Since: 1.30
+   */
+  guint8 used_by_curr_pic_flag[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.delta_poc_s0_minus1:
+   *
+   * Specifies the negative picture order count delta for the i-th entry in
+   * the short-term RPS. See details in section 7.4.8 "Short-term reference
+   * picture set semantics" of the specification.
+   *
+   * Since: 1.30
+   */
+  guint32 delta_poc_s0_minus1[16];
+
+  /**
+   * GstH265ShortTermRefPicSet.delta_poc_s1_minus1:
+   *
+   * Specifies the positive picture order count delta for the i-th entry in
+   * the short-term RPS. See details in section 7.4.8 "Short-term reference
+   * picture set semantics" of the specification.
+   *
+   * Since: 1.30
+   */
+  guint32 delta_poc_s1_minus1[16];
 
   /* calculated values */
   guint8 NumDeltaPocs;
@@ -946,30 +996,6 @@ struct _GstH265ShortTermRefPicSet
   gint32 DeltaPocS0[16];
   gint32 DeltaPocS1[16];
   guint8 NumDeltaPocsOfRefRpsIdx;
-};
-
-/**
- * GstH265ShortTermRefPicSetExt:
- * @use_delta_flag: Bit j equals to 1 specifies that the j-th entry in the source candidate
- *  short-term RPS is included in this candidate short-term RPS.
- * @used_by_curr_pic: Bit j specifies if short-term RPS j is used by the current picture.
- * @delta_poc_s0_minus1: Specifies the negative picture order count delta for the i-th
- *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
- *  picture set semantics" of the specification.
- * @delta_poc_s1_minus1: Specifies the positive picture order count delta for the i-th
- *  entry in the short-term RPS. See details in section 7.4.8 "Short-term reference
- *  picture set semantics" of the specification.
- *
- * Defines the extended #GstH265ShortTermRefPicSetExt params
- *
- * Since: 1.28
- */
-struct _GstH265ShortTermRefPicSetExt
-{
-  guint8 use_delta_flag[16];
-  guint8 used_by_curr_pic_flag[16];
-  guint32 delta_poc_s0_minus1[16];
-  guint32 delta_poc_s1_minus1[16];
 };
 
 /**
@@ -1398,17 +1424,6 @@ struct _GstH265SPS
   gint crop_rect_x, crop_rect_y;
   gint fps_num, fps_den;
   gboolean valid;
-};
-
-/**
- * GstH265SPSEXT:
- *
- * H265 Sequence Parameter Set extension
- *
- * Since: 1.28
- */
-struct _GstH265SPSEXT {
-  GstH265ShortTermRefPicSetExt short_term_ref_pic_set_ext[65];
 };
 
 /**
@@ -2252,12 +2267,6 @@ GstH265ParserResult gst_h265_parser_parse_slice_hdr (GstH265Parser   * parser,
                                                      GstH265SliceHdr * slice);
 
 GST_CODEC_PARSERS_API
-GstH265ParserResult gst_h265_parser_parse_slice_hdr_ext (GstH265Parser   * parser,
-                                                         GstH265NalUnit  * nalu,
-                                                         GstH265SliceHdr * slice,
-                                                         GstH265SPSEXT   * sps_ext);
-
-GST_CODEC_PARSERS_API
 GstH265ParserResult gst_h265_parser_parse_vps       (GstH265Parser   * parser,
                                                      GstH265NalUnit  * nalu,
                                                      GstH265VPS      * vps);
@@ -2268,12 +2277,6 @@ GstH265ParserResult gst_h265_parser_parse_sps       (GstH265Parser   * parser,
                                                      GstH265SPS      * sps,
                                                      gboolean          parse_vui_params);
 
-GST_CODEC_PARSERS_API
-GstH265ParserResult gst_h265_parser_parse_sps_ext   (GstH265Parser   * parser,
-                                                     GstH265NalUnit  * nalu,
-                                                     GstH265SPS      * sps,
-                                                     GstH265SPSEXT   * sps_ext,
-                                                     gboolean          parse_vui_params);
 GST_CODEC_PARSERS_API
 GstH265ParserResult gst_h265_parser_parse_pps       (GstH265Parser   * parser,
                                                      GstH265NalUnit  * nalu,
@@ -2311,13 +2314,6 @@ GST_CODEC_PARSERS_API
 GstH265ParserResult gst_h265_parse_sps              (GstH265Parser  * parser,
                                                      GstH265NalUnit * nalu,
                                                      GstH265SPS     * sps,
-                                                     gboolean         parse_vui_params);
-
-GST_CODEC_PARSERS_API
-GstH265ParserResult gst_h265_parse_sps_ext          (GstH265Parser  * parser,
-                                                     GstH265NalUnit * nalu,
-                                                     GstH265SPS     * sps,
-                                                     GstH265SPSEXT  * sps_ext,
                                                      gboolean         parse_vui_params);
 
 GST_CODEC_PARSERS_API
