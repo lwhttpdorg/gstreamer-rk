@@ -1160,6 +1160,41 @@ GST_START_TEST (test_parse_sliced_au_nal)
 
 GST_END_TEST;
 
+GST_START_TEST (test_parse_sliced_au_nal_one_discont)
+{
+  GstHarness *h = gst_harness_new ("h264parse");
+  GstBuffer *buf;
+
+  gst_harness_set_caps_str (h,
+      "video/x-h264,stream-format=byte-stream,alignment=au,parsed=false,framerate=30/1",
+      "video/x-h264,stream-format=byte-stream,alignment=nal,parsed=true");
+
+  /* Make sure DISCONT is not propagated when the AU is split into continuously */
+  /* push the whole AU in a single buffer */
+  buf = composite_buffer (100, GST_BUFFER_FLAG_DISCONT, 4,
+      h264_slicing_sps, sizeof (h264_slicing_sps),
+      h264_slicing_pps, sizeof (h264_slicing_pps),
+      h264_idr_slice_1, sizeof (h264_idr_slice_1),
+      h264_idr_slice_2, sizeof (h264_idr_slice_2));
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+  fail_unless_equals_int (gst_harness_buffers_in_queue (h), 5);
+  pull_and_check (h, h264_aud, 100, 0);
+
+  buf = gst_harness_pull (h);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT));
+  gst_buffer_unref (buf);
+
+  while (gst_harness_buffers_in_queue (h) > 0) {
+    buf = gst_harness_pull (h);
+    fail_unless (!GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DISCONT));
+    gst_buffer_unref (buf);
+  }
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_parse_sliced_nal_au)
 {
   GstHarness *h = gst_harness_new ("h264parse");
@@ -1295,6 +1330,7 @@ h264parse_sliced_suite (void)
   suite_add_tcase (s, tc_chain);
   tcase_add_test (tc_chain, test_parse_sliced_nal_nal);
   tcase_add_test (tc_chain, test_parse_sliced_au_nal);
+  tcase_add_test (tc_chain, test_parse_sliced_au_nal_one_discont);
   tcase_add_test (tc_chain, test_parse_sliced_nal_au);
   tcase_add_test (tc_chain, test_parse_sliced_sps_pps_sps);
 
