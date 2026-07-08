@@ -558,6 +558,10 @@ gst_fdkaacenc_set_format (GstAudioEncoder * enc, GstAudioInfo * info)
   gst_audio_encoder_set_hard_min (enc, FALSE);
   self->outbuf_size = enc_info.maxOutBufBytes;
   self->samples_per_frame = enc_info.frameLength;
+  self->delay_samples = enc_info.nDelay;
+  self->pending_trim_start = enc_info.nDelay;
+  self->samples_in = 0;
+  self->samples_out = 0;
 
   src_caps = gst_caps_new_simple ("audio/mpeg",
       "mpegversion", G_TYPE_INT, mpegversion,
@@ -617,6 +621,8 @@ gst_fdkaacenc_handle_frame (GstAudioEncoder * enc, GstBuffer * inbuf)
   gint in_id = IN_AUDIO_DATA, out_id = OUT_BITSTREAM_DATA;
   gint in_sizes, out_sizes;
   gint in_el_sizes, out_el_sizes;
+  gboolean draining = inbuf == NULL;
+  guint64 trim_start = 0, trim_end = 0;
   AACENC_ERROR err;
 
   info = gst_audio_encoder_get_audio_info (enc);
@@ -633,6 +639,7 @@ gst_fdkaacenc_handle_frame (GstAudioEncoder * enc, GstBuffer * inbuf)
     }
 
     in_args.numInSamples = imap.size / GST_AUDIO_INFO_BPS (info);
+    self->samples_in += imap.size / GST_AUDIO_INFO_BPF (info);
 
     in_sizes = imap.size;
     in_el_sizes = GST_AUDIO_INFO_BPS (info);
@@ -690,6 +697,29 @@ gst_fdkaacenc_handle_frame (GstAudioEncoder * enc, GstBuffer * inbuf)
 
   gst_buffer_unmap (outbuf, &omap);
   gst_buffer_set_size (outbuf, out_args.numOutBytes);
+
+  self->samples_out += self->samples_per_frame;
+
+  /* The first nDelay output samples are priming samples and the encoder pads
+   * the end of the stream to a full frame when draining, mark both with
+   * clipping meta so muxers can take them into account. */
+  if (self->pending_trim_start) {
+    trim_start = MIN (self->pending_trim_start, self->samples_per_frame);
+    self->pending_trim_start -= trim_start;
+  }
+  if (draining) {
+    guint64 valid_samples = self->samples_in + self->delay_samples;
+
+    if (self->samples_out > valid_samples)
+      trim_end = MIN (self->samples_per_frame,
+          self->samples_out - valid_samples);
+  }
+  if (trim_start || trim_end) {
+    GST_DEBUG_OBJECT (self, "Adding clipping meta: start %" G_GUINT64_FORMAT
+        " end %" G_GUINT64_FORMAT, trim_start, trim_end);
+    gst_buffer_add_audio_clipping_meta (outbuf, GST_FORMAT_DEFAULT, trim_start,
+        trim_end);
+  }
 
   ret = gst_audio_encoder_finish_frame (enc, outbuf, self->samples_per_frame);
   outbuf = NULL;

@@ -23,6 +23,7 @@
 
 #include <gst/check/check.h>
 #include <gst/app/app.h>
+#include <gst/audio/audio.h>
 #include <gst/pbutils/pbutils.h>
 
 typedef struct
@@ -255,6 +256,100 @@ GST_START_TEST (test_fdkaacenc_raw)
 
 GST_END_TEST;
 
+static void
+run_clipping_check (const gchar * launch_line, guint64 samples_in,
+    guint64 frame_samples, guint rate)
+{
+  GstElement *pipe, *sink, *enc;
+  GstClockTime min_latency;
+  GError *err = NULL;
+  GstSample *sample;
+  guint64 samples_out = 0, trim_start_total = 0, trim_end_total = 0;
+  gboolean in_start_trims = TRUE, in_end_trims = FALSE;
+
+  pipe = gst_parse_launch (launch_line, &err);
+  fail_if (err != NULL, "Error creating pipeline: %s", err->message);
+  sink = gst_bin_get_by_name (GST_BIN (pipe), "sink");
+
+  gst_element_set_state (pipe, GST_STATE_PLAYING);
+
+  while ((sample = gst_app_sink_pull_sample (GST_APP_SINK (sink)))) {
+    GstBuffer *buf = gst_sample_get_buffer (sample);
+    GstAudioClippingMeta *cmeta = gst_buffer_get_audio_clipping_meta (buf);
+
+    samples_out += frame_samples;
+
+    /* Padding trims must be a contiguous suffix of the stream */
+    if (in_end_trims)
+      fail_unless (cmeta && cmeta->end > 0, "unclipped buffer after trim_end");
+
+    if (cmeta) {
+      fail_unless_equals_int (cmeta->format, GST_FORMAT_DEFAULT);
+      fail_unless (cmeta->start + cmeta->end <= frame_samples);
+
+      if (cmeta->start) {
+        /* Priming trims must be a packed contiguous prefix of the stream:
+         * only the last one may clip less than a full frame */
+        fail_unless (in_start_trims,
+            "unexpected trim_start after unclipped samples");
+        trim_start_total += cmeta->start;
+        if (cmeta->start < frame_samples)
+          in_start_trims = FALSE;
+      } else {
+        in_start_trims = FALSE;
+      }
+      if (cmeta->end) {
+        in_end_trims = TRUE;
+        trim_end_total += cmeta->end;
+      }
+    } else {
+      in_start_trims = FALSE;
+    }
+
+    gst_sample_unref (sample);
+  }
+
+  /* The encoder delay, as reported through the latency, must be clipped
+   * at the start and the padding added when draining at the end, so that
+   * exactly the input samples remain */
+  enc = gst_bin_get_by_name (GST_BIN (pipe), "enc");
+  gst_audio_encoder_get_latency (GST_AUDIO_ENCODER (enc), &min_latency, NULL);
+  gst_object_unref (enc);
+  fail_unless (min_latency > 0);
+  fail_unless_equals_uint64 (trim_start_total,
+      gst_util_uint64_scale_round (min_latency, rate, GST_SECOND));
+  fail_unless_equals_uint64 (samples_out - trim_start_total - trim_end_total,
+      samples_in);
+
+  gst_element_set_state (pipe, GST_STATE_NULL);
+  gst_object_unref (sink);
+  gst_object_unref (pipe);
+}
+
+GST_START_TEST (test_fdkaacenc_clipping)
+{
+  /* AAC-LC: 1024 samples/frame, the delay spans multiple frames */
+  run_clipping_check ("audiotestsrc samplesperbuffer=1000 num-buffers=10 "
+      "! audio/x-raw,rate=48000,channels=2 ! fdkaacenc name=enc "
+      "! appsink name=sink sync=false caps=audio/mpeg,profile=lc",
+      10 * 1000, 1024, 48000);
+
+  /* HE-AACv1: 2048 samples/frame, SBR delay included in the trims */
+  run_clipping_check ("audiotestsrc samplesperbuffer=500 num-buffers=4 "
+      "! audio/x-raw,rate=48000,channels=2 ! fdkaacenc name=enc "
+      "! appsink name=sink sync=false caps=audio/mpeg,profile=he-aac-v1",
+      4 * 500, 2048, 48000);
+
+  /* Input shorter than the delay: the last buffer carries both the
+   * remaining trim_start and the trim_end padding */
+  run_clipping_check ("audiotestsrc samplesperbuffer=10 num-buffers=1 "
+      "! audio/x-raw,rate=48000,channels=2 ! fdkaacenc name=enc "
+      "! appsink name=sink sync=false caps=audio/mpeg,profile=he-aac-v1",
+      10, 2048, 48000);
+}
+
+GST_END_TEST;
+
 static Suite *
 fdkaac_suite (void)
 {
@@ -264,6 +359,7 @@ fdkaac_suite (void)
   suite_add_tcase (s, tc_chain_enc);
   tcase_add_test (tc_chain_enc, test_fdkaacenc_adts);
   tcase_add_test (tc_chain_enc, test_fdkaacenc_raw);
+  tcase_add_test (tc_chain_enc, test_fdkaacenc_clipping);
 
   return s;
 }
