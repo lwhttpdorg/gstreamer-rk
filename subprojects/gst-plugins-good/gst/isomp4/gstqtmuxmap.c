@@ -156,6 +156,13 @@
   "framed = (boolean) true, " \
   COMMON_AUDIO_CAPS (16, MAX)
 
+#define AC4_CAPS \
+  "audio/x-ac4, " \
+  "framed = (boolean) true, " \
+  "alignment = (string) iec61937, " \
+  "rate = (int) [ 1, " G_STRINGIFY (MAX) " ]"
+  // COMMON_AUDIO_CAPS not added here as AC-4 can work in object-based audio modes
+
 #define AMR_CAPS \
   "audio/AMR, " \
   "rate = (int) 8000, " \
@@ -226,7 +233,7 @@ GstQTMuxFormatProp gst_qt_mux_format_list[] = {
             "video/x-av1, " "stream-format = (string) \"obu-stream\", "
             "alignment = (string) \"tu\", " COMMON_VIDEO_CAPS ";"),
         GST_STATIC_CAPS (PCM_CAPS_FULL "; " PCM_CAPS_UNPOSITIONED " ; "
-            MP123_CAPS " ; " AAC_CAPS " ; " AC3_CAPS " ; "
+            MP123_CAPS " ; " AAC_CAPS " ; " AC3_CAPS " ; " AC4_CAPS " ; "
             ADPCM_CAPS " ; " "audio/x-alaw, " COMMON_AUDIO_CAPS (2,
                 MAX) "; " "audio/x-mulaw, " COMMON_AUDIO_CAPS (2,
                 MAX) "; " AMR_CAPS " ; " ALAC_CAPS " ; " OPUS_CAPS),
@@ -248,7 +255,7 @@ GstQTMuxFormatProp gst_qt_mux_format_list[] = {
             "alignment = (string) \"tu\", " COMMON_VIDEO_CAPS "; " VP9_CAPS
             "; "),
         GST_STATIC_CAPS (MP123_CAPS "; " AAC_CAPS " ; " AC3_CAPS " ; " EAC3_CAPS
-            " ; " ALAC_CAPS " ; " OPUS_CAPS),
+            " ; " AC4_CAPS " ; " ALAC_CAPS " ; " OPUS_CAPS),
         GST_STATIC_CAPS (TEXT_UTF8),
       GST_STATIC_CAPS_NONE}
   ,
@@ -331,7 +338,7 @@ gst_qt_mux_map_check_tracks (AtomMOOV * moov, gint * _video, gint * _audio,
         has_h264 = TRUE;
     } else {
       audio++;
-      if (track->is_ac3 || track->is_eac3)
+      if (track->is_ac3 || track->is_eac3 || track->is_ac4)
         has_dolby = TRUE;
     }
   }
@@ -388,7 +395,7 @@ gst_qt_mux_map_format_to_header (GstQTMuxFormat format, GstBuffer ** _prefix,
 
       gboolean has_dolby = FALSE;
       gst_qt_mux_map_check_tracks (moov, NULL, NULL, NULL, &has_dolby);
-      if (has_dolby) {          /* Add Dolby brand for AC-3/E-AC-3 content */
+      if (has_dolby) {          /* Add Dolby brand for AC-3/E-AC-3/AC-4 content */
         result = g_list_append (result, GUINT_TO_POINTER (FOURCC_dby1));
       }
 
