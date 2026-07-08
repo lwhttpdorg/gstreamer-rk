@@ -30,6 +30,9 @@
  *
  * Set #GstGDIScreenCapSrc:cursor to TRUE to include the mouse cursor.
  *
+ * Set #GstGDIScreenCapSrc:capture-blt to FALSE to disable CAPTUREBLT usage in
+ * BitBlt.
+ *
  * ## Example pipelines
  * |[
  * gst-launch-1.0 gdiscreencapsrc ! videoconvert ! dshowvideosink
@@ -67,7 +70,8 @@ enum
   PROP_X_POS,
   PROP_Y_POS,
   PROP_WIDTH,
-  PROP_HEIGHT
+  PROP_HEIGHT,
+  PROP_CAPTURE_BLT
 };
 
 /* Fwd. decl. */
@@ -145,6 +149,11 @@ gst_gdiscreencapsrc_class_init (GstGDIScreenCapSrcClass * klass)
           "Height of screen capture area (0 = maximum)",
           0, G_MAXINT, 0, G_PARAM_READWRITE));
 
+  g_object_class_install_property (go_class, PROP_CAPTURE_BLT,
+      g_param_spec_boolean ("capture-blt", "Enable CAPTUREBLT",
+          "Whether to enable CAPTUREBLT flag in BitBlt (default on)",
+          TRUE, G_PARAM_READWRITE));
+
   gst_element_class_add_static_pad_template (e_class, &src_template);
   gst_element_class_set_static_metadata (e_class,
       "GDI screen capture source", "Source/Video", "Captures screen",
@@ -170,6 +179,7 @@ gst_gdiscreencapsrc_init (GstGDIScreenCapSrc * src)
 
   src->monitor = 0;
   src->show_cursor = FALSE;
+  src->capture_blt = TRUE;
 
   gst_base_src_set_format (GST_BASE_SRC (src), GST_FORMAT_TIME);
   gst_base_src_set_live (GST_BASE_SRC (src), TRUE);
@@ -230,6 +240,9 @@ gst_gdiscreencapsrc_set_property (GObject * object, guint prop_id,
     case PROP_HEIGHT:
       src->capture_h = g_value_get_int (value);
       break;
+    case PROP_CAPTURE_BLT:
+      src->capture_blt = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -260,6 +273,9 @@ gst_gdiscreencapsrc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_HEIGHT:
       g_value_set_int (value, src->capture_h);
+      break;
+    case PROP_CAPTURE_BLT:
+      g_value_set_boolean (value, src->capture_blt);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -531,6 +547,7 @@ gst_gdiscreencapsrc_screen_capture (GstGDIScreenCapSrc * src, GstBuffer * buf)
   HWND capture;
   HDC winDC;
   gint height, width;
+  DWORD rop;
   GstMapInfo map;
 
   if (G_UNLIKELY (!src->hBitmap || !src->dibMem))
@@ -543,8 +560,12 @@ gst_gdiscreencapsrc_screen_capture (GstGDIScreenCapSrc * src, GstBuffer * buf)
   capture = GetDesktopWindow ();
   winDC = GetWindowDC (capture);
 
+  rop = SRCCOPY;
+  if (src->capture_blt)
+    rop |= CAPTUREBLT;
+
   BitBlt (src->memDC, 0, 0, width, height,
-      winDC, src->src_rect.left, src->src_rect.top, SRCCOPY);
+      winDC, src->src_rect.left, src->src_rect.top, rop);
 
   ReleaseDC (capture, winDC);
 
