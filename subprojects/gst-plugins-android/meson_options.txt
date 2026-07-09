@@ -1,0 +1,40 @@
+option('with_system_opus',
+  type: 'boolean',
+  value: true,
+  description: 'Link against system libopus via pkg-config. If false, use a subproject fallback.')
+
+option('with_system_fdk_aac',
+  type: 'boolean',
+  value: true,
+  description: 'Link against system libfdk-aac via pkg-config. If false, use a subproject fallback.')
+
+option('aosp_tag',
+  type: 'string',
+  value: 'android-16.0.0_r1',
+  description: 'AOSP tag to fetch sources from (android.googlesource.com).')
+
+option('aosp_fetch',
+  type: 'feature',
+  value: 'auto',
+  description: 'Fetch AOSP sources at configure time if aosp/ is empty.')
+
+option('with_iamf',
+  type: 'feature',
+  value: 'auto',
+  description: 'Build the IAMF decoder element (c2iamfdec) via vendored AOM libiamf + system opus/fdk-aac/FLAC. IAMF is NOT an AOSP Codec2 component (the AOSP one is a stub), so it is built directly from the AOM reference decoder.')
+
+option('iamf_tag',
+  type: 'string',
+  value: 'v1.0.1',
+  description: 'libiamf git tag to fetch (github.com/AOMediaCodec/libiamf). Pin a release tag; main/HEAD needs a private submodule + cmake>=3.28.')
+
+option('tests',
+  type: 'feature',
+  value: 'auto',
+  description: 'Build the standalone C2 smoke tests and the GStreamer plugin registration test.')
+
+option('logging',
+  type: 'combo',
+  choices: ['off', 'error', 'warning', 'info', 'verbose'],
+  value: 'warning',
+  description: 'Default AOSP ALOG* log level baked at compile time (overridable at runtime via GST_C2_LOG_LEVEL).')
