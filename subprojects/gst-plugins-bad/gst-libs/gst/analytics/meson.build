@@ -9,6 +9,7 @@ analytics_sources = files( 'gstanalyticsmeta.c',
                               'gstanalyticstensormtd.c',
                               'gsttensormeta.c',
                               'gsttensor.c',
+                              'gstanalyticsindexmap.c',
                               'gstanalytics_image_util.c',
                               'modelinfo.c')
 
@@ -28,10 +29,12 @@ analytics_headers = files(    'analytics.h',
                               'gstanalytics_image_util.h',
                               'modelinfo.h')
 
+analytics_private_headers = files('gstanalyticsindexmap-private.h')
+
 install_headers(analytics_headers, subdir : 'gstreamer-1.0/gst/analytics')
 
 doc_sources = []
-foreach s: analytics_sources + analytics_headers
+foreach s: analytics_sources + analytics_headers + analytics_private_headers
   doc_sources += s.full_path()
 endforeach
 

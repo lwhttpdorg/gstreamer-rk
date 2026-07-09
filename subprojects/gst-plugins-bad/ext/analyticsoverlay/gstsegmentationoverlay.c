@@ -52,6 +52,7 @@
 #include <gst/analytics/analytics.h>
 #include <math.h>
 
+#include <gst/analytics/gstanalyticsindexmap-private.h>
 #include "gstsegmentationoverlay.h"
 
 struct _GstSegmentationOverlay
@@ -733,6 +734,33 @@ gst_segmentation_overlay_update_mask_filter (GstSegmentationOverlay * overlay,
   }
 }
 
+static void G_GNUC_UNUSED
+gst_segmentation_overlay_colorize_labels (GstSegmentationOverlay * overlay,
+    gint32 * canvas_data, const guint8 * labels, guint width, guint height)
+{
+  gsize color_count = overlay->color_table_size + 1;
+  guint32 *color_table = overlay->color_table;
+  gboolean *mask_filter = overlay->mask_filter;
+
+  for (guint y = 0; y < height; y++) {
+    const guint8 *lrow = labels + (y * width);
+    gint32 *crow = canvas_data + (y * width);
+
+    for (guint x = 0; x < width; x++) {
+      guint8 label = lrow[x];
+      guint idx = label % color_count;
+      gboolean keep = (mask_filter == NULL ||
+          (label < overlay->mask_filter_len && mask_filter[label]));
+
+      if (idx != 0 && keep) {
+        crow[x] = 0x80000000 | color_table[idx - 1];
+      } else {
+        crow[x] = overlay->bg_color;
+      }
+    }
+  }
+}
+
 static void
 gst_segmentation_overlay_resampling (GstSegmentationOverlay * overlay,
     gint32 * canvas_data, guint8 * mask_data, GstVideoMeta * cvmeta,
@@ -741,21 +769,32 @@ gst_segmentation_overlay_resampling (GstSegmentationOverlay * overlay,
   gsize mask_col_idx, mask_line_idx, last_mask_line_idx = -1;
   gint32 *cline = canvas_data, *pcline = NULL;
   guint8 *mline = mask_data;
+  guint src_stride;
   gsize color_count = overlay->color_table_size + 1;
   guint32 *color_table = overlay->color_table;
   gboolean *mask_filter = overlay->mask_filter;
 
-#define CTBL_IDX(val) (mline[val] % color_count)
-#define MASK_FILTER(val) (mask_filter == NULL || mask_filter [mline [val]])
+  src_stride =
+      mvmeta->stride[0] > 0 ? (guint) mvmeta->stride[0] : mvmeta->width;
 
   for (gint cl = 0; cl < cvmeta->height; cl++) {
     mask_line_idx = (cl * mvmeta->height) / cvmeta->height;
+    mline = mask_data + (mask_line_idx * src_stride);
     if (last_mask_line_idx != mask_line_idx) {
       mask_col_idx = 0;
       for (gint cc = 0; cc < cvmeta->width; cc++) {
+        guint8 label;
+        guint idx;
+        gboolean keep;
+
         mask_col_idx = (cc * mvmeta->width) / cvmeta->width;
-        if (CTBL_IDX (mask_col_idx) != 0 && MASK_FILTER (mask_col_idx)) {
-          cline[cc] = 0x80000000 | color_table[CTBL_IDX (mask_col_idx) - 1];
+        label = mline[mask_col_idx];
+        idx = label % color_count;
+        keep = (mask_filter == NULL ||
+            (label < overlay->mask_filter_len && mask_filter[label]));
+
+        if (idx != 0 && keep) {
+          cline[cc] = 0x80000000 | color_table[idx - 1];
         } else {
           cline[cc] = overlay->bg_color;
         }
@@ -769,8 +808,35 @@ gst_segmentation_overlay_resampling (GstSegmentationOverlay * overlay,
     last_mask_line_idx = mask_line_idx;
     pcline = cline;
     cline += cvmeta->width;
-    mline = (mask_line_idx * mvmeta->width) + mask_data;
   }
+}
+
+static gboolean
+gst_segmentation_overlay_resampling_lib (GstSegmentationOverlay * overlay,
+    gint32 * canvas_data, guint8 * mask_data, GstVideoMeta * cvmeta,
+    GstVideoMeta * mvmeta)
+{
+  gsize out_size = (gsize) cvmeta->width * (gsize) cvmeta->height;
+  guint8 *upscaled = g_try_malloc (out_size);
+  gsize src_stride;
+  gboolean ok;
+
+  if (upscaled == NULL)
+    return FALSE;
+
+  src_stride =
+      mvmeta->stride[0] > 0 ? (gsize) mvmeta->stride[0] : (gsize) mvmeta->width;
+
+  ok = gst_analytics_index_map_nearest_scale_uint8 (mask_data,
+      mvmeta->width, mvmeta->height,
+      src_stride, upscaled, cvmeta->width, cvmeta->height, cvmeta->width);
+
+  if (ok)
+    gst_segmentation_overlay_colorize_labels (overlay, canvas_data,
+        upscaled, cvmeta->width, cvmeta->height);
+
+  g_free (upscaled);
+  return ok;
 }
 
 static void
@@ -780,6 +846,8 @@ gst_segmentation_overlay_fill_canvas (GstSegmentationOverlay * overlay,
 {
   GstVideoMeta *mvmeta;
   GstMapInfo mmap;
+  const gchar *force_c;
+  gboolean use_c_path;
 
   /* Retrieve video-meta describing the mask */
   mvmeta = gst_buffer_get_video_meta (mask);
@@ -788,8 +856,14 @@ gst_segmentation_overlay_fill_canvas (GstSegmentationOverlay * overlay,
       gst_segmentation_overlay_update_mask_filter (overlay, cls_mtd);
 
     gst_buffer_map (mask, &mmap, GST_MAP_READ);
-    gst_segmentation_overlay_resampling (overlay,
-        (gint32 *) cmap->data, mmap.data, cvmeta, mvmeta);
+    force_c = g_getenv ("GST_SEGMENTATION_OVERLAY_FORCE_C");
+    use_c_path = (force_c != NULL && g_strcmp0 (force_c, "0") != 0);
+
+    if (use_c_path || !gst_segmentation_overlay_resampling_lib (overlay,
+            (gint32 *) cmap->data, mmap.data, cvmeta, mvmeta)) {
+      gst_segmentation_overlay_resampling (overlay,
+          (gint32 *) cmap->data, mmap.data, cvmeta, mvmeta);
+    }
     gst_buffer_unmap (mask, &mmap);
   }
   gst_buffer_unref (mask);
