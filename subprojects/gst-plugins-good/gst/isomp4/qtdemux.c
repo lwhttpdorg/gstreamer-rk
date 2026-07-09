@@ -11332,7 +11332,7 @@ done2:
             GST_TIME_ARGS (QTSTREAMTIME_TO_GSTTIME (stream, stts_time)));
 
         cur->timestamp = stts_time;
-        cur->duration = stts_duration;
+        cur->duration = MAX (stts_duration, 0);
 
         /* avoid 32-bit wrap-around,
          * but still mind possible 'negative' duration */
