@@ -36,18 +36,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <stdio.h>
 
 #include "gstvalidateflow.h"
 
 #define VALIDATE_FLOW_MISMATCH g_quark_from_static_string ("validateflow::mismatch")
 #define VALIDATE_FLOW_NOT_ATTACHED g_quark_from_static_string ("validateflow::not-attached")
-
-typedef enum _ValidateFlowMode
-{
-  VALIDATE_FLOW_MODE_WRITING_EXPECTATIONS,
-  VALIDATE_FLOW_MODE_WRITING_ACTUAL_RESULTS
-} ValidateFlowMode;
 
 #define GST_TYPE_VALIDATE_FLOW_CHECKSUM_TYPE (validate_flow_checksum_type_get_type ())
 static GType
@@ -72,48 +65,6 @@ validate_flow_checksum_type_get_type (void)
   }
   return gtype;
 }
-
-struct _ValidateFlowOverride
-{
-  GstValidateOverride parent;
-
-  const gchar *pad_name;
-  gboolean record_buffers;
-  gint checksum_type;
-  gchar *expectations_dir;
-  gchar *actual_results_dir;
-  gboolean error_writing_file;
-  gchar **caps_properties;
-  GstStructure *ignored_fields;
-  GstStructure *logged_fields;
-
-  gchar **logged_event_types;
-  gchar **logged_upstream_event_types;
-  gchar **ignored_event_types;
-  gchar **logged_unregistered_sei_uuids;
-
-  gchar *expectations_file_path;
-  gchar *actual_results_file_path;
-  ValidateFlowMode mode;
-  gboolean was_attached;
-  GstStructure *config;
-
-  /* output_file will refer to the expectations file if it did not exist,
-   * or to the actual results file otherwise. */
-  gchar *output_file_path;
-  FILE *output_file;
-  GMutex flow_mutex;
-
-  /* Live comparison state, protected by flow_mutex */
-  gchar **expected_lines;
-  gsize expected_line_index;
-  gboolean live_mismatch_found;
-
-  /* Tracks async mismatch reports queued via gst_call_async() */
-  GMutex async_report_lock;
-  GCond async_report_cond;
-  gint pending_async_reports;
-};
 
 GList *all_overrides = NULL;
 
@@ -331,13 +282,7 @@ validate_flow_override_event_handler (GstValidateOverride * override,
   if (flow->error_writing_file)
     return;
 
-  event_string = validate_flow_format_event (event,
-      (const gchar * const *) flow->caps_properties,
-      flow->logged_fields,
-      flow->ignored_fields,
-      (const gchar * const *) flow->ignored_event_types,
-      (const gchar * const *) flow->logged_event_types,
-      (const gchar * const *) flow->logged_upstream_event_types);
+  event_string = validate_flow_format_event (flow, event);
 
   if (event_string) {
     validate_flow_override_printf (flow, "event %s\n", event_string);
@@ -355,9 +300,7 @@ validate_flow_override_buffer_handler (GstValidateOverride * override,
   if (flow->error_writing_file || !flow->record_buffers)
     return;
 
-  buffer_str = validate_flow_format_buffer (buffer, flow->checksum_type,
-      flow->logged_fields, flow->ignored_fields,
-      flow->logged_unregistered_sei_uuids);
+  buffer_str = validate_flow_format_buffer (flow, buffer);
   validate_flow_override_printf (flow, "buffer: %s\n", buffer_str);
   g_free (buffer_str);
 }
@@ -564,6 +507,13 @@ validate_flow_override_new (GstStructure * config)
     g_free (expectations_file_name);
     g_free (actual_results_file_name);
     g_free (pad_name_safe);
+  }
+
+  /* extra-serialized-metas */  {
+    gchar **m = gst_validate_utils_get_strv (config, "extra-serialized-metas");
+    flow->extra_serialized_metas = m;
+    flow->extra_serialized_metas_all =
+        m && g_strv_contains ((const gchar * const *) m, "all");
   }
 
   flow->was_attached = FALSE;
@@ -821,6 +771,7 @@ validate_flow_override_finalize (GObject * object)
   g_strfreev (flow->logged_upstream_event_types);
   g_strfreev (flow->ignored_event_types);
   g_strfreev (flow->logged_unregistered_sei_uuids);
+  g_strfreev (flow->extra_serialized_metas);
   if (flow->ignored_fields)
     gst_structure_free (flow->ignored_fields);
   g_strfreev (flow->expected_lines);

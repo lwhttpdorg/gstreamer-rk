@@ -45,6 +45,12 @@ static GstStructure *checksums_as_id = NULL;
 
 #define CONSTIFY(strv) ((const gchar * const *) strv)
 
+static void format_time (gchar * dest_str, guint64 time);
+static gchar *validate_flow_format_segment (const GstSegment * segment,
+    gchar ** logged_fields, gchar ** ignored_fields);
+static gchar *validate_flow_format_caps (const GstCaps * caps,
+    gchar ** wanted_fields, gchar ** ignored_fields);
+
 static gboolean
 use_field (const gchar * field, gchar ** logged, gchar ** ignored)
 {
@@ -282,13 +288,26 @@ format_sei_uuid (gchar * dest_str, const guint8 * uuid)
       uuid[12], uuid[13], uuid[14], uuid[15]);
 }
 
+static gboolean
+must_serialize_meta (const ValidateFlowOverride * flow, GstMeta * meta)
+{
+  const gchar *name = g_type_name (meta->info->type);
+  const gboolean is_serializable = meta->info->serialize_func != NULL;
+  const gchar *const *req_metas = CONSTIFY (flow->extra_serialized_metas);
+  const gboolean requested = req_metas && g_strv_contains (req_metas, name);
+  const gboolean requested_all = flow->extra_serialized_metas_all;
+
+  return is_serializable && (requested_all || requested);
+}
+
 /* Returns a newly-allocated string describing the metas on this buffer, or NULL */
 static gchar *
-buffer_get_meta_string (GstBuffer * buffer, gchar ** logged_sei_uuids)
+buffer_get_meta_string (const ValidateFlowOverride * flow, GstBuffer * buffer)
 {
   gpointer state = NULL;
   GstMeta *meta;
   GString *s = NULL;
+  gchar **logged_sei_uuids = flow->logged_unregistered_sei_uuids;
 
   while ((meta = gst_buffer_iterate_meta (buffer, &state))) {
     const gchar *desc = g_type_name (meta->info->type);
@@ -319,7 +338,21 @@ buffer_get_meta_string (GstBuffer * buffer, gchar ** logged_sei_uuids)
     else
       g_string_append (s, ", ");
 
-    if (meta->info->api == GST_VIDEO_REGION_OF_INTEREST_META_API_TYPE) {
+    if (must_serialize_meta (flow, meta)) {
+      g_string_append (s, desc);
+
+      // Append Base64 serialized metadata if possible
+      GByteArray *ba = g_byte_array_new ();
+      gboolean serialized = gst_meta_serialize_simple (meta, ba);
+      if (serialized && ba->data) {
+        g_string_append (s, "(");
+        gchar *serialized_meta = g_base64_encode (ba->data, ba->len);
+        g_string_append (s, serialized_meta);
+        g_free (serialized_meta);
+        g_string_append (s, ")");
+      }
+      g_byte_array_free (ba, TRUE);
+    } else if (meta->info->api == GST_VIDEO_REGION_OF_INTEREST_META_API_TYPE) {
       GstVideoRegionOfInterestMeta *roi = (GstVideoRegionOfInterestMeta *) meta;
       g_string_append_printf (s,
           "GstVideoRegionOfInterestMeta[x=%" G_GUINT32_FORMAT ", y=%"
@@ -400,14 +433,17 @@ buffer_get_meta_string (GstBuffer * buffer, gchar ** logged_sei_uuids)
 }
 
 gchar *
-validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
-    GstStructure * logged_fields_struct, GstStructure * ignored_fields_struct,
-    gchar ** logged_sei_uuids)
+validate_flow_format_buffer (const ValidateFlowOverride * flow,
+    GstBuffer * buffer)
 {
   gchar *flags_str, *meta_str, *buffer_str;
   gchar *buffer_parts[7];
   int buffer_parts_index = 0;
   GstMapInfo map;
+  gint checksum_type = flow->checksum_type;
+  GstStructure *logged_fields_struct = flow->logged_fields;
+  GstStructure *ignored_fields_struct = flow->ignored_fields;
+
   gchar **logged_fields =
       logged_fields_struct ? gst_validate_utils_get_strv (logged_fields_struct,
       "buffer") : NULL;
@@ -495,7 +531,7 @@ validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
         g_strdup_printf ("flags=%s", flags_str);
   }
 
-  meta_str = buffer_get_meta_string (buffer, logged_sei_uuids);
+  meta_str = buffer_get_meta_string (flow, buffer);
   if (meta_str && use_field ("meta", logged_fields, ignored_fields))
     buffer_parts[buffer_parts_index++] = g_strdup_printf ("meta=%s", meta_str);
 
@@ -515,19 +551,21 @@ validate_flow_format_buffer (GstBuffer * buffer, gint checksum_type,
 }
 
 gchar *
-validate_flow_format_event (GstEvent * event,
-    const gchar * const *caps_properties,
-    GstStructure * logged_fields_struct,
-    GstStructure * ignored_fields_struct,
-    const gchar * const *ignored_event_types,
-    const gchar * const *logged_event_types,
-    const gchar * const *logged_upstream_event_types)
+validate_flow_format_event (const ValidateFlowOverride * flow, GstEvent * event)
 {
   const gchar *event_type;
   gchar *structure_string;
   gchar *event_string;
   gchar **ignored_fields;
   gchar **logged_fields;
+  gchar **caps_properties = flow->caps_properties;
+  GstStructure *logged_fields_struct = flow->logged_fields;
+  GstStructure *ignored_fields_struct = flow->ignored_fields;
+  const gchar *const *ignored_event_types =
+      CONSTIFY (flow->ignored_event_types);
+  const gchar *const *logged_event_types = CONSTIFY (flow->logged_event_types);
+  const gchar *const *logged_upstream_event_types =
+      CONSTIFY (flow->logged_upstream_event_types);
 
   event_type = gst_event_type_get_name (GST_EVENT_TYPE (event));
 
