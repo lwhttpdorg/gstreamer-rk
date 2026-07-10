@@ -324,6 +324,8 @@ rtp_source_reset (RTPSource * src)
   src->stats.sent_fir_count = 0;
   src->stats.sent_nack_count = 0;
   src->stats.recv_nack_count = 0;
+
+  g_hash_table_remove_all (src->csrcs);
 }
 
 static void
@@ -356,6 +358,8 @@ rtp_source_init (RTPSource * src)
       g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
 
   src->last_keyframe_request = GST_CLOCK_TIME_NONE;
+
+  src->csrcs = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   rtp_source_reset (src);
 
@@ -404,6 +408,8 @@ rtp_source_finalize (GObject * object)
   g_hash_table_unref (src->received_rr);
   g_mutex_unlock (&src->received_rr_lock);
   g_mutex_clear (&src->received_rr_lock);
+
+  g_hash_table_unref (src->csrcs);
 
   G_OBJECT_CLASS (rtp_source_parent_class)->finalize (object);
 }
@@ -765,17 +771,66 @@ rtp_source_get_ssrc (RTPSource * src)
 /**
  * rtp_source_set_as_csrc:
  * @src: an #RTPSource
+ * @ssrc: the SSRC this source is a contributor to
  *
  * Configure @src as a CSRC, this will also validate @src.
  */
 void
-rtp_source_set_as_csrc (RTPSource * src)
+rtp_source_set_as_csrc (RTPSource * src, guint32 ssrc)
 {
   g_return_if_fail (RTP_IS_SOURCE (src));
 
   src->validated = TRUE;
   src->is_csrc = TRUE;
+  src->csrc_ssrc = ssrc;
 }
+
+/**
+ * rtp_source_add_csrc:
+ * @src: an #RTPSource
+ * @csrc: the CSRC of the contributing source
+ *
+ * Track that csrc is a contributor to this source
+ */
+void
+rtp_source_add_csrc (RTPSource * src, guint32 csrc)
+{
+  g_return_if_fail (RTP_IS_SOURCE (src));
+
+  g_hash_table_insert (src->csrcs, GUINT_TO_POINTER (csrc), NULL);
+}
+
+/**
+ * rtp_source_remove_csrc:
+ * @src: an #RTPSource
+ * @csrc: the CSRC of the contributing source
+ *
+ * Untrack that csrc is a contributor to this source
+ */
+void
+rtp_source_remove_csrc (RTPSource * src, guint32 csrc)
+{
+  g_return_if_fail (RTP_IS_SOURCE (src));
+
+  g_hash_table_remove (src->csrcs, GUINT_TO_POINTER (csrc));
+}
+
+/**
+ * rtp_source_has_max_csrcs:
+ * @src: an #RTPSource
+ *
+ * Check if @src has reached its max CSRC number (DoS prevention).
+ *
+ * Returns: %TRUE if @src can't accept more CRSCs.
+ */
+gboolean
+rtp_source_has_max_csrcs (RTPSource * src)
+{
+  g_return_val_if_fail (RTP_IS_SOURCE (src), FALSE);
+
+  return g_hash_table_size (src->csrcs) >= 15;
+}
+
 
 /**
  * rtp_source_is_as_csrc:

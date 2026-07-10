@@ -210,6 +210,9 @@ struct _RTPSource {
   guint8        pt;
 
   gboolean      disable_rtcp;
+
+  guint32       csrc_ssrc;
+  GHashTable    *csrcs;
 };
 
 struct _RTPSourceClass {
@@ -225,8 +228,11 @@ void            rtp_source_set_callbacks       (RTPSource *src, RTPSourceCallbac
 /* properties */
 guint32         rtp_source_get_ssrc            (RTPSource *src);
 
-void            rtp_source_set_as_csrc         (RTPSource *src);
+void            rtp_source_set_as_csrc         (RTPSource *src, guint32 ssrc);
 gboolean        rtp_source_is_as_csrc          (RTPSource *src);
+void            rtp_source_add_csrc            (RTPSource * src, guint32 csrc);
+void            rtp_source_remove_csrc         (RTPSource * src, guint32 csrc);
+gboolean        rtp_source_has_max_csrcs       (RTPSource * src);
 
 gboolean        rtp_source_is_active           (RTPSource *src);
 gboolean        rtp_source_is_validated        (RTPSource *src);
