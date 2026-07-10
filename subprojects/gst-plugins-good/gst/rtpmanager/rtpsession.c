@@ -2399,23 +2399,30 @@ rtp_session_process_rtp (RTPSession * sess, GstBuffer * buffer,
 
     /* for validated sources, we add the CSRCs as well */
     for (i = 0; i < pinfo.csrc_count; i++) {
-      guint32 csrc;
-      RTPSource *csrc_src;
+      guint32 csrc = pinfo.csrcs[i];
 
-      csrc = pinfo.csrcs[i];
+      if (!rtp_source_has_max_csrcs (source)) {
+        RTPSource *csrc_src;
 
-      /* get source */
-      csrc_src = obtain_source (sess, csrc, &created, &pinfo, TRUE);
-      if (!csrc_src)
-        continue;
+        /* get source */
+        csrc_src = obtain_source (sess, csrc, &created, &pinfo, TRUE);
+        if (!csrc_src)
+          continue;
 
-      if (created) {
-        GST_DEBUG ("created new CSRC: %08x", csrc);
-        rtp_source_set_as_csrc (csrc_src);
-        source_update_active (sess, csrc_src, FALSE);
-        on_new_ssrc (sess, csrc_src);
+        if (created) {
+          GST_DEBUG ("created new CSRC: %08x", csrc);
+          rtp_source_set_as_csrc (csrc_src, source->ssrc);
+          rtp_source_add_csrc (source, csrc);
+          source_update_active (sess, csrc_src, FALSE);
+          on_new_ssrc (sess, csrc_src);
+        }
+        g_object_unref (csrc_src);
+      } else {
+        GST_WARNING
+            ("max number of csrcs reached for ssrc %08x, ignoring %08x and subsequent",
+            ssrc, csrc);
+        break;
       }
-      g_object_unref (csrc_src);
     }
   }
   g_object_unref (source);
@@ -4275,6 +4282,14 @@ session_cleanup (const gchar * key, RTPSource * source, ReportData * data)
 
     if (source->internal)
       sess->stats.internal_sources--;
+
+    if (rtp_source_is_as_csrc (source)) {
+      RTPSource *contributed_source = find_source (sess, source->csrc_ssrc);
+
+      if (contributed_source) {
+        rtp_source_remove_csrc (contributed_source, source->ssrc);
+      }
+    }
 
     if (byetimeout)
       on_bye_timeout (sess, source);
