@@ -704,6 +704,27 @@ dash_mpd_type_find (GstTypeFind * tf, gpointer unused)
   }
 }
 
+/*** application/x-movpkg ****************************************************/
+
+#define MOVPKG_TYPE "application/x-movpkg"
+
+static GstStaticCaps movpkg_caps = GST_STATIC_CAPS (MOVPKG_TYPE);
+
+#define MOVPKG_CAPS gst_static_caps_get (&movpkg_caps)
+
+#define MOVPKG_MOVIEPACKAGE_ELEMENT "MoviePackage"
+#define MOVPKG_MOVIEPACKAGE_ELEMENT_LEN \
+    (G_N_ELEMENTS (MOVPKG_MOVIEPACKAGE_ELEMENT) - 1)
+
+static void
+movpkg_type_find (GstTypeFind * tf, gpointer unused)
+{
+  if (xml_check_first_element (tf, MOVPKG_MOVIEPACKAGE_ELEMENT,
+          MOVPKG_MOVIEPACKAGE_ELEMENT_LEN, FALSE)) {
+    gst_type_find_suggest (tf, GST_TYPE_FIND_MAXIMUM, MOVPKG_CAPS);
+  }
+}
+
 /*** application/xges ****************************************************/
 
 static GstStaticCaps xges_caps = GST_STATIC_CAPS ("application/xges");
@@ -7156,6 +7177,8 @@ GST_TYPE_FIND_REGISTER_DEFINE (dash_mpd, "application/dash+xml",
 GST_TYPE_FIND_REGISTER_DEFINE (mss_manifest, "application/vnd.ms-sstr+xml",
     GST_RANK_PRIMARY, mss_manifest_type_find, NULL, MSS_MANIFEST_CAPS, NULL,
     NULL);
+GST_TYPE_FIND_REGISTER_DEFINE (movpkg, MOVPKG_TYPE, GST_RANK_PRIMARY,
+    movpkg_type_find, "xml,XML", MOVPKG_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (utf8, "text/plain", GST_RANK_MARGINAL,
     utf8_type_find, "txt", UTF8_CAPS, NULL, NULL);
 GST_TYPE_FIND_REGISTER_DEFINE (utf16, "text/utf-16", GST_RANK_MARGINAL,

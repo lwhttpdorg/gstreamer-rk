@@ -431,6 +431,46 @@
                 },
                 "rank": "primary + 1"
             },
+            "movpkgdemux": {
+                "author": "Jordan Yelloz <jordan.yelloz@collabora.com>",
+                "description": "Movpkg Demuxer",
+                "hierarchy": [
+                    "GstMovpkgDemux",
+                    "GstAdaptiveDemux2",
+                    "GstBin",
+                    "GstElement",
+                    "GstObject",
+                    "GInitiallyUnowned",
+                    "GObject"
+                ],
+                "interfaces": [
+                    "GstChildProxy"
+                ],
+                "klass": "Codec/Demuxer/Adaptive",
+                "pad-templates": {
+                    "audio_%%02u": {
+                        "caps": "ANY",
+                        "direction": "src",
+                        "presence": "sometimes"
+                    },
+                    "sink": {
+                        "caps": "application/x-movpkg:\n",
+                        "direction": "sink",
+                        "presence": "always"
+                    },
+                    "subtitle_%%02u": {
+                        "caps": "ANY",
+                        "direction": "src",
+                        "presence": "sometimes"
+                    },
+                    "video_%%02u": {
+                        "caps": "ANY",
+                        "direction": "src",
+                        "presence": "sometimes"
+                    }
+                },
+                "rank": "primary"
+            },
             "mssdemux2": {
                 "author": "Thiago Santos <thiago.sousa.santos@collabora.com>",
                 "description": "Parse and demultiplex a Smooth Streaming manifest into audio and video streams",

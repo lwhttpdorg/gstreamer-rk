@@ -1,5 +1,9 @@
 /* GStreamer
- * Copyright (C) 2021-2022 Jan Schmidt <jan@centricular.com>
+ *
+ * SPDX-License-Identifier: LGPL-2.1
+ *
+ * Copyright (C) 2024-2025 Collabora Ltd.
+ *  @author: Jordan Yelloz <jordan.yelloz@collabora.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -18,26 +22,19 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif
 
-#include "gstadaptivedemuxelements.h"
+#include "gstmovpkgelements.h"
 
-static gboolean
-plugin_init (GstPlugin * plugin)
+GST_DEBUG_CATEGORY (movpkg_debug);
+
+void
+movpkg_element_init (void)
 {
-  gboolean ret = TRUE;
-
-  ret |= GST_ELEMENT_REGISTER (hlsdemux2, plugin);
-  ret |= GST_ELEMENT_REGISTER (dashdemux2, plugin);
-  ret |= GST_ELEMENT_REGISTER (mssdemux2, plugin);
-  ret |= GST_ELEMENT_REGISTER (movpkgdemux, plugin);
-
-  return ret;
+  static gsize initialized = FALSE;
+  if (g_once_init_enter (&initialized)) {
+    GST_DEBUG_CATEGORY_INIT (movpkg_debug, "movpkg", 0, "Movpkg");
+    g_once_init_leave (&initialized, TRUE);
+  }
 }
-
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
-    GST_VERSION_MINOR,
-    adaptivedemux2,
-    "Adaptive Streaming 2 plugin", plugin_init, VERSION,
-    GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

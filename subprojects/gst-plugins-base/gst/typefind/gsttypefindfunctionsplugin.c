@@ -146,6 +146,7 @@ plugin_init (GstPlugin * plugin)
   GST_TYPE_FIND_REGISTER (otio, plugin);
   GST_TYPE_FIND_REGISTER (dash_mpd, plugin);
   GST_TYPE_FIND_REGISTER (mss_manifest, plugin);
+  GST_TYPE_FIND_REGISTER (movpkg, plugin);
   GST_TYPE_FIND_REGISTER (utf8, plugin);
   GST_TYPE_FIND_REGISTER (utf16, plugin);
   GST_TYPE_FIND_REGISTER (utf32, plugin);

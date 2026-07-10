@@ -1,5 +1,9 @@
 /* GStreamer
- * Copyright (C) 2021-2022 Jan Schmidt <jan@centricular.com>
+ *
+ * SPDX-License-Identifier: LGPL-2.1
+ *
+ * Copyright (C) 2024-2025 Collabora Ltd.
+ *  @author: Jordan Yelloz <jordan.yelloz@collabora.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,20 +21,29 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GST_ADAPTIVEDEMUX2_ELEMENTS_H__
-#define __GST_ADAPTIVEDEMUX2_ELEMENTS_H__
-
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#pragma once
 
 #include <gst/gst.h>
 
-gboolean adaptivedemux2_base_element_init (GstPlugin * plugin);
+G_BEGIN_DECLS
 
-GST_ELEMENT_REGISTER_DECLARE (mssdemux2);
-GST_ELEMENT_REGISTER_DECLARE (hlsdemux2);
-GST_ELEMENT_REGISTER_DECLARE (dashdemux2);
-GST_ELEMENT_REGISTER_DECLARE (movpkgdemux);
+typedef struct _GstMovpkgMoviePackage GstMovpkgMoviePackage;
 
-#endif
+typedef enum {
+  GST_MOVPKG_MOVIE_PACKAGE_TYPE_NONE,
+  GST_MOVPKG_MOVIE_PACKAGE_TYPE_HLS,
+} GstMovpkgMoviePackageType;
+
+gboolean
+gst_movpkg_parse_movie_package (GstMovpkgMoviePackage ** pkg,
+                                const gchar            * data,
+                                gsize                    size,
+                                GError                ** error);
+
+void
+gst_movpkg_movie_package_free (GstMovpkgMoviePackage * self);
+
+const gchar *
+gst_movpkg_movie_package_get_boot_image (GstMovpkgMoviePackage * self);
+
+G_END_DECLS
