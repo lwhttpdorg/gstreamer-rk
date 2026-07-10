@@ -25,71 +25,94 @@
 #include <gst/base/gstadapter.h>
 
 #include "gstsubparseelements.h"
+#include "gstcssparse.h"
+#include "gstwebvttparse.h"
 
 G_BEGIN_DECLS
 
 #define GST_TYPE_SUBPARSE (gst_sub_parse_get_type ())
 G_DECLARE_FINAL_TYPE (GstSubParse, gst_sub_parse, GST, SUBPARSE, GstElement)
 
+     /* ParserState is tagged with _ParserState so gstwebvttparse.h can
+      * forward-declare it without pulling in the full definition. */
+     typedef struct _ParserState
+     {
+       int state;
+       GString *buf;
+       guint64 start_time;
+       guint64 duration;
+       guint64 max_duration;    /* to clamp duration, 0 = no limit (used by tmplayer parser) */
+       GstSegment *segment;
+       gpointer user_data;
+       gboolean have_internal_fps;      /* If TRUE don't overwrite fps by property */
+       gint fps_n, fps_d;       /* used by frame based parsers */
+       guint8 line_position;    /* percent value */
+       gint line_number;        /* line number, can be positive or negative */
+       guint8 text_position;    /* percent value */
+       guint8 text_size;        /* percent value */
+       gchar *vertical;         /* "", "vertical", "vertical-lr" */
+       gchar *alignment;        /* "", "start", "middle", "end" */
+       gchar *position;         /* e.g., "90%" */
+       gchar *line;             /* e.g., "10%" or "5" */
+       gconstpointer allowed_tags;      /* list of markup tags allowed in the cue text. */
+       gboolean allows_tag_attributes;
+       gchar *cue_id;
+       GList *regions;          /* List of GstSubParseVTTRegion structures */
+       gchar *region_id;
+       GList *active_cues;      /* List of GstSubParseVTTCue for overlapping WebVTT cues */
+     } ParserState;
 
-typedef struct {
-  int      state;
-  GString *buf;
-  guint64  start_time;
-  guint64  duration;
-  guint64  max_duration; /* to clamp duration, 0 = no limit (used by tmplayer parser) */
-  GstSegment *segment;
-  gpointer user_data;
-  gboolean have_internal_fps; /* If TRUE don't overwrite fps by property */
-  gint fps_n, fps_d;     /* used by frame based parsers */
-  guint8 line_position;          /* percent value */
-  gint line_number;              /* line number, can be positive or negative */
-  guint8 text_position;          /* percent value */
-  guint8 text_size;          /* percent value */
-  gchar *vertical;        /* "", "vertical", "vertical-lr" */
-  gchar *alignment;       /* "", "start", "middle", "end" */
-  gchar **allowed_tags; /* list of markup tags allowed in the cue text. */
-  gboolean allows_tag_attributes;
-} ParserState;
 
-typedef gchar* (*Parser) (ParserState *state, const gchar *line);
+     typedef gchar *(*Parser) (ParserState * state, const gchar * line);
+#define GST_QUERY_VIDEO_SIZE "custom-video-size"
 
-struct _GstSubParse {
-  GstElement element;
+/* Shared timestamp parser — used by both subrip and WebVTT formats.
+ * Handles "hh:mm:ss,mmm" (subrip) and "mm:ss.mmm" (WebVTT) variants. */
+gboolean parse_subrip_time (const gchar * ts_string, GstClockTime * t);
 
-  GstPad *sinkpad,*srcpad;
+     struct _GstSubParse
+     {
+       GstElement element;
 
-  /* contains the input in the input encoding */
-  GstAdapter *adapter;
-  /* contains the UTF-8 decoded input */
-  GString *textbuf;
+       GstPad *sinkpad, *srcpad;
 
-  GstSubParseFormat parser_type;
-  gboolean parser_detected;
-  const gchar *subtitle_codec;
+       /* contains the input in the input encoding */
+       GstAdapter *adapter;
+       /* contains the UTF-8 decoded input */
+       GString *textbuf;
 
-  Parser parse_line;
-  ParserState state;
+       GstSubParseFormat parser_type;
+       gboolean parser_detected;
+       const gchar *subtitle_codec;
 
-  /* seek */
-  guint64 offset;
-  
-  /* Segment */
-  guint32       segment_seqnum;
-  GstSegment    segment;
-  gboolean      need_segment;
-  
-  gboolean flushing;
-  gboolean valid_utf8;
-  gchar   *detected_encoding;
-  gchar   *encoding;
-  gboolean strip_pango_markup;
+       Parser parse_line;
+       ParserState state;
+       gint video_width;
+       gint video_height;
+#ifdef HAVE_WEBVTT_CSS
+       GstCssParse *css_parse;
+#endif
+       GQueue *buffer_queue;    /* Queue of GstBuffer */
+       /* seek */
+       guint64 offset;
 
-  gboolean first_buffer;
+       /* Segment */
+       guint32 segment_seqnum;
+       GstSegment segment;
+       gboolean need_segment;
 
-  /* used by frame based parsers */
-  gint fps_n, fps_d;          
-};
+       gboolean flushing;
+       gboolean valid_utf8;
+       gchar *detected_encoding;
+       gchar *encoding;
+       gboolean strip_pango_markup;
+
+       gboolean first_buffer;
+       GstBuffer *last_buffer;
+       /* used by frame based parsers */
+       gint fps_n, fps_d;
+     };
+
 
 G_END_DECLS
 

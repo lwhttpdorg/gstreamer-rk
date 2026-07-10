@@ -89,6 +89,8 @@ static GstStateChangeReturn gst_sub_parse_change_state (GstElement * element,
 static GstFlowReturn gst_sub_parse_chain (GstPad * sinkpad, GstObject * parent,
     GstBuffer * buf);
 
+static void gst_sub_parse_finalize (GObject * object);
+
 #define gst_sub_parse_parent_class parent_class
 G_DEFINE_TYPE (GstSubParse, gst_sub_parse, GST_TYPE_ELEMENT);
 
@@ -158,6 +160,9 @@ gst_sub_parse_class_init (GstSubParseClass * klass)
           "and the subtitle format requires it subtitles may be out of sync.",
           0, 1, G_MAXINT, 1, 24000, 1001,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /* Register the finalize method */
+  object_class->finalize = gst_sub_parse_finalize;
 }
 
 static void
@@ -190,6 +195,13 @@ gst_sub_parse_init (GstSubParse * subparse)
 
   subparse->fps_n = 24000;
   subparse->fps_d = 1001;
+
+#ifdef HAVE_WEBVTT_CSS
+  subparse->css_parse = gst_cssparse_new ();
+#endif
+  subparse->buffer_queue = g_queue_new ();
+  subparse->last_buffer = NULL;
+
 }
 
 /*
@@ -251,7 +263,7 @@ gst_sub_parse_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
   GstSubParse *self = GST_SUBPARSE (parent);
   gboolean ret = FALSE;
 
-  GST_DEBUG ("Handling %s event", GST_EVENT_TYPE_NAME (event));
+  GST_TRACE ("Handling %s event", GST_EVENT_TYPE_NAME (event));
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
@@ -919,7 +931,9 @@ subrip_fix_up_markup (gchar ** p_txt, gchar ** allowed_tags)
   g_ptr_array_free (open_tags, TRUE);
 }
 
-static gboolean
+/* Shared between subrip and WebVTT — declared non-static in gstsubparse.h
+ * so that gstwebvttparse.c can call it for WebVTT timestamp parsing. */
+gboolean
 parse_subrip_time (const gchar * ts_string, GstClockTime * t)
 {
   gchar s[128] = { '\0', };
@@ -996,122 +1010,55 @@ parse_subrip_time (const gchar * ts_string, GstClockTime * t)
   return TRUE;
 }
 
-/* cue settings are part of the WebVTT specification. They are
- * declared after the time interval in the first line of the
- * cue. Example: 00:00:01,000 --> 00:00:02,000 D:vertical-lr A:start
- * See also http://www.whatwg.org/specs/web-apps/current-work/webvtt.html
- */
-static void
-parse_webvtt_cue_settings (ParserState * state, const gchar * settings)
-{
-  gchar **splitted_settings = g_strsplit_set (settings, " \t", -1);
-  gint16 text_position, text_size;
-  gint16 line_position;
-  gboolean vertical_found = FALSE;
-  gboolean alignment_found = FALSE;
-
-  for (gchar ** setting_ptr = splitted_settings; *setting_ptr; setting_ptr++) {
-    gboolean valid_tag = FALSE;
-    switch ((*setting_ptr)[0]) {
-      case 'T':
-        if (sscanf (*setting_ptr, "T:%" G_GINT16_FORMAT "%%",
-                &text_position) > 0) {
-          state->text_position = (guint8) text_position;
-          valid_tag = TRUE;
-        }
-        break;
-      case 'D':
-        if (strlen (*setting_ptr) > 2) {
-          vertical_found = TRUE;
-          g_free (state->vertical);
-          state->vertical = g_strdup (*setting_ptr + 2);
-          valid_tag = TRUE;
-        }
-        break;
-      case 'L':
-        if (g_str_has_suffix (*setting_ptr, "%")) {
-          if (sscanf (*setting_ptr, "L:%" G_GINT16_FORMAT "%%",
-                  &line_position) > 0) {
-            state->line_position = line_position;
-            valid_tag = TRUE;
-          }
-        } else {
-          if (sscanf (*setting_ptr, "L:%" G_GINT16_FORMAT, &line_position) > 0) {
-            state->line_number = line_position;
-            valid_tag = TRUE;
-          }
-        }
-        break;
-      case 'S':
-        if (sscanf (*setting_ptr, "S:%" G_GINT16_FORMAT "%%", &text_size) > 0) {
-          state->text_size = (guint8) text_size;
-          valid_tag = TRUE;
-        }
-        break;
-      case 'A':
-        if (strlen (*setting_ptr) > 2) {
-          g_free (state->alignment);
-          state->alignment = g_strdup (*setting_ptr + 2);
-          alignment_found = TRUE;
-          valid_tag = TRUE;
-        }
-        break;
-      default:
-        break;
-    }
-    if (!valid_tag) {
-      GST_LOG ("Invalid or unrecognised setting found: %s", *setting_ptr);
-    }
-  }
-  g_strfreev (splitted_settings);
-  if (!vertical_found) {
-    g_free (state->vertical);
-    state->vertical = g_strdup ("");
-  }
-  if (!alignment_found) {
-    g_free (state->alignment);
-    state->alignment = g_strdup ("");
-  }
-}
+/* WebVTT cue settings parsing moved to gstwebvttparse.c */
 
 static gchar *
 parse_subrip (ParserState * state, const gchar * line)
 {
   gchar *ret;
-
+  GstSubParse *subparse =
+      state->user_data ? GST_SUBPARSE (state->user_data) : NULL;
+  GST_DEBUG_OBJECT (subparse, "Parsing line in state %d: '%s'", state->state,
+      line);
   switch (state->state) {
-    case 0:{
+    case 0:
+    {
       char *endptr;
       guint64 id;
-
-      /* looking for a single integer as a Cue ID, but we
-       * don't actually use it */
       errno = 0;
       id = g_ascii_strtoull (line, &endptr, 10);
+      GST_DEBUG_OBJECT (subparse, "Checking for cue ID: '%s'", line);
       if (id == G_MAXUINT64 && errno == ERANGE)
         state->state = 1;
       else if (id == 0 && errno == EINVAL)
         state->state = 1;
       else if (endptr != line && *endptr == '\0')
         state->state = 1;
+      g_string_truncate (state->buf, 0);        // Clear buffer for new subtitle
+      GST_DEBUG_OBJECT (subparse, "Transition to state %d, cleared buffer",
+          state->state);
       return NULL;
     }
     case 1:
     {
       GstClockTime ts_start, ts_end;
-      const gchar *end_time;
-
-      /* looking for start_time --> end_time */
+      gchar *end_time;
+      GST_DEBUG_OBJECT (subparse, "Parsing timestamp line: '%s'", line);
       if ((end_time = strstr (line, " --> ")) &&
           parse_subrip_time (line, &ts_start) &&
           parse_subrip_time (end_time + strlen (" --> "), &ts_end) &&
-          state->start_time <= ts_end) {
+          ts_start <= ts_end) {
         state->state = 2;
         state->start_time = ts_start;
         state->duration = ts_end - ts_start;
+        g_string_truncate (state->buf, 0);      // Ensure buffer is cleared
+        GST_DEBUG_OBJECT (subparse,
+            "Parsed timestamps: start=%" GST_TIME_FORMAT ", duration=%"
+            GST_TIME_FORMAT, GST_TIME_ARGS (ts_start), GST_TIME_ARGS (ts_end));
       } else {
-        GST_DEBUG ("error parsing subrip time line '%s'", line);
+        GST_DEBUG_OBJECT (subparse, "Error parsing timestamp line '%s'", line);
         state->state = 0;
+        g_string_truncate (state->buf, 0);      // Clear buffer on error
       }
       return NULL;
     }
@@ -1125,35 +1072,47 @@ parse_subrip (ParserState * state, const gchar * line)
       in_seg = gst_segment_clip (state->segment, GST_FORMAT_TIME,
           state->start_time, state->start_time + state->duration,
           &clip_start, &clip_stop);
-
+      GST_DEBUG_OBJECT (subparse,
+          "Segment clip result: in_seg=%d, clip_start=%" GST_TIME_FORMAT
+          ", clip_stop=%" GST_TIME_FORMAT, in_seg, GST_TIME_ARGS (clip_start),
+          GST_TIME_ARGS (clip_stop));
       if (in_seg) {
         state->start_time = clip_start;
         state->duration = clip_stop - clip_start;
       } else {
         state->state = 0;
+        g_string_truncate (state->buf, 0);
+        GST_DEBUG_OBJECT (subparse, "Subtitle out of segment, resetting state");
         return NULL;
       }
-    }
-      /* looking for subtitle text; empty line ends this subtitle entry */
       if (state->buf->len)
         g_string_append_c (state->buf, '\n');
       g_string_append (state->buf, line);
+      GST_DEBUG_OBJECT (subparse,
+          "Appending to buffer: '%s', current buffer: '%s'", line,
+          state->buf->str);
       if (strlen (line) == 0) {
         if (!g_utf8_validate (state->buf->str, state->buf->len, NULL)) {
+          GST_WARNING_OBJECT (subparse, "Invalid UTF-8 in buffer: '%s'",
+              state->buf->str);
           g_string_truncate (state->buf, 0);
           return NULL;
         }
         ret = g_markup_escape_text (state->buf->str, state->buf->len);
-        g_string_truncate (state->buf, 0);
-        state->state = 0;
+        GST_DEBUG_OBJECT (subparse, "Generated markup: '%s'", ret);
         subrip_unescape_formatting (ret, state->allowed_tags,
             state->allows_tag_attributes);
         subrip_remove_unhandled_tags (ret);
         strip_trailing_newlines (ret);
         subrip_fix_up_markup (&ret, state->allowed_tags);
+        g_string_truncate (state->buf, 0);      // Clear buffer after processing
+        state->state = 0;
+        GST_DEBUG_OBJECT (subparse,
+            "Final subtitle: '%s', resetting to state 0", ret);
         return ret;
       }
       return NULL;
+    }
     default:
       g_return_val_if_reached (NULL);
   }
@@ -1192,55 +1151,9 @@ parse_lrc (ParserState * state, const gchar * line)
   return g_strdup (start + 1);
 }
 
-/* WebVTT is a new subtitle format for the upcoming HTML5 video track
- * element. This format is similar to Subrip, the biggest differences
- * are that there can be cue settings detailing how to display the cue
- * text and more markup tags are allowed.
- * See also http://www.whatwg.org/specs/web-apps/current-work/webvtt.html
- */
-static gchar *
-parse_webvtt (ParserState * state, const gchar * line)
-{
-  /* Cue IDs are optional in WebVTT, but not in subrip,
-   * so when in state 0 (cue ID), also check if we're
-   * already at the start --> end time marker */
-  if (state->state == 0 || state->state == 1) {
-    GstClockTime ts_start, ts_end;
-    const gchar *end_time;
-    const gchar *cue_settings = NULL;
-
-    /* looking for start_time --> end_time */
-    if ((end_time = strstr (line, " --> ")) &&
-        parse_subrip_time (line, &ts_start) &&
-        parse_subrip_time (end_time + strlen (" --> "), &ts_end) &&
-        state->start_time <= ts_end) {
-      state->state = 2;
-      state->start_time = ts_start;
-      state->duration = ts_end - ts_start;
-      cue_settings = strstr (end_time + strlen (" --> "), " ");
-    } else {
-      GST_DEBUG ("error parsing subrip time line '%s'", line);
-      state->state = 0;
-    }
-
-    state->text_position = 0;
-    state->text_size = 0;
-    state->line_position = 0;
-    state->line_number = 0;
-
-    if (cue_settings)
-      parse_webvtt_cue_settings (state, cue_settings + 1);
-    else {
-      g_free (state->vertical);
-      state->vertical = g_strdup ("");
-      g_free (state->alignment);
-      state->alignment = g_strdup ("");
-    }
-
-    return NULL;
-  } else
-    return parse_subrip (state, line);
-}
+/* WebVTT region parsing, cue processing, overlap resolution, and the main
+ * parse_webvtt() state machine have been moved to gstwebvttparse.c to keep
+ * this file focused on the shared subtitle parsing infrastructure. */
 
 static void
 unescape_newlines_br (gchar * read)
@@ -1464,6 +1377,23 @@ parser_state_init (ParserState * state)
   state->max_duration = 0;      /* no limit */
   state->state = 0;
   state->segment = NULL;
+  g_free (state->cue_id);
+  state->cue_id = NULL;
+  g_free (state->vertical);
+  state->vertical = g_strdup ("");
+  g_free (state->alignment);
+  state->alignment = g_strdup ("");
+  g_free (state->region_id);
+  state->region_id = NULL;
+  g_free (state->position);
+  state->position = NULL;
+  g_free (state->line);
+  state->line = NULL;
+  state->text_position = 0;
+  state->text_size = 0;
+  state->line_position = 0;
+  state->line_number = 0;
+  state->active_cues = NULL;    /* Initialize active cues list */
 }
 
 static void
@@ -1478,7 +1408,43 @@ parser_state_dispose (GstSubParse * self, ParserState * state)
   state->vertical = NULL;
   g_free (state->alignment);
   state->alignment = NULL;
+  g_free (state->cue_id);
+  state->cue_id = NULL;
+  g_free (state->region_id);
+  state->region_id = NULL;
+  g_free (state->position);
+  state->position = NULL;
+  g_free (state->line);
+  state->line = NULL;
 
+  /* Free active cues */
+  GList *iter = state->active_cues;
+  while (iter) {
+    GstSubParseVTTCue *cue = (GstSubParseVTTCue *) iter->data;
+    g_free (cue->cue_id);
+    g_free (cue->text);
+    g_free (cue->region_id);
+    g_free (cue->vertical);
+    g_free (cue->alignment);
+    g_free (cue->position);
+    g_free (cue->line);
+    g_free (cue);
+    iter = g_list_next (iter);
+  }
+  g_list_free (state->active_cues);
+  state->active_cues = NULL;
+
+  /* Free regions */
+  iter = state->regions;
+  while (iter) {
+    GstSubParseVTTRegion *region = (GstSubParseVTTRegion *) iter->data;
+    g_free (region->id);
+    g_free (region->scroll);
+    g_free (region);
+    iter = g_list_next (iter);
+  }
+  g_list_free (state->regions);
+  state->regions = NULL;
   if (state->user_data) {
     switch (self->parser_type) {
       case GST_SUB_PARSE_FORMAT_QTTEXT:
@@ -1514,6 +1480,8 @@ gst_sub_parse_format_autodetect (GstSubParse * self)
   self->parser_type = format;
   self->subtitle_codec = gst_sub_parse_get_format_description (format);
   parser_state_init (&self->state);
+  self->state.user_data = self; /* Set user_data to GstSubParse instance */
+  GST_LOG_OBJECT (self, "Set state->user_data to %p", self);
   self->state.allowed_tags = NULL;
 
   switch (format) {
@@ -1631,9 +1599,16 @@ static void
 xml_text (GMarkupParseContext * context,
     const gchar * text, gsize text_len, gpointer user_data, GError ** error)
 {
-  GString *accum = user_data;
+  gchar **accum = (gchar **) user_data;
+  gchar *concat;
 
-  g_string_append_len (accum, text, text_len);
+  if (*accum) {
+    concat = g_strconcat (*accum, text, NULL);
+    g_free (*accum);
+    *accum = concat;
+  } else {
+    *accum = g_strdup (text);
+  }
 }
 
 static gchar *
@@ -1641,10 +1616,10 @@ strip_pango_markup (gchar * markup, GError ** error)
 {
   GMarkupParser parser = { 0, };
   GMarkupParseContext *context;
-  GString *accum = g_string_new (NULL);
+  gchar *accum = NULL;
 
   parser.text = xml_text;
-  context = g_markup_parse_context_new (&parser, 0, accum, NULL);
+  context = g_markup_parse_context_new (&parser, 0, &accum, NULL);
 
   g_markup_parse_context_parse (context, "<root>", 6, NULL);
   g_markup_parse_context_parse (context, markup, strlen (markup), error);
@@ -1658,10 +1633,10 @@ strip_pango_markup (gchar * markup, GError ** error)
 
 done:
   g_markup_parse_context_free (context);
-  return accum ? g_string_free (accum, FALSE) : NULL;
+  return accum;
 
 error:
-  g_string_free (accum, TRUE);
+  g_free (accum);
   accum = NULL;
   goto done;
 }
@@ -1757,10 +1732,25 @@ check_initial_events (GstSubParse * self)
 static GstFlowReturn
 handle_buffer (GstSubParse * self, GstBuffer * buf)
 {
+  ParserState *state = &self->state;
   GstFlowReturn ret = GST_FLOW_OK;
   gchar *line, *subtitle;
+  GList *pending_cues = NULL;
+  GList *iter;
 
-  GST_DEBUG_OBJECT (self, "%" GST_PTR_FORMAT, buf);
+  GST_DEBUG_OBJECT (self,
+      "Handling buffer: buffer: %p, pts %" GST_TIME_FORMAT ", dts %"
+      GST_TIME_FORMAT ", dur %" GST_TIME_FORMAT ", size %" G_GSIZE_FORMAT
+      ", offset %" G_GINT64_FORMAT
+      ", offset_end %s, flags 0x%x, parser_type=%s", buf,
+      GST_TIME_ARGS (GST_BUFFER_PTS (buf)),
+      GST_TIME_ARGS (GST_BUFFER_DTS (buf)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buf)), gst_buffer_get_size (buf),
+      GST_BUFFER_OFFSET (buf),
+      GST_BUFFER_OFFSET_END_IS_VALID (buf) ? g_strdup_printf ("%"
+          G_GINT64_FORMAT, GST_BUFFER_OFFSET_END (buf)) : "none",
+      GST_BUFFER_FLAGS (buf),
+      gst_sub_parse_get_format_description (self->parser_type));
 
   if (self->first_buffer) {
     GstMapInfo map;
@@ -1772,14 +1762,20 @@ handle_buffer (GstSubParse * self, GstBuffer * buf)
     self->first_buffer = FALSE;
     self->state.fps_n = self->fps_n;
     self->state.fps_d = self->fps_d;
+    GST_DEBUG_OBJECT (self, "First buffer processed, detected encoding: %s",
+        GST_STR_NULL (self->detected_encoding));
   }
 
   feed_textbuf (self, buf);
 
   ret = check_initial_events (self);
-  if (ret != GST_FLOW_OK)
+  if (ret != GST_FLOW_OK) {
+    GST_WARNING_OBJECT (self, "Failed to send initial events: %s",
+        gst_flow_get_name (ret));
     return ret;
+  }
 
+  /* Process lines from text buffer */
   while (!self->flushing && (line = get_next_line (self))) {
     guint offset = 0;
 
@@ -1788,77 +1784,123 @@ handle_buffer (GstSubParse * self, GstBuffer * buf)
     /* Now parse the line, out of segment lines will just return NULL */
     GST_LOG_OBJECT (self, "State %d. Parsing line '%s'", self->state.state,
         line + offset);
+
+    /* Parse the line */
     subtitle = self->parse_line (&self->state, line + offset);
     g_free (line);
 
-    if (subtitle) {
+    if (subtitle && self->parser_type != GST_SUB_PARSE_FORMAT_VTT) {
+      /* Handle subtitle for non-WebVTT formats */
       guint subtitle_len;
+      gchar *final_subtitle;
 
+      GST_DEBUG_OBJECT (self,
+          "Got subtitle: '%s', state->cue_id: '%s', region_id: '%s'", subtitle,
+          GST_STR_NULL (self->state.cue_id),
+          GST_STR_NULL (self->state.region_id));
+
+      /* Strip Pango markup if required */
       if (self->strip_pango_markup) {
         GError *error = NULL;
-        gchar *stripped;
-
-        if ((stripped = strip_pango_markup (subtitle, &error))) {
+        gchar *stripped = strip_pango_markup (subtitle, &error);
+        if (stripped) {
           g_free (subtitle);
           subtitle = stripped;
         } else {
-          GST_WARNING_OBJECT (self, "Failed to strip pango markup: %s",
+          GST_WARNING_OBJECT (self, "Failed to strip Pango markup: %s",
               error->message);
           g_clear_error (&error);
         }
       }
-
-      subtitle_len = strlen (subtitle);
-
-      /* +1 for terminating NUL character */
-      buf = gst_buffer_new_and_alloc (subtitle_len + 1);
-
-      /* copy terminating NUL character as well */
-      gst_buffer_fill (buf, 0, subtitle, subtitle_len + 1);
-      gst_buffer_set_size (buf, subtitle_len);
-
-      GST_BUFFER_TIMESTAMP (buf) = self->state.start_time;
-      GST_BUFFER_DURATION (buf) = self->state.duration;
-
       /* in some cases (e.g. tmplayer) we can only determine the duration
        * of a text chunk from the timestamp of the next text chunk; in those
        * cases, we probably want to limit the duration to something
        * reasonable, so we don't end up showing some text for e.g. 40 seconds
        * just because nothing else is being said during that time */
-      if (self->state.max_duration > 0 && GST_BUFFER_DURATION_IS_VALID (buf)) {
-        if (GST_BUFFER_DURATION (buf) > self->state.max_duration)
-          GST_BUFFER_DURATION (buf) = self->state.max_duration;
+
+      /* Create final subtitle text */
+      final_subtitle = g_strdup (subtitle);
+      GST_DEBUG_OBJECT (self, "Final subtitle text: '%s'", final_subtitle);
+
+      /* Create output buffer */
+      subtitle_len = strlen (final_subtitle);
+      GstBuffer *out_buf =
+          gst_buffer_new_allocate (NULL, subtitle_len + 1, NULL);
+      if (!out_buf) {
+        GST_ERROR_OBJECT (self, "Failed to allocate buffer for subtitle");
+        g_free (subtitle);
+        g_free (final_subtitle);
+        return GST_FLOW_ERROR;
+      }
+      gst_buffer_fill (out_buf, 0, final_subtitle, subtitle_len + 1);
+      gst_buffer_set_size (out_buf, subtitle_len);
+
+      /* Set buffer timestamps */
+      GST_BUFFER_TIMESTAMP (out_buf) = self->state.start_time;
+      GST_BUFFER_DURATION (out_buf) = self->state.duration;
+
+      /* Clamp duration if max_duration is set */
+      if (self->state.max_duration > 0
+          && GST_BUFFER_DURATION_IS_VALID (out_buf)) {
+        if (GST_BUFFER_DURATION (out_buf) > self->state.max_duration) {
+          GST_BUFFER_DURATION (out_buf) = self->state.max_duration;
+          GST_DEBUG_OBJECT (self, "Clamped duration to %" GST_TIME_FORMAT,
+              GST_TIME_ARGS (self->state.max_duration));
+        }
       }
 
+      /* Update segment position */
       self->segment.position = self->state.start_time;
 
+      /* Log final output */
       GST_DEBUG_OBJECT (self, "Sending text '%s', %" GST_TIME_FORMAT " + %"
-          GST_TIME_FORMAT, subtitle, GST_TIME_ARGS (self->state.start_time),
+          GST_TIME_FORMAT, final_subtitle,
+          GST_TIME_ARGS (self->state.start_time),
           GST_TIME_ARGS (self->state.duration));
 
-      g_free (self->state.vertical);
-      self->state.vertical = NULL;
-      g_free (self->state.alignment);
-      self->state.alignment = NULL;
+      /* Push buffer to src pad */
+      ret = gst_pad_push (self->srcpad, out_buf);
+      if (ret != GST_FLOW_OK) {
+        GST_DEBUG_OBJECT (self, "Push failed: %s", gst_flow_get_name (ret));
+        g_free (subtitle);
+        g_free (final_subtitle);
+        return ret;
+      }
 
-      ret = gst_pad_push (self->srcpad, buf);
-
-      /* move this forward (the tmplayer parser needs this) */
-      if (self->state.duration != GST_CLOCK_TIME_NONE)
+      /* Update start_time for next buffer */
+      if (self->state.duration != GST_CLOCK_TIME_NONE) {
         self->state.start_time += self->state.duration;
+      }
 
       g_free (subtitle);
-      subtitle = NULL;
-
-      if (ret != GST_FLOW_OK) {
-        GST_DEBUG_OBJECT (self, "flow: %s", gst_flow_get_name (ret));
-        break;
-      }
+      g_free (final_subtitle);
+    } else if (self->parser_type == GST_SUB_PARSE_FORMAT_VTT) {
+      /* Collect WebVTT cues for deferred processing */
+      pending_cues =
+          g_list_concat (pending_cues, g_list_copy (self->state.active_cues));
     }
   }
 
+  /* Process WebVTT cues after parsing all lines in the buffer */
+  if (self->parser_type == GST_SUB_PARSE_FORMAT_VTT && state->active_cues) {
+    GST_DEBUG_OBJECT (self, "Processing %d WebVTT cues",
+        g_list_length (state->active_cues));
+
+    /* Log active cues for debugging */
+    for (iter = state->active_cues; iter; iter = g_list_next (iter)) {
+      GstSubParseVTTCue *cue = (GstSubParseVTTCue *) iter->data;
+      GST_DEBUG_OBJECT (self,
+          "Active cue: id=%s, start=%" GST_TIME_FORMAT ", end=%" GST_TIME_FORMAT
+          ", text='%s', counter=%u", GST_STR_NULL (cue->cue_id),
+          GST_TIME_ARGS (cue->start_time), GST_TIME_ARGS (cue->end_time),
+          GST_STR_NULL (cue->text), cue->counter);
+    }
+    process_webvtt_cues (self, state);
+  }
+  g_list_free (pending_cues);
   return ret;
 }
+
 
 static GstFlowReturn
 gst_sub_parse_chain (GstPad * sinkpad, GstObject * parent, GstBuffer * buf)
@@ -1883,9 +1925,9 @@ gst_sub_parse_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_STREAM_GROUP_DONE:
-    case GST_EVENT_EOS:{
-      /* Make sure the last subrip chunk is pushed out even
-       * if the file does not have an empty line at the end */
+    case GST_EVENT_EOS:
+    {
+      /* Force parsing of remaining text and process cues */
       if (self->parser_type == GST_SUB_PARSE_FORMAT_SUBRIP ||
           self->parser_type == GST_SUB_PARSE_FORMAT_TMPLAYER ||
           self->parser_type == GST_SUB_PARSE_FORMAT_MPL2 ||
@@ -1894,14 +1936,46 @@ gst_sub_parse_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
         gchar term_chars[] = { '\n', '\n', '\0' };
         GstBuffer *buf = gst_buffer_new_and_alloc (2 + 1);
 
-        GST_DEBUG_OBJECT (self, "%s: force pushing of any remaining text",
-            GST_EVENT_TYPE_NAME (event));
+        GST_DEBUG_OBJECT (self, "EOS: force pushing of any remaining text");
 
         gst_buffer_fill (buf, 0, term_chars, 3);
         gst_buffer_set_size (buf, 2);
 
         GST_BUFFER_OFFSET (buf) = self->offset;
-        gst_sub_parse_chain (pad, parent, buf);
+        ret = gst_sub_parse_chain (pad, parent, buf);
+        if (ret != GST_FLOW_OK) {
+          GST_WARNING_OBJECT (self, "Failed to chain terminator buffer: %s",
+              gst_flow_get_name (ret));
+        }
+
+        /* Process any remaining WebVTT cues to handle overlaps */
+        if (self->parser_type == GST_SUB_PARSE_FORMAT_VTT
+            && self->state.active_cues) {
+          GST_DEBUG_OBJECT (self,
+              "EOS: Processing %d remaining WebVTT cues",
+              g_list_length (self->state.active_cues));
+          process_webvtt_cues (self, &self->state);
+          if (self->parser_type == GST_SUB_PARSE_FORMAT_VTT
+              && self->last_buffer) {
+            GstBuffer *dup = gst_buffer_copy (self->last_buffer);
+            if (dup) {
+              GST_DEBUG_OBJECT (self, "Duplicating final buffer at EOS");
+              ret = gst_pad_push (self->srcpad, dup);
+              if (ret != GST_FLOW_OK) {
+                GST_WARNING_OBJECT (self,
+                    "Failed to push duplicate final buffer: %s",
+                    gst_flow_get_name (ret));
+              }
+            } else {
+              GST_WARNING_OBJECT (self,
+                  "Failed to copy last buffer for duplication");
+            }
+          }
+          /* Clean up active cues to prevent accumulation */
+          g_list_free_full (self->state.active_cues,
+              (GDestroyNotify) free_webvtt_cue);
+          self->state.active_cues = NULL;
+        }
       }
       ret = gst_pad_event_default (pad, parent, event);
       break;
@@ -1910,10 +1984,21 @@ gst_sub_parse_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     {
       const GstSegment *s;
       gst_event_parse_segment (event, &s);
-      if (s->format == GST_FORMAT_TIME)
+      if (s->format == GST_FORMAT_TIME) {
         gst_event_copy_segment (event, &self->segment);
-      GST_DEBUG_OBJECT (self, "newsegment (%s)",
-          gst_format_get_name (self->segment.format));
+        GST_DEBUG_OBJECT (self, "New segment: start=%" GST_TIME_FORMAT
+            ", stop=%" GST_TIME_FORMAT ", position=%" GST_TIME_FORMAT,
+            GST_TIME_ARGS (self->segment.start),
+            GST_TIME_ARGS (self->segment.stop),
+            GST_TIME_ARGS (self->segment.position));
+        /* Process any active cues to handle segment change */
+        if (self->parser_type == GST_SUB_PARSE_FORMAT_VTT
+            && self->state.active_cues) {
+          GST_DEBUG_OBJECT (self, "Processing %d active cues on SEGMENT event",
+              g_list_length (self->state.active_cues));
+          process_webvtt_cues (self, &self->state);
+        }
+      }
       self->segment_seqnum = gst_event_get_seqnum (event);
 
       /* if not time format, we'll either start with a 0 timestamp anyway or
@@ -1943,19 +2028,41 @@ gst_sub_parse_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       break;
     }
     case GST_EVENT_FLUSH_START:
-    {
+      GST_DEBUG_OBJECT (self, "Received FLUSH_START event");
       self->flushing = TRUE;
-
       ret = gst_pad_event_default (pad, parent, event);
       break;
-    }
     case GST_EVENT_FLUSH_STOP:
-    {
+      GST_DEBUG_OBJECT (self,
+          "Received FLUSH_STOP event, pushing %u queued buffers",
+          g_queue_get_length (self->buffer_queue));
       self->flushing = FALSE;
-
+      /* Push queued buffers in FIFO order */
+      while (!g_queue_is_empty (self->buffer_queue)) {
+        GstBuffer *buf = (GstBuffer *) g_queue_pop_head (self->buffer_queue);
+        if (buf) {
+          GST_DEBUG_OBJECT (self, "Pushing queued buffer at %" GST_TIME_FORMAT
+              " with duration %" GST_TIME_FORMAT ", refcount: %d",
+              GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
+              GST_TIME_ARGS (GST_BUFFER_DURATION (buf)),
+              GST_MINI_OBJECT_REFCOUNT_VALUE (buf));
+          GstFlowReturn push_ret = gst_pad_push (self->srcpad, buf);
+          if (push_ret != GST_FLOW_OK) {
+            GST_WARNING_OBJECT (self, "Failed to push queued buffer at %"
+                GST_TIME_FORMAT ": %s, re-queuing, refcount: %d",
+                GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
+                gst_flow_get_name (push_ret),
+                GST_MINI_OBJECT_REFCOUNT_VALUE (buf));
+            g_queue_push_tail (self->buffer_queue, gst_buffer_ref (buf));
+            gst_buffer_unref (buf);
+            break;
+          }
+        }
+      }
+      GST_DEBUG_OBJECT (self, "Queue emptied, %u buffers remain",
+          g_queue_get_length (self->buffer_queue));
       ret = gst_pad_event_default (pad, parent, event);
       break;
-    }
     default:
       ret = gst_pad_event_default (pad, parent, event);
       break;
@@ -2002,4 +2109,18 @@ gst_sub_parse_change_state (GstElement * element, GstStateChange transition)
   }
 
   return ret;
+}
+
+
+static void
+gst_sub_parse_finalize (GObject * object)
+{
+  GstSubParse *subparse = GST_SUBPARSE (object);
+  g_queue_free_full (subparse->buffer_queue, (GDestroyNotify) gst_buffer_unref);
+  gst_buffer_replace (&subparse->last_buffer, NULL);
+#ifdef HAVE_WEBVTT_CSS
+  gst_cssparse_free (subparse->css_parse);
+#endif
+  /* Existing finalize code */
+  G_OBJECT_CLASS (gst_sub_parse_parent_class)->finalize (object);
 }

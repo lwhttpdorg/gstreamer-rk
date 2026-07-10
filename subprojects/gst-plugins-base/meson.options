@@ -46,7 +46,6 @@ option('overlaycomposition', type : 'feature', value : 'auto')
 option('pbtypes', type : 'feature', value : 'auto')
 option('playback', type : 'feature', value : 'auto')
 option('rawparse', type : 'feature', value : 'auto')
-option('subparse', type : 'feature', value : 'auto')
 option('tcp', type : 'feature', value : 'auto')
 option('typefind', type : 'feature', value : 'auto')
 option('videoconvertscale', type : 'feature', value : 'auto')
@@ -61,6 +60,7 @@ option('libvisual', type : 'feature', value : 'auto', description : 'libvisual a
 option('ogg', type : 'feature', value : 'auto', description : 'ogg parser, muxer, demuxer plugin')
 option('opus', type : 'feature', value : 'auto', description : 'OPUS audio codec plugin')
 option('pango', type : 'feature', value : 'auto', description : 'Pango text rendering and overlay plugin')
+option('subparse', type : 'feature', value : 'auto')
 option('theora', type : 'feature', value : 'auto', description : 'Theora video parser and codec plugin')
 option('tremor', type : 'feature', value : 'auto', description : 'Integer Vorbis decoder plugin for devices without floating point')
 option('vorbis', type : 'feature', value : 'auto', description : 'Vorbis audio parser, tagger, and codec plugin')
@@ -97,6 +97,7 @@ option('glib_assert', type : 'boolean', value : true, yield : true, description 
 option('glib_checks', type : 'boolean', value : true, yield : true, description : 'Enable GLib checks such as API guards (see docs/macros.txt)',
   deprecated: {'enabled' : 'true', 'disabled' : 'false', 'auto' : 'false'},
 )
+option('libcss', type: 'feature', value: 'auto', description: 'Enable libcss for CSS parsing in subtitles (e.g., WebVTT)')
 
 # Deprecated, kept for backward compat
 option('gobject-cast-checks', type : 'feature', value : 'auto', yield : true,

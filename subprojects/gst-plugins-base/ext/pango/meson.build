@@ -2,6 +2,7 @@ pango_sources = [
   'gstpangoelement.c',
   'gstpangoplugin.c',
   'gstbasetextoverlay.c',
+  'gstwebvttoverlay.c',
   'gstclockoverlay.c',
   'gsttextoverlay.c',
   'gsttextrender.c',
@@ -13,6 +14,7 @@ pango_headers = [
   'gsttimeoverlay.h',
   'gsttextoverlay.h',
   'gstbasetextoverlay.h',
+  'gstwebvttoverlay.h',
   'gstpangoelements.h',
   'gstclockoverlay.h',
 ]
