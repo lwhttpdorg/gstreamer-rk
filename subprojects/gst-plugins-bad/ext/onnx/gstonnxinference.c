@@ -428,6 +428,7 @@ gst_onnx_inference_set_property (GObject * object, guint prop_id,
   GstOnnxInference *self = GST_ONNX_INFERENCE (object);
   const gchar *filename;
 
+  GST_OBJECT_LOCK (self);
   switch (prop_id) {
     case PROP_MODEL_FILE:
       filename = g_value_get_string (value);
@@ -453,6 +454,7 @@ gst_onnx_inference_set_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK (self);
 }
 
 static void
@@ -461,6 +463,7 @@ gst_onnx_inference_get_property (GObject * object, guint prop_id,
 {
   GstOnnxInference *self = GST_ONNX_INFERENCE (object);
 
+  GST_OBJECT_LOCK (self);
   switch (prop_id) {
     case PROP_MODEL_FILE:
       g_value_set_string (value, self->model_file);
@@ -475,6 +478,7 @@ gst_onnx_inference_get_property (GObject * object, guint prop_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK (self);
 }
 
 static gsize
@@ -790,9 +794,10 @@ gst_onnx_inference_start (GstBaseTransform * trans)
   }
 
   if (self->model_file == NULL) {
-    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
+    GST_OBJECT_UNLOCK (self);
+    GST_ELEMENT_ERROR (self, RESOURCE, FAILED, (NULL),
         ("model-file property not set"));
-    goto done;
+    return FALSE;
   }
 
   modelinfo = gst_analytics_modelinfo_load (self->model_file);
@@ -801,11 +806,6 @@ gst_onnx_inference_start (GstBaseTransform * trans)
         "This could be due to: file not found, unsupported version, "
         "or invalid file format.", self->model_file);
     goto error;
-  }
-
-  if (self->session) {
-    ret = TRUE;
-    goto done;
   }
   // Create environment
   OrtLoggingLevel ort_logging;
@@ -866,9 +866,8 @@ gst_onnx_inference_start (GstBaseTransform * trans)
 
   status = api->SetSessionGraphOptimizationLevel (session_options, onnx_optim);
   if (status) {
-    GST_ELEMENT_ERROR (self, STREAM, FAILED, (NULL),
-        ("Failed to set optimization level: %s",
-            api->GetErrorMessage (status)));
+    GST_ERROR_OBJECT (self, "Failed to set optimization level: %s",
+        api->GetErrorMessage (status));
     goto error;
   }
   // Set execution provider
@@ -1012,7 +1011,7 @@ gst_onnx_inference_start (GstBaseTransform * trans)
 
   status = api->SessionGetOutputCount (self->session, &self->output_count);
   if (status) {
-    GST_ERROR_OBJECT (self, "Could to retrieve output count: %s",
+    GST_ERROR_OBJECT (self, "Failed to retrieve output count: %s",
         api->GetErrorMessage (status));
     goto error;
   }
@@ -1199,8 +1198,6 @@ gst_onnx_inference_start (GstBaseTransform * trans)
     if (status) {
       GST_ERROR_OBJECT (self, "Failed to get output tensor (%s) dimensions",
           self->output_names[i]);
-      api->ReleaseStatus (status);
-      status = NULL;
       g_free (output_dims);
       api->ReleaseTypeInfo (output_type_info);
       goto error;
@@ -1365,6 +1362,8 @@ error:
     gst_analytics_modelinfo_free (modelinfo);
   GST_OBJECT_UNLOCK (self);
 
+  GST_ELEMENT_ERROR (self, RESOURCE, FAILED, (NULL),
+      ("Failed to start ONNX inference; see log for details"));
   gst_onnx_inference_stop (trans);
   return ret;
 
