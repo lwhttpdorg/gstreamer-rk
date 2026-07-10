@@ -91,6 +91,7 @@ static void gst_alsasink_get_property (GObject * object,
 
 static GstCaps *gst_alsasink_getcaps (GstBaseSink * bsink, GstCaps * filter);
 static gboolean gst_alsasink_query (GstBaseSink * bsink, GstQuery * query);
+static gboolean gst_alsasink_event (GstBaseSink * bsink, GstEvent * event);
 
 static gboolean gst_alsasink_open (GstAudioSink * asink);
 static gboolean gst_alsasink_prepare (GstAudioSink * asink,
@@ -183,6 +184,7 @@ gst_alsasink_class_init (GstAlsaSinkClass * klass)
 
   gstbasesink_class->get_caps = GST_DEBUG_FUNCPTR (gst_alsasink_getcaps);
   gstbasesink_class->query = GST_DEBUG_FUNCPTR (gst_alsasink_query);
+  gstbasesink_class->event = GST_DEBUG_FUNCPTR (gst_alsasink_event);
 
   gstbaseaudiosink_class->payload = GST_DEBUG_FUNCPTR (gst_alsasink_payload);
 
@@ -435,6 +437,23 @@ gst_alsasink_query (GstBaseSink * sink, GstQuery * query)
       break;
   }
   return ret;
+}
+
+static gboolean
+gst_alsasink_event (GstBaseSink * sink, GstEvent * event)
+{
+  GstAlsaSink *alsa = GST_ALSA_SINK (sink);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_STOP:
+      if (alsa->hw_support_pause
+          && snd_pcm_state (alsa->handle) == SND_PCM_STATE_PAUSED)
+        gst_alsasink_stop (GST_AUDIO_SINK (alsa));
+      break;
+    default:
+      break;
+  }
+  return GST_BASE_SINK_CLASS (parent_class)->event (sink, event);
 }
 
 static int
@@ -1233,7 +1252,8 @@ gst_alsasink_resume (GstAudioSink * asink)
 
   alsa = GST_ALSA_SINK (asink);
 
-  if (alsa->hw_support_pause == TRUE) {
+  if (alsa->hw_support_pause
+      && snd_pcm_state (alsa->handle) == SND_PCM_STATE_PAUSED) {
     GST_ALSA_SINK_LOCK (asink);
     CHECK (snd_pcm_pause (alsa->handle, 0), resume_error);
     GST_DEBUG_OBJECT (alsa, "resume done");
