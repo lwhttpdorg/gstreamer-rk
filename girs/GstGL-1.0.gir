@@ -10679,6 +10679,10 @@ you are writing to OpenGL. Conversely, combining #GST_MAP_GL with
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstglbasememory.h"/>
       <type name="gint" c:type="gint"/>
     </constant>
+    <constant name="META_TAG_GL_SYNC_STR" value="gl-sync" c:type="GST_META_TAG_GL_SYNC_STR" version="1.30">
+      <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstglsyncmeta.h"/>
+      <type name="utf8" c:type="gchar*"/>
+    </constant>
     <function name="buffer_add_gl_sync_meta" c:identifier="gst_buffer_add_gl_sync_meta" version="1.6">
       <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstglsyncmeta.h"/>
       <return-value transfer-ownership="none">

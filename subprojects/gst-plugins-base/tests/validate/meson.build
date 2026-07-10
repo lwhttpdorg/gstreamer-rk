@@ -5,6 +5,9 @@ endif
 
 tests = [
     'audiotestsrc/reverse',
+    'glsinkbin/sysmem_to_gl_bgrx',
+    'glsinkbin/sysmem_to_gl_nv12',
+    'glsinkbin/sysmem_to_gl_rgba',
     'videorate/10_to_1fps',
     'videorate/reverse.10_to_1fps',
     'videorate/reverse_fast.10_to_1fps',
@@ -43,6 +46,27 @@ tests = [
     'fakevideodec/simple'
 ]
 
+tests_dmabuf = [
+    'glsinkbin/dmabuf_passthrough_bgrx',
+    'glsinkbin/dmabuf_passthrough_nv12',
+    'glsinkbin/dmabuf_passthrough_rgba',
+    'glsinkbin/dmabuf_to_gl_bgrx',
+    'glsinkbin/dmabuf_to_gl_nv12',
+    'glsinkbin/dmabuf_to_gl_rgba',
+    'glsinkbin/sysmem_to_gl_with_udmabuf_bgrx',
+    'glsinkbin/sysmem_to_gl_with_udmabuf_nv12',
+    'glsinkbin/sysmem_to_gl_with_udmabuf_rgba',
+    'glsinkbin/sysmem_to_udmabuf_bgrx',
+    'glsinkbin/sysmem_to_udmabuf_nv12',
+    'glsinkbin/sysmem_to_udmabuf_rgba',
+    'glsinkbin/upload_dmabuf_to_gl_bgrx',
+    'glsinkbin/upload_dmabuf_to_gl_nv12',
+    'glsinkbin/upload_dmabuf_to_gl_rgba',
+    'glsinkbin/upload_sysmem_to_gl_bgrx',
+    'glsinkbin/upload_sysmem_to_gl_nv12',
+    'glsinkbin/upload_sysmem_to_gl_rgba',
+]
+
 env = environment()
 env.set('GST_PLUGIN_PATH_1_0', meson.global_build_root(), pluginsdirs)
 env.set('GST_PLUGIN_SYSTEM_PATH_1_0', '')
@@ -50,6 +74,21 @@ env.set('GST_REGISTRY', '@0@/@1@.registry'.format(meson.current_build_dir(), 'va
 env.set('GST_PLUGIN_SCANNER_1_0', gst_plugin_scanner_path)
 env.set('GST_PLUGIN_LOADING_WHITELIST', 'gstreamer', 'gst-validate', 'debugutilsbad',
     'gst-plugins-good', 'gst-plugins-base@' + meson.project_build_root())
+
+foreach t: tests_dmabuf
+    test_dir_name = t.split('/')
+    test_name = 'validate'
+    foreach c: test_dir_name
+        test_name += '.' + c
+    endforeach
+    test_env = env
+    test_env.set('GST_VALIDATE_LOGSDIR', join_paths(meson.current_build_dir(), test_name))
+    test_file = join_paths(meson.current_source_dir(), t + '.validatetest')
+    test(test_name, gst_tester, args: [test_file, '--use-fakesinks'],
+        env: test_env, timeout : 3 * 60, protocol: 'tap')
+endforeach
+
+env.set('GST_DISABLE_UDMABUF', '1')
 
 foreach t: tests
     test_dir_name = t.split('/')

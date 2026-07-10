@@ -1,0 +1,4 @@
+event caps: video/x-raw(memory:GLMemory), format=(string)RGBA, framerate=(fraction)30/1, height=(int)240, interlace-mode=(string)progressive, multiview-mode=(string)mono, pixel-aspect-ratio=(fraction)1/1, texture-target=(string)2D, width=(int)320;
+event segment: format=TIME, start=0:00:00.000000000, offset=0:00:00.000000000, stop=none, time=0:00:00.000000000, base=0:00:00.000000000, position=0:00:00.000000000
+buffer: content-id=0, pts=0:00:00.000000000, dur=0:00:00.033333333, flags=discont tag-memory, meta=GstVideoMeta, GstGLSyncMeta
+event eos: (no structure)

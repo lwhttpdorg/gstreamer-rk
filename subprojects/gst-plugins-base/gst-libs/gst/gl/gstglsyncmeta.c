@@ -360,7 +360,7 @@ GType
 gst_gl_sync_meta_api_get_type (void)
 {
   static GType type = 0;
-  static const gchar *tags[] = { NULL };
+  static const gchar *tags[] = { GST_META_TAG_GL_SYNC_STR, NULL };
 
   if (g_once_init_enter (&type)) {
     GType _type = gst_meta_api_type_register ("GstGLSyncMetaAPI", tags);

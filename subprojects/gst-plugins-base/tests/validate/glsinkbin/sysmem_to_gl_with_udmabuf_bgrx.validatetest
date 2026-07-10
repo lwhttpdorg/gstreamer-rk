@@ -1,0 +1,18 @@
+meta,
+    args={
+        "videotestsrc num-buffers=1 ! video/x-raw,format=BGRx ! glupload name=upload ! glcolorconvert name=convert ! glcolorbalance name=balance ! video/x-raw(memory:GLMemory) ! fakevideosink",
+    },
+    configs={
+        [validateflow,
+            pad=upload:sink,
+            buffers-checksum=as-id,
+            ignored-event-types={
+                tag, stream-start,
+            }],
+        [validateflow,
+            pad=balance:src,
+            buffers-checksum=as-id,
+            ignored-event-types={
+                tag, stream-start,
+            }],
+    }

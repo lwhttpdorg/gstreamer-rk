@@ -29,9 +29,13 @@ popd
 # Build a linux image for virtme fluster tests
 bash ./ci/scripts/build-linux.sh \
     "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git" \
-    "v6.6.93" \
+    "v7.0.12" \
     /opt/linux/bzImage \
     'MEDIA_SUPPORT' \
     'MEDIA_TEST_SUPPORT' \
     'V4L_TEST_DRIVERS' \
-    'CONFIG_VIDEO_VISL'
+    'CONFIG_VIDEO_VISL' \
+    'CONFIG_DRM' \
+    'CONFIG_DRM_KMS_HELPER' \
+    'CONFIG_DRM_VKMS' \
+    'CONFIG_UDMABUF'

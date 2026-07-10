@@ -30,6 +30,13 @@ G_BEGIN_DECLS
 typedef struct _GstGLSyncMeta GstGLSyncMeta;
 
 /**
+ * GST_META_TAG_GL_SYNC_STR:
+ *
+ * Since: 1.30
+ */
+#define GST_META_TAG_GL_SYNC_STR "gl-sync"
+
+/**
  * GST_BUFFER_POOL_OPTION_GL_SYNC_META:
  *
  * An option that can be activated on bufferpools to request OpenGL
