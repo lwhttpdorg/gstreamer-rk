@@ -751,8 +751,11 @@ gst_adaptive_demux_change_state (GstElement * element,
       if (g_atomic_int_compare_and_exchange (&demux->running, TRUE, FALSE))
         GST_DEBUG_OBJECT (demux, "demuxer has stopped running");
 
-      gst_adaptive_demux_loop_stop (demux->priv->scheduler_task, TRUE);
+      /* Stop the download helper before the scheduler loop: cancelled transfers
+       * complete via g_task_return() on the scheduler context, so the loop must
+       * still run to dispatch them or the tasks and their buffers leak. */
       downloadhelper_stop (demux->download_helper);
+      gst_adaptive_demux_loop_stop (demux->priv->scheduler_task, TRUE);
 
       TRACKS_LOCK (demux);
       demux->priv->flushing = TRUE;

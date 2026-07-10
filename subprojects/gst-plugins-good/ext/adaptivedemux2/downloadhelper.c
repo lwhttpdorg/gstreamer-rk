@@ -965,6 +965,11 @@ dh_transfer_thread_func (gpointer data)
 
   g_main_context_push_thread_default (dh->transfer_context);
   g_main_loop_run (dh->loop);
+
+  /* Drain the context so the cancelled reads finish and return their GTasks.
+   * The completions are dispatched later on the scheduler context. */
+  while (g_main_context_iteration (dh->transfer_context, FALSE));
+
   g_main_context_pop_thread_default (dh->transfer_context);
 
   GST_DEBUG ("Exiting DownloadHelper thread");
@@ -1004,6 +1009,14 @@ downloadhelper_stop (DownloadHelper * dh)
   for (i = 0; i < dh->active_transfers->len; i++) {
     GTask *transfer_task = g_array_index (dh->active_transfers, GTask *, i);
     DownloadHelperTransfer *transfer = g_task_get_task_data (transfer_task);
+    /* Cancel like downloadhelper_cancel_request() so the GTask completion is
+     * dispatched as a cancellation, not asserting on a LOADING state. Clear the
+     * callbacks first so it can't re-enter the stream being torn down. */
+    download_request_lock (transfer->request);
+    transfer->request->state = DOWNLOAD_REQUEST_STATE_CANCELLED;
+    download_request_unlock (transfer->request);
+    download_request_set_callbacks (transfer->request, NULL, NULL, NULL, NULL,
+        NULL);
     g_cancellable_cancel (transfer->cancellable);
   }
 
