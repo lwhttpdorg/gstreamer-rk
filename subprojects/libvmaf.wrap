@@ -1,6 +1,6 @@
 [wrap-git]
 url =  https://github.com/Netflix/vmaf.git
-revision = f5f366446ed9680cb0fdab558a2bfff11f5ba12c
+revision = 3f9e02af258a5c0e30124fc585a3c3af90126dee
 depth = 1
 diff_files = libvmaf/0001-Declare-dependency-to-use-it-as-subproject.patch
 patch_directory = libvmaf
