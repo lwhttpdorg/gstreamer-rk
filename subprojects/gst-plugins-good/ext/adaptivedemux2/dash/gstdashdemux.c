@@ -1673,11 +1673,12 @@ gst_dash_demux_stream_seek (GstAdaptiveDemux2Stream * stream, gboolean forward,
 
   is_isobmff = gst_mpd_client2_has_isoff_ondemand_profile (dashdemux->client);
 
-  if (!gst_mpd_client2_stream_seek (dashdemux->client,
-          dashstream->active_stream, forward,
-          is_isobmff ? (flags & (~(GST_SEEK_FLAG_SNAP_BEFORE |
-                      GST_SEEK_FLAG_SNAP_AFTER))) : flags, ts, &final_ts)) {
-    return GST_FLOW_EOS;
+  GstFlowReturn seek_ret = gst_mpd_client2_stream_seek (dashdemux->client,
+      dashstream->active_stream, forward,
+      is_isobmff ? (flags & (~(GST_SEEK_FLAG_SNAP_BEFORE |
+                  GST_SEEK_FLAG_SNAP_AFTER))) : flags, ts, &final_ts);
+  if (seek_ret != GST_FLOW_OK) {
+    return seek_ret;
   }
 
   if (final_rt)
@@ -2574,17 +2575,24 @@ gst_dash_demux_seek (GstAdaptiveDemux * demux, GstEvent * seek)
   }
 
   /* Update the current sequence on all streams */
+  gboolean all_eos = TRUE;
   for (iter = demux->input_period->streams; iter; iter = g_list_next (iter)) {
     GstAdaptiveDemux2Stream *stream = iter->data;
     GstDashDemux2Stream *dashstream = iter->data;
+    GstFlowReturn seek_ret;
 
     dashstream->average_skip_size = 0;
-    if (gst_dash_demux_stream_seek (stream, rate >= 0, 0, target_pos,
-            NULL) != GST_FLOW_OK)
+    seek_ret =
+        gst_dash_demux_stream_seek (stream, rate >= 0, 0, target_pos, NULL);
+    if (seek_ret != GST_FLOW_OK && seek_ret != GST_FLOW_EOS) {
+      /* Only fail on actual errors, not EOS (stream past last segment) */
       return FALSE;
+    }
+
+    all_eos &= seek_ret == GST_FLOW_EOS;
   }
 
-  return TRUE;
+  return !all_eos;
 }
 
 static gint64
