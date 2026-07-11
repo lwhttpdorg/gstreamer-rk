@@ -335,6 +335,7 @@ if build_gir
     'symbol_prefix' : 'gst',
     'export_packages' : pkg_name,
     'includes' : ['GLib-2.0', 'GObject-2.0', 'GModule-2.0' ],
+    'dependencies' : [glib_dep, gobject_dep, gmodule_dep],
     'install' : true,
     'extra_args' : gst_gir_extra_args,
   }
