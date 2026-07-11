@@ -575,8 +575,25 @@ typedef enum
   GST_AGGREGATOR_START_TIME_SELECTION_NOW,
 } GstAggregatorStartTimeSelection;
 
+/**
+ * GstAggregatorInactivePadsPolicy:
+ * @GST_AGGREGATOR_INACTIVE_PADS_POLICY_TIMEOUT: Wait until all pads have seen a first buffer or timeout.
+ * @GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT: Wait for all pads to have seen a first buffer
+ *
+ * Since: 1.30
+ */
+typedef enum
+{
+  GST_AGGREGATOR_INACTIVE_PADS_POLICY_TIMEOUT,
+  GST_AGGREGATOR_INACTIVE_PADS_POLICY_WAIT,
+} GstAggregatorInactivePadsPolicy;
+
+
 GST_BASE_API
 GType           gst_aggregator_start_time_selection_get_type (void);
+
+GST_BASE_API
+GType           gst_aggregator_inactive_pads_policy_get_type (void);
 
 G_END_DECLS
 
