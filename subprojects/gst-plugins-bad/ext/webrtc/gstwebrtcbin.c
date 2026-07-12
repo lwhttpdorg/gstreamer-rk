@@ -9759,7 +9759,7 @@ gst_webrtc_bin_class_init (GstWebRTCBinClass * klass)
    * GstWebRTCBin::get-transceivers:
    * @object: the #webrtcbin
    *
-   * Returns: a #GArray of #GstWebRTCRTPTransceivers
+   * Returns: (transfer full) (element-type GstWebRTCRTPTransceiver): a #GArray of #GstWebRTCRTPTransceiver
    */
   gst_webrtc_bin_signals[GET_TRANSCEIVERS_SIGNAL] =
       g_signal_new_class_handler ("get-transceivers", G_TYPE_FROM_CLASS (klass),
