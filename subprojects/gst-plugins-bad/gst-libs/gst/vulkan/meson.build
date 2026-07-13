@@ -96,9 +96,8 @@ vulkan_windowing = false
 vulkan_objc_args = []
 vulkan_defines = []
 optional_deps = []
-has_vulkan_header = false
+vulkan_headers_version = '>=1.4.317'
 vulkan_dep = dependency('', required: false)
-vulkan_inc_dir = ''
 enabled_vulkan_winsys = []
 
 vulkan_conf = configuration_data()
@@ -117,6 +116,7 @@ foreach option : vulkan_conf_options
 endforeach
 
 vulkan_plugin_kwargs = {}
+
 if host_system == 'darwin'
   # Prefer direct MoltenVK linkage on Darwin instead of the Vulkan loader.
   # This matches the framework packaging model and avoids depending on local
@@ -128,39 +128,70 @@ if host_system == 'darwin'
     # We need this to find libMoltenVK.dylib when installed
     vulkan_plugin_kwargs += {'install_rpath': '@loader_path/..'}
   endif
-elif host_system == 'windows'
-  vulkan_root = run_command(python3, '-c', 'import os; print(os.environ.get("VK_SDK_PATH"))', check: false).stdout().strip()
-  if vulkan_root != '' and vulkan_root != 'None'
-    vulkan_lib_dir = ''
-    if build_machine.cpu_family() == 'x86_64'
-      vulkan_lib_dir = join_paths(vulkan_root, 'Lib')
-    else
-      vulkan_lib_dir = join_paths(vulkan_root, 'Lib32')
-    endif
-
-    vulkan_lib = cc.find_library('vulkan-1', dirs: vulkan_lib_dir,
-                                 required : vulkan_opt)
-
-    vulkan_inc_dir = join_paths(vulkan_root, 'Include')
-    has_vulkan_header = cc.has_header('vulkan/vulkan_core.h',
-                                      args: '-I' + vulkan_inc_dir,
-                                      required: vulkan_opt)
-
-    if vulkan_lib.found() and has_vulkan_header
-      vulkan_dep = declare_dependency(include_directories: include_directories(vulkan_inc_dir),
-                                      dependencies: vulkan_lib)
-    endif
-  endif
 else
-  vulkan_dep = dependency('vulkan', method: 'pkg-config', required: false)
+  if host_system == 'windows'
+    vulkan_lib_name = 'vulkan-1'
+  else
+    vulkan_lib_name = 'vulkan'
+  endif
+
+  # first, check for VULKAN SDK
+  if meson.version().version_compare('>=1.6.1')
+    vulkan_dep = dependency('vulkan', method: 'auto', required: false)
+  else # fallback
+    vulkan_root = run_command(python3, '-c', 'import os; print(os.environ.get("VULKAN_SDK", os.environ.get("VK_SDK_PATH")))', check: false).stdout().strip()
+    if vulkan_root != '' and vulkan_root != 'None'
+      vulkan_lib_dir = ''
+      if build_machine.cpu_family() == 'x86'
+        vulkan_lib_dir = join_paths(vulkan_root, 'Lib32')
+      else # x86_64 and aarch64
+        vulkan_lib_dir = join_paths(vulkan_root, 'Lib')
+      endif
+
+      vulkan_lib = cc.find_library(vulkan_lib_name,
+                                   dirs: vulkan_lib_dir,
+                                   required: vulkan_opt)
+      if vulkan_lib.found()
+        vulkan_inc_dir = join_paths(vulkan_root, 'Include')
+        has_vulkan_header = cc.has_header('vulkan/vulkan_core.h',
+                                          args: '-I' + vulkan_inc_dir,
+                                          required: vulkan_opt)
+        if has_vulkan_header
+          vulkan_dep = declare_dependency(include_directories: include_directories(vulkan_inc_dir),
+                                          dependencies: vulkan_lib)
+        endif
+      endif
+    endif
+  endif
+
+  # second, check for pkg-config (again?)
   if not vulkan_dep.found()
-    vulkan_dep = cc.find_library('vulkan', required: vulkan_opt)
+    vulkan_dep = dependency('vulkan', method: 'pkg-config', required: false)
+  endif
+
+  # last, system libs
+  if not vulkan_dep.found()
+    vulkan_dep = cc.find_library(vulkan_lib_name, required: vulkan_opt)
   endif
 endif
 
-if host_system != 'windows'
-  has_vulkan_header = cc.has_header('vulkan/vulkan_core.h', dependencies: vulkan_dep, required: vulkan_opt)
+if not vulkan_dep.found()
+  subdir_done()
 endif
+
+# vulkan-headers wrap aims to provide headers with sufficient declaration to
+# support vulkan video latest supported extensions. Vulkan video is not
+# supported on MacOS.
+#
+# `meson configure build/ --force-fallback-for=vulkan-headers` to use it
+vulkan_deps = []
+if host_system != 'darwin'
+  vulkan_headers_dep = dependency('vulkan-headers',
+                                  required: false,
+                                  version: vulkan_headers_version)
+  vulkan_deps += vulkan_headers_dep
+endif
+vulkan_deps += vulkan_dep
 
 if 'x11' in vulkan_windowing_opt or 'auto' in vulkan_windowing_opt
   vulkan_xcb_required = vulkan_opt.enabled() and 'x11' in vulkan_windowing_opt
@@ -169,7 +200,7 @@ if 'x11' in vulkan_windowing_opt or 'auto' in vulkan_windowing_opt
   xkbcommon_x11_dep = dependency('xkbcommon-x11', required: vulkan_xcb_required)
 
   if xcb_dep.found() and xkbcommon_dep.found() and xkbcommon_x11_dep.found() and \
-     cc.has_header('vulkan/vulkan_xcb.h', dependencies : vulkan_dep, required: vulkan_xcb_required)
+     cc.has_header('vulkan/vulkan_xcb.h', dependencies : vulkan_deps, required: vulkan_xcb_required)
     vulkan_priv_sources += files(
       'xcb/gstvkwindow_xcb.c',
       'xcb/xcb_event_source.c',
@@ -196,7 +227,7 @@ if 'wayland' in vulkan_windowing_opt or 'auto' in vulkan_windowing_opt
   wayland_scanner = find_program('wayland-scanner', required: vulkan_wayland_required)
 
   if wayland_client_dep.found() and wayland_protocols_dep.found() and wayland_scanner.found() and \
-     cc.has_header('vulkan/vulkan_wayland.h', dependencies: vulkan_dep, required: vulkan_wayland_required)
+     cc.has_header('vulkan/vulkan_wayland.h', dependencies: vulkan_deps, required: vulkan_wayland_required)
     # Generate the XDG shell interface
     wayland_protocols_basedir = wayland_protocols_dep.get_variable('pkgdatadir')
     xdg_shell_xml_spec = join_paths(wayland_protocols_basedir, 'stable', 'xdg-shell', 'xdg-shell.xml')
@@ -254,7 +285,7 @@ endif
 if subsystem == 'macos'
   cocoa_dep = dependency('appleframeworks', modules : ['Cocoa'], required : vulkan_opt)
 
-  if cocoa_dep.found() and cc.has_header('vulkan/vulkan_macos.h', dependencies: vulkan_dep, required: vulkan_opt)
+  if cocoa_dep.found() and cc.has_header('vulkan/vulkan_macos.h', dependencies: vulkan_deps, required: vulkan_opt)
     vulkan_priv_sources += files(
       'cocoa/gstvkdisplay_cocoa.m',
       'cocoa/gstvkwindow_cocoa.m',
@@ -267,7 +298,7 @@ if subsystem == 'macos'
 elif host_system == 'darwin'
   uikit_dep = dependency('appleframeworks', modules : ['UIKit', 'IOSurface', 'CoreGraphics', 'Metal'], required : vulkan_opt)
 
-  if uikit_dep.found() and cc.has_header('vulkan/vulkan_ios.h', dependencies : vulkan_dep, required: vulkan_opt)
+  if uikit_dep.found() and cc.has_header('vulkan/vulkan_ios.h', dependencies : vulkan_deps, required: vulkan_opt)
     vulkan_priv_sources += files(
       'ios/gstvkdisplay_ios.m',
       'ios/gstvkwindow_ios.m',
@@ -282,8 +313,7 @@ endif
 if host_system == 'windows'
   gdi_dep = cc.find_library('gdi32', required : vulkan_opt)
 
-  # Cannot use internal dependency object with cc.has_header()
-  if gdi_dep.found() and cc.has_header('vulkan/vulkan_win32.h', args: '-I' + vulkan_inc_dir, required: vulkan_opt)
+  if gdi_dep.found() and cc.has_header('vulkan/vulkan_win32.h', dependencies: vulkan_deps, required: vulkan_opt)
     vulkan_priv_sources += ['win32/gstvkwindow_win32.c']
     optional_deps += [gdi_dep]
     vulkan_windowing = true
@@ -293,7 +323,7 @@ if host_system == 'windows'
 endif
 
 if host_system == 'android'
-  if cc.has_header('vulkan/vulkan_android.h', dependencies : vulkan_dep, required: vulkan_opt)
+  if cc.has_header('vulkan/vulkan_android.h', dependencies : vulkan_deps, required: vulkan_opt)
     vulkan_priv_sources += files(
       'android/gstvkdisplay_android.c',
       'android/gstvkwindow_android.c',
@@ -312,12 +342,8 @@ if not vulkan_windowing
   endif
 endif
 
-if not vulkan_dep.found() or not has_vulkan_header
-  subdir_done()
-endif
-
 if get_option('vulkan-video').allowed()
-  video_test = '''
+  vulkan_video_test = '''
 #include <vulkan/vulkan.h>
 
 #if !(defined(VK_VERSION_1_5) || (defined(VK_VERSION_1_4) && VK_HEADER_VERSION >= 317))
@@ -336,12 +362,11 @@ static VkVideoEncodeH264ProfileInfoKHR h264_profile;
 static VkVideoEncodeH265ProfileInfoKHR h265_profile;
 '''
 
-  if vulkan_inc_dir != ''
-    have_vk_video = cc.compiles(video_test, dependencies : vulkan_dep,  args: '-I' + vulkan_inc_dir)
-  else
-    have_vk_video = cc.compiles(video_test, dependencies : vulkan_dep)
-  endif
-  if have_vk_video
+  # check if vulkan video is supported, instead of simple version check, since
+  # Moltenvk and Android don't support vulkan video so far
+  has_vulkan_video = cc.compiles(vulkan_video_test, dependencies : vulkan_deps)
+
+  if has_vulkan_video
     vulkan_conf.set('GST_VULKAN_HAVE_VIDEO_EXTENSIONS', 1)
     vulkan_priv_sources += files(
       'gstvkvideoutils-private.c',
@@ -391,7 +416,7 @@ gstvulkan = library('gstvulkan-' + api_version,
   soversion : soversion,
   darwin_versions : osxversion,
   install : true,
-  dependencies : [gstbase_dep, gstvideo_dep, vulkan_dep] + optional_deps,
+  dependencies : [gstbase_dep, gstvideo_dep] + vulkan_deps + optional_deps,
   # don't confuse gst/vulkan/xcb/xcb.h with xcb/xcb.h
   implicit_include_directories : false)
 
@@ -438,7 +463,7 @@ gst_libraries += [[pkg_name, library_def]]
 gstvulkan_dep = declare_dependency(link_with : gstvulkan,
   include_directories : [libsinc],
   sources: gen_sources,
-  dependencies : [gstvideo_dep, gstbase_dep, vulkan_dep] + optional_deps)
+  dependencies : [gstvideo_dep, gstbase_dep] + vulkan_deps + optional_deps)
 
 meson.override_dependency(pkg_name, gstvulkan_dep)
 
