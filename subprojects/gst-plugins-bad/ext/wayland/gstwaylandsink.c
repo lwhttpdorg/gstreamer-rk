@@ -878,6 +878,15 @@ gst_wayland_sink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
     }
   }
 
+  /* Discard GAP buffer */
+  if (gst_buffer_get_size (buffer) == 0 &&
+      GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_GAP)) {
+    GST_LOG_OBJECT (self, "buffer %" GST_PTR_FORMAT 
+        " dropped (gap in the stream)", buffer);
+    goto done;
+  }
+
+
   /* make sure that the application has called set_render_rectangle() */
   if (G_UNLIKELY (gst_wl_window_get_render_rectangle (self->window)->w == 0))
     goto no_window_size;
