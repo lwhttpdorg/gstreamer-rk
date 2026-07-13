@@ -599,7 +599,12 @@ html_context_parse (HtmlContext * ctxt, const gchar * text, gsize text_len)
       gchar *element = NULL;
       /* find <blahblah> */
       if (!strchr (next, '>')) {
-        /* no tag end point. buffer will be process in next time */
+        /* no tag end point — erase everything up to the dangling '<' so we
+         * don't rescan already-consumed content on the next call. Without
+         * this the buffer grows unboundedly and every subsequent call
+         * rescans all accumulated data, producing O(n^2) behaviour that is
+         * very expensive (and effectively a hang under address sanitizer). */
+        g_string_erase (ctxt->buf, 0, next - ctxt->buf->str);
         return TRUE;
       }
 
