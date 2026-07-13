@@ -46,9 +46,7 @@ _SCOPE_RELATED_TO = {
     'GST_TRACER_VALUE_SCOPE_PROCESS': 'Process',
 }
 
-# GstTracerFieldType nicks (current) plus the legacy GType names (older logs).
-_NUMERIC_TYPES = ('int', 'uint', 'int64', 'uint64', 'double', 'clock_time',
-                  'gint', 'guint', 'gint64', 'guint64', 'gdouble')
+_NUMERIC_TYPES = ('int', 'uint', 'gint', 'guint', 'gint64', 'guint64')
 
 
 class Stats(Analyzer):
@@ -76,9 +74,8 @@ class Stats(Analyzer):
                 # print("scope: [%s]=%s" % (k, v))
                 record['scope'][k] = v
             elif v.name == 'value':
-                # aggregate any numeric field (bounds are derived from the data;
-                # GstTraceFormat no longer declares per-field min/max)
-                if v.values['type'] in _NUMERIC_TYPES:
+                # skip non numeric and those without min/max
+                if v.values['type'] in _NUMERIC_TYPES and 'min' in v.values and 'max' in v.values:
                     # TODO only for debugging
                     # print("value: [%s]=%s" % (k, v))
                     record['value'][k] = v
@@ -144,8 +141,10 @@ class Stats(Analyzer):
                 data['num'] += 1
                 if 'sum' in data:
                     data['sum'] += dv
-                    data['min'] = dv if 'min' not in data else min(dv, data['min'])
-                    data['max'] = dv if 'max' not in data else max(dv, data['max'])
+                    if 'min' in data:
+                        data['min'] = min(dv, data['min'])
+                    if 'max' in data:
+                        data['max'] = max(dv, data['max'])
                 else:
                     # aggregated: collect last value
                     data['max'] = dv
