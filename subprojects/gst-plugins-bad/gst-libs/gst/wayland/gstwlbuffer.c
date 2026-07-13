@@ -164,6 +164,8 @@ buffer_release (void *data, struct wl_buffer *wl_buffer)
   priv->current_gstbuffer = NULL;
   g_mutex_unlock (&priv->lock);
 
+  GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_TAG_MEMORY);
+
   /* unref should be last, because it may end up destroying the GstWlBuffer */
   GST_LOG_OBJECT (self, "wl_buffer::release (GstWlbuffer: %p, GstBuffer: %p)",
       self, buf);
