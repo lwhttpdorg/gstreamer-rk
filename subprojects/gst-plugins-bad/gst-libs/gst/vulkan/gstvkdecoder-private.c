@@ -739,14 +739,22 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
 
   /* change image layout */
   barriers = gst_vulkan_operation_retrieve_image_barriers (priv->exec);
-  /* *INDENT-OFF* */
-  vkCmdPipelineBarrier2 (cmd_buf->cmd, &(VkDependencyInfo) {
-      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-      .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
-      .pImageMemoryBarriers = (VkImageMemoryBarrier2 *) barriers->data,
-      .imageMemoryBarrierCount = barriers->len,
-    });
-  /* *INDENT-ON* */
+  if (gst_vulkan_operation_use_sync2 (priv->exec)) {
+    /* *INDENT-OFF* */
+    gst_vulkan_operation_pipeline_barrier2 (priv->exec, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+        .pImageMemoryBarriers = (VkImageMemoryBarrier2 *) barriers->data,
+        .imageMemoryBarrierCount = barriers->len,
+      });
+    /* *INDENT-ON* */
+  } else {
+    gst_vulkan_command_buffer_lock (cmd_buf);
+    vkCmdPipelineBarrier (cmd_buf->cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0,
+        NULL, 0, NULL, barriers->len, (VkImageMemoryBarrier *) barriers->data);
+    gst_vulkan_command_buffer_unlock (cmd_buf);
+  }
   g_array_unref (barriers);
 
   priv->vk.CmdBeginVideoCoding (cmd_buf->cmd, &decode_start);
