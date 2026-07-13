@@ -28,6 +28,7 @@
 
 #include "video-format.h"
 #include "video-orc.h"
+#include "gstvideoutilsprivate.h"
 
 #ifndef restrict
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
@@ -2813,8 +2814,8 @@ pack_ABGR64_BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
   }
 }
 
-static inline gfloat
-half_to_float (guint16 h)
+gfloat
+gst_half_to_float (guint16 h)
 {
   union
   {
@@ -2846,8 +2847,8 @@ half_to_float (guint16 h)
   return u.f;
 }
 
-static inline guint16
-float_to_half (gfloat f)
+guint16
+gst_float_to_half (gfloat f)
 {
   union
   {
@@ -2923,13 +2924,13 @@ unpack_RGBA_F16LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 
   for (i = 0; i < width; i++) {
     d[i * 4 + 0] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_LE (s + i * 8 + 6)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_LE (s + i * 8 + 6)));
     d[i * 4 + 1] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_LE (s + i * 8 + 0)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_LE (s + i * 8 + 0)));
     d[i * 4 + 2] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_LE (s + i * 8 + 2)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_LE (s + i * 8 + 2)));
     d[i * 4 + 3] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_LE (s + i * 8 + 4)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_LE (s + i * 8 + 4)));
   }
 }
 
@@ -2945,13 +2946,13 @@ pack_RGBA_F16LE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 
   for (i = 0; i < width; i++) {
     GST_WRITE_UINT16_LE (d + i * 8 + 0,
-        float_to_half (s[i * 4 + 1] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 1] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_LE (d + i * 8 + 2,
-        float_to_half (s[i * 4 + 2] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 2] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_LE (d + i * 8 + 4,
-        float_to_half (s[i * 4 + 3] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 3] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_LE (d + i * 8 + 6,
-        float_to_half (s[i * 4 + 0] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 0] * (1.0f / 65535.0f)));
   }
 }
 
@@ -2969,13 +2970,13 @@ unpack_RGBA_F16BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 
   for (i = 0; i < width; i++) {
     d[i * 4 + 0] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_BE (s + i * 8 + 6)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_BE (s + i * 8 + 6)));
     d[i * 4 + 1] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_BE (s + i * 8 + 0)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_BE (s + i * 8 + 0)));
     d[i * 4 + 2] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_BE (s + i * 8 + 2)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_BE (s + i * 8 + 2)));
     d[i * 4 + 3] =
-        float_to_u16 (half_to_float (GST_READ_UINT16_BE (s + i * 8 + 4)));
+        float_to_u16 (gst_half_to_float (GST_READ_UINT16_BE (s + i * 8 + 4)));
   }
 }
 
@@ -2991,13 +2992,13 @@ pack_RGBA_F16BE (const GstVideoFormatInfo * info, GstVideoPackFlags flags,
 
   for (i = 0; i < width; i++) {
     GST_WRITE_UINT16_BE (d + i * 8 + 0,
-        float_to_half (s[i * 4 + 1] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 1] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_BE (d + i * 8 + 2,
-        float_to_half (s[i * 4 + 2] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 2] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_BE (d + i * 8 + 4,
-        float_to_half (s[i * 4 + 3] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 3] * (1.0f / 65535.0f)));
     GST_WRITE_UINT16_BE (d + i * 8 + 6,
-        float_to_half (s[i * 4 + 0] * (1.0f / 65535.0f)));
+        gst_float_to_half (s[i * 4 + 0] * (1.0f / 65535.0f)));
   }
 }
 
