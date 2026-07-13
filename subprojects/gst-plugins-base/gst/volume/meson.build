@@ -41,8 +41,21 @@ else
     copy : true)
 endif
 
+volume_cargs = gst_plugins_base_args
+if have_rvv
+  volume_rvv_lib = static_library('volume_rvv',
+    ['gstvolume-rvv.c'],
+    c_args : gst_plugins_base_args + [rvv_args],
+    include_directories : [configinc, libsinc],
+    dependencies : [gst_base_dep],
+    pic : true,
+    install : false)
+  volume_deps += declare_dependency(link_with : volume_rvv_lib)
+  volume_cargs += ['-DHAVE_RISCV_RVV']
+endif
+
 gstvolume = library('gstvolume', volume_sources + [orc_c, orc_h],
-  c_args : gst_plugins_base_args,
+  c_args : volume_cargs,
   include_directories: [configinc, libsinc],
   dependencies : volume_deps,
   install : true,

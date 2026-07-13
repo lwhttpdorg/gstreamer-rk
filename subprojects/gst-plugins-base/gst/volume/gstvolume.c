@@ -56,6 +56,10 @@
 
 #include "gstvolumeorc.h"
 #include "gstvolume.h"
+#ifdef HAVE_RISCV_RVV
+#include "gstvolume-rvv.h"
+#include <gst/gstcpuid.h>
+#endif
 
 /* some defines for audio processing */
 /* we map VOLUME_UNITY_INT* to volume = 1.0
@@ -434,7 +438,12 @@ volume_process_double (GstVolume * self, gpointer bytes, guint n_bytes)
   gdouble *data = (gdouble *) bytes;
   guint num_samples = n_bytes / sizeof (gdouble);
 
-  volume_orc_scalarmultiply_f64_ns (data, self->current_volume, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_scalarmultiply_f64_ns_rvv (data, self->current_volume, num_samples);
+  else
+#endif
+    volume_orc_scalarmultiply_f64_ns (data, self->current_volume, num_samples);
 }
 
 static void
@@ -464,7 +473,12 @@ volume_process_float (GstVolume * self, gpointer bytes, guint n_bytes)
   gfloat *data = (gfloat *) bytes;
   guint num_samples = n_bytes / sizeof (gfloat);
 
-  volume_orc_scalarmultiply_f32_ns (data, self->current_volume, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_scalarmultiply_f32_ns_rvv (data, self->current_volume, num_samples);
+  else
+#endif
+    volume_orc_scalarmultiply_f32_ns (data, self->current_volume, num_samples);
 }
 
 static void
@@ -498,7 +512,12 @@ volume_process_int32 (GstVolume * self, gpointer bytes, guint n_bytes)
 
   /* hard coded in volume.orc */
   g_assert (VOLUME_UNITY_INT32_BIT_SHIFT == 27);
-  volume_orc_process_int32 (data, self->current_vol_i32, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_process_int32_rvv (data, self->current_vol_i32, num_samples);
+  else
+#endif
+    volume_orc_process_int32 (data, self->current_vol_i32, num_samples);
 }
 
 static void
@@ -510,7 +529,12 @@ volume_process_int32_clamp (GstVolume * self, gpointer bytes, guint n_bytes)
   /* hard coded in volume.orc */
   g_assert (VOLUME_UNITY_INT32_BIT_SHIFT == 27);
 
-  volume_orc_process_int32_clamp (data, self->current_vol_i32, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_process_int32_clamp_rvv (data, self->current_vol_i32, num_samples);
+  else
+#endif
+    volume_orc_process_int32_clamp (data, self->current_vol_i32, num_samples);
 }
 
 // TODO: Add ORC implementation for this
@@ -678,7 +702,12 @@ volume_process_int16 (GstVolume * self, gpointer bytes, guint n_bytes)
   /* hard coded in volume.orc */
   g_assert (VOLUME_UNITY_INT16_BIT_SHIFT == 11);
 
-  volume_orc_process_int16 (data, self->current_vol_i16, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_process_int16_rvv (data, self->current_vol_i16, num_samples);
+  else
+#endif
+    volume_orc_process_int16 (data, self->current_vol_i16, num_samples);
 }
 
 static void
@@ -690,7 +719,12 @@ volume_process_int16_clamp (GstVolume * self, gpointer bytes, guint n_bytes)
   /* hard coded in volume.orc */
   g_assert (VOLUME_UNITY_INT16_BIT_SHIFT == 11);
 
-  volume_orc_process_int16_clamp (data, self->current_vol_i16, num_samples);
+#ifdef HAVE_RISCV_RVV
+  if (gst_cpuid_supports_riscv_v ())
+    volume_orc_process_int16_clamp_rvv (data, self->current_vol_i16, num_samples);
+  else
+#endif
+    volume_orc_process_int16_clamp (data, self->current_vol_i16, num_samples);
 }
 
 // TODO: Add ORC implementation for this
