@@ -863,6 +863,7 @@ gstreamer-full static build:
     BUILD_TYPE: "--default-library=static"
     # Disabling building both qt5 and qt6 when doing static builds since we can only link against one
     MESON_ARGS: >-
+      --wrap-mode=forcefallback
       -Ddoc=disabled
       -Dqt5=disabled -Dqt6=enabled
   script:
