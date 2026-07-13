@@ -601,19 +601,6 @@ send_enhancement_data (GstLcevcDec * lcevc, GstBuffer * input_buffer)
     goto done;
   }
 
-  /* Now peek and update the output resolution */
-  if (LCEVC_PeekDecoder (lcevc->decoder_handle, input_buffer->pts,
-          &out_w, &out_h) != LCEVC_Success) {
-    GST_INFO_OBJECT (lcevc, "Could not peek decoder for output resolution");
-    goto done;
-  }
-
-  if (!ensure_output_resolution (lcevc, out_w, out_h, out_w, out_h)) {
-    GST_INFO_OBJECT (lcevc, "Could not set output resolution to %dx%d", out_w,
-        out_h);
-    goto done;
-  }
-
   GST_INFO_OBJECT (lcevc,
       "Sent input buffer %" GST_TIME_FORMAT " enhancement data with size %zu",
       GST_TIME_ARGS (GST_BUFFER_PTS (input_buffer)), enhancement_info.size);
@@ -664,6 +651,46 @@ send_base_picture (GstLcevcDec * lcevc, GstBuffer * input_buffer)
 done:
   gst_video_frame_unmap (&frame);
   return ret;
+}
+
+static gboolean
+peek_output_picture (GstLcevcDec * lcevc, GstBuffer * input_buffer)
+{
+  uint32_t out_w, out_h;
+
+  out_w = GST_VIDEO_INFO_WIDTH (&lcevc->input_state->info);
+  out_h = GST_VIDEO_INFO_HEIGHT (&lcevc->input_state->info);
+
+  /* Now peek and update the output resolution */
+#if LCEVC_DEC_VERSION_MAJOR > 4 || \
+    (LCEVC_DEC_VERSION_MAJOR == 4 && LCEVC_DEC_VERSION_MINOR >= 2)
+  {
+    LCEVC_PictureDesc pic_desc = { 0, };
+
+    if (LCEVC_PeekDecoderPictureDesc (lcevc->decoder_handle, input_buffer->pts,
+            &pic_desc) != LCEVC_Success) {
+      GST_INFO_OBJECT (lcevc, "Could not peek decoder for output resolution");
+      return FALSE;
+    }
+
+    out_w = pic_desc.width;
+    out_h = pic_desc.height;
+  }
+#else
+  if (LCEVC_PeekDecoder (lcevc->decoder_handle, input_buffer->pts,
+          &out_w, &out_h) != LCEVC_Success) {
+    GST_INFO_OBJECT (lcevc, "Could not peek decoder for output resolution");
+    return FALSE;
+  }
+#endif
+
+  if (!ensure_output_resolution (lcevc, out_w, out_h, out_w, out_h)) {
+    GST_INFO_OBJECT (lcevc, "Could not set output resolution to %dx%d", out_w,
+        out_h);
+    return FALSE;
+  }
+
+  return TRUE;
 }
 
 static gboolean
@@ -739,6 +766,9 @@ gst_lcevc_dec_handle_frame (GstVideoDecoder * decoder,
     goto error;
 
   if (!send_base_picture (lcevc, frame->input_buffer))
+    goto error;
+
+  if (!peek_output_picture (lcevc, frame->input_buffer))
     goto error;
 
   if (gst_video_decoder_allocate_output_frame (decoder, frame) != GST_FLOW_OK) {
