@@ -543,6 +543,21 @@ gst_vulkan_swapper_finalize (GObject * object)
   gst_object_unref (priv->trash_list);
   priv->trash_list = NULL;
 
+#ifdef __APPLE__
+  /* On MoltenVK, vkWaitForFences (used by the trash list wait above) returns
+   * as soon as the Metal command buffers complete, but the Metal runtime may
+   * not have released its strong references to textures and other resources
+   * until the command buffers are deallocated.  vkQueueWaitIdle forces
+   * MoltenVK to fully drain its internal command buffer lifecycle so that
+   * upstream elements (e.g. vulkanupload) can safely free their VkImages
+   * without triggering Metal's debug assertion about live references. */
+  if (swapper->queue) {
+    gst_vulkan_queue_submit_lock (swapper->queue);
+    vkQueueWaitIdle (swapper->queue->queue);
+    gst_vulkan_queue_submit_unlock (swapper->queue);
+  }
+#endif
+
   if (priv->swap_chain_images) {
     for (i = 0; i < priv->n_swap_chain_images; i++) {
       gst_memory_unref ((GstMemory *) priv->swap_chain_images[i]);
@@ -888,9 +903,8 @@ _allocate_swapchain (GstVulkanSwapper * swapper, GstCaps * caps,
     if (gst_vulkan_error_to_g_error (err, error, "vkCreateSwapchainKHR") < 0)
       return FALSE;
 
-    if (old_swap_chain != VK_NULL_HANDLE) {
-      priv->DestroySwapchainKHR (swapper->device->device, old_swap_chain, NULL);
-    }
+    /* Old swapchain destruction is deferred by _swapchain_resize via the
+     * trash list, so don't destroy it here. */
   }
 
   err =
@@ -928,10 +942,27 @@ _allocate_swapchain (GstVulkanSwapper * swapper, GstCaps * caps,
   return TRUE;
 }
 
+struct _SwapchainDestroyData
+{
+  PFN_vkDestroySwapchainKHR DestroySwapchainKHR;
+  VkSwapchainKHR swapchain;
+};
+
+static void
+_trash_notify_destroy_swapchain (GstVulkanDevice * device, gpointer user_data)
+{
+  struct _SwapchainDestroyData *data = user_data;
+  GST_TRACE_OBJECT (device, "Destroying old swapchain %"
+      GST_VULKAN_NON_DISPATCHABLE_HANDLE_FORMAT, data->swapchain);
+  data->DestroySwapchainKHR (device->device, data->swapchain, NULL);
+  g_free (data);
+}
+
 static gboolean
 _swapchain_resize (GstVulkanSwapper * swapper, GError ** error)
 {
   GstVulkanSwapperPrivate *priv = GET_PRIV (swapper);
+  VkSwapchainKHR old_swap_chain;
   int i;
 
   if (!swapper->queue) {
@@ -940,13 +971,67 @@ _swapchain_resize (GstVulkanSwapper * swapper, GError ** error)
     }
   }
 
-  if (priv->swap_chain_images) {
-    for (i = 0; i < priv->n_swap_chain_images; i++) {
-      if (priv->swap_chain_images[i])
-        gst_memory_unref ((GstMemory *) priv->swap_chain_images[i]);
+  /* Defer destruction of old swapchain resources until all prior GPU work
+   * completes. On MoltenVK, vkAcquireNextImageKHR internally creates Metal
+   * command buffers that reference swapchain MTLEvent objects.  When it returns
+   * VK_ERROR_OUT_OF_DATE_KHR those command buffers may still be in flight.
+   * Destroying the swapchain (and its MTLEvents) while they are referenced
+   * by a live command buffer triggers an assertion in Metal's debug layer.
+   * Similarly, command buffers submitted before vkQueuePresentKHR returned
+   * out-of-date may still be executing.
+   *
+   * We submit an empty command buffer with a fence and add the old images
+   * and swapchain to the trash list gated on that fence. They will be freed
+   * once the fence signals, i.e. all prior queue work has completed. */
+  old_swap_chain = priv->swap_chain;
+
+  if (priv->swap_chain_images || old_swap_chain != VK_NULL_HANDLE) {
+    VkSubmitInfo submit_info = { 0, };
+    GstVulkanFence *fence;
+    VkResult err;
+
+    /* *INDENT-OFF* */
+    submit_info = (VkSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    };
+    /* *INDENT-ON* */
+
+    fence = gst_vulkan_device_create_fence (swapper->device, error);
+    if (!fence)
+      return FALSE;
+
+    gst_vulkan_queue_submit_lock (swapper->queue);
+    err =
+        vkQueueSubmit (swapper->queue->queue, 1, &submit_info,
+        GST_VULKAN_FENCE_FENCE (fence));
+    gst_vulkan_queue_submit_unlock (swapper->queue);
+    if (gst_vulkan_error_to_g_error (err, error, "vkQueueSubmit") < 0) {
+      gst_vulkan_fence_unref (fence);
+      return FALSE;
     }
-    g_free (priv->swap_chain_images);
-    priv->swap_chain_images = NULL;
+
+    if (priv->swap_chain_images) {
+      for (i = 0; i < priv->n_swap_chain_images; i++) {
+        if (priv->swap_chain_images[i])
+          gst_vulkan_trash_list_add (priv->trash_list,
+              gst_vulkan_trash_new_mini_object_unref (fence,
+                  (GstMiniObject *) priv->swap_chain_images[i]));
+      }
+      g_free (priv->swap_chain_images);
+      priv->swap_chain_images = NULL;
+    }
+
+    if (old_swap_chain != VK_NULL_HANDLE) {
+      struct _SwapchainDestroyData *data =
+          g_new0 (struct _SwapchainDestroyData, 1);
+      data->DestroySwapchainKHR = priv->DestroySwapchainKHR;
+      data->swapchain = old_swap_chain;
+      gst_vulkan_trash_list_add (priv->trash_list,
+          gst_vulkan_trash_new (fence,
+              (GstVulkanTrashNotify) _trash_notify_destroy_swapchain, data));
+    }
+
+    gst_vulkan_fence_unref (fence);
   }
 
   return _allocate_swapchain (swapper, priv->caps, error);
@@ -1297,9 +1382,15 @@ reacquire:
   err =
       priv->AcquireNextImageKHR (swapper->device->device,
       priv->swap_chain, -1, acquire_semaphore, VK_NULL_HANDLE, &swap_idx);
-  /* TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR */
-  if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-    GST_DEBUG_OBJECT (swapper, "out of date frame acquired");
+  if (err == VK_ERROR_OUT_OF_DATE_KHR
+#ifdef __APPLE__
+      /* With MoltenVK we need to treat VK_SUBOPTIMAL_KHR as an error,
+       * otherwise it can produce broken output (e.g. just a solid color) */
+      || err == VK_SUBOPTIMAL_KHR
+#endif
+      ) {
+    GST_DEBUG_OBJECT (swapper, "swapchain is %s, recreating",
+        err == VK_ERROR_OUT_OF_DATE_KHR ? "out of date" : "suboptimal");
 
     vkDestroySemaphore (swapper->device->device, acquire_semaphore, NULL);
     acquire_semaphore = VK_NULL_HANDLE;
