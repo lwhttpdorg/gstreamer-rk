@@ -50,11 +50,11 @@ GType gst_tracer_record_get_type          (void);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstTracerRecord, gst_object_unref)
 
-GST_DEPRECATED_FOR(gst_trace_format_register)
+GST_API
 GstTracerRecord * gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...) G_GNUC_NULL_TERMINATED G_GNUC_WARN_UNUSED_RESULT;
 
 #ifndef GST_DISABLE_GST_DEBUG
-GST_DEPRECATED_FOR(gst_trace_event)
+GST_API
 void              gst_tracer_record_log (GstTracerRecord *self, ...);
 #else
 #define gst_tracer_record_log(...) G_STMT_START {} G_STMT_END
