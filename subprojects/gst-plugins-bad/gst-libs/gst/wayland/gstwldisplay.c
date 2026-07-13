@@ -404,9 +404,10 @@ output_description (void *data, struct wl_output *wl_output,
 static void
 output_done (void *data, struct wl_output *wl_output)
 {
-  GstWlOutput *output = GST_WL_OUTPUT (data);
-  GstWlDisplay *self = g_object_steal_data (G_OBJECT (output), "display");
+  GstWlOutput *shared_output = GST_WL_OUTPUT (data);
+  GstWlDisplay *self = g_object_get_data (G_OBJECT (shared_output), "display");
   GstWlDisplayPrivate *priv = gst_wl_display_get_instance_private (self);
+  GstWlOutput *output = gst_wl_output_clone (shared_output);
   const gchar *name = gst_wl_output_get_name (output);
 
   GST_INFO ("Adding output %s (%p):", name, wl_output);
@@ -428,6 +429,7 @@ output_done (void *data, struct wl_output *wl_output)
   GST_INFO ("  Subpixel    %i", gst_wl_output_get_subpixel (output));
   GST_INFO ("  Transform:  %i", gst_wl_output_get_transform (output));
   GST_INFO ("---");
+
 
   g_mutex_lock (&priv->outputs_mutex);
   if (name)
