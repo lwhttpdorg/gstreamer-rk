@@ -146,6 +146,7 @@ option('mplex', type : 'feature', value : 'auto', description : 'mplex audio/vid
 option('msdk', type : 'feature', value : 'auto', description : 'Intel Media SDK video encoder/decoder plugin')
 option('musepack', type : 'feature', value : 'auto', description : 'libmpcdec Musepack decoder plugin')
 option('neon', type : 'feature', value : 'auto', description : 'NEON HTTP source plugin')
+option('nicodec', type : 'feature', value : 'auto', description : 'NETINT VPU codec plugin')
 option('nvcomp', type : 'feature', value : 'auto', description : 'NVIDIA nvCOMP compression/decompression plugin')
 option('nvcodec', type : 'feature', value : 'auto', description : 'NVIDIA GPU codec plugin')
 option('nvdswrapper', type : 'feature', value : 'auto', description : 'NVIDIA DeepStream SDK wrapper plugin')
