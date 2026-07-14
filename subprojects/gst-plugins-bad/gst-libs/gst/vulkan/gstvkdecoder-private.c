@@ -739,14 +739,22 @@ gst_vulkan_decoder_decode (GstVulkanDecoder * self,
 
   /* change image layout */
   barriers = gst_vulkan_operation_retrieve_image_barriers (priv->exec);
-  /* *INDENT-OFF* */
-  vkCmdPipelineBarrier2 (cmd_buf->cmd, &(VkDependencyInfo) {
-      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-      .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
-      .pImageMemoryBarriers = (VkImageMemoryBarrier2 *) barriers->data,
-      .imageMemoryBarrierCount = barriers->len,
-    });
-  /* *INDENT-ON* */
+  if (gst_vulkan_operation_use_sync2 (priv->exec)) {
+    /* *INDENT-OFF* */
+    gst_vulkan_operation_pipeline_barrier2 (priv->exec, &(VkDependencyInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+        .pImageMemoryBarriers = (VkImageMemoryBarrier2 *) barriers->data,
+        .imageMemoryBarrierCount = barriers->len,
+      });
+    /* *INDENT-ON* */
+  } else {
+    gst_vulkan_command_buffer_lock (cmd_buf);
+    vkCmdPipelineBarrier (cmd_buf->cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0,
+        NULL, 0, NULL, barriers->len, (VkImageMemoryBarrier *) barriers->data);
+    gst_vulkan_command_buffer_unlock (cmd_buf);
+  }
   g_array_unref (barriers);
 
   priv->vk.CmdBeginVideoCoding (cmd_buf->cmd, &decode_start);
@@ -974,8 +982,6 @@ gst_vulkan_decoder_update_ycbcr_sampler (GstVulkanDecoder * self,
   GstVulkanDecoderPrivate *priv;
   GstVulkanHandle *handle;
   VkSamplerYcbcrConversionCreateInfo create_info;
-  VkSamplerYcbcrConversion ycbr_conversion;
-  VkResult res;
 
   g_return_val_if_fail (GST_IS_VULKAN_DECODER (self), FALSE);
 
@@ -1002,16 +1008,10 @@ gst_vulkan_decoder_update_ycbcr_sampler (GstVulkanDecoder * self,
   };
   /* *INDENT-ON* */
 
-  res = vkCreateSamplerYcbcrConversion (device->device, &create_info, NULL,
-      &ycbr_conversion);
-  if (gst_vulkan_error_to_g_error (res, error,
-          "vkCreateSamplerYcbcrConversion") != VK_SUCCESS)
+  handle = gst_vulkan_handle_create_sampler_ycbcr_conversion (device,
+      &create_info, error);
+  if (!handle)
     return FALSE;
-
-  handle = gst_vulkan_handle_new_wrapped (device,
-      GST_VULKAN_HANDLE_TYPE_SAMPLER_YCBCR_CONVERSION,
-      (GstVulkanHandleTypedef) ycbr_conversion,
-      gst_vulkan_handle_free_sampler_ycbcr_conversion, NULL);
 
   gst_clear_vulkan_handle (&priv->sampler);
   priv->sampler = handle;
