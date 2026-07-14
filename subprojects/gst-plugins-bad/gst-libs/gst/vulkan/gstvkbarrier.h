@@ -74,6 +74,7 @@ struct _GstVulkanBarrierMemoryInfo
   guint64 pipeline_stages;
   guint64 access_flags;
 
+#if 0
   /**
    * GstVulkanBarrierMemoryInfo.semaphore:
    *
@@ -90,7 +91,7 @@ struct _GstVulkanBarrierMemoryInfo
    * Since: 1.24
    */
   guint64 semaphore_value;
-
+#endif
   /* <private> */
   gpointer _reserved        [GST_PADDING];
 };

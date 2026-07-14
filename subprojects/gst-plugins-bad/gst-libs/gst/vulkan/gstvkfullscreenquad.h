@@ -76,10 +76,7 @@ struct _GstVulkanFullScreenQuad
   GstVulkanHandle                  *framebuffer;
   GstVulkanHandle                  *sampler;
 
-  GstVulkanCommandPool             *cmd_pool;
-
-  GstVulkanTrashList               *trash_list;
-  GstVulkanFence                   *last_fence;
+  GstVulkanOperation               *exec;
 
   /* <private> */
   gpointer _reserved        [GST_PADDING];
@@ -141,11 +138,11 @@ void                gst_vulkan_full_screen_quad_enable_clear        (GstVulkanFu
                                                                      gboolean enable_clear);
 
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_prepare_draw        (GstVulkanFullScreenQuad * self, GstVulkanFence * fence, GError ** error);
+GstVulkanCommandBuffer * gst_vulkan_full_screen_quad_prepare_draw   (GstVulkanFullScreenQuad * self, GError ** error);
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_fill_command_buffer (GstVulkanFullScreenQuad * self, GstVulkanCommandBuffer * cmd, GstVulkanFence * fence, GError ** error);
+gboolean            gst_vulkan_full_screen_quad_fill_command_buffer (GstVulkanFullScreenQuad * self, GstVulkanCommandBuffer * cmd, GError ** error);
 GST_VULKAN_API
-gboolean            gst_vulkan_full_screen_quad_submit              (GstVulkanFullScreenQuad * self, GstVulkanCommandBuffer * cmd, GstVulkanFence * fence, GError ** error);
+gboolean            gst_vulkan_full_screen_quad_submit              (GstVulkanFullScreenQuad * self, GError ** error);
 GST_VULKAN_API
 gboolean            gst_vulkan_full_screen_quad_draw                (GstVulkanFullScreenQuad * self, GError ** error);
 
@@ -154,6 +151,8 @@ GstVulkanFence *    gst_vulkan_full_screen_quad_get_last_fence      (GstVulkanFu
 
 GST_VULKAN_API
 GstVulkanQueue *    gst_vulkan_full_screen_quad_get_queue           (GstVulkanFullScreenQuad * self) G_GNUC_WARN_UNUSED_RESULT;
+GST_VULKAN_API
+GstVulkanOperation *gst_vulkan_full_screen_quad_get_operation       (GstVulkanFullScreenQuad * self);
 
 G_END_DECLS
 #endif /* __GST_VULKAN_FULL_SCREEN_QUAD_H__ */
