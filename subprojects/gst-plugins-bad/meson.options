@@ -100,6 +100,7 @@ option('bz2', type : 'feature', value : 'auto', description : 'bz2 stream encode
 option('chromaprint', type : 'feature', value : 'auto', description : 'Chromaprint fingerprint audio plugin')
 option('codec2json', type : 'feature', value : 'auto')
 option('colormanagement', type : 'feature', value : 'auto', description : 'Color management correction plugin')
+option('coreaudio', type : 'feature', value : 'auto', description : 'Apple CoreAudio plugin')
 option('curl', type : 'feature', value : 'auto', description : 'cURL network source and sink plugin')
 option('curl-ssh2', type : 'feature', value : 'auto', description : 'cURL network source and sink plugin libssh2 support')
 option('d3dvideosink', type : 'feature', value : 'auto', description : 'Direct3D video sink plugin')
