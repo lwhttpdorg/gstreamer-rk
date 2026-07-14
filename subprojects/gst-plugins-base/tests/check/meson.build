@@ -48,6 +48,7 @@ base_tests = [
   [ 'elements/playsink.c', get_option('playback').disabled()],
   [ 'elements/streamsynchronizer.c', get_option('playback').disabled()],
   [ 'elements/subparse.c', get_option('subparse').disabled()],
+  [ 'elements/uridecodebin3.c', get_option('playback').disabled()],
   [ 'elements/urisourcebin.c', get_option('playback').disabled()],
   [ 'elements/videoconvert.c', get_option('videoconvertscale').disabled()],
   [ 'elements/videorate.c', get_option('videorate').disabled()],
