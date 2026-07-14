@@ -284,6 +284,64 @@ GST_START_TEST (test_stream_type_name)
 
 GST_END_TEST;
 
+
+GST_START_TEST (test_stream_null_caps)
+{
+  /* Stream created with NULL caps - getter returns NULL */
+  GstStream *stream = gst_stream_new ("stream-no-caps", NULL,
+      GST_STREAM_TYPE_UNKNOWN, 0);
+  fail_unless (stream != NULL);
+  fail_if (gst_stream_get_caps (stream) != NULL);
+
+  /* Set fixed caps on a NULL-caps stream - allowed */
+  GstCaps *caps = gst_caps_from_string ("audio/x-raw,channels=2");
+  gst_stream_set_caps (stream, caps);
+  GstCaps *got_caps = gst_stream_get_caps (stream);
+  fail_unless (got_caps != NULL);
+  fail_unless (gst_caps_is_equal (caps, got_caps));
+  gst_caps_unref (got_caps);
+
+  /* gst_stream_set_caps(stream, NULL) is rejected once the stream already has
+   * caps, and resulting caps haven't changed */
+  gst_stream_set_caps (stream, NULL);
+  got_caps = gst_stream_get_caps (stream);
+  fail_unless (got_caps != NULL);
+  fail_unless (gst_caps_is_equal (caps, got_caps));
+  gst_caps_unref (got_caps);
+
+  gst_caps_unref (caps);
+  gst_object_unref (stream);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_stream_unfixed_caps)
+{
+  GstCaps *fixed = gst_caps_from_string ("video/x-raw,format=RGB,width=640");
+  GstCaps *unfixed =
+      gst_caps_from_string
+      ("video/x-raw,format=(string){RGB,BGR},width=(int)[1,1920]");
+  GstStream *stream;
+
+  fail_unless (gst_caps_is_fixed (fixed));
+  fail_unless (!gst_caps_is_fixed (unfixed));
+
+  /* Fixed caps - succeeds */
+  stream = gst_stream_new ("fixed-caps", fixed, GST_STREAM_TYPE_VIDEO, 0);
+  fail_unless (stream != NULL);
+  gst_object_unref (stream);
+
+  /* Non-fidex caps - fails */
+  ASSERT_CRITICAL (stream = gst_stream_new ("fixed-caps", unfixed,
+          GST_STREAM_TYPE_VIDEO, 0););
+  fail_unless (stream == NULL);
+
+  gst_caps_unref (fixed);
+  gst_caps_unref (unfixed);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_streams_suite (void)
 {
@@ -295,6 +353,8 @@ gst_streams_suite (void)
   tcase_add_test (tc_chain, test_stream_event);
   tcase_add_test (tc_chain, test_notifies);
   tcase_add_test (tc_chain, test_stream_type_name);
+  tcase_add_test (tc_chain, test_stream_null_caps);
+  tcase_add_test (tc_chain, test_stream_unfixed_caps);
   return s;
 }
 

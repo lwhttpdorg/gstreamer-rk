@@ -1979,31 +1979,86 @@ ges_timeline_remove_clip (GESTimeline * timeline, GESClip * clip)
   GST_DEBUG ("Done");
 }
 
+static GstStreamType
+ges_track_type_to_gst (GESTrackType tracktype)
+{
+  switch (tracktype) {
+    case GES_TRACK_TYPE_AUDIO:
+      return GST_STREAM_TYPE_AUDIO;
+    case GES_TRACK_TYPE_VIDEO:
+      return GST_STREAM_TYPE_VIDEO;
+    case GES_TRACK_TYPE_TEXT:
+      return GST_STREAM_TYPE_TEXT;
+    default:
+      return GST_STREAM_TYPE_UNKNOWN;
+  }
+}
+
+/*
+ * Get caps which are fixated. Empty or ANY caps are voided and NULL is returned
+ * transfer full
+*/
+static GstCaps *
+non_empty_fixated_caps (GstCaps * caps)
+{
+  GstCaps *ret;
+
+  /* If empty or any, return nothing */
+  if (gst_caps_is_empty (caps) || gst_caps_is_any (caps)) {
+    gst_caps_unref (caps);
+    return NULL;
+  }
+  ret = gst_caps_fixate (caps);
+  if (gst_caps_is_empty (ret) || gst_caps_is_any (ret)) {
+    gst_caps_unref (ret);
+    return NULL;
+  }
+  return ret;
+}
+
 static gboolean
 update_stream_object (TrackPrivate * tr_priv)
 {
-  gboolean res = FALSE;
-  GstStreamType type = GST_STREAM_TYPE_UNKNOWN;
+  GstStreamType gst_type;
   gchar *stream_id;
+  GstCaps *track_caps, *fixed_caps = NULL, *restriction_caps;
 
   g_object_get (tr_priv->track, "id", &stream_id, NULL);
-  if (tr_priv->track->type == GES_TRACK_TYPE_VIDEO)
-    type = GST_STREAM_TYPE_VIDEO;
-  if (tr_priv->track->type == GES_TRACK_TYPE_AUDIO)
-    type = GST_STREAM_TYPE_AUDIO;
 
-  if (!tr_priv->stream ||
-      g_strcmp0 (stream_id, gst_stream_get_stream_id (tr_priv->stream))) {
-    res = TRUE;
-    gst_clear_object (&tr_priv->stream);
-    tr_priv->stream = gst_stream_new (stream_id,
-        (GstCaps *) ges_track_get_caps (tr_priv->track),
-        type, GST_STREAM_FLAG_NONE);
+  /* Stream already exists with correct STREAM ID, nothing to do */
+  if (tr_priv->stream &&
+      !g_strcmp0 (stream_id, gst_stream_get_stream_id (tr_priv->stream))) {
+    g_free (stream_id);
+    return FALSE;
   }
+
+  gst_clear_object ((GstObject **) & tr_priv->stream);
+
+  gst_type = ges_track_type_to_gst (tr_priv->track->type);
+  track_caps = ges_track_get_caps_full (tr_priv->track);
+  restriction_caps = ges_track_get_restriction_caps (tr_priv->track);
+
+  /* Get single fixated caps for the stream. First attempt with the restriction
+   * caps, else with the track caps. In any case, the final fixed_caps will
+   * either be NULL or a valid fixated caps  */
+  if (restriction_caps) {
+    fixed_caps = non_empty_fixated_caps (restriction_caps);
+    restriction_caps = NULL;
+  }
+  if (fixed_caps == NULL && track_caps != NULL) {
+    fixed_caps = non_empty_fixated_caps (track_caps);
+    track_caps = NULL;
+  }
+
+  tr_priv->stream =
+      gst_stream_new (stream_id, fixed_caps, gst_type, GST_STREAM_FLAG_NONE);
+  gst_caps_unref (track_caps);
+  gst_caps_unref (restriction_caps);
+  gst_caps_unref (fixed_caps);
 
   g_free (stream_id);
 
-  return res;
+  return TRUE;
 }
 
 static GstPadProbeReturn
