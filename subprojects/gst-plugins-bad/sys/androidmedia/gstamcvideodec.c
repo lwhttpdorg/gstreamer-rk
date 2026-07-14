@@ -2380,10 +2380,11 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
     GstPad *src_pad = GST_VIDEO_DECODER_SRC_PAD (decoder);
     GstCaps *templ_caps = gst_pad_get_pad_template_caps (src_pad);
     GstCaps *downstream_caps = gst_pad_peer_query_caps (src_pad, templ_caps);
+    gboolean downstream_caps_available = downstream_caps != templ_caps;
 
     gst_caps_unref (templ_caps);
 
-    if (downstream_caps) {
+    if (downstream_caps_available) {
       guint i, n;
       /* Surface/AHB caps describe the sampled RGBA result exposed to
        * consumers through API-specific external image handling. They do not
@@ -2493,8 +2494,12 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
         }
       }
 
-      gst_caps_unref (downstream_caps);
+    } else {
+      GST_INFO_OBJECT (self,
+          "Downstream caps query failed, assuming system memory output");
     }
+
+    gst_caps_unref (downstream_caps);
   }
 
   GST_INFO_OBJECT (self, "AHardwareBuffer output: %s",
