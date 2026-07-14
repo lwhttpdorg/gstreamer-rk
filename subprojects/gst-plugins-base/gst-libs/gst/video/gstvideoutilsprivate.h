@@ -30,6 +30,15 @@
 
 G_BEGIN_DECLS
 
+/* IEEE half-float (binary16) <-> float conversion, shared by the RGBA_F16
+ * (un)pack in video-format.c and the RGBA_F16 <-> RGBA_F32 converter fast
+ * path in video-converter.c. */
+G_GNUC_INTERNAL
+gfloat gst_half_to_float (guint16 h);
+
+G_GNUC_INTERNAL
+guint16 gst_float_to_half (gfloat f);
+
 /* Element utility functions */
 G_GNUC_INTERNAL
 GstCaps *__gst_video_element_proxy_getcaps (GstElement * element, GstPad * sinkpad,

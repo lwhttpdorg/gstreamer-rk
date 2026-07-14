@@ -39,7 +39,17 @@ G_BEGIN_DECLS
 typedef enum {
   GST_VIDEO_COLOR_RANGE_UNKNOWN = 0,
   GST_VIDEO_COLOR_RANGE_0_255,
-  GST_VIDEO_COLOR_RANGE_16_235
+  GST_VIDEO_COLOR_RANGE_16_235,
+
+  /**
+   * GST_VIDEO_COLOR_RANGE_0_1:
+   *
+   * [0.0..1.0] for floating point components, the default range of
+   * floating point formats.
+   *
+   * Since: 1.30
+   */
+  GST_VIDEO_COLOR_RANGE_0_1
 } GstVideoColorRange;
 
 /**
