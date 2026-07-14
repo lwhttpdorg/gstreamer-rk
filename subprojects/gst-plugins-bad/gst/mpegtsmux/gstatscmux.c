@@ -36,6 +36,9 @@ GST_ELEMENT_REGISTER_DEFINE (atscmux, "atscmux", GST_RANK_PRIMARY,
 #define parent_class gst_atsc_mux_parent_class
 #define ATSCMUX_ST_PS_AUDIO_EAC3 0x87
 
+/* ATSC standard, A/53 Part 3 (2023), Sec 5.9 “PID Value Assignments” */
+#define ATSCMUX_START_ES_PID 0x0030
+
 static GstStaticPadTemplate gst_atsc_mux_src_factory =
 GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
@@ -125,8 +128,6 @@ gst_atsc_mux_stream_get_es_descrs (TsMuxStream * stream,
         gst_mpegts_descriptor_from_custom (GST_MTS_DESC_ATSC_EAC3, add_info, 4);
     g_ptr_array_add (pmt_stream->descriptors, descriptor);
   } else if (stream->stream_type == TSMUX_ST_PS_AUDIO_AC3) {
-    int wr_size = 0;
-    guint8 *add_info = NULL;
     guint8 data;
     guint bitrate;
     gboolean has_language;
@@ -172,7 +173,10 @@ gst_atsc_mux_stream_get_es_descrs (TsMuxStream * stream,
     gint i;
     guint bitrate_code = 0x12;
     GstByteWriter writer;
-    gst_byte_writer_init_with_size (&writer, 7, FALSE);
+    guint wr_size;
+    guint8 *wr_data;
+
+    gst_byte_writer_init_with_size (&writer, 10, FALSE);
 
     /* audio_stream_descriptor () | ATSC A/52-2001 Annex A
      *
@@ -279,12 +283,14 @@ gst_atsc_mux_stream_get_es_descrs (TsMuxStream * stream,
     g_ptr_array_add (pmt_stream->descriptors, descriptor);
 
     wr_size = gst_byte_writer_get_size (&writer);
-    add_info = gst_byte_writer_reset_and_get_data (&writer);
+    wr_data = gst_byte_writer_reset_and_get_data (&writer);
 
     descriptor =
         gst_mpegts_descriptor_from_custom (GST_MTS_DESC_AC3_AUDIO_STREAM,
-        add_info, wr_size);
+        wr_data, wr_size);
     g_ptr_array_add (pmt_stream->descriptors, descriptor);
+
+    g_free (wr_data);
   } else {
     tsmux_stream_default_get_es_descrs (stream, pmt_stream);
   }
@@ -379,4 +385,5 @@ gst_atsc_mux_class_init (GstATSCMuxClass * klass)
 static void
 gst_atsc_mux_init (GstATSCMux * mux)
 {
+  gst_base_ts_mux_set_min_pid (GST_BASE_TS_MUX (mux), ATSCMUX_START_ES_PID);
 }

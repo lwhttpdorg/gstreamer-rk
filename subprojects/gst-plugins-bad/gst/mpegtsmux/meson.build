@@ -8,6 +8,7 @@ tsmux_sources = [
   'gstbasetsmuxjpegxs.c',
   'gstmpegtsmux.c',
   'gstatscmux.c',
+  'gstdvbmux.c',
   'tsmux/tsmux.c',
   'tsmux/tsmuxstream.c'
 ]
@@ -15,6 +16,7 @@ tsmux_sources = [
 tsmux_headers = [
   'gstbasetsmuxopus.h',
   'gstatscmux.h',
+  'gstdvbmux.h',
   'gstbasetsmuxjpeg2000.h',
   'gstbasetsmuxjpegxs.h',
   'gstmpegtsmux.h',

@@ -1764,6 +1764,7 @@ gst_base_ts_mux_request_new_pad (GstElement * element, GstPadTemplate * templ,
   gint pid = -1;
   GstPad *pad = NULL;
   gchar *free_name = NULL;
+  gint min_pid = mux->min_pid;
 
   g_mutex_lock (&mux->lock);
   if (name != NULL && sscanf (name, "sink_%d", &pid) == 1) {
@@ -1771,9 +1772,8 @@ gst_base_ts_mux_request_new_pad (GstElement * element, GstPadTemplate * templ,
       g_mutex_unlock (&mux->lock);
       goto stream_exists;
     }
-    /* Make sure we don't use reserved PID.
-     * FIXME : This should be extended to other variants (ex: ATSC) reserved PID */
-    if (pid < TSMUX_START_ES_PID) {
+    /* Make sure we don't use reserved PID. */
+    if (pid < min_pid) {
       g_mutex_unlock (&mux->lock);
       goto invalid_stream_pid;
     }
@@ -1809,7 +1809,8 @@ stream_exists:
 invalid_stream_pid:
   {
     GST_ELEMENT_ERROR (element, STREAM, MUX,
-        ("Invalid Elementary stream PID (0x%02x < 0x40)", pid), (NULL));
+        ("Invalid Elementary stream PID (0x%02x < 0x%02x)", pid, min_pid),
+        (NULL));
     return NULL;
   }
 }
@@ -3196,6 +3197,12 @@ gst_base_ts_mux_set_automatic_alignment (GstBaseTsMux * mux, gsize alignment)
   mux->automatic_alignment = alignment;
 }
 
+void
+gst_base_ts_mux_set_min_pid (GstBaseTsMux * mux, gint min_pid)
+{
+  mux->min_pid = min_pid;
+}
+
 static void
 gst_base_ts_mux_class_init (GstBaseTsMuxClass * klass)
 {
@@ -3362,13 +3369,14 @@ gst_base_ts_mux_init (GstBaseTsMux * mux)
   mux->scte35_null_interval = TSMUX_DEFAULT_SCTE_35_NULL_INTERVAL;
   mux->enable_custom_mappings = DEFAULT_ENABLE_CUSTOM_MAPPINGS;
 
-  mux->packet_size = GST_BASE_TS_MUX_NORMAL_PACKET_LENGTH;
-  mux->automatic_alignment = 0;
-
   mux->audio_pes_target_time_ticks = BASETSMUX_DEFAULT_AUDIO_PES_TARGET_TIME;
   mux->audio_pes_target_time =
       MPEGTIME_TO_GSTTIME (mux->audio_pes_target_time_ticks);
   mux->audio_pes_target_bytes = BASETSMUX_DEFAULT_AUDIO_PES_TARGET_BYTES;
+
+  mux->packet_size = GST_BASE_TS_MUX_NORMAL_PACKET_LENGTH;
+  mux->automatic_alignment = 0;
+  mux->min_pid = TSMUX_START_ES_PID;
 
   g_mutex_init (&mux->lock);
 }
