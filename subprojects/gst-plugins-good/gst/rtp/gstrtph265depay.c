@@ -265,6 +265,7 @@ gst_rtp_h265_depay_reset (GstRtpH265Depay * rtph265depay, gboolean hard)
   rtph265depay->last_ts = 0;
   rtph265depay->current_fu_type = 0;
   rtph265depay->new_codec_data = FALSE;
+  gst_clear_buffer (&rtph265depay->au_outbuf);
   g_ptr_array_set_size (rtph265depay->vps, 0);
   g_ptr_array_set_size (rtph265depay->sps, 0);
   g_ptr_array_set_size (rtph265depay->pps, 0);
@@ -302,6 +303,8 @@ gst_rtp_h265_depay_finalize (GObject * object)
 
   if (rtph265depay->codec_data)
     gst_buffer_unref (rtph265depay->codec_data);
+
+  gst_clear_buffer (&rtph265depay->au_outbuf);
 
   g_object_unref (rtph265depay->adapter);
   g_object_unref (rtph265depay->picture_adapter);
@@ -1101,22 +1104,32 @@ incomplete_caps:
   }
 }
 
+/* Ensure @outbuf has at least @size bytes of writable memory.
+ * If @outbuf is NULL a new buffer is allocated. */
 static GstBuffer *
-gst_rtp_h265_depay_allocate_output_buffer (GstRtpH265Depay * depay, gsize size)
+gst_rtp_h265_depay_allocate_output_buffer (GstRtpH265Depay * depay,
+    GstBuffer * outbuf, gsize size)
 {
-  GstBuffer *buffer = NULL;
+  GstMemory *mem;
 
   g_return_val_if_fail (size > 0, NULL);
 
+  if (!outbuf)
+    outbuf = gst_buffer_new ();
+
   GST_LOG_OBJECT (depay, "want output buffer of %u bytes", (guint) size);
 
-  buffer = gst_buffer_new_allocate (depay->allocator, size, &depay->params);
-  if (buffer == NULL) {
+  mem = gst_allocator_alloc (depay->allocator, size, &depay->params);
+  if (!mem)
+    mem = gst_allocator_alloc (NULL, size, NULL);
+  if (!mem) {
     GST_INFO_OBJECT (depay, "couldn't allocate output buffer");
-    buffer = gst_buffer_new_allocate (NULL, size, NULL);
+    gst_buffer_unref (outbuf);
+    return NULL;
   }
+  gst_buffer_append_memory (outbuf, mem);
 
-  return buffer;
+  return outbuf;
 }
 
 static GstBuffer *
@@ -1133,13 +1146,19 @@ gst_rtp_h265_complete_au (GstRtpH265Depay * rtph265depay,
   GST_DEBUG_OBJECT (rtph265depay, "taking completed AU");
   outsize = gst_adapter_available (rtph265depay->picture_adapter);
 
-  outbuf = gst_rtp_h265_depay_allocate_output_buffer (rtph265depay, outsize);
+  /* Use the pre-created AU output buffer that already carries metadata
+   * accumulated from all contributing NALs (including consumed param sets) */
+  outbuf = gst_rtp_h265_depay_allocate_output_buffer (rtph265depay,
+      rtph265depay->au_outbuf, outsize);
+  rtph265depay->au_outbuf = NULL;
 
   if (outbuf == NULL)
     return NULL;
 
-  if (!gst_buffer_map (outbuf, &outmap, GST_MAP_WRITE))
+  if (!gst_buffer_map (outbuf, &outmap, GST_MAP_WRITE)) {
+    gst_buffer_unref (outbuf);
     return NULL;
+  }
 
   list = gst_adapter_take_buffer_list (rtph265depay->picture_adapter, outsize);
 
@@ -1161,8 +1180,6 @@ gst_rtp_h265_complete_au (GstRtpH265Depay * rtph265depay,
       }
       offset += mem_size;
     }
-
-    gst_rtp_copy_video_meta (rtph265depay, outbuf, buf);
   }
   gst_buffer_list_unref (list);
   gst_buffer_unmap (outbuf, &outmap);
@@ -1263,6 +1280,11 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
 
   if (!rtph265depay->byte_stream) {
     if (NAL_TYPE_IS_PARAMETER_SET (nal_type)) {
+      /* Copy meta from consumed param set NAL onto the AU output buffer */
+      if (!rtph265depay->au_outbuf)
+        rtph265depay->au_outbuf = gst_buffer_new ();
+      gst_rtp_copy_video_meta (rtph265depay, rtph265depay->au_outbuf, nal);
+
       gst_rtp_h265_depay_add_vps_sps_pps (rtph265depay,
           gst_buffer_copy_region (nal, GST_BUFFER_COPY_ALL,
               4, gst_buffer_get_size (nal) - 4));
@@ -1321,6 +1343,10 @@ gst_rtp_h265_depay_handle_nal (GstRtpH265Depay * rtph265depay, GstBuffer * nal,
     }
 
     GST_DEBUG_OBJECT (depayload, "adding NAL to picture adapter");
+    /* Copy meta from this NAL onto the AU output buffer */
+    if (!rtph265depay->au_outbuf)
+      rtph265depay->au_outbuf = gst_buffer_new ();
+    gst_rtp_copy_video_meta (rtph265depay, rtph265depay->au_outbuf, nal);
     gst_adapter_push (rtph265depay->picture_adapter, nal);
     rtph265depay->last_ts = in_timestamp;
     rtph265depay->last_keyframe |= keyframe;

@@ -87,6 +87,9 @@ struct _GstRtpH265Depay
   GstAllocator *allocator;
   GstAllocationParams params;
 
+  /* output buffer for current AU, created early to accumulate metadata */
+  GstBuffer *au_outbuf;
+
   gboolean wait_for_keyframe;
   gboolean request_keyframe;
   gboolean waiting_for_keyframe;
