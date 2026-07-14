@@ -51,6 +51,7 @@ subprojects/.wraplock
 !subprojects/gst-examples
 !subprojects/gst-integration-testsuites
 !subprojects/gst-libav
+!subprojects/gst-plugins-android
 !subprojects/gst-plugins-bad
 !subprojects/gst-plugins-base
 !subprojects/gst-plugins-good

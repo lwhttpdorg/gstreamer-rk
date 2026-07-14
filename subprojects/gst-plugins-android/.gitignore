@@ -1,0 +1,10 @@
+# AOSP sources fetched at configure time (fetch_aosp_sources.py)
+/aosp/*
+!/aosp/meson.build
+
+# libiamf sources fetched at configure time (fetch_libiamf.py)
+/iamf/upstream/
+
+# Build directories
+build*/
+subprojects/packagecache/

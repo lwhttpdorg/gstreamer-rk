@@ -1,0 +1,14 @@
+All files under aosp/ are © The Android Open Source Project and are
+distributed under the Apache License, Version 2.0. See
+https://www.apache.org/licenses/LICENSE-2.0 for the full text.
+
+This subproject does not modify the AOSP source files in place. Behavioural
+differences from upstream are achieved entirely through:
+
+  - the porting/ shim headers redirecting Android-only system includes to
+    glibc-compatible substitutes;
+  - the -DGST_C2_LINUX_PORT define gating Android-specific code paths inside
+    the vendored sources where they cannot be hidden by an include override.
+
+The original Apache-2.0 NOTICE / LICENSE headers at the top of each vendored
+file are preserved verbatim.
