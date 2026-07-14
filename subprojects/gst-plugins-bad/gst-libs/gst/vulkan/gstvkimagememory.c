@@ -134,6 +134,25 @@ _vk_image_mem_new_alloc_with_image_info (GstAllocator * allocator,
   guint32 type_idx;
   VkImage image;
   VkResult err;
+  gboolean wants_dedicated = FALSE;
+  /* If the caller chained a VkExternalMemoryImageCreateInfo into
+   * image_info->pNext, mirror its handleTypes into a
+   * VkExportMemoryAllocateInfo for the VkDeviceMemory allocation below,
+   * so vkGetMemoryFdKHR() / vkGetMemoryWin32HandleKHR() returns a real
+   * importable handle. Without this the consumer gets a VkImage whose
+   * memory cannot actually be exported. */
+  VkExternalMemoryHandleTypeFlags ext_handle_types = 0;
+  {
+    const VkBaseInStructure *p = (const VkBaseInStructure *) image_info->pNext;
+    while (p) {
+      if (p->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO) {
+        ext_handle_types =
+            ((const VkExternalMemoryImageCreateInfo *) p)->handleTypes;
+        break;
+      }
+      p = p->pNext;
+    }
+  }
 
   gpu = gst_vulkan_device_get_physical_device (device);
 
@@ -156,7 +175,30 @@ _vk_image_mem_new_alloc_with_image_info (GstAllocator * allocator,
 
   mem = g_new0 (GstVulkanImageMemory, 1);
 
-  vkGetImageMemoryRequirements (device->device, image, &mem->requirements);
+  if (ext_handle_types != 0) {
+    /* Ask the driver whether this image needs (or prefers) a dedicated
+     * allocation for this external-memory export */
+    VkMemoryDedicatedRequirements dedicated_reqs = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS,
+      .pNext = NULL,
+    };
+    VkMemoryRequirements2 reqs2 = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+      .pNext = &dedicated_reqs,
+    };
+    VkImageMemoryRequirementsInfo2 reqs_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
+      .pNext = NULL,
+      .image = image,
+    };
+
+    vkGetImageMemoryRequirements2 (device->device, &reqs_info, &reqs2);
+    mem->requirements = reqs2.memoryRequirements;
+    wants_dedicated = dedicated_reqs.requiresDedicatedAllocation
+        || dedicated_reqs.prefersDedicatedAllocation;
+  } else {
+    vkGetImageMemoryRequirements (device->device, image, &mem->requirements);
+  }
 
   gst_vulkan_image_memory_init (mem, allocator, parent, device,
       image_info->format, image_info->usage, image_info->initialLayout, &params,
@@ -165,6 +207,7 @@ _vk_image_mem_new_alloc_with_image_info (GstAllocator * allocator,
   /* XXX: to avoid handling pNext lifetime  */
   mem->create_info.pNext = NULL;
   mem->image = image;
+  mem->exportable_handle_types = ext_handle_types;
 
 #if defined(VK_KHR_timeline_semaphore)
   if (gst_vulkan_physical_device_check_api_version (device->physical_device, 1,
@@ -205,8 +248,27 @@ _vk_image_mem_new_alloc_with_image_info (GstAllocator * allocator,
     goto error;
   }
   params.align = mem->requirements.alignment - 1;
-  mem->vk_mem = (GstVulkanMemory *) gst_vulkan_memory_alloc (device, type_idx,
-      &params, mem->requirements.size, mem_prop_flags);
+  if (ext_handle_types != 0) {
+    VkMemoryDedicatedAllocateInfo dedicated_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+      .pNext = NULL,
+      .buffer = VK_NULL_HANDLE,
+      .image = image,
+    };
+    VkExportMemoryAllocateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+      .pNext = wants_dedicated ? &dedicated_allocate_info : NULL,
+      .handleTypes = ext_handle_types,
+    };
+    mem->vk_mem = (GstVulkanMemory *)
+        gst_vulkan_memory_alloc_with_pnext (device, type_idx, &params,
+        mem->requirements.size, mem_prop_flags, &export_info);
+    if (mem->vk_mem)
+      mem->exportable_handle_types = ext_handle_types;
+  } else {
+    mem->vk_mem = (GstVulkanMemory *) gst_vulkan_memory_alloc (device, type_idx,
+        &params, mem->requirements.size, mem_prop_flags);
+  }
   if (!mem->vk_mem)
     goto error;
 

@@ -113,6 +113,7 @@ struct _GstVulkanImageMemory
   GPtrArray *views;
   GPtrArray *outstanding_views;
 
+  VkExternalMemoryHandleTypeFlags exportable_handle_types;
   gpointer _padding[GST_PADDING];
 };
 
