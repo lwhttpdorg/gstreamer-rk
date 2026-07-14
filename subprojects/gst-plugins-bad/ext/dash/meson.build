@@ -31,6 +31,7 @@ dash_sources = [
   'gstmpdclient.c',
   'gstplugin.c',
   'gstdashsink.c',
+  'gstutctiminghelper.c',
 ]
 
 dash_headers = [
@@ -66,6 +67,7 @@ dash_headers = [
   'gstmpdbaseurlnode.h',
   'gstdash_debug.h',
   'gstmpdperiodnode.h',
+  'gstutctiminghelper.h',
 ]
 
 doc_sources = []

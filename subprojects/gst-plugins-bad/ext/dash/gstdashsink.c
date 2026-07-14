@@ -84,6 +84,7 @@
 #include "config.h"
 #endif
 
+#include "gstutctiminghelper.h"
 #include "gstdashsink.h"
 #include "gstmpdparser.h"
 #include <gst/pbutils/pbutils.h>
@@ -166,6 +167,37 @@ static const DashSinkMuxer dash_muxer_list[] = {
       "mp4"},
 };
 
+#define GST_TYPE_DASH_SINK_UTC_TIMING (gst_dash_sink_utc_timing_get_type())
+static GType
+gst_dash_sink_utc_timing_get_type (void)
+{
+  static GType dash_sink_utc_timing_type = 0;
+  static const GEnumValue utc_timing_type[] = {
+    {GST_MPD_UTCTIMING_TYPE_UNKNOWN, "Do not use UTC Timing", "disabled"},
+    /* NTP and SNTP are currently not implemented */
+    /* {GST_MPD_UTCTIMING_TYPE_NTP, "Use urn:mpeg:dash:utc:ntp:2014", "ntp"}, */
+    /* {GST_MPD_UTCTIMING_TYPE_SNTP, "Use urn:mpeg:dash:utc:sntp:2014", "sntp"}, */
+    {GST_MPD_UTCTIMING_TYPE_HTTP_HEAD, "Use urn:mpeg:dash:utc:http-head:2014",
+        "http-head"},
+    {GST_MPD_UTCTIMING_TYPE_HTTP_XSDATE,
+        "Use urn:mpeg:dash:utc:http-xsdate:2014", "http-xsdate"},
+    {GST_MPD_UTCTIMING_TYPE_HTTP_ISO, "Use urn:mpeg:dash:utc:http-iso:2014",
+        "http-iso"},
+    /* HTTP-NTP is currently not implemented */
+    /* {GST_MPD_UTCTIMING_TYPE_HTTP_NTP, "Use urn:mpeg:dash:utc:http-ntp:2014",
+       "http-ntp"}, */
+    {GST_MPD_UTCTIMING_TYPE_DIRECT, "Use urn:mpeg:dash:utc:direct:2014",
+        "direct"},
+    {0, NULL, NULL},
+  };
+
+  if (!dash_sink_utc_timing_type) {
+    dash_sink_utc_timing_type =
+        g_enum_register_static ("GstMPDUTCTimingType", utc_timing_type);
+  }
+  return dash_sink_utc_timing_type;
+}
+
 #define DEFAULT_SEGMENT_LIST_TPL "_%05d"
 #define DEFAULT_SEGMENT_TEMPLATE_TPL "_%d"
 #define DEFAULT_MPD_FILENAME "dash.mpd"
@@ -179,6 +211,7 @@ static const DashSinkMuxer dash_muxer_list[] = {
 #define DEFAULT_MPD_MIN_BUFFER_TIME 2000
 #define DEFAULT_MPD_PERIOD_DURATION GST_CLOCK_TIME_NONE
 #define DEFAULT_MPD_SUGGESTED_PRESENTATION_DELAY 0
+#define DEFAULT_MPD_UTC_TIMING GST_MPD_UTCTIMING_TYPE_UNKNOWN
 
 #define DEFAULT_DASH_SINK_MUXER GST_DASH_SINK_MUXER_TS
 
@@ -204,6 +237,8 @@ enum
   PROP_MPD_BASEURL,
   PROP_MPD_PERIOD_DURATION,
   PROP_MPD_SUGGESTED_PRESENTATION_DELAY,
+  PROP_UTC_TIMING,
+  PROP_UTC_TIMING_URL,
 };
 
 enum
@@ -272,6 +307,8 @@ struct _GstDashSink
   guint64 suggested_presentation_delay;
   guint64 min_buffer_time;
   gint64 period_duration;
+  GstMPDUTCTimingType utc_timing;
+  gchar *utc_timing_url;
 };
 
 typedef struct _GstDashSinkStream
@@ -410,6 +447,7 @@ gst_dash_sink_finalize (GObject * object)
   g_free (sink->mpd_filename);
   g_free (sink->mpd_root_path);
   g_free (sink->mpd_profiles);
+  g_free (sink->utc_timing_url);
   if (sink->mpd_client)
     gst_mpd_client_free (sink->mpd_client);
   g_mutex_clear (&sink->mpd_lock);
@@ -554,6 +592,15 @@ gst_dash_sink_class_init (GstDashSinkClass * klass)
           "Provides the explicit duration of a period in milliseconds", 0,
           G_MAXUINT64, DEFAULT_MPD_PERIOD_DURATION,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_UTC_TIMING,
+      g_param_spec_enum ("utc-timing", "UTC Timing",
+          "Method for UTC Timing (only if dymanic = true)",
+          GST_TYPE_DASH_SINK_UTC_TIMING, DEFAULT_MPD_UTC_TIMING,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_UTC_TIMING_URL,
+      g_param_spec_string ("utc-timing-url", "UTC Timing URL",
+          "UTC Timing URL (only if dymanic = true and utc-timing set to http-head, http-xsdate or htto-iso)",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstDashSink:suggested-presentation-delay
@@ -702,6 +749,8 @@ gst_dash_sink_init (GstDashSink * sink)
   sink->min_buffer_time = DEFAULT_MPD_MIN_BUFFER_TIME;
   sink->period_duration = DEFAULT_MPD_PERIOD_DURATION;
   sink->suggested_presentation_delay = DEFAULT_MPD_SUGGESTED_PRESENTATION_DELAY;
+  sink->utc_timing = DEFAULT_MPD_UTC_TIMING;
+  sink->utc_timing_url = NULL;
 
   g_mutex_init (&sink->lock);
   g_mutex_init (&sink->mpd_lock);
@@ -806,7 +855,40 @@ gst_dash_sink_generate_mpd_content (GstDashSink * sink,
         "default-namespace", DEFAULT_MPD_NAMESPACE,
         "min-buffer-time", sink->min_buffer_time, NULL);
     if (sink->is_dynamic) {
-      GstDateTime *now = gst_date_time_new_now_utc ();
+      GstDateTime *now = NULL;
+      if (sink->utc_timing != GST_MPD_UTCTIMING_TYPE_UNKNOWN &&
+          sink->utc_timing != GST_MPD_UTCTIMING_TYPE_DIRECT) {
+        GstFragment *download = NULL;
+        GST_DEBUG_OBJECT (sink, "Fetching current time from %s",
+            sink->utc_timing_url);
+        download = gst_utctiming_helper_poll_http_server (sink->utc_timing_url);
+        if (download) {
+          if (sink->utc_timing == GST_MPD_UTCTIMING_TYPE_HTTP_HEAD
+              && download->headers) {
+            now = gst_utctiming_helper_parse_http_head (download);
+          } else {
+            GstBuffer *buffer = NULL;
+            buffer = gst_fragment_get_buffer (download);
+            if (buffer) {
+              /* GST_MPD_UTCTIMING_TYPE_HTTP_XSDATE or GST_MPD_UTCTIMING_TYPE_HTTP_ISO */
+              now = gst_utctiming_helper_parse_http_xsdate (buffer);
+              gst_buffer_unref (buffer);
+            }
+          }
+          g_object_unref (download);
+        }
+        if (!now) {
+          GST_ERROR_OBJECT (sink, "Failed to fetch time from %s",
+              sink->utc_timing_url);
+        }
+      }
+      if (now) {
+        gst_mpd_client_set_utc_timing_node (sink->mpd_client,
+            "method", sink->utc_timing, "urls", sink->utc_timing_url, NULL);
+      } else {
+        GST_DEBUG_OBJECT (sink, "Using local time in MPD");
+        now = gst_date_time_new_now_utc ();
+      }
       gst_mpd_client_set_root_node (sink->mpd_client,
           "type", GST_MPD_FILE_TYPE_DYNAMIC,
           "availability-start-time", now, "publish-time", now, NULL);
@@ -876,6 +958,14 @@ gst_dash_sink_generate_mpd_content (GstDashSink * sink,
     }
   }
   /* MPD updates */
+  if (sink->is_dynamic && sink->utc_timing == GST_MPD_UTCTIMING_TYPE_DIRECT) {
+    GstDateTime *now = gst_date_time_new_now_utc ();
+    gchar *str = gst_date_time_to_iso8601_string (now);
+    gst_mpd_client_set_utc_timing_node (sink->mpd_client,
+        "method", sink->utc_timing, "urls", str, NULL);
+    g_free (str);
+    gst_date_time_unref (now);
+  }
   if (stream && sink->use_segment_list) {
     GST_INFO_OBJECT (sink, "Add segment URL: %s",
         stream->current_segment_location);
@@ -1250,6 +1340,13 @@ gst_dash_sink_set_property (GObject * object, guint prop_id,
     case PROP_MPD_PERIOD_DURATION:
       sink->period_duration = g_value_get_uint64 (value);
       break;
+    case PROP_UTC_TIMING:
+      sink->utc_timing = g_value_get_enum (value);
+      break;
+    case PROP_UTC_TIMING_URL:
+      g_free (sink->utc_timing_url);
+      sink->utc_timing_url = g_value_dup_string (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1299,6 +1396,12 @@ gst_dash_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_MPD_PERIOD_DURATION:
       g_value_set_uint64 (value, sink->period_duration);
+      break;
+    case PROP_UTC_TIMING:
+      g_value_set_enum (value, sink->utc_timing);
+      break;
+    case PROP_UTC_TIMING_URL:
+      g_value_set_string (value, sink->utc_timing_url);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

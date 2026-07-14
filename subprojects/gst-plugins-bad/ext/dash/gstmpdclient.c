@@ -3160,6 +3160,37 @@ gst_mpd_client_add_baseurl_node (GstMPDClient * client,
   return TRUE;
 }
 
+gboolean
+gst_mpd_client_set_utc_timing_node (GstMPDClient * client,
+    const gchar * property_name, ...)
+{
+  GstMPDUTCTimingNode *timing_node = NULL;
+  va_list myargs;
+
+  g_return_val_if_fail (client != NULL, FALSE);
+  g_return_val_if_fail (client->mpd_root_node != NULL, FALSE);
+
+  va_start (myargs, property_name);
+
+  /* According to the DASH specification, the MPD can contain several UTC Timing
+     elements while the current implementation only limits it to one.
+   */
+  if (!g_list_length (client->mpd_root_node->UTCTimings)) {
+    timing_node = gst_mpd_utctiming_node_new ();
+    g_object_set_valist (G_OBJECT (timing_node), property_name, myargs);
+    client->mpd_root_node->UTCTimings =
+        g_list_append (client->mpd_root_node->UTCTimings, timing_node);
+  } else {
+    timing_node =
+        (GstMPDUTCTimingNode *) g_list_first (client->
+        mpd_root_node->UTCTimings)->data;
+    g_object_set_valist (G_OBJECT (timing_node), property_name, myargs);
+  }
+
+  va_end (myargs);
+  return TRUE;
+}
+
 /* returns a period id */
 gchar *
 gst_mpd_client_set_period_node (GstMPDClient * client,
