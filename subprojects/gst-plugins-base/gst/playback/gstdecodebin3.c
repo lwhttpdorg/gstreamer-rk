@@ -3485,6 +3485,19 @@ multiqueue_src_probe (GstPad * pad, GstPadProbeInfo * info,
       {
         slot->is_drained = TRUE;
 
+        /* If this slot's output was deferred waiting for fixed caps that never
+         * arrived, the stream is ending now without a usable format. Fail it
+         * with a proper stream error instead of leaving the pipeline waiting
+         * forever. */
+        if (slot->output && !slot->output->src_exposed) {
+          GstCaps *caps = gst_stream_get_caps (slot->active_stream);
+          if (!caps || !gst_caps_is_fixed (caps))
+            GST_ELEMENT_ERROR (dbin, STREAM, FORMAT, (NULL),
+                ("Stream ended without providing a usable (fixed) format"));
+          if (caps)
+            gst_caps_unref (caps);
+        }
+
         GST_FIXME_OBJECT (pad, "EOS on multiqueue source pad. input:%p",
             slot->input);
         if (slot->input == NULL) {
@@ -4011,6 +4024,20 @@ db_output_stream_reconfigure (DecodebinOutputStream * output, GstMessage ** msg)
   GstCaps *new_caps = (GstCaps *) gst_stream_get_caps (slot->active_stream);
   gboolean needs_decoder;
   gboolean ret = TRUE;
+
+  /* The active stream might not have fixed caps yet (for example a parsed
+   * stream that hasn't seen any buffer). We can't pick a decoder from unfixed
+   * caps, so defer the (re)configuration until a fixed-caps CAPS event triggers
+   * it again. If the stream ends while still deferred, the EOS handler turns
+   * this into a proper stream error. */
+  if (!new_caps || !gst_caps_is_fixed (new_caps)) {
+    GST_DEBUG_OBJECT (dbin,
+        "Active stream caps not fixed yet (%" GST_PTR_FORMAT "), deferring "
+        "reconfiguration", new_caps);
+    if (new_caps)
+      gst_caps_unref (new_caps);
+    return TRUE;
+  }
 
   needs_decoder = gst_caps_can_intersect (new_caps, dbin->caps) != TRUE;
 
