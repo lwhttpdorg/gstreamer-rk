@@ -153,7 +153,7 @@ enum
   PROP_CAP_COMPAT,
 };
 
-#define DEFAULT_BITS_PER_PIXEL 3        // or add an auto default for bpp?
+#define DEFAULT_BITS_PER_PIXEL 0        // 0 = auto-select based on video format
 #define DEFAULT_DECOMP_H 5
 #define DEFAULT_DECOMP_V 2
 #define DEFAULT_SLICE_HEIGHT 16
@@ -243,8 +243,10 @@ gst_svt_jpeg_xs_enc_class_init (GstSvtJpegXsEncClass * klass)
       PROP_BITS_PER_PIXEL,
       g_param_spec_double ("bits-per-pixel",
           "Bits per pixel",
-          "Bits per pixel (can be a fractional number, e.g. 3.75)",
-          0.001,
+          "Bits per pixel (can be a fractional number, e.g. 3.75). "
+          "0 = auto-select an uncompressed-equivalent value based on the "
+          "input video format.",
+          0.0,
           100.00,
           DEFAULT_BITS_PER_PIXEL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
@@ -420,6 +422,27 @@ gst_svt_jpeg_xs_enc_stop (GstVideoEncoder * encoder)
   return TRUE;
 }
 
+/* Derive a lossless-equivalent bpp default from the already-resolved
+ * colour_format/input_bit_depth, used only when "bits-per-pixel" was
+ * never explicitly set by the caller. Returns 0 if colour_format is not
+ * recognized. */
+static uint32_t
+gst_svt_jpeg_xs_enc_default_bpp_numerator (const svt_jpeg_xs_encoder_api_t *
+    enc)
+{
+  switch (enc->colour_format) {
+    case COLOUR_FORMAT_PLANAR_YUV420:
+      return enc->input_bit_depth * 3 / 2;
+    case COLOUR_FORMAT_PLANAR_YUV422:
+      return enc->input_bit_depth * 2;
+    case COLOUR_FORMAT_PLANAR_YUV444_OR_RGB:
+    case COLOUR_FORMAT_PACKED_YUV444_OR_RGB:
+      return enc->input_bit_depth * 3;
+    default:
+      return 0;
+  }
+}
+
 static gboolean
 gst_svt_jpeg_xs_enc_set_format (GstVideoEncoder * encoder,
     GstVideoCodecState * state)
@@ -463,16 +486,13 @@ gst_svt_jpeg_xs_enc_set_format (GstVideoEncoder * encoder,
   }
 
   svt_jpeg_xs_encoder_api_t *enc = jxsenc->jxs_encoder;
+  gdouble bits_per_pixel;
 
   // Fill in encode parameters from properties
   {
-    int num, denom;
-
     GST_OBJECT_LOCK (jxsenc);
 
-    gst_util_double_to_fraction (jxsenc->bits_per_pixel, &num, &denom);
-    enc->bpp_numerator = num;
-    enc->bpp_denominator = denom;
+    bits_per_pixel = jxsenc->bits_per_pixel;
 
     enc->ndecomp_h = jxsenc->decomp_h;
     enc->ndecomp_v = jxsenc->decomp_v;
@@ -578,6 +598,34 @@ gst_svt_jpeg_xs_enc_set_format (GstVideoEncoder * encoder,
             gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (&state->info)));
         return FALSE;
     }
+  }
+
+  // Resolve bits-per-pixel now that colour_format/input_bit_depth are known
+  {
+    int num, denom;
+
+    if (bits_per_pixel != 0.0) {
+      gst_util_double_to_fraction (bits_per_pixel, &num, &denom);
+    } else {
+      num = gst_svt_jpeg_xs_enc_default_bpp_numerator (enc);
+      denom = 1;
+
+      if (num == 0) {
+        GST_ELEMENT_ERROR (encoder, LIBRARY, INIT, (NULL),
+            ("Could not determine a default \"bits-per-pixel\" for this "
+                "video format; set the \"bits-per-pixel\" property "
+                "explicitly."));
+        return FALSE;
+      }
+
+      GST_INFO_OBJECT (jxsenc,
+          "\"bits-per-pixel\" not set; defaulting to uncompressed-equivalent "
+          "%d bpp for this format (no compression will occur). Set "
+          "\"bits-per-pixel\" explicitly to target a specific bitrate.", num);
+    }
+
+    enc->bpp_numerator = num;
+    enc->bpp_denominator = denom;
   }
 
   // Init encoder
