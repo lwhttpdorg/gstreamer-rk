@@ -44,6 +44,7 @@
 #include "gstv4l2codech264dec.h"
 #include "gstv4l2codecpool.h"
 #include "gstv4l2format.h"
+#include "gstv4l2codech264_debug.h"
 #include "linux/v4l2-controls.h"
 
 #define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
@@ -541,6 +542,7 @@ static void
 gst_v4l2_codec_h264_dec_fill_sequence (GstV4l2CodecH264Dec * self,
     const GstH264SPS * sps)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   gint i;
 
   /* *INDENT-OFF* */
@@ -576,11 +578,15 @@ gst_v4l2_codec_h264_dec_fill_sequence (GstV4l2CodecH264Dec * self,
 
   for (i = 0; i < sps->num_ref_frames_in_pic_order_cnt_cycle; i++)
     self->sps.offset_for_ref_frame[i] = sps->offset_for_ref_frame[i];
+
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_SEQUENCE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_sequence (codec_dec, &self->sps);
 }
 
 static void
 gst_v4l2_codec_h264_dec_fill_pps (GstV4l2CodecH264Dec * self, GstH264PPS * pps)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   /* *INDENT-OFF* */
   self->pps = (struct v4l2_ctrl_h264_pps) {
     .pic_parameter_set_id = pps->id,
@@ -604,12 +610,16 @@ gst_v4l2_codec_h264_dec_fill_pps (GstV4l2CodecH264Dec * self, GstH264PPS * pps)
         | (self->scaling_matrix_present ? V4L2_H264_PPS_FLAG_SCALING_MATRIX_PRESENT : 0),
   };
   /* *INDENT-ON* */
+
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_PICTURE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_pps (codec_dec, &self->pps);
 }
 
 static void
 gst_v4l2_codec_h264_dec_fill_scaling_matrix (GstV4l2CodecH264Dec * self,
     GstH264PPS * pps)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   gint i, n;
 
   for (i = 0; i < G_N_ELEMENTS (pps->scaling_lists_4x4); i++)
@@ -627,12 +637,16 @@ gst_v4l2_codec_h264_dec_fill_scaling_matrix (GstV4l2CodecH264Dec * self,
   for (i = 0; i < n; i++)
     gst_h264_quant_matrix_8x8_get_raster_from_zigzag (self->
         scaling_matrix.scaling_list_8x8[i], pps->scaling_lists_8x8[i]);
+
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_PICTURE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_scaling_matrix (codec_dec, &self->scaling_matrix);
 }
 
 static void
 gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
     GstH264SliceHdr * slice_hdr, GstH264Picture * picture, GstH264Dpb * dpb)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   GArray *refs = gst_h264_dpb_get_pictures_all (dpb);
   gint i, entry_id = 0;
 
@@ -745,12 +759,16 @@ gst_v4l2_codec_h264_dec_fill_decoder_params (GstV4l2CodecH264Dec * self,
   }
 
   g_array_unref (refs);
+
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_PICTURE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_decode_params (codec_dec, &self->decode_params);
 }
 
 static void
 gst_v4l2_codec_h264_dec_fill_pred_weight (GstV4l2CodecH264Dec * self,
     GstH264SliceHdr * slice_hdr)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   gint i, j;
 
   /* *INDENT-OFF* */
@@ -779,8 +797,9 @@ gst_v4l2_codec_h264_dec_fill_pred_weight (GstV4l2CodecH264Dec * self,
   }
 
   /* Skip l1 if this is not a B-Frames. */
-  if (slice_hdr->type % 5 != GST_H264_B_SLICE)
-    return;
+  if (slice_hdr->type % 5 != GST_H264_B_SLICE) {
+    goto finish;
+  }
 
   for (i = 0; i <= slice_hdr->num_ref_idx_l1_active_minus1; i++) {
     self->pred_weight.weight_factors[1].luma_weight[i] =
@@ -799,6 +818,9 @@ gst_v4l2_codec_h264_dec_fill_pred_weight (GstV4l2CodecH264Dec * self,
       }
     }
   }
+finish:
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_PICTURE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_pred_weights (codec_dec, &self->pred_weight);
 }
 
 static guint
@@ -812,6 +834,7 @@ static void
 gst_v4l2_codec_h264_dec_fill_slice_params (GstV4l2CodecH264Dec * self,
     GstH264Slice * slice)
 {
+  GstCodecDecoder *codec_dec = GST_CODEC_DECODER_CAST (self);
   gint n = self->num_slices++;
   struct v4l2_ctrl_h264_slice_params *params;
 
@@ -839,6 +862,9 @@ gst_v4l2_codec_h264_dec_fill_slice_params (GstV4l2CodecH264Dec * self,
              (slice->header.sp_for_switch_flag ? V4L2_H264_SLICE_FLAG_SP_FOR_SWITCH : 0),
   };
   /* *INDENT-ON* */
+
+  if (codec_dec->debug_mode & GST_CODEC_DEBUG_PICTURE_HDRS)
+    gst_v4l2_codec_h264_debug_dump_slice_params (codec_dec, params);
 }
 
 static guint8

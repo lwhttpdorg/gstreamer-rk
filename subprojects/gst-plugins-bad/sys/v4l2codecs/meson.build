@@ -12,6 +12,7 @@ v4l2codecs_sources = [
   'gstv4l2decoder.c',
   'gstv4l2format.c',
   'gstv4l2codecalphadecodebin.c',
+  'gstv4l2codech264_debug.c',
 ]
 
 v4l2codecs_headers = [
@@ -27,6 +28,7 @@ v4l2codecs_headers = [
   'gstv4l2codecmpeg2dec.h',
   'gstv4l2codecdevice.h',
   'gstv4l2codecpool.h',
+  'gstv4l2codech264_debug.h',
 ]
 
 doc_sources = []
