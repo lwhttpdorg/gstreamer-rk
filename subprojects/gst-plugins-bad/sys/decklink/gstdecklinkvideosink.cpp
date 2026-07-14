@@ -1447,9 +1447,13 @@ gst_decklink_video_sink_convert_to_internal_clock (GstDecklinkVideoSink * self,
     // according to our internal clock.
     //
     // For the duration we just scale
-    *timestamp =
-        gst_clock_unadjust_with_calibration (NULL, external_timestamp,
-        internal, external, rate_n, rate_d);
+    if (internal != external) {
+      *timestamp =
+          gst_clock_unadjust_with_calibration (NULL, external_timestamp,
+          internal, external, rate_n, rate_d);
+    } else {
+      *timestamp = gst_clock_get_internal_time (self->output->clock);
+    }
 
     GST_LOG_OBJECT (self,
         "Converted %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT " (internal: %"
