@@ -42,6 +42,7 @@
 #include "gstamfhqscaler.h"
 #include "gstamfvqenhancer.h"
 #endif
+#include "gstamfcolorconvert.h"
 
 #include <glib/gi18n-lib.h>
 
@@ -135,6 +136,8 @@ plugin_init_d3d11 (GstPlugin * plugin)
           (gpointer) context.GetPtr (), GST_RANK_NONE);
       gst_amf_vq_enhancer_register (plugin, GST_OBJECT_CAST (device),
           (gpointer) context.GetPtr (), GST_RANK_NONE);
+      gst_amf_color_convert_register (plugin, GST_DEVICE_CAST (device),
+          (gpointer) context.GetPtr (), GST_RANK_NONE);
     }
 
     gst_clear_object (&device);
@@ -173,6 +176,8 @@ plugin_init_vulkan (GstPlugin * plugin)
     gst_amf_h265_enc_register (plugin, nullptr,
         (gpointer) context.GetPtr (), GST_RANK_PRIMARY);
     gst_amf_av1_enc_register (plugin, nullptr,
+        (gpointer) context.GetPtr (), GST_RANK_NONE);
+    gst_amf_color_convert_register (plugin, nullptr,
         (gpointer) context.GetPtr (), GST_RANK_NONE);
   }
 

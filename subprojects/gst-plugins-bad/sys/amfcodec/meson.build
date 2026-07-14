@@ -4,6 +4,7 @@ amf_sources = [
   'gstamfh265enc.cpp',
   'gstamfav1enc.cpp',
   'gstamfbasefilter.cpp',
+  'gstamfcolorconvert.cpp',
   'gstamfutils.cpp',
   'plugin.cpp',
 ]
@@ -15,6 +16,7 @@ amf_headers = [
   'gstamfh264enc.h',
   'gstamfav1enc.h',
   'gstamfbasefilter.h',
+  'gstamfcolorconvert.h',
   'gstamfplatform.h',
 ]
 
