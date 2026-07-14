@@ -2769,6 +2769,37 @@ video_time_code_replace (GstVideoTimeCode ** old_tc, GstVideoTimeCode * new_tc)
 }
 
 /* Called with splitmux lock held */
+/* Send a finish-fragment command to the output side and reset the
+ * fragment accounting so that @gop starts the next fragment */
+static void
+finish_fragment_and_reset (GstSplitMuxSink * splitmux, const InputGop * gop)
+{
+  SplitMuxOutputCommand *cmd;
+
+  g_atomic_int_set (&(splitmux->do_split_next_gop), FALSE);
+
+  /* Tell the output side to start a new fragment */
+  cmd = out_cmd_buf_new_finish_fragment ();
+  g_queue_push_head (&splitmux->out_cmd_q, cmd);
+  GST_SPLITMUX_BROADCAST_OUTPUT (splitmux);
+
+  splitmux->fragment_start_time = gop->start_time;
+  splitmux->fragment_start_time_pts = gop->start_time_pts;
+  splitmux->fragment_total_bytes = 0;
+  splitmux->fragment_reference_bytes = 0;
+
+  video_time_code_replace (&splitmux->fragment_start_tc, gop->start_tc);
+  splitmux->next_fragment_start_tc_time =
+      calculate_next_max_timecode (splitmux, splitmux->fragment_start_tc,
+      splitmux->fragment_start_time, NULL);
+  if (splitmux->tc_interval && splitmux->fragment_start_tc
+      && !GST_CLOCK_TIME_IS_VALID (splitmux->next_fragment_start_tc_time)) {
+    GST_WARNING_OBJECT (splitmux,
+        "Couldn't calculate next fragment start time for timecode mode");
+  }
+}
+
+/* Called with splitmux lock held */
 /* Called when entering ProcessingCompleteGop state
  * Assess if mq contents overflowed the current file
  *   -> If yes, need to switch to new file
@@ -2830,30 +2861,11 @@ handle_gathered_gop (GstSplitMuxSink * splitmux, const InputGop * gop,
   /* Check for overrun - have we output at least one byte and overrun
    * either threshold? */
   if (need_new_fragment (splitmux, queued_time, queued_gop_time, queued_bytes)) {
-    g_atomic_int_set (&(splitmux->do_split_next_gop), FALSE);
-    /* Tell the output side to start a new fragment */
     GST_INFO_OBJECT (splitmux,
         "This GOP (dur %" GST_STIME_FORMAT
         ") would overflow the fragment, Sending start_new_fragment cmd",
         GST_STIME_ARGS (queued_gop_time));
-    cmd = out_cmd_buf_new_finish_fragment ();
-    g_queue_push_head (&splitmux->out_cmd_q, cmd);
-    GST_SPLITMUX_BROADCAST_OUTPUT (splitmux);
-
-    splitmux->fragment_start_time = gop->start_time;
-    splitmux->fragment_start_time_pts = gop->start_time_pts;
-    splitmux->fragment_total_bytes = 0;
-    splitmux->fragment_reference_bytes = 0;
-
-    video_time_code_replace (&splitmux->fragment_start_tc, gop->start_tc);
-    splitmux->next_fragment_start_tc_time =
-        calculate_next_max_timecode (splitmux, splitmux->fragment_start_tc,
-        splitmux->fragment_start_time, NULL);
-    if (splitmux->tc_interval && splitmux->fragment_start_tc
-        && !GST_CLOCK_TIME_IS_VALID (splitmux->next_fragment_start_tc_time)) {
-      GST_WARNING_OBJECT (splitmux,
-          "Couldn't calculate next fragment start time for timecode mode");
-    }
+    finish_fragment_and_reset (splitmux, gop);
   }
 
   /* And set up to collect the next GOP */
@@ -3014,6 +3026,39 @@ check_completed_gop (GstSplitMuxSink * splitmux, MqStreamCtx * ctx)
         if (g_atomic_int_compare_and_exchange (&(splitmux->split_requested),
                 TRUE, FALSE)) {
           g_atomic_int_set (&(splitmux->do_split_next_gop), TRUE);
+        }
+
+        /* A split-at-running-time boundary is already known once the GOP
+         * starting at/after it has begun: everything belonging to the current
+         * fragment was released above. Finish the fragment now instead of one
+         * GOP later, when the new GOP completes. */
+        gop = g_queue_peek_head (&splitmux->pending_input_gops);
+        if (gop && splitmux->fragment_reference_bytes > 0) {
+          GstClockTime time_to_split = GST_CLOCK_TIME_NONE;
+          GstClockTime *ptr_to_time;
+          gboolean do_split = FALSE;
+
+          GST_OBJECT_LOCK (splitmux);
+          ptr_to_time = (GstClockTime *)
+              gst_vec_deque_peek_head_struct (splitmux->times_to_split);
+          while (ptr_to_time) {
+            time_to_split = *ptr_to_time;
+            if (gop->start_time < time_to_split)
+              break;
+            gst_vec_deque_pop_head_struct (splitmux->times_to_split);
+            ptr_to_time = (GstClockTime *)
+                gst_vec_deque_peek_head_struct (splitmux->times_to_split);
+            do_split = TRUE;
+          }
+          GST_OBJECT_UNLOCK (splitmux);
+
+          if (do_split) {
+            GST_INFO_OBJECT (splitmux,
+                "New GOP start %" GST_STIME_FORMAT " passed requested split "
+                "point, finishing fragment immediately",
+                GST_STIME_ARGS (gop->start_time));
+            finish_fragment_and_reset (splitmux, gop);
+          }
         }
       }
     }

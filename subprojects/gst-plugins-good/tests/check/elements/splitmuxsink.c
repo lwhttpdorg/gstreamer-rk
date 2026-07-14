@@ -969,6 +969,127 @@ GST_START_TEST (test_splitmuxsink_keyframe_request_less)
 
 GST_END_TEST;
 
+static void
+push_fake_vp8_buffer (GstElement * src, GstClockTime pts, gboolean keyframe)
+{
+  GstBuffer *buf = gst_buffer_new_allocate (NULL, 64, NULL);
+
+  GST_BUFFER_PTS (buf) = pts;
+  GST_BUFFER_DTS (buf) = pts;
+  GST_BUFFER_DURATION (buf) = 100 * GST_MSECOND;
+  if (!keyframe)
+    GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT);
+
+  fail_unless (gst_app_src_push_buffer (GST_APP_SRC (src), buf) == GST_FLOW_OK);
+}
+
+static GstMessage *
+wait_for_fragment_closed (GstBus * bus, GstClockTime timeout)
+{
+  GstMessage *msg;
+
+  while ((msg = gst_bus_timed_pop_filtered (bus, timeout,
+              GST_MESSAGE_ELEMENT | GST_MESSAGE_ERROR)) != NULL) {
+    const GstStructure *s;
+
+    if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR)
+      return msg;
+
+    s = gst_message_get_structure (msg);
+    if (s != NULL && gst_structure_has_name (s, "splitmuxsink-fragment-closed"))
+      return msg;
+
+    gst_message_unref (msg);
+  }
+
+  return NULL;
+}
+
+GST_START_TEST (test_splitmuxsink_split_at_running_time_immediate)
+{
+  GstElement *pipeline, *src, *sink;
+  GstBus *bus;
+  GstMessage *msg;
+  GstCaps *caps;
+  gchar *dest_pattern;
+  const GstStructure *s;
+  GstClockTime fragment_offset, fragment_duration;
+  guint i;
+
+  pipeline = gst_parse_launch ("splitmuxsink name=splitsink "
+      "muxer=matroskamux appsrc name=src format=time ! splitsink.video", NULL);
+  fail_if (pipeline == NULL);
+
+  src = gst_bin_get_by_name (GST_BIN (pipeline), "src");
+  fail_if (src == NULL);
+  caps = gst_caps_from_string ("video/x-vp8,width=80,height=64,framerate=10/1");
+  g_object_set (src, "caps", caps, NULL);
+  gst_caps_unref (caps);
+
+  sink = gst_bin_get_by_name (GST_BIN (pipeline), "splitsink");
+  fail_if (sink == NULL);
+  dest_pattern = g_build_filename (tmpdir, "out%05d.mkv", NULL);
+  g_object_set (sink, "location", dest_pattern, NULL);
+  g_free (dest_pattern);
+
+  bus = gst_element_get_bus (pipeline);
+
+  gst_element_set_state (pipeline, GST_STATE_PLAYING);
+
+  /* Two complete GOPs: keyframes at 0 and 0.5s, delta units in between */
+  for (i = 0; i < 10; i++)
+    push_fake_vp8_buffer (src, i * 100 * GST_MSECOND, i % 5 == 0);
+
+  /* The GOP starting at 1.0s is the first one at/after this split point */
+  g_signal_emit_by_name (sink, "split-at-running-time",
+      (guint64) (700 * GST_MSECOND));
+
+  /* Push only the keyframe that starts the GOP at 1.0s. The first fragment
+   * must be finalized without waiting for this GOP to complete */
+  push_fake_vp8_buffer (src, 1000 * GST_MSECOND, TRUE);
+
+  msg = wait_for_fragment_closed (bus, 10 * GST_SECOND);
+  fail_unless (msg != NULL,
+      "Timed out waiting for fragment-closed after the GOP past the split "
+      "point began");
+  if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR)
+    dump_error (msg);
+  fail_unless (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ELEMENT);
+
+  s = gst_message_get_structure (msg);
+  fail_unless (gst_structure_get_clock_time (s, "fragment-offset",
+          &fragment_offset));
+  fail_unless (gst_structure_get_clock_time (s, "fragment-duration",
+          &fragment_duration));
+  fail_unless_equals_uint64 (fragment_offset, 0);
+  fail_unless_equals_uint64 (fragment_duration, GST_SECOND);
+  gst_message_unref (msg);
+
+  /* Finish the second GOP and check the remainder lands in a second file */
+  for (i = 11; i < 15; i++)
+    push_fake_vp8_buffer (src, i * 100 * GST_MSECOND, FALSE);
+  fail_unless (gst_app_src_end_of_stream (GST_APP_SRC (src)) == GST_FLOW_OK);
+
+  msg = gst_bus_timed_pop_filtered (bus, 20 * GST_SECOND,
+      GST_MESSAGE_EOS | GST_MESSAGE_ERROR);
+  fail_unless (msg != NULL, "Timed out waiting for EOS");
+  if (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_ERROR)
+    dump_error (msg);
+  fail_unless (GST_MESSAGE_TYPE (msg) == GST_MESSAGE_EOS);
+  gst_message_unref (msg);
+
+  gst_element_set_state (pipeline, GST_STATE_NULL);
+
+  fail_unless_equals_int (count_files (tmpdir), 2);
+
+  gst_object_unref (bus);
+  gst_object_unref (src);
+  gst_object_unref (sink);
+  gst_object_unref (pipeline);
+}
+
+GST_END_TEST;
+
 static Suite *
 splitmuxsink_suite (void)
 {
@@ -978,8 +1099,9 @@ splitmuxsink_suite (void)
   TCase *tc_chain_complex = tcase_create ("complex");
   TCase *tc_chain_mp4_jpeg = tcase_create ("caps_change");
   TCase *tc_chain_keyframe_request = tcase_create ("keyframe_request");
+  TCase *tc_chain_split_request = tcase_create ("split_request");
   gboolean have_theora, have_ogg, have_vorbis, have_matroska, have_qtmux,
-      have_jpeg, have_vp8;
+      have_jpeg, have_vp8, have_appsrc;
 
   /* we assume that if encoder/muxer are there, decoder/demuxer will be a well */
   have_theora = gst_registry_check_feature_version (gst_registry_get (),
@@ -996,12 +1118,15 @@ splitmuxsink_suite (void)
       "jpegenc", GST_VERSION_MAJOR, GST_VERSION_MINOR, 0);
   have_vp8 = gst_registry_check_feature_version (gst_registry_get (),
       "vp8enc", GST_VERSION_MAJOR, GST_VERSION_MINOR, 0);
+  have_appsrc = gst_registry_check_feature_version (gst_registry_get (),
+      "appsrc", GST_VERSION_MAJOR, GST_VERSION_MINOR, 0);
 
   suite_add_tcase (s, tc_chain);
   suite_add_tcase (s, tc_chain_basic);
   suite_add_tcase (s, tc_chain_complex);
   suite_add_tcase (s, tc_chain_mp4_jpeg);
   suite_add_tcase (s, tc_chain_keyframe_request);
+  suite_add_tcase (s, tc_chain_split_request);
 
   tcase_add_test (tc_chain_basic, test_splitmuxsink_reuse_simple);
 
@@ -1048,6 +1173,15 @@ splitmuxsink_suite (void)
         test_splitmuxsink_keyframe_request_less);
   } else {
     GST_INFO ("Skipping tests, missing plugins: vp8enc or mp4mux");
+  }
+
+  if (have_matroska && have_appsrc) {
+    tcase_add_checked_fixture (tc_chain_split_request, tempdir_setup,
+        tempdir_cleanup);
+    tcase_add_test (tc_chain_split_request,
+        test_splitmuxsink_split_at_running_time_immediate);
+  } else {
+    GST_INFO ("Skipping tests, missing plugins: matroskamux or appsrc");
   }
 
   return s;
