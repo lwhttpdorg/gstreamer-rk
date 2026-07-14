@@ -324,6 +324,10 @@ rtp_source_reset (RTPSource * src)
   src->stats.sent_fir_count = 0;
   src->stats.sent_nack_count = 0;
   src->stats.recv_nack_count = 0;
+  src->stats.sent_rpsi_count = 0;
+  src->stats.recv_rpsi_count = 0;
+  src->stats.sent_sli_count = 0;
+  src->stats.recv_sli_count = 0;
 }
 
 static void
@@ -526,6 +530,10 @@ rtp_source_create_stats (RTPSource * src)
       "recv-fir-count", G_TYPE_UINT, src->stats.recv_fir_count,
       "sent-nack-count", G_TYPE_UINT, src->stats.sent_nack_count,
       "recv-nack-count", G_TYPE_UINT, src->stats.recv_nack_count,
+      "sent_rpsi_count", G_TYPE_UINT, src->stats.sent_rpsi_count,
+      "recv_rpsi_count", G_TYPE_UINT, src->stats.recv_rpsi_count,
+      "sent_sli_count", G_TYPE_UINT, src->stats.sent_sli_count,
+      "recv_sli_count", G_TYPE_UINT, src->stats.recv_sli_count,
       "recv-packet-rate", G_TYPE_UINT,
       gst_rtp_packet_rate_ctx_get (&src->packet_rate_ctx), NULL);
 

@@ -2460,6 +2460,22 @@ buffer and the output buffer will be pushed out. If this function returns
           </parameter>
         </parameters>
       </virtual-method>
+      <virtual-method name="src_handle_event" version="1.30">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/rtp/gstrtpbasedepayload.h">Optional. The default implementation does the default actions for events but
+implementation can override.</doc>
+        <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/rtp/gstrtpbasedepayload.h"/>
+        <return-value transfer-ownership="none">
+          <type name="gboolean" c:type="gboolean"/>
+        </return-value>
+        <parameters>
+          <instance-parameter name="filter" transfer-ownership="none">
+            <type name="RTPBaseDepayload" c:type="GstRTPBaseDepayload*"/>
+          </instance-parameter>
+          <parameter name="event" transfer-ownership="none">
+            <type name="Gst.Event" c:type="GstEvent*"/>
+          </parameter>
+        </parameters>
+      </virtual-method>
       <method name="delayed" c:identifier="gst_rtp_base_depayload_delayed" version="1.24">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/rtp/gstrtpbasedepayload.c">Called from @GstRTPBaseDepayload.process or
 @GstRTPBaseDepayload.process_rtp_packet when the depayloader needs
@@ -2860,8 +2876,25 @@ buffer and the output buffer will be pushed out. If this function returns
           </parameters>
         </callback>
       </field>
+      <field name="src_handle_event">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/rtp/gstrtpbasedepayload.h">source pad even handler. Since: 1.30.</doc>
+        <callback name="src_handle_event">
+          <source-position filename="../subprojects/gst-plugins-base/gst-libs/gst/rtp/gstrtpbasedepayload.h"/>
+          <return-value transfer-ownership="none">
+            <type name="gboolean" c:type="gboolean"/>
+          </return-value>
+          <parameters>
+            <parameter name="filter" transfer-ownership="none">
+              <type name="RTPBaseDepayload" c:type="GstRTPBaseDepayload*"/>
+            </parameter>
+            <parameter name="event" transfer-ownership="none">
+              <type name="Gst.Event" c:type="GstEvent*"/>
+            </parameter>
+          </parameters>
+        </callback>
+      </field>
       <field name="_gst_reserved" readable="0" private="1">
-        <array zero-terminated="0" fixed-size="3">
+        <array zero-terminated="0" fixed-size="2">
           <type name="gpointer" c:type="gpointer"/>
         </array>
       </field>

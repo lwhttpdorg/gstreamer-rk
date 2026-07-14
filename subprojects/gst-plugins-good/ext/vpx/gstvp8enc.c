@@ -117,6 +117,7 @@ static void gst_vp8_enc_get_frame_temporal_settings (GstVPXEnc * enc,
 static void gst_vp8_enc_preflight_buffer (GstVPXEnc * enc,
     GstVideoCodecFrame * frame, GstBuffer * buffer,
     gboolean layer_sync, guint layer_id, guint8 tl0picidx);
+static gboolean gst_vp8_enc_src_event (GstVPXEnc * enc, GstEvent * event);
 
 static GstFlowReturn gst_vp8_enc_pre_push (GstVideoEncoder * encoder,
     GstVideoCodecFrame * frame);
@@ -183,6 +184,7 @@ gst_vp8_enc_class_init (GstVP8EncClass * klass)
   vpx_encoder_class->get_frame_temporal_settings =
       gst_vp8_enc_get_frame_temporal_settings;
   vpx_encoder_class->preflight_buffer = gst_vp8_enc_preflight_buffer;
+  vpx_encoder_class->src_event = gst_vp8_enc_src_event;
 
   GST_DEBUG_CATEGORY_INIT (gst_vp8enc_debug, "vp8enc", 0, "VP8 Encoder");
 }
@@ -510,6 +512,45 @@ gst_vp8_enc_pre_push (GstVideoEncoder * video_encoder,
 
 done:
   return ret;
+}
+
+static gboolean
+gst_vp8_enc_src_event (GstVPXEnc * enc, GstEvent * event)
+{
+  const GstStructure *s;
+  GstVP8Enc *encoder = GST_VP8_ENC (enc);
+  vpx_codec_err_t status;
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_CUSTOM_UPSTREAM:
+      s = gst_event_get_structure (event);
+      if (gst_structure_has_name (s, "GstSliceLossIndication-vp8")) {
+        if (strcmp (gst_structure_get_string (s, "frame-type"), "golden") == 0)
+          encoder->frame_flags |= VP8_EFLAG_NO_REF_GF;
+        if (strcmp (gst_structure_get_string (s, "frame-type"),
+                "alternate") == 0)
+          encoder->frame_flags |= VP8_EFLAG_NO_REF_ARF;
+      }
+      if (gst_structure_has_name (s,
+              "GstReferencePictureSelectionIndication-vp8")) {
+        if (strcmp (gst_structure_get_string (s, "frame-type"), "golden") == 0)
+          encoder->frame_flags &= ~VP8_EFLAG_NO_REF_GF;
+        if (strcmp (gst_structure_get_string (s, "frame-type"),
+                "alternate") == 0)
+          encoder->frame_flags &= ~VP8_EFLAG_NO_REF_ARF;
+      }
+      status =
+          vpx_codec_control (&enc->encoder, VP8E_SET_FRAME_FLAGS,
+          encoder->frame_flags);
+      if (status != VPX_CODEC_OK) {
+        GST_DEBUG_OBJECT (encoder, "Can't set frame flags");
+        return FALSE;
+      }
+    default:
+      break;
+  }
+
+  return TRUE;
 }
 
 #endif /* HAVE_VP8_ENCODER */

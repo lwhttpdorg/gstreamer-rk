@@ -61,6 +61,7 @@ static void gst_vp8_dec_set_default_format (GstVPXDec * dec, GstVideoFormat fmt,
 static void gst_vp8_dec_handle_resolution_change (GstVPXDec * dec,
     vpx_image_t * img, GstVideoFormat fmt);
 static gboolean gst_vp8_dec_get_needs_sync_point (GstVPXDec * dec);
+static void gst_vp8_dec_send_rpsi (GstVPXDec * dec, GstVideoCodecFrame * frame);
 
 static GstStaticPadTemplate gst_vp8_dec_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
@@ -109,6 +110,7 @@ gst_vp8_dec_class_init (GstVP8DecClass * klass)
       GST_DEBUG_FUNCPTR (gst_vp8_dec_handle_resolution_change);
   vpx_class->get_needs_sync_point =
       GST_DEBUG_FUNCPTR (gst_vp8_dec_get_needs_sync_point);
+  vpx_class->send_rpsi = GST_DEBUG_FUNCPTR (gst_vp8_dec_send_rpsi);
 
   GST_DEBUG_CATEGORY_INIT (gst_vp8dec_debug, "vp8dec", 0, "VP8 Decoder");
 }
@@ -163,6 +165,58 @@ static gboolean
 gst_vp8_dec_get_needs_sync_point (GstVPXDec * dec)
 {
   return FALSE;
+}
+
+static void
+gst_vp8_dec_send_rpsi (GstVPXDec * dec, GstVideoCodecFrame * frame)
+{
+  gint reference_updates = 0, corrupted = 0;
+  vpx_codec_err_t status;
+  GstEvent *event = NULL;
+
+  status =
+      vpx_codec_control (&dec->decoder, VP8D_GET_LAST_REF_UPDATES,
+      &reference_updates);
+  if (status != VPX_CODEC_OK) {
+    GST_DEBUG_OBJECT (dec, "vpx failed to get last updated references");
+    return;
+  }
+
+  status =
+      vpx_codec_control (&dec->decoder, VP8D_GET_FRAME_CORRUPTED, &corrupted);
+  if (status != VPX_CODEC_OK) {
+    GST_DEBUG_OBJECT (dec, "vpx failed to check corrupted frame status");
+    return;
+  }
+
+  if (corrupted) {
+    GST_DEBUG_OBJECT (dec, "corrupted frame");
+    if (reference_updates & VP8_GOLD_FRAME) {
+      event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+          gst_structure_new ("GstSliceLossIndication-vp8",
+              "frame-type", G_TYPE_STRING, "golden", NULL));
+      gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (dec), event);
+    }
+    if (reference_updates & VP8_ALTR_FRAME) {
+      event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+          gst_structure_new ("GstSliceLossIndication-vp8",
+              "frame-type", G_TYPE_STRING, "alternate", NULL));
+      gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (dec), event);
+    }
+  } else {
+    if (reference_updates & VP8_GOLD_FRAME) {
+      event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+          gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+              "frame-type", G_TYPE_STRING, "golden", NULL));
+      gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (dec), event);
+    }
+    if (reference_updates & VP8_ALTR_FRAME) {
+      event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+          gst_structure_new ("GstReferencePictureSelectionIndication-vp8",
+              "frame-type", G_TYPE_STRING, "alternate", NULL));
+      gst_pad_push_event (GST_VIDEO_DECODER_SINK_PAD (dec), event);
+    }
+  }
 }
 
 #endif /* HAVE_VP8_DECODER */
