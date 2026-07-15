@@ -75,6 +75,7 @@ typedef enum
   GST_V4L2_TRANSPORT = 1u << 2,
   GST_V4L2_NO_PARSE = 1u << 3,
   GST_V4L2_BAYER = GST_V4L2_RAW | (1u << 5),
+  GST_V4L2_MPLANE = 1u << 6,
   GST_V4L2_ALL = 0xffff
 } GstV4L2FormatFlags;
 
@@ -195,16 +196,16 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   /* Luminance+Chrominance formats */
   {MAP_FMT (YUV410, YUV9),    KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (YVU410, YVU9),    KNOWN_DRM_MAP,              GST_V4L2_RAW},
-  {MAP_FMT (YUV420M, I420),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
+  {MAP_FMT (YUV420M, I420),   KNOWN_DRM_MAP,              GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (YUV420, I420),    KNOWN_DRM_MAP,              GST_V4L2_RAW},
-  {MAP_FMT (YVU420M, YV12),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
+  {MAP_FMT (YVU420M, YV12),   KNOWN_DRM_MAP,              GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (YVU420, YV12),    KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (YUYV, YUY2),      KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (YYUV, UNKNOWN),   MAP_DRM (YVYU, LINEAR),     GST_V4L2_RAW},
   {MAP_FMT (YVYU, YVYU),      KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (UYVY, UYVY),      KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (VYUY, VYUY),      KNOWN_DRM_MAP,              GST_V4L2_RAW},
-  {MAP_FMT (YUV422M, Y42B),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
+  {MAP_FMT (YUV422M, Y42B),   KNOWN_DRM_MAP,              GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (YUV422P, Y42B),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (YUV411P, Y41B),   KNOWN_DRM_MAP,              GST_V4L2_RAW},
   {MAP_FMT (Y41P, UNKNOWN),   MAP_DRM (INVALID, INVALID), GST_V4L2_RAW},
@@ -216,22 +217,22 @@ static GstV4L2FormatDesc gst_v4l2_formats[] = {
   {MAP_FMT (M420, UNKNOWN),   MAP_DRM (INVALID, INVALID),  GST_V4L2_RAW},
 
   /* two planes -- one Y,         one Cr + Cb interleaved  */
-  {MAP_FMT (NV12M, NV12),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (NV12M, NV12),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (NV12, NV12),                        KNOWN_DRM_MAP,                      GST_V4L2_RAW},
-  {MAP_FMT (NV12MT, NV12_64Z32),                KNOWN_DRM_MAP,                      GST_V4L2_RAW},
-  {MAP_FMT (NV12MT_16X16, UNKNOWN),             MAP_DRM (NV12, SAMSUNG_16_16_TILE), GST_V4L2_RAW},
-  {MAP_FMT (NV12_16L16, UNKNOWN),               MAP_DRM (NV12, SAMSUNG_16_16_TILE), GST_V4L2_RAW},
-  {MAP_FMT (NV12M_8L128, NV12_8L128),           MAP_DRM (INVALID, INVALID),         GST_V4L2_RAW},
-  {MAP_FMT (NV12M_10BE_8L128, NV12_10BE_8L128), MAP_DRM (INVALID, INVALID),         GST_V4L2_RAW},
-  {MAP_FMT (NV21M, NV21),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (NV12MT, NV12_64Z32),                KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
+  {MAP_FMT (NV12MT_16X16, UNKNOWN),             MAP_DRM (NV12, SAMSUNG_16_16_TILE), GST_V4L2_RAW | GST_V4L2_MPLANE},
+  {MAP_FMT (NV12_16L16, UNKNOWN),               MAP_DRM (NV12, SAMSUNG_16_16_TILE), GST_V4L2_RAW | GST_V4L2_MPLANE},
+  {MAP_FMT (NV12M_8L128, NV12_8L128),           MAP_DRM (INVALID, INVALID),         GST_V4L2_RAW | GST_V4L2_MPLANE},
+  {MAP_FMT (NV12M_10BE_8L128, NV12_10BE_8L128), MAP_DRM (INVALID, INVALID),         GST_V4L2_RAW | GST_V4L2_MPLANE},
+  {MAP_FMT (NV21M, NV21),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (NV21, NV21),                        KNOWN_DRM_MAP,                      GST_V4L2_RAW},
-  {MAP_FMT (NV16M, NV16),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (NV16M, NV16),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (NV16, NV16),                        KNOWN_DRM_MAP,                      GST_V4L2_RAW},
-  {MAP_FMT (NV61M, NV61),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (NV61M, NV61),                       KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (NV61, NV61),                        KNOWN_DRM_MAP,                      GST_V4L2_RAW},
   {MAP_FMT (NV24, NV24),                        KNOWN_DRM_MAP,                      GST_V4L2_RAW},
   {MAP_FMT (NV42, UNKNOWN),                     MAP_DRM (NV42, LINEAR),             GST_V4L2_RAW},
-  {MAP_FMT (MM21, NV12_16L32S),                 KNOWN_DRM_MAP,                      GST_V4L2_RAW},
+  {MAP_FMT (MM21, NV12_16L32S),                 KNOWN_DRM_MAP,                      GST_V4L2_RAW | GST_V4L2_MPLANE},
   {MAP_FMT (P010, P010_10LE),                   KNOWN_DRM_MAP,                      GST_V4L2_RAW},
 
   /* Bayer formats - see http://www.siliconimaging.com/RGB%20Bayer.htm */
@@ -1537,9 +1538,9 @@ gst_v4l2_object_get_desc_from_video_format (GstVideoFormat format,
 
   for (i = 0; i < GST_V4L2_FORMAT_COUNT; i++) {
     if (formats[i].gst_format == format) {
-      if (!ret)
+      if (!ret && formats[i].flags & GST_V4L2_MPLANE)
         ret = &formats[i];
-      else if (fallback && !*fallback)
+      else if (fallback && !*fallback && !(formats[i].flags & GST_V4L2_MPLANE))
         *fallback = &formats[i];
       else
         break;
@@ -1563,9 +1564,9 @@ gst_v4l2_object_get_desc_from_drm_fourcc (guint32 drm_fourcc,
   for (i = 0; i < GST_V4L2_FORMAT_COUNT; i++) {
     if (formats[i].drm_fourcc == drm_fourcc
         && formats[i].drm_modifier == drm_modifier) {
-      if (!ret)
+      if (!ret && formats[i].flags & GST_V4L2_MPLANE)
         ret = &formats[i];
-      else if (fallback && !*fallback)
+      else if (fallback && !*fallback && !(formats[i].flags & GST_V4L2_MPLANE))
         *fallback = &formats[i];
       else
         break;
