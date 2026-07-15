@@ -4558,7 +4558,7 @@ text_set_blocked (GstPlaySink * playsink, gboolean blocked)
       playsink->vis_pad_block_id = 0;
 
       playsink->text_block_id =
-          gst_pad_add_probe (opad, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
+          gst_pad_add_probe (opad, GST_PAD_PROBE_TYPE_IDLE,
           sinkpad_blocked_cb, playsink, NULL);
     } else if (!blocked && playsink->text_block_id) {
       gst_pad_remove_probe (opad, playsink->text_block_id);
@@ -4591,9 +4591,25 @@ gst_play_sink_reconfigure (GstPlaySink * playsink)
   g_mutex_unlock (&playsink->reconfigure_lock);
 
   GST_PLAY_SINK_LOCK (playsink);
+
+  /* Block the video pad to stop the video streaming thread before
+   * do_reconfigure rewires the video/text chain topology.
+   *
+   * Don't block the audio pad since a blocked video thread causes queue
+   * back pressure. The video queue fills, flow control stalls the multiq
+   * src task, and the audio thread can never reach its own probe which
+   * deadlocks. Audio chain teardown is safe without blocking because
+   * do_reconfigure releases the stream_synchronizer src pad before calling
+   * activate_chain(FALSE), which drains the audio streaming thread first. */
   video_set_blocked (playsink, TRUE);
-  audio_set_blocked (playsink, TRUE);
+
+  /* also block the text pad if present to hold back sparse subtitle data during
+   * the reconfiguration window. The text probe isn't included in
+   * ready_to_reconfigure_locked gate since text data may never arrive (sparse)
+   * and the text pad may not have a ghost target yet, so the probe might
+   * never fire.. */
   text_set_blocked (playsink, TRUE);
+
   playsink->reconfigure_pending = TRUE;
   GST_PLAY_SINK_UNLOCK (playsink);
 
@@ -4610,25 +4626,30 @@ gst_play_sink_reconfigure (GstPlaySink * playsink)
 static gboolean
 gst_play_sink_ready_to_reconfigure_locked (GstPlaySink * playsink)
 {
-  /* We reconfigure when for ALL streams:
-   * * there isn't a pad
-   * * OR the pad is blocked
-   * * OR there are no pending blocks on that pad
-   */
   if (playsink->reconfigure_pending == FALSE)
     return FALSE;
 
+  /* Wait for video probe to fire before rewiring the video/text chain.
+   * video_block_id is not zero whenever a blocking probe is installed on the
+   * video pad (by video_set_blocked(TRUE) or request_pad/refresh_pad).
+   * video_pad_blocked is set TRUE by sinkpad_blocked_cb when that probe fires.
+   * If probe is installed but hasn't fired, the video streaming thread is
+   * still running through chain elements and we must not tear them down. */
   if (playsink->video_pad && !playsink->video_pad_blocked
-      && PENDING_VIDEO_BLOCK (playsink))
+      && playsink->video_block_id)
     return FALSE;
 
-  if (playsink->audio_pad && !playsink->audio_pad_blocked
-      && PENDING_AUDIO_BLOCK (playsink))
-    return FALSE;
-
-  if (playsink->text_pad && !playsink->text_pad_blocked
-      && PENDING_TEXT_BLOCK (playsink))
-    return FALSE;
+  /* Don't gate on audio_pad_blocked or text_pad_blocked.
+   *
+   * Audio: blocking both video and audio can cause deadlock. The video blocking
+   * probe creates back pressure through the mq chain, which stalls the demuxer,
+   * preventing audio data from ever reaching its probe. Audio chain teardown is
+   * safe without blocking because do_reconfigure manages the
+   * stream_synchronizer and chain deactivation in a way that properly drains
+   * the audio streaming thread.
+   *
+   * Text: data is sparse and the text pad may lack a ghost pad target, so the
+   * text probe may never fire. */
 
   return TRUE;
 }
@@ -4640,12 +4661,71 @@ sinkpad_blocked_cb (GstPad * blockedpad, GstPadProbeInfo * info,
   GstPlaySink *playsink = (GstPlaySink *) user_data;
   GstPad *pad;
 
-  if (GST_IS_EVENT (info->data) && !GST_EVENT_IS_SERIALIZED (info->data)) {
-    GST_DEBUG_OBJECT (playsink, "Letting non-serialized event %s pass",
-        GST_EVENT_TYPE_NAME (info->data));
-    return GST_PAD_PROBE_PASS;
+  if (GST_IS_EVENT (info->data)) {
+    GstEvent *event = GST_PAD_PROBE_INFO_EVENT (info);
+    GstEventType type = GST_EVENT_TYPE (event);
+
+    /* FLUSH_START is non-serialised. Letting it pass on text/audio while
+     * still blocking FLUSH_STOP creates an incomplete flush sequence
+     * downstream (e.g. in stream_synchronizer) during reconfiguration.
+     * Pass FLUSH_START only on video; block it on non-video pads so the
+     * complete flush pair is released together when probes are removed. */
+    if (type == GST_EVENT_FLUSH_START) {
+      GstPad *internal =
+          GST_PAD_CAST (gst_proxy_pad_get_internal (GST_PROXY_PAD
+              (blockedpad)));
+      gboolean is_video = (internal == playsink->video_pad);
+      gboolean reconfigure_pending;
+
+      GST_PLAY_SINK_LOCK (playsink);
+      reconfigure_pending = playsink->reconfigure_pending;
+      GST_PLAY_SINK_UNLOCK (playsink);
+
+      gst_object_unref (internal);
+      if (is_video || !reconfigure_pending) {
+        GST_DEBUG_OBJECT (playsink,
+            "Letting flush-start pass%s",
+            is_video ? " on video to keep flush handling live"
+            : " while no reconfigure is pending");
+        return GST_PAD_PROBE_PASS;
+      }
+
+      GST_DEBUG_OBJECT (playsink,
+          "Blocking flush-start on non-video during pending reconfigure");
+      goto block;
+    }
+
+    if (!GST_EVENT_IS_SERIALIZED (event)) {
+      GST_DEBUG_OBJECT (playsink, "Letting non-serialized event %s pass",
+          GST_EVENT_TYPE_NAME (event));
+      return GST_PAD_PROBE_PASS;
+    }
+    /* FLUSH_STOP must pass through on the video pad. If blocked the
+     * upstream mq gst_single_queue_start is never called after
+     * the flush, leaving the src task permanently paused and preventing any
+     * data from flowing to unblock the reconfig probe.
+     *
+     * Text/audio pads don't need this exception. The reconfiguration gate
+     * only waits for the video probe, so it does not matter if the text or
+     * audio mq src task stay paused. OTOH letting FLUSH_STOP
+     * through on the text pad causes the subqueue to push events into a
+     * subtitleoverlay that may be mid-reconfiguration, producing errors. */
+    if (type == GST_EVENT_FLUSH_STOP) {
+      GstPad *internal =
+          GST_PAD_CAST (gst_proxy_pad_get_internal (GST_PROXY_PAD
+              (blockedpad)));
+      gboolean is_video = (internal == playsink->video_pad);
+
+      gst_object_unref (internal);
+      if (is_video) {
+        GST_DEBUG_OBJECT (playsink,
+            "Letting flush-stop pass on video to unblock multiqueue src task");
+        return GST_PAD_PROBE_PASS;
+      }
+    }
   }
 
+block:
   GST_PLAY_SINK_LOCK (playsink);
 
   pad = GST_PAD_CAST (gst_proxy_pad_get_internal (GST_PROXY_PAD (blockedpad)));
@@ -4737,11 +4817,6 @@ gst_play_sink_refresh_pad (GstPlaySink * playsink, GstPad * pad,
     *block_id =
         gst_pad_add_probe (blockpad, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
         sinkpad_blocked_cb, playsink, NULL);
-    /* Don't set PENDING for text pads - subtitle data is sparse and may
-     * not arrive before video/audio, which would cause reconfiguration to
-     * wait indefinitely. */
-    if (type != GST_PLAY_SINK_TYPE_TEXT)
-      PENDING_FLAG_SET (playsink, type);
     gst_object_unref (blockpad);
   }
   GST_PLAY_SINK_UNLOCK (playsink);
@@ -4876,11 +4951,6 @@ gst_play_sink_request_pad (GstPlaySink * playsink, GstPlaySinkType type)
       *block_id =
           gst_pad_add_probe (blockpad, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
           sinkpad_blocked_cb, playsink, NULL);
-      /* Don't set PENDING for text pads - subtitle data is sparse and may
-       * not arrive before video/audio, which would cause reconfiguration to
-       * wait indefinitely. */
-      if (type != GST_PLAY_SINK_TYPE_TEXT)
-        PENDING_FLAG_SET (playsink, type);
       gst_object_unref (blockpad);
     }
     GST_PLAY_SINK_UNLOCK (playsink);
@@ -5082,47 +5152,55 @@ static gboolean
 gst_play_sink_send_event_to_sink (GstPlaySink * playsink, GstEvent * event,
     gboolean force_video)
 {
-  gboolean res = TRUE;
+  gboolean res = FALSE;
   if (playsink->send_event_mode == MODE_FIRST || force_video) {
-    if (playsink->textchain && playsink->textchain->sink) {
+    gboolean primary_success = FALSE;
+
+    /* Handle the video/audio branch first. During seek this pushes flush
+     * events into the main playback chain before touching subtitle queues,
+     * which avoids pausing subtitle queue tasks while video still holds
+     * stream locks. */
+    if (playsink->videochain) {
       gst_event_ref (event);
-      if ((res =
-              gst_element_send_event (playsink->textchain->chain.bin, event))) {
+      if (gst_element_send_event (playsink->videochain->chain.bin, event)) {
+        GST_DEBUG_OBJECT (playsink, "Sent event successfully to video sink");
+        primary_success = TRUE;
+      } else {
+        GST_DEBUG_OBJECT (playsink, "Event failed when sent to video sink");
+      }
+    }
+
+    if (!force_video && !primary_success && playsink->audiochain) {
+      gst_event_ref (event);
+      if (gst_element_send_event (playsink->audiochain->chain.bin, event)) {
+        GST_DEBUG_OBJECT (playsink, "Sent event successfully to audio sink");
+        primary_success = TRUE;
+      } else {
+        GST_DEBUG_OBJECT (playsink, "Event failed when sent to audio sink");
+      }
+    }
+
+    if (playsink->textchain && playsink->textchain->sink) {
+      gboolean text_success;
+
+      gst_event_ref (event);
+      text_success =
+          gst_element_send_event (playsink->textchain->chain.bin, event);
+      if (text_success) {
         GST_DEBUG_OBJECT (playsink, "Sent event successfully to text sink");
       } else {
         GST_DEBUG_OBJECT (playsink, "Event failed when sent to text sink");
       }
+      res = res || text_success;
     }
 
-    if (playsink->videochain) {
-      gst_event_ref (event);
-      if ((res =
-              gst_element_send_event (playsink->videochain->chain.bin,
-                  event))) {
-        GST_DEBUG_OBJECT (playsink, "Sent event successfully to video sink");
-        goto done;
-      }
-      GST_DEBUG_OBJECT (playsink, "Event failed when sent to video sink");
-    }
-    if (!force_video && playsink->audiochain) {
-      gst_event_ref (event);
-      if ((res =
-              gst_element_send_event (playsink->audiochain->chain.bin,
-                  event))) {
-        GST_DEBUG_OBJECT (playsink, "Sent event successfully to audio sink");
-        goto done;
-      }
-      GST_DEBUG_OBJECT (playsink, "Event failed when sent to audio sink");
-    } else {
-      res = FALSE;
-    }
+    res = res || primary_success;
   } else {
     return
         GST_ELEMENT_CLASS (gst_play_sink_parent_class)->send_event
         (GST_ELEMENT_CAST (playsink), event);
   }
 
-done:
   gst_event_unref (event);
   return res;
 }

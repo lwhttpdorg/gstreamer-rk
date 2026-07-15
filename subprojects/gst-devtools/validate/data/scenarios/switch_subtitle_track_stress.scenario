@@ -1,0 +1,156 @@
+description, summary="Rapidly cycle subtitle tracks while playing, with heavy disable/re-enable churn, to catch the playsink reconfiguration deadlock where a pending pad block is never satisfied. A hang here means do_reconfigure never ran.", min-subtitle-track=2, duration=20.0, need-clock-sync=true
+
+# Each switch triggers a playsink reconfiguration (the video pad blocks, the text
+# chain is rewired). The short 0.12s waits let video buffers flow so multiqueue
+# back-pressure builds between switches - that back-pressure is what starves the
+# text pad and wedges the never-released block. The disable -> re-enable cycles
+# exercise text-chain teardown and rebuild. Front-loaded into the first ~9s so the
+# whole reproduction completes well before the stop (and before EOS).
+
+switch-track, playback-time=0.3, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+wait, duration=0.12
+switch-track, type=text, disable=true
+wait, duration=0.12
+switch-track, type=text, index=(string)0
+wait, duration=0.12
+switch-track, type=text, index=(string)+1
+
+stop, playback-time=18.0
