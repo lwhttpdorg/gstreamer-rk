@@ -253,13 +253,27 @@ gst_vulkan_window_ios_close (GstVulkanWindow * window)
 {
   GstVulkanWindowIos *window_ios = GST_VULKAN_WINDOW_IOS (window);
   GstVulkanWindowIosPrivate *priv = GET_PRIV (window_ios);
-  GstVulkanUIView *view = (__bridge GstVulkanUIView *) priv->internal_view;
 
-  [view setGstWindow:NULL];
-  CFBridgingRelease (priv->internal_view);
-  priv->internal_view = NULL;
-  CFBridgingRelease (priv->internal_layer);
-  priv->internal_layer = NULL;
+  if (priv->internal_view) {
+    GstVulkanUIView *view = (__bridge GstVulkanUIView *) priv->internal_view;
+    /* Must be done on main thread since it touches UIKit.
+     * Use dispatch_sync to ensure it completes before close returns. */
+    if ([NSThread isMainThread]) {
+      [view setGstWindow:NULL];
+      [view removeFromSuperview];
+    } else {
+      dispatch_sync (dispatch_get_main_queue (), ^{
+        [view setGstWindow:NULL];
+        [view removeFromSuperview];
+      });
+    }
+    CFBridgingRelease (priv->internal_view);
+    priv->internal_view = NULL;
+  }
+  if (priv->internal_layer) {
+    CFBridgingRelease (priv->internal_layer);
+    priv->internal_layer = NULL;
+  }
 
   GST_VULKAN_WINDOW_CLASS (parent_class)->close (window);
 }
