@@ -1759,6 +1759,47 @@ error:
   return GST_H266_PARSER_ERROR;
 }
 
+static GstH266ParserResult
+    gst_h266_parser_parse_mastering_display_colour_volume
+    (GstH266MasteringDisplayColourVolume * mdcv, NalReader * nr)
+{
+  guint i;
+
+  GST_LOG ("parsing \"Mastering display colour volume\"");
+
+  for (i = 0; i < 3; i++) {
+    READ_UINT16 (nr, mdcv->display_primaries_x[i], 16);
+    READ_UINT16 (nr, mdcv->display_primaries_y[i], 16);
+  }
+
+  READ_UINT16 (nr, mdcv->white_point_x, 16);
+  READ_UINT16 (nr, mdcv->white_point_y, 16);
+  READ_UINT32 (nr, mdcv->max_display_mastering_luminance, 32);
+  READ_UINT32 (nr, mdcv->min_display_mastering_luminance, 32);
+
+  return GST_H266_PARSER_OK;
+
+error:
+  GST_WARNING ("error parsing \"Mastering display colour volume\"");
+  return GST_H266_PARSER_ERROR;
+}
+
+static GstH266ParserResult
+gst_h266_parser_parse_content_light_level_info (GstH266ContentLightLevel * cll,
+    NalReader * nr)
+{
+  GST_LOG ("parsing \"Content light level\"");
+
+  READ_UINT16 (nr, cll->max_content_light_level, 16);
+  READ_UINT16 (nr, cll->max_pic_average_light_level, 16);
+
+  return GST_H266_PARSER_OK;
+
+error:
+  GST_WARNING ("error parsing \"Content light level\"");
+  return GST_H266_PARSER_ERROR;
+}
+
 /**
  * gst_h266_parser_new: (skip)
  *
@@ -6128,6 +6169,14 @@ gst_h266_parser_parse_sei_message (GstH266SEIMessage * sei, NalReader * nr,
       case GST_H266_SEI_SUBPIC_LEVEL_INFO:
         res = gst_h266_parser_parse_subpic_level_info
             (&sei->payload.subpic_level_info, nr);
+        break;
+      case GST_H266_SEI_MASTERING_DISPLAY_COLOUR_VOLUME:
+        res = gst_h266_parser_parse_mastering_display_colour_volume
+            (&sei->payload.mastering_display_colour_volume, nr);
+        break;
+      case GST_H266_SEI_CONTENT_LIGHT_LEVEL:
+        res = gst_h266_parser_parse_content_light_level_info
+            (&sei->payload.content_light_level, nr);
         break;
       case GST_H266_SEI_DIGITALLY_SIGNED_CONTENT_INITIALIZATION:
         res = (GstH266ParserResult)

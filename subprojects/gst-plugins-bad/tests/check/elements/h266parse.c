@@ -236,6 +236,20 @@ static const guint8 h266_suffix_sei[] = {
   0xf7, 0x77, 0xd5, 0xa4, 0x13, 0x30, 0x2c, 0x10, 0xb5, 0xf0, 0x80
 };
 
+/* Content light level info SEI (payloadType 144): maxCLL=1000, maxFALL=400.
+ * Prefix SEI NAL header (0x00 0xb9); payload is identical to the H.265 SEI. */
+static const guint8 h266_sei_clli[] = {
+  0x00, 0x00, 0x00, 0x01, 0x00, 0xb9, 0x90, 0x04, 0x03, 0xe8, 0x01, 0x90, 0x80
+};
+
+/* Mastering display colour volume SEI (payloadType 137). Prefix SEI NAL header
+ * (0x00 0xb9); payload is identical to the H.265 SEI. */
+static const guint8 h266_sei_mdcv[] = {
+  0x00, 0x00, 0x00, 0x01, 0x00, 0xb9, 0x89, 0x18, 0x33, 0xc2, 0x86, 0xc4, 0x1d,
+  0x4c, 0x0b, 0xb8, 0x84, 0xd0, 0x3e, 0x80, 0x3d, 0x13, 0x40, 0x42, 0x00, 0x98,
+  0x96, 0x80, 0x00, 0x00, 0x03, 0x00, 0x01, 0x80
+};
+
 /* A single access unit comprising of VPS, SPS, PPS, APS and IDR frame */
 static gboolean
 verify_buffer_bs_au (buffer_verify_data_s * vdata, GstBuffer * buffer)
@@ -1331,6 +1345,75 @@ GST_START_TEST (test_packetized_vvc1_drop_corrupt)
 
 GST_END_TEST;
 
+GST_START_TEST (test_parse_detect_stream_hdr_sei_expiry)
+{
+  GstHarness *h = gst_harness_new ("h266parse");
+  GstCaps *caps;
+  GstStructure *s;
+  GstBuffer *buf;
+
+  bytestream_set_caps (h, "au", "au");
+
+  /* AU1: full headers + HDR SEIs + IDR → parser emits caps with HDR fields */
+  buf = composite_buffer (10, 0, 7,
+      h266_vps, sizeof (h266_vps),
+      h266_sps, sizeof (h266_sps),
+      h266_pps, sizeof (h266_pps),
+      h266_prefix_aps, sizeof (h266_prefix_aps),
+      h266_sei_mdcv, sizeof (h266_sei_mdcv),
+      h266_sei_clli, sizeof (h266_sei_clli), h266_idr, sizeof (h266_idr));
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+
+  caps = gst_pad_get_current_caps (h->sinkpad);
+  fail_unless (caps != NULL);
+  s = gst_caps_get_structure (caps, 0);
+  fail_unless_structure_field_string_equals (s, "mastering-display-info",
+      "34000:16000:13250:34500:7500:3000:15635:16450:10000000:1");
+  fail_unless_structure_field_string_equals (s, "content-light-level",
+      "1000:400");
+  fail_unless_structure_field_string_equals (s, "hdr-format", "hdr10");
+  gst_caps_unref (caps);
+  while (gst_harness_buffers_in_queue (h) > 0) {
+    GstBuffer *b = gst_harness_pull (h);
+    gst_buffer_unref (b);
+  }
+
+  /* AU2: IDR without HDR SEIs → state ACTIVE→EXPIRED, update_caps=TRUE → caps
+   * WITHOUT HDR fields */
+  buf = wrap_buffer (h266_idr, sizeof (h266_idr), 20, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+  caps = gst_pad_get_current_caps (h->sinkpad);
+  fail_unless (caps != NULL);
+  s = gst_caps_get_structure (caps, 0);
+  fail_if (gst_structure_has_field (s, "mastering-display-info"));
+  fail_if (gst_structure_has_field (s, "content-light-level"));
+  fail_if (gst_structure_has_field (s, "hdr-format"));
+  gst_caps_unref (caps);
+  while (gst_harness_buffers_in_queue (h) > 0) {
+    GstBuffer *b = gst_harness_pull (h);
+    gst_buffer_unref (b);
+  }
+
+  /* AU3: IDR without HDR SEIs → state stays EXPIRED, caps still without HDR */
+  buf = wrap_buffer (h266_idr, sizeof (h266_idr), 30, 0);
+  fail_unless_equals_int (gst_harness_push (h, buf), GST_FLOW_OK);
+  caps = gst_pad_get_current_caps (h->sinkpad);
+  fail_unless (caps != NULL);
+  s = gst_caps_get_structure (caps, 0);
+  fail_if (gst_structure_has_field (s, "mastering-display-info"));
+  fail_if (gst_structure_has_field (s, "content-light-level"));
+  fail_if (gst_structure_has_field (s, "hdr-format"));
+  gst_caps_unref (caps);
+  while (gst_harness_buffers_in_queue (h) > 0) {
+    GstBuffer *b = gst_harness_pull (h);
+    gst_buffer_unref (b);
+  }
+
+  gst_harness_teardown (h);
+}
+
+GST_END_TEST;
+
 static Suite *
 h266parse_harnessed_suite (void)
 {
@@ -1370,6 +1453,8 @@ h266parse_harnessed_suite (void)
   tcase_add_test (tc_chain, test_drain);
 
   tcase_add_test (tc_chain, test_packetized_vvc1_drop_corrupt);
+
+  tcase_add_test (tc_chain, test_parse_detect_stream_hdr_sei_expiry);
 
   return s;
 }
