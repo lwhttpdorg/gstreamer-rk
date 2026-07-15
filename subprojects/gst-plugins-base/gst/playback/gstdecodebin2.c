@@ -5026,8 +5026,6 @@ source_pad_blocked_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
 
   GST_LOG_OBJECT (dpad, "blocked: dpad->chain:%p", chain);
 
-  dpad->blocked = TRUE;
-
   EXPOSE_LOCK (dbin);
   if (dbin->decode_chain) {
     if (gst_decode_chain_is_complete (dbin->decode_chain)) {
@@ -5087,6 +5085,7 @@ gst_decode_pad_set_blocked (GstDecodePad * dpad, gboolean blocked)
    * we do not consider/expect it blocked further below, but use other trick */
   if (!blocked || !dbin->shutdown) {
     if (blocked) {
+      dpad->blocked = TRUE;
       if (dpad->block_id == 0)
         dpad->block_id =
             gst_pad_add_probe (opad,
@@ -5190,8 +5189,7 @@ gst_decode_pad_query (GstPad * pad, GstObject * parent, GstQuery * query)
   gboolean ret = FALSE;
 
   CHAIN_MUTEX_LOCK (dpad->chain);
-  if (!dpad->exposed && !dpad->dbin->shutdown && !dpad->chain->deadend
-      && dpad->chain->elements) {
+  if (!dpad->dbin->shutdown && !dpad->chain->deadend && dpad->chain->elements) {
     GstDecodeElement *delem = dpad->chain->elements->data;
 
     ret = FALSE;
