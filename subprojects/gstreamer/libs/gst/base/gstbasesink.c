@@ -5736,7 +5736,12 @@ gst_base_sink_change_state (GstElement * element, GstStateChange transition)
       GST_BASE_SINK_PREROLL_UNLOCK (basesink);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+      if (bclass->unlock)
+        bclass->unlock (basesink);
       GST_BASE_SINK_PREROLL_LOCK (basesink);
+      if (bclass->unlock_stop)
+        bclass->unlock_stop (basesink);
+
       g_atomic_int_set (&basesink->priv->to_playing, TRUE);
       if (!gst_base_sink_needs_preroll (basesink)) {
         GST_DEBUG_OBJECT (basesink, "PAUSED to PLAYING, don't need preroll");
