@@ -58,6 +58,13 @@ GST_DEBUG_CATEGORY_EXTERN (v4l2_debug);
 #define GST_V4L2_DEFAULT_WIDTH          320
 #define GST_V4L2_DEFAULT_HEIGHT         240
 
+#define SIZE_OF_1280x720                (1280 * 720)
+#define SIZE_OF_1920x1080               (1920 * 1080)
+#define SIZE_OF_3840x2160               (3840 * 2160)
+#define BITRATE_OF_1280x720             (5 * 1024 * 1024)
+#define BITRATE_OF_1920x1080            (8 * 1024 * 1024)
+#define BITRATE_OF_3840x2160            (12 * 1024 * 1024)
+
 enum
 {
   PROP_0,
@@ -633,6 +640,8 @@ gst_v4l2_object_new (GstElement * element,
 
   v4l2object->poll = gst_poll_new (TRUE);
   v4l2object->can_poll_device = TRUE;
+
+  v4l2object->set_bitrate = FALSE;
 
   /* We now disable libv4l2 by default, but have an env to enable it. */
 #ifdef HAVE_LIBV4L2
@@ -3915,6 +3924,27 @@ calculate_max_sizeimage (GstV4l2Object * v4l2object, guint pixel_bitdepth)
   return MAX (ENCODED_BUFFER_MIN_SIZE, sizeimage);
 }
 
+static void
+gst_v4l2_object_set_bitrate (GstV4l2Object * v4l2object, gint width,
+    gint height)
+{
+  gint size = width * height;
+  guint id = V4L2_CID_MPEG_VIDEO_BITRATE;
+  gint bitrate = 0;
+
+  if (size >= SIZE_OF_1280x720 && size < SIZE_OF_1920x1080)
+    bitrate = BITRATE_OF_1280x720;
+  else if (size >= SIZE_OF_1920x1080 && size < SIZE_OF_3840x2160)
+    bitrate = BITRATE_OF_1920x1080;
+  else if (size >= SIZE_OF_3840x2160)
+    bitrate = BITRATE_OF_3840x2160;
+
+  if (bitrate) {
+    gst_v4l2_set_attribute (v4l2object, id, bitrate);
+    GST_INFO_OBJECT (v4l2object->dbg_obj, "Set default bitrate to %d", bitrate);
+  }
+}
+
 static gboolean
 gst_v4l2_object_set_format_full (GstV4l2Object * v4l2object, GstCaps * caps,
     gboolean try_only, GstV4l2Error * error)
@@ -3967,6 +3997,13 @@ gst_v4l2_object_set_format_full (GstV4l2Object * v4l2object, GstCaps * caps,
   }
   fps_n = GST_VIDEO_INFO_FPS_N (&info.vinfo);
   fps_d = GST_VIDEO_INFO_FPS_D (&info.vinfo);
+
+  /* Set various bitrates for different resolutions when encoding if
+   * video_bitrate is not set in extra-controls */
+  if (!v4l2object->set_bitrate && V4L2_TYPE_IS_OUTPUT (v4l2object->type) &&
+      GST_VIDEO_INFO_FORMAT (&info.vinfo) > GST_VIDEO_FORMAT_ENCODED) {
+    gst_v4l2_object_set_bitrate (v4l2object, width, height);
+  }
 
   n_v4l_planes = GST_VIDEO_INFO_N_PLANES (&info.vinfo);
   if (!n_v4l_planes) {
