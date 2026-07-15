@@ -4527,6 +4527,13 @@ gst_video_decoder_negotiate_pool (GstVideoDecoder * decoder, GstCaps * caps)
 
   if (!gst_pad_peer_query (decoder->srcpad, query)) {
     GST_DEBUG_OBJECT (decoder, "didn't get downstream ALLOCATION hints");
+
+    /* The src pad may not have been exposed by decodebin yet.  In that case
+     * there is no downstream element that can advertise allocation metadata,
+     * but the fallback pool created below still needs to describe padded or
+     * non-linear video layouts correctly.  A later reconfigure will replace
+     * these defaults once the pad is linked. */
+    gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
   }
 
   g_assert (klass->decide_allocation != NULL);

@@ -1061,6 +1061,7 @@ gst_tflite_inference_process (GstBaseTransform * trans, GstBuffer * buf)
   if (!gst_video_frame_map (&frame, &priv->video_info, buf, GST_MAP_READ))
     return FALSE;
 
+#ifdef TFLITE_HAS_CUSTOM_ALLOCATION
   if (priv->in_place) {
     if (gst_buffer_n_memory (buf) == 1 &&
         gst_buffer_get_size (buf) == GST_VIDEO_FRAME_SIZE (&frame) &&
@@ -1102,6 +1103,7 @@ gst_tflite_inference_process (GstBaseTransform * trans, GstBuffer * buf)
           GST_VIDEO_FRAME_PLANE_DATA (&frame, 0), TFLITE_DEFAULT_ALIGNMENT + 1);
     }
   }
+#endif
 
   {
 

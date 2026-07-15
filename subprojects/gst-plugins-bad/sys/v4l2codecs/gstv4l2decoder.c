@@ -407,6 +407,61 @@ gst_v4l2_decoder_set_sink_fmt (GstV4l2Decoder * self, guint32 pix_fmt,
   return TRUE;
 }
 
+GstCaps *
+gst_v4l2_decoder_enum_sink_framesizes (GstV4l2Decoder * self,
+    guint32 pixelformat, const gchar * media_type)
+{
+  GstCaps *caps = gst_caps_new_empty ();
+  guint index;
+
+  g_return_val_if_fail (self->opened, caps);
+  g_return_val_if_fail (media_type != NULL, caps);
+
+  for (index = 0;; index++) {
+    struct v4l2_frmsizeenum size = {
+      .index = index,
+      .pixel_format = pixelformat,
+    };
+    GstStructure *structure;
+
+    if (ioctl (self->video_fd, VIDIOC_ENUM_FRAMESIZES, &size) < 0)
+      break;
+
+    structure = gst_structure_new_empty (media_type);
+
+    switch (size.type) {
+      case V4L2_FRMSIZE_TYPE_DISCRETE:
+        gst_structure_set (structure,
+            "width", G_TYPE_INT, size.discrete.width,
+            "height", G_TYPE_INT, size.discrete.height, NULL);
+        break;
+      case V4L2_FRMSIZE_TYPE_CONTINUOUS:
+      case V4L2_FRMSIZE_TYPE_STEPWISE:
+        gst_structure_set (structure,
+            "width", GST_TYPE_INT_RANGE,
+            size.stepwise.min_width, size.stepwise.max_width,
+            "height", GST_TYPE_INT_RANGE,
+            size.stepwise.min_height, size.stepwise.max_height, NULL);
+        break;
+      default:
+        gst_structure_free (structure);
+        continue;
+    }
+
+    gst_caps_append_structure (caps, structure);
+
+    /* Continuous and stepwise descriptors fully describe the range. */
+    if (size.type != V4L2_FRMSIZE_TYPE_DISCRETE)
+      break;
+  }
+
+  GST_DEBUG_OBJECT (self, "Sink frame size caps for %"
+      GST_FOURCC_FORMAT ": %" GST_PTR_FORMAT,
+      GST_FOURCC_ARGS (pixelformat), caps);
+
+  return caps;
+}
+
 static GstCaps *
 gst_v4l2_decoder_enum_size_for_format (GstV4l2Decoder * self,
     guint32 pixelformat, gint index, gint unscaled_width, gint unscaled_height)
@@ -958,9 +1013,17 @@ gst_v4l2_decoder_queue_src_buffer (GstV4l2Decoder * self, GstBuffer * buffer)
   GST_TRACE_OBJECT (self, "Queuing picture buffer %i", buf.index);
 
   if (self->mplane) {
-    buf.length = gst_buffer_n_memory (buffer);
+    guint n_memories = gst_buffer_n_memory (buffer);
+
+    if (n_memories > GST_VIDEO_MAX_PLANES) {
+      GST_ERROR_OBJECT (self, "Buffer has %u planes, but V4L2 supports at "
+          "most %u", n_memories, GST_VIDEO_MAX_PLANES);
+      return FALSE;
+    }
+
+    buf.length = n_memories;
     buf.m.planes = planes;
-    for (i = 0; i < buf.length; i++) {
+    for (i = 0; i < n_memories; i++) {
       GstMemory *mem = gst_buffer_peek_memory (buffer, i);
       /* *INDENT-OFF* */
       planes[i] = (struct v4l2_plane) {

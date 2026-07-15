@@ -226,6 +226,14 @@ _gst_gl_upload_element_propose_allocation (GstBaseTransform * bt,
   GstGLContext *context;
   gboolean ret;
 
+  /* DMA_DRM buffers require GstVideoMeta to describe their actual plane
+   * layout.  The GL context can be created asynchronously by sinks such as
+   * gtkglsink, so advertise VideoMeta even if the upload implementation is
+   * not ready yet.  Otherwise a stateless V4L2 decoder can negotiate
+   * DMA_DRM caps and then correctly reject this allocation query. */
+  if (!gst_query_find_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL))
+    gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
+
   GST_OBJECT_LOCK (upload);
   if (!upload->upload) {
     GST_OBJECT_UNLOCK (upload);

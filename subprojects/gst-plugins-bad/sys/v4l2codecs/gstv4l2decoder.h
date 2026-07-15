@@ -66,6 +66,10 @@ gboolean          gst_v4l2_decoder_set_sink_fmt (GstV4l2Decoder * self, guint32 
                                                  gint width, gint height,
                                                  gint pixel_bitdepth);
 
+GstCaps *         gst_v4l2_decoder_enum_sink_framesizes (GstV4l2Decoder * self,
+                                                         guint32 pixelformat,
+                                                         const gchar * media_type);
+
 GstCaps *         gst_v4l2_decoder_enum_src_formats (GstV4l2Decoder * self,
                                                      GstStaticCaps * static_filter);
 

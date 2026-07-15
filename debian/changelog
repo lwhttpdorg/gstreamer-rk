@@ -1,0 +1,6 @@
+gstreamer-rk (1.29.2-1) experimental; urgency=medium
+
+  * Build the GStreamer 1.29.2 monorepo for RK3588.
+  * Enable stateless V4L2 codecs and the tested desktop playback stack.
+
+ -- Sandro <sandro@localhost>  Wed, 15 Jul 2026 22:00:00 +0800

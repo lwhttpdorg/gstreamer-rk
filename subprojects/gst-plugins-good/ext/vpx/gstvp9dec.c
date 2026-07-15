@@ -77,7 +77,10 @@ GST_STATIC_PAD_TEMPLATE ("sink",
 
 #define parent_class gst_vp9_dec_parent_class
 G_DEFINE_TYPE (GstVP9Dec, gst_vp9_dec, GST_TYPE_VPX_DEC);
-GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (vp9dec, "vp9dec", GST_RANK_PRIMARY,
+/* RK3588 currently has no V4L2 stateless VP9 decoder exposed by the kernel.
+ * FFmpeg's software decoder performs better than libvpx on this platform, so
+ * retain vp9dec for explicit use while preferring avdec_vp9 for autoplugging. */
+GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (vp9dec, "vp9dec", GST_RANK_MARGINAL - 1,
     gst_vp9_dec_get_type (), vpx_element_init (plugin));
 
 static GstCaps *

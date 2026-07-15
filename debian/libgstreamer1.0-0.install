@@ -1,0 +1,8 @@
+usr/lib/*/gstreamer-1.0/libgstcoreelements.so
+usr/lib/*/gstreamer-1.0/libgstcoretracers.so
+usr/lib/*/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner
+usr/lib/*/libgstbase-1.0.so.*
+usr/lib/*/libgstcheck-1.0.so.*
+usr/lib/*/libgstcontroller-1.0.so.*
+usr/lib/*/libgstnet-1.0.so.*
+usr/lib/*/libgstreamer-1.0.so.*

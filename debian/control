@@ -1,0 +1,213 @@
+Source: gstreamer-rk
+Section: libs
+Priority: optional
+Maintainer: Sandro <sandro@localhost>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 1.4),
+ ninja-build,
+ pkg-config,
+ python3:any,
+ flex,
+ bison,
+ gettext,
+ libglib2.0-dev,
+ liborc-0.4-dev,
+ libdrm-dev,
+ libudev-dev,
+ libgudev-1.0-dev,
+ libgtk-3-dev,
+ libpulse-dev,
+ libasound2-dev,
+ libx11-dev,
+ libx11-xcb-dev,
+ libxext-dev,
+ libxfixes-dev,
+ libxdamage-dev,
+ libxv-dev,
+ libegl-dev,
+ libgl-dev,
+ libgles-dev,
+ libgbm-dev,
+ libwayland-dev,
+ libpango1.0-dev,
+ libv4l-dev,
+ libvpx-dev,
+ libogg-dev,
+ libopus-dev,
+ libtheora-dev,
+ libvorbis-dev,
+ libavcodec-dev,
+ libavfilter-dev,
+ libavformat-dev,
+ libavutil-dev,
+ libswresample-dev,
+ libswscale-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://gstreamer.freedesktop.org/
+
+Package: libgstreamer1.0-0
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Core GStreamer libraries and elements with RK3588 integration
+ GStreamer core runtime libraries, helpers and core elements built from the
+ gstreamer-rk monorepo.
+
+Package: libgstreamer1.0-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends:
+ libgstreamer1.0-0 (= ${binary:Version}),
+ libc6-dev | libc-dev,
+ pkgconf,
+ libglib2.0-dev,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: GStreamer core development files
+ Development headers, linker files and pkg-config metadata for the GStreamer
+ core libraries.
+
+Package: gstreamer1.0-tools
+Section: utils
+Architecture: any
+Depends: libgstreamer1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Tools for use with GStreamer
+ Command-line tools including gst-inspect-1.0 and gst-launch-1.0.
+
+Package: libgstreamer-plugins-base1.0-0
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer base plugin libraries
+ Runtime libraries shared by the GStreamer base plugins.
+
+Package: libgstreamer-plugins-base1.0-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends:
+ libgstreamer-plugins-base1.0-0 (= ${binary:Version}),
+ libgstreamer-gl1.0-0 (= ${binary:Version}),
+ libgstreamer1.0-dev (= ${binary:Version}),
+ libc6-dev | libc-dev,
+ pkgconf,
+ libglib2.0-dev,
+ liborc-0.4-dev,
+ libgl-dev,
+ libegl-dev,
+ libgles-dev,
+ libx11-xcb-dev,
+ libwayland-dev [linux-any],
+ libdrm-dev [linux-any],
+ libgbm-dev [linux-any],
+ libgudev-1.0-dev [linux-any],
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: GStreamer base plugin development files
+ Development headers, linker files and pkg-config metadata for libraries from
+ the GStreamer base plugin set, including its OpenGL integration library.
+
+Package: libgstreamer-gl1.0-0
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer OpenGL libraries
+ OpenGL integration runtime libraries used by GStreamer video sinks.
+
+Package: gstreamer1.0-plugins-base
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer plugins from the base set
+ Essential playback, conversion, typefinding and transport plugins.
+
+Package: gstreamer1.0-plugins-base-apps
+Section: utils
+Architecture: any
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer base helper programs
+ Helper programs such as gst-play-1.0 and gst-discoverer-1.0.
+
+Package: gstreamer1.0-gl
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-gl1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer OpenGL plugin
+ OpenGL upload, conversion, mixer and sink elements.
+
+Package: gstreamer1.0-x
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer X11 and Pango plugins
+ X11 video sinks and Pango text rendering elements.
+
+Package: gstreamer1.0-alsa
+Architecture: linux-any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer ALSA plugin
+ ALSA audio source and sink elements.
+
+Package: gstreamer1.0-plugins-good
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer plugins from the good set with RK3588 support
+ Includes the V4L2, MP4, Matroska, VP8/VP9 and desktop playback plugins.
+
+Package: gstreamer1.0-gtk3
+Architecture: any
+Multi-Arch: same
+Depends: gstreamer1.0-gl (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer GTK 3 sink plugin
+ GTK 3 and GL based video sink elements used by desktop players.
+
+Package: libgstreamer-plugins-bad1.0-0
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer bad plugin libraries with RK3588 integration
+ Runtime codec, parser and playback libraries from gst-plugins-bad.
+
+Package: libgstreamer-plugins-bad1.0-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends:
+ libgstreamer-plugins-bad1.0-0 (= ${binary:Version}),
+ libgstreamer-plugins-base1.0-dev (= ${binary:Version}),
+ libgstreamer1.0-dev (= ${binary:Version}),
+ libc6-dev | libc-dev,
+ pkgconf,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: GStreamer bad plugin development files with RK3588 integration
+ Development headers, linker files and pkg-config metadata for the public
+ libraries from the GStreamer bad plugin set.
+
+Package: gstreamer1.0-plugins-bad
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-bad1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer bad plugins with RK3588 V4L2 codecs
+ Includes stateless V4L2 codecs and video parsers used by RK3588 hardware
+ decoders.
+
+Package: gstreamer1.0-plugins-bad-apps
+Section: utils
+Architecture: any
+Depends: libgstreamer-plugins-bad1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: GStreamer bad plugin helper programs
+ Command-line helper programs from gst-plugins-bad.
+
+Package: gstreamer1.0-libav
+Architecture: any
+Multi-Arch: same
+Depends: libgstreamer-plugins-base1.0-0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: FFmpeg plugin for GStreamer
+ FFmpeg based decoders used as the optimized software fallback for 4K VP8 and
+ VP9 streams that are not supported by the exposed RK3588 V4L2 hardware.

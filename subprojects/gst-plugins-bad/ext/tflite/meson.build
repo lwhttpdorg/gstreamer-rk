@@ -64,6 +64,12 @@ if tensorflow_lite_dep.found() and tensorflow_lite_header_found
     tflite_c_args += ['-DTFLITE_HAS_BFLOAT16']
   endif
 
+  if cc.has_function('TfLiteInterpreterSetCustomAllocationForTensor',
+                     prefix: '#include <tensorflow/lite/c/c_api.h>',
+                     dependencies: tensorflow_lite_dep)
+    tflite_c_args += ['-DTFLITE_HAS_CUSTOM_ALLOCATION']
+  endif
+
   edgetpu_dep = cc.find_library('edgetpu',
 				required : get_option('tflite-edgetpu'))
 
@@ -94,7 +100,8 @@ if tensorflow_lite_dep.found() and tensorflow_lite_header_found
     c_args : gst_plugins_bad_args + tflite_c_args,
     include_directories : [configinc, libsinc],
     dependencies : [gstbase_dep, gstvideo_dep, gstanalytics_dep,
-                    tensorflow_lite_dep,libm, gio_dep, tflite_extra_dep],
+                    tensorflow_lite_dep, libm, gio_dep, gmodule_dep,
+                    tflite_extra_dep],
     install : true,
     install_dir : plugins_install_dir,
   )
