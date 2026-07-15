@@ -1,0 +1,11 @@
+usr/lib/*/gstreamer-1.0/libgstaudiofx.so
+usr/lib/*/gstreamer-1.0/libgstautodetect.so
+usr/lib/*/gstreamer-1.0/libgstdeinterlace.so
+usr/lib/*/gstreamer-1.0/libgstisomp4.so
+usr/lib/*/gstreamer-1.0/libgstmatroska.so
+usr/lib/*/gstreamer-1.0/libgstpulseaudio.so
+usr/lib/*/gstreamer-1.0/libgstvideo4linux2.so
+usr/lib/*/gstreamer-1.0/libgstvideofilter.so
+usr/lib/*/gstreamer-1.0/libgstvpx.so
+usr/share/gstreamer-1.0/presets/GstQTMux.prs
+usr/share/gstreamer-1.0/presets/GstVP8Enc.prs

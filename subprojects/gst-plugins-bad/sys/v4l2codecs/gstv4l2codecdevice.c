@@ -50,6 +50,7 @@ gst_v4l2_codec_device_free (GstV4l2CodecDevice * device)
   g_free (device->name);
   g_free (device->media_device_path);
   g_free (device->video_device_path);
+  gst_clear_caps (&device->vp8_sink_caps);
   g_free (device);
 }
 
@@ -336,8 +337,12 @@ gst_v4l2_codec_find_devices (void)
     gboolean ret;
 
     fd = open (path, 0);
-    if (fd < 0)
+    if (fd < 0) {
+      GST_WARNING ("Failed to open media device '%s': %s. Check access to "
+          "/dev/media* and membership in the video group.", path,
+          g_strerror (errno));
       continue;
+    }
 
     GST_DEBUG ("Analysing media device '%s'", path);
 
@@ -381,7 +386,7 @@ gst_v4l2_codec_find_devices (void)
       GST_DEBUG ("Found source and sink V4L IO entities");
 
       source_dev = find_video_devnode (&topology, source_entity);
-      sink_dev = find_video_devnode (&topology, source_entity);
+      sink_dev = find_video_devnode (&topology, sink_entity);
 
       if (!source_dev || !sink_dev)
         continue;

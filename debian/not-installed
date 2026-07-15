@@ -1,0 +1,3 @@
+# Internal documentation scanners are not needed by runtime packages
+usr/lib/*/gstreamer1.0/gstreamer-1.0/gst-hotdoc-plugins-scanner
+usr/lib/*/gstreamer1.0/gstreamer-1.0/gst-plugins-doc-cache-generator

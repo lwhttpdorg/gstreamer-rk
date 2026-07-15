@@ -78,7 +78,10 @@ GST_STATIC_PAD_TEMPLATE ("src",
 
 #define parent_class gst_vp8_dec_parent_class
 G_DEFINE_TYPE (GstVP8Dec, gst_vp8_dec, GST_TYPE_VPX_DEC);
-GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (vp8dec, "vp8dec", GST_RANK_PRIMARY,
+/* On RK3588, FFmpeg's VP8 decoder is substantially faster than libvpx for
+ * streams that exceed the 1080p limit of the Hantro hardware decoder.  Keep
+ * vp8dec available for explicit pipelines, but let avdec_vp8 win autoplugging. */
+GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (vp8dec, "vp8dec", GST_RANK_MARGINAL - 1,
     gst_vp8_dec_get_type (), vpx_element_init (plugin));
 
 static void

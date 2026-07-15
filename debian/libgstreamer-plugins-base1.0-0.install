@@ -1,0 +1,12 @@
+usr/lib/*/libgstallocators-1.0.so.*
+usr/lib/*/libgstapp-1.0.so.*
+usr/lib/*/libgstaudio-1.0.so.*
+usr/lib/*/libgstfft-1.0.so.*
+usr/lib/*/libgstpbutils-1.0.so.*
+usr/lib/*/libgstriff-1.0.so.*
+usr/lib/*/libgstrtp-1.0.so.*
+usr/lib/*/libgstrtsp-1.0.so.*
+usr/lib/*/libgstsdp-1.0.so.*
+usr/lib/*/libgsttag-1.0.so.*
+usr/lib/*/libgstvideo-1.0.so.*
+usr/share/gst-plugins-base/1.0/license-translations.dict

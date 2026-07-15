@@ -1,0 +1,12 @@
+usr/bin/gst-inspect-1.0
+usr/bin/gst-launch-1.0
+usr/bin/gst-stats-1.0
+usr/bin/gst-typefind-1.0
+usr/lib/*/gstreamer1.0/gstreamer-1.0/gst-completion-helper
+usr/share/bash-completion/completions/gst-inspect-1.0
+usr/share/bash-completion/completions/gst-launch-1.0
+usr/share/bash-completion/helpers/gst
+usr/share/man/man1/gst-inspect-1.0.1
+usr/share/man/man1/gst-launch-1.0.1
+usr/share/man/man1/gst-stats-1.0.1
+usr/share/man/man1/gst-typefind-1.0.1

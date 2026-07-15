@@ -1,0 +1,97 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/default.mk
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,-O1 -Wl,-z,defs
+
+BUILDDIR = obj-$(DEB_HOST_GNU_TYPE)
+
+MESON_FLAGS = --wrap-mode=nodownload
+MESON_FLAGS += --libexecdir=lib/$(DEB_HOST_MULTIARCH)/gstreamer1.0
+MESON_FLAGS += -Dpackage-name=GStreamer-RK
+MESON_FLAGS += -Dpackage-origin=https://gstreamer.freedesktop.org/
+MESON_FLAGS += -Dauto_features=disabled
+MESON_FLAGS += -Dbase=enabled -Dgood=enabled -Dbad=enabled -Dlibav=enabled
+MESON_FLAGS += -Dugly=disabled -Ddevtools=disabled -Dges=disabled
+MESON_FLAGS += -Drtsp_server=disabled -Drs=disabled -Dgst-examples=disabled
+MESON_FLAGS += -Dpython=disabled -Dsharp=disabled -Dgtk=disabled
+MESON_FLAGS += -Dorc-source=system -Dbuild-tools-source=system
+MESON_FLAGS += -Dtools=enabled -Dtests=disabled -Dexamples=disabled
+MESON_FLAGS += -Dbenchmarks=disabled -Ddoc=disabled -Dgtk_doc=disabled
+MESON_FLAGS += -Dintrospection=disabled
+MESON_FLAGS += -Dgstreamer:check=enabled
+MESON_FLAGS += -Dgstreamer:coretracers=enabled
+MESON_FLAGS += -Dgstreamer:bash-completion=enabled
+MESON_FLAGS += -Dgst-plugins-base:gl=enabled
+MESON_FLAGS += -Dgst-plugins-base:x11=enabled
+MESON_FLAGS += -Dgst-plugins-base:alsa=enabled
+MESON_FLAGS += -Dgst-plugins-base:pango=enabled
+MESON_FLAGS += -Dgst-plugins-base:adder=enabled
+MESON_FLAGS += -Dgst-plugins-base:app=enabled
+MESON_FLAGS += -Dgst-plugins-base:audioconvert=enabled
+MESON_FLAGS += -Dgst-plugins-base:audiomixer=enabled
+MESON_FLAGS += -Dgst-plugins-base:audiorate=enabled
+MESON_FLAGS += -Dgst-plugins-base:audioresample=enabled
+MESON_FLAGS += -Dgst-plugins-base:audiotestsrc=enabled
+MESON_FLAGS += -Dgst-plugins-base:compositor=enabled
+MESON_FLAGS += -Dgst-plugins-base:debugutils=enabled
+MESON_FLAGS += -Dgst-plugins-base:drm=enabled
+MESON_FLAGS += -Dgst-plugins-base:dsd=enabled
+MESON_FLAGS += -Dgst-plugins-base:encoding=enabled
+MESON_FLAGS += -Dgst-plugins-base:gio=enabled
+MESON_FLAGS += -Dgst-plugins-base:gio-typefinder=enabled
+MESON_FLAGS += -Dgst-plugins-base:ogg=enabled
+MESON_FLAGS += -Dgst-plugins-base:opus=enabled
+MESON_FLAGS += -Dgst-plugins-base:overlaycomposition=enabled
+MESON_FLAGS += -Dgst-plugins-base:pbtypes=enabled
+MESON_FLAGS += -Dgst-plugins-base:playback=enabled
+MESON_FLAGS += -Dgst-plugins-base:rawparse=enabled
+MESON_FLAGS += -Dgst-plugins-base:subparse=enabled
+MESON_FLAGS += -Dgst-plugins-base:tcp=enabled
+MESON_FLAGS += -Dgst-plugins-base:theora=enabled
+MESON_FLAGS += -Dgst-plugins-base:typefind=enabled
+MESON_FLAGS += -Dgst-plugins-base:videoconvertscale=enabled
+MESON_FLAGS += -Dgst-plugins-base:videorate=enabled
+MESON_FLAGS += -Dgst-plugins-base:videotestsrc=enabled
+MESON_FLAGS += -Dgst-plugins-base:volume=enabled
+MESON_FLAGS += -Dgst-plugins-base:vorbis=enabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2=enabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2-probe=true
+MESON_FLAGS += -Dgst-plugins-good:v4l2-gudev=disabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2-libv4l2=disabled
+MESON_FLAGS += -Dgst-plugins-good:vpx=enabled
+MESON_FLAGS += -Dgst-plugins-good:audiofx=enabled
+MESON_FLAGS += -Dgst-plugins-good:autodetect=enabled
+MESON_FLAGS += -Dgst-plugins-good:deinterlace=enabled
+MESON_FLAGS += -Dgst-plugins-good:gtk3=enabled
+MESON_FLAGS += -Dgst-plugins-good:isomp4=enabled
+MESON_FLAGS += -Dgst-plugins-good:matroska=enabled
+MESON_FLAGS += -Dgst-plugins-good:pulse=enabled
+MESON_FLAGS += -Dgst-plugins-good:videofilter=enabled
+MESON_FLAGS += -Dgst-plugins-bad:v4l2codecs=enabled
+MESON_FLAGS += -Dgst-plugins-bad:videoparsers=enabled
+
+%:
+	dh $@ --buildsystem=meson --builddirectory=$(BUILDDIR)
+
+override_dh_auto_configure:
+	dh_auto_configure --builddirectory=$(BUILDDIR) -- $(MESON_FLAGS)
+
+override_dh_auto_test:
+	# Tests are intentionally disabled for the RK3588 runtime build.
+
+override_dh_missing:
+	dh_missing --fail-missing
+
+override_dh_makeshlibs:
+	dh_makeshlibs -plibgstreamer1.0-0 \
+		-X '/usr/lib/$(DEB_HOST_MULTIARCH)/gstreamer-1.0' \
+		-V 'libgstreamer1.0-0 (>= $(DEB_VERSION_UPSTREAM))'
+	dh_makeshlibs -plibgstreamer-plugins-base1.0-0 \
+		-V 'libgstreamer-plugins-base1.0-0 (>= $(DEB_VERSION_UPSTREAM))'
+	dh_makeshlibs -plibgstreamer-gl1.0-0 \
+		-V 'libgstreamer-gl1.0-0 (>= $(DEB_VERSION_UPSTREAM))'
+	dh_makeshlibs -plibgstreamer-plugins-bad1.0-0 \
+		-V 'libgstreamer-plugins-bad1.0-0 (>= $(DEB_VERSION_UPSTREAM))'
+	dh_makeshlibs --remaining-packages

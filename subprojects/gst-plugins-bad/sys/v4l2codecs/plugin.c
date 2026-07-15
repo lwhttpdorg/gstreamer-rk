@@ -119,6 +119,21 @@ register_video_decoder (GstPlugin * plugin, GstV4l2CodecDevice * device)
   g_object_unref (decoder);
 }
 
+static gint
+compare_decoder_priority (gconstpointer a, gconstpointer b)
+{
+  const GstV4l2CodecDevice *device_a = a;
+  const GstV4l2CodecDevice *device_b = b;
+  gboolean a_is_rkvdec = device_a->name && g_strrstr (device_a->name, "rkvdec");
+  gboolean b_is_rkvdec = device_b->name && g_strrstr (device_b->name, "rkvdec");
+
+  /* RK3588 also exposes the older Hantro decoder.  Prefer RKVDEC so that the
+   * stable, suffix-less H.264 element is backed by the high-resolution
+   * decoder instead of depending on the non-deterministic media-device order.
+   */
+  return b_is_rkvdec - a_is_rkvdec;
+}
+
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
@@ -135,6 +150,7 @@ plugin_init (GstPlugin * plugin)
       NULL, paths, names, GST_PLUGIN_DEPENDENCY_FLAG_FILE_NAME_IS_PREFIX);
 
   devices = gst_v4l2_codec_find_devices ();
+  devices = g_list_sort (devices, compare_decoder_priority);
   for (d = devices; d; d = g_list_next (d)) {
     GstV4l2CodecDevice *device = d->data;
 

@@ -294,6 +294,21 @@ gst_v4l2_codec_vp8_dec_negotiate (GstVideoDecoder * decoder)
   }
   gst_caps_unref (caps);
 
+  /* Some stateless VP8 drivers accept the coded size on the OUTPUT queue but
+   * clamp the CAPTURE queue to the maximum size supported by the hardware.
+   * Do not later reinterpret and copy that smaller buffer as a full-sized
+   * frame, since that would read beyond the mapped V4L2 buffer. */
+  if (GST_VIDEO_INFO_WIDTH (&self->vinfo_drm.vinfo) < self->width ||
+      GST_VIDEO_INFO_HEIGHT (&self->vinfo_drm.vinfo) < self->height) {
+    GST_ELEMENT_ERROR (self, CORE, NEGOTIATION,
+        ("VP8 stream resolution exceeds the decoder output size"),
+        ("Stream is %ux%u but the V4L2 driver provides at most %ux%u",
+            self->width, self->height,
+            GST_VIDEO_INFO_WIDTH (&self->vinfo_drm.vinfo),
+            GST_VIDEO_INFO_HEIGHT (&self->vinfo_drm.vinfo)));
+    return FALSE;
+  }
+
 done:
   if (self->output_state)
     gst_video_codec_state_unref (self->output_state);
@@ -973,7 +988,12 @@ gst_v4l2_codec_vp8_dec_class_init (GstV4l2CodecVp8DecClass * klass,
 
   parent_class = g_type_class_peek_parent (klass);
 
-  gst_element_class_add_static_pad_template (element_class, &sink_template);
+  if (device->vp8_sink_caps && !gst_caps_is_empty (device->vp8_sink_caps))
+    gst_element_class_add_pad_template (element_class,
+        gst_pad_template_new (GST_VIDEO_DECODER_SINK_NAME, GST_PAD_SINK,
+            GST_PAD_ALWAYS, device->vp8_sink_caps));
+  else
+    gst_element_class_add_static_pad_template (element_class, &sink_template);
   gst_element_class_add_pad_template (element_class,
       gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS,
           device->src_caps));
@@ -1050,6 +1070,10 @@ gst_v4l2_codec_vp8_dec_register (GstPlugin * plugin, GstV4l2Decoder * decoder,
   if (!gst_v4l2_decoder_set_sink_fmt (decoder, V4L2_PIX_FMT_VP8_FRAME,
           320, 240, 8))
     return;
+
+  gst_clear_caps (&device->vp8_sink_caps);
+  device->vp8_sink_caps = gst_v4l2_decoder_enum_sink_framesizes (decoder,
+      V4L2_PIX_FMT_VP8_FRAME, "video/x-vp8");
 
   /* Make sure that decoder support stateless VP8 */
   src_caps = gst_v4l2_decoder_enum_src_formats (decoder, &static_src_caps);
