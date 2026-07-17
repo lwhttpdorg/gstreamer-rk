@@ -39,16 +39,23 @@ GStreamer components:
 
 ```sh
 sudo apt install \
-  build-essential debhelper devscripts dpkg-dev gettext git v4l-utils \
-  meson ninja-build pkg-config python3 flex bison \
-  libglib2.0-dev liborc-0.4-dev libdrm-dev libudev-dev \
-  libgudev-1.0-dev libgtk-3-dev libpulse-dev libasound2-dev \
-  libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev \
-  libxdamage-dev libxv-dev libwayland-dev \
-  libegl-dev libgl-dev libgles-dev libgbm-dev libpango1.0-dev \
-  libv4l-dev libvpx-dev libogg-dev libopus-dev libtheora-dev \
-  libvorbis-dev libavcodec-dev libavfilter-dev libavformat-dev \
-  libavutil-dev libswresample-dev libswscale-dev
+  bash-completion bison build-essential cmake \
+  debhelper devscripts dpkg-dev flex \
+  gettext git gitlint libasound2-dev \
+  libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev \
+  libcairo2-dev libdrm-dev libegl-dev libgbm-dev \
+  libgdk-pixbuf-2.0-dev libgl-dev libgles-dev libglib2.0-dev \
+  libgmp-dev libgsl-dev libgtk-3-dev libgtk-4-dev \
+  libgudev-1.0-dev libjpeg-dev libnice-dev libogg-dev \
+  libopus-dev liborc-0.4-dev libpango1.0-dev libpng-dev \
+  libpulse-dev libsharp-dev libsoup-3.0-dev libssl-dev \
+  libswresample-dev libswscale-dev libtheora-dev libudev-dev \
+  libv4l-dev libvorbis-dev libvpx-dev libwayland-dev \
+  libwebp-dev libx11-dev libx11-xcb-dev libxdamage-dev \
+  libxext-dev libxfixes-dev libxml2-dev libxv-dev \
+  meson ninja-build pkg-config pre-commit \
+  python3 v4l-utils \
+  zlib1g-dev
 ```
 
 The authoritative dependency list is maintained in `debian/control`. Verify it
@@ -67,29 +74,26 @@ GObject introspection.
 
 ```sh
 meson setup builddir \
-  --prefix=/usr \
-  --buildtype=release \
-  -Dauto_features=disabled \
-  -Dbase=enabled \
-  -Dgood=enabled \
+  -Dauto_features=auto \
   -Dbad=enabled \
-  -Dlibav=enabled \
-  -Dugly=disabled \
-  -Dgst-plugins-base:gl=enabled \
-  -Dgst-plugins-base:x11=enabled \
+  -Dbase=enabled \
+  -Dbenchmarks=disabled \
+  --buildtype=release \
+  -Ddoc=disabled \
+  -Dexamples=disabled \
+  -Dgood=enabled \
+  -Dgst-plugins-bad:v4l2codecs=enabled \
+  -Dgst-plugins-bad:videoparsers=enabled \
   -Dgst-plugins-base:alsa=enabled \
-  -Dgst-plugins-base:pango=enabled \
   -Dgst-plugins-base:app=enabled \
   -Dgst-plugins-base:audioconvert=enabled \
   -Dgst-plugins-base:audioresample=enabled \
+  -Dgst-plugins-base:gl=enabled \
+  -Dgst-plugins-base:pango=enabled \
   -Dgst-plugins-base:playback=enabled \
   -Dgst-plugins-base:typefind=enabled \
   -Dgst-plugins-base:videoconvertscale=enabled \
-  -Dgst-plugins-good:v4l2=enabled \
-  -Dgst-plugins-good:v4l2-probe=true \
-  -Dgst-plugins-good:v4l2-gudev=disabled \
-  -Dgst-plugins-good:v4l2-libv4l2=disabled \
-  -Dgst-plugins-good:vpx=enabled \
+  -Dgst-plugins-base:x11=enabled \
   -Dgst-plugins-good:audiofx=enabled \
   -Dgst-plugins-good:autodetect=enabled \
   -Dgst-plugins-good:deinterlace=enabled \
@@ -97,17 +101,20 @@ meson setup builddir \
   -Dgst-plugins-good:isomp4=enabled \
   -Dgst-plugins-good:matroska=enabled \
   -Dgst-plugins-good:pulse=enabled \
+  -Dgst-plugins-good:v4l2=enabled \
+  -Dgst-plugins-good:v4l2-gudev=disabled \
+  -Dgst-plugins-good:v4l2-libv4l2=disabled \
+  -Dgst-plugins-good:v4l2-probe=true \
   -Dgst-plugins-good:videofilter=enabled \
-  -Dgst-plugins-bad:v4l2codecs=enabled \
-  -Dgst-plugins-bad:videoparsers=enabled \
+  -Dgst-plugins-good:vpx=enabled \
   -Dgstreamer:check=enabled \
-  -Dtools=enabled \
-  -Dtests=disabled \
-  -Dexamples=disabled \
-  -Dbenchmarks=disabled \
-  -Ddoc=disabled \
   -Dgtk_doc=disabled \
-  -Dintrospection=disabled
+  -Dintrospection=disabled \
+  -Dlibav=enabled \
+  --prefix=/usr \
+  -Dtests=disabled \
+  -Dtools=enabled \
+  -Dugly=disabled
 ```
 
 Compile the tree:
@@ -166,7 +173,7 @@ dpkg-checkbuilddeps
 ```
 
 ```sh
-DEB_BUILD_OPTIONS="parallel=$(nproc)" dpkg-buildpackage -b -uc -us
+DEB_BUILD_OPTIONS="parallel=$(nproc) noddebs" dpkg-buildpackage -b -uc -us
 ```
 
 Clean the Debian build tree and all debhelper-generated package directories:

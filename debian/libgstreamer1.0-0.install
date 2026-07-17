@@ -6,3 +6,4 @@ usr/lib/*/libgstcheck-1.0.so.*
 usr/lib/*/libgstcontroller-1.0.so.*
 usr/lib/*/libgstnet-1.0.so.*
 usr/lib/*/libgstreamer-1.0.so.*
+usr/share/locale/*/LC_MESSAGES/gstreamer-1.0.mo
