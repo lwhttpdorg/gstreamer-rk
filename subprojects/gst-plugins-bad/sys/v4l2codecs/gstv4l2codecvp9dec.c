@@ -678,7 +678,9 @@ gst_v4l2_codec_vp9_dec_decide_allocation (GstVideoDecoder * decoder,
   }
 
   self->src_pool =
-      gst_v4l2_codec_pool_new (self->src_allocator, &self->vinfo_drm);
+      gst_v4l2_codec_pool_new (self->src_allocator, &self->vinfo_drm,
+      GST_VIDEO_INFO_WIDTH (&self->output_state->info),
+      GST_VIDEO_INFO_HEIGHT (&self->output_state->info));
 
   /* Our buffer pool is internal, we will let the base class create a video
    * pool, and use it if we are running out of buffers or if downstream does
