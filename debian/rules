@@ -7,27 +7,22 @@ export DEB_LDFLAGS_MAINT_APPEND = -Wl,-O1 -Wl,-z,defs
 
 BUILDDIR = obj-$(DEB_HOST_GNU_TYPE)
 
-MESON_FLAGS = --wrap-mode=nodownload
-MESON_FLAGS += --libexecdir=lib/$(DEB_HOST_MULTIARCH)/gstreamer1.0
-MESON_FLAGS += -Dpackage-name=GStreamer-RK
-MESON_FLAGS += -Dpackage-origin=https://gstreamer.freedesktop.org/
-MESON_FLAGS += -Dauto_features=disabled
-MESON_FLAGS += -Dbase=enabled -Dgood=enabled -Dbad=enabled -Dlibav=enabled
-MESON_FLAGS += -Dugly=disabled -Ddevtools=disabled -Dges=disabled
-MESON_FLAGS += -Drtsp_server=disabled -Drs=disabled -Dgst-examples=disabled
-MESON_FLAGS += -Dpython=disabled -Dsharp=disabled -Dgtk=disabled
-MESON_FLAGS += -Dorc-source=system -Dbuild-tools-source=system
-MESON_FLAGS += -Dtools=enabled -Dtests=disabled -Dexamples=disabled
-MESON_FLAGS += -Dbenchmarks=disabled -Ddoc=disabled -Dgtk_doc=disabled
-MESON_FLAGS += -Dintrospection=disabled
-MESON_FLAGS += -Dgstreamer:check=enabled
-MESON_FLAGS += -Dgstreamer:coretracers=enabled
-MESON_FLAGS += -Dgstreamer:bash-completion=enabled
-MESON_FLAGS += -Dgst-plugins-base:gl=enabled
-MESON_FLAGS += -Dgst-plugins-base:x11=enabled
-MESON_FLAGS += -Dgst-plugins-base:alsa=enabled
-MESON_FLAGS += -Dgst-plugins-base:pango=enabled
+MESON_FLAGS =
+MESON_FLAGS += -Dauto_features=auto
+MESON_FLAGS += -Dbad=enabled
+MESON_FLAGS += -Dbase=enabled
+MESON_FLAGS += -Dbenchmarks=disabled
+MESON_FLAGS += -Dbuild-tools-source=system
+MESON_FLAGS += -Ddevtools=disabled
+MESON_FLAGS += -Ddoc=disabled
+MESON_FLAGS += -Dexamples=disabled
+MESON_FLAGS += -Dges=disabled
+MESON_FLAGS += -Dgood=enabled
+MESON_FLAGS += -Dgst-examples=disabled
+MESON_FLAGS += -Dgst-plugins-bad:v4l2codecs=enabled
+MESON_FLAGS += -Dgst-plugins-bad:videoparsers=enabled
 MESON_FLAGS += -Dgst-plugins-base:adder=enabled
+MESON_FLAGS += -Dgst-plugins-base:alsa=enabled
 MESON_FLAGS += -Dgst-plugins-base:app=enabled
 MESON_FLAGS += -Dgst-plugins-base:audioconvert=enabled
 MESON_FLAGS += -Dgst-plugins-base:audiomixer=enabled
@@ -41,9 +36,11 @@ MESON_FLAGS += -Dgst-plugins-base:dsd=enabled
 MESON_FLAGS += -Dgst-plugins-base:encoding=enabled
 MESON_FLAGS += -Dgst-plugins-base:gio=enabled
 MESON_FLAGS += -Dgst-plugins-base:gio-typefinder=enabled
+MESON_FLAGS += -Dgst-plugins-base:gl=enabled
 MESON_FLAGS += -Dgst-plugins-base:ogg=enabled
 MESON_FLAGS += -Dgst-plugins-base:opus=enabled
 MESON_FLAGS += -Dgst-plugins-base:overlaycomposition=enabled
+MESON_FLAGS += -Dgst-plugins-base:pango=enabled
 MESON_FLAGS += -Dgst-plugins-base:pbtypes=enabled
 MESON_FLAGS += -Dgst-plugins-base:playback=enabled
 MESON_FLAGS += -Dgst-plugins-base:rawparse=enabled
@@ -56,11 +53,7 @@ MESON_FLAGS += -Dgst-plugins-base:videorate=enabled
 MESON_FLAGS += -Dgst-plugins-base:videotestsrc=enabled
 MESON_FLAGS += -Dgst-plugins-base:volume=enabled
 MESON_FLAGS += -Dgst-plugins-base:vorbis=enabled
-MESON_FLAGS += -Dgst-plugins-good:v4l2=enabled
-MESON_FLAGS += -Dgst-plugins-good:v4l2-probe=true
-MESON_FLAGS += -Dgst-plugins-good:v4l2-gudev=disabled
-MESON_FLAGS += -Dgst-plugins-good:v4l2-libv4l2=disabled
-MESON_FLAGS += -Dgst-plugins-good:vpx=enabled
+MESON_FLAGS += -Dgst-plugins-base:x11=enabled
 MESON_FLAGS += -Dgst-plugins-good:audiofx=enabled
 MESON_FLAGS += -Dgst-plugins-good:autodetect=enabled
 MESON_FLAGS += -Dgst-plugins-good:deinterlace=enabled
@@ -68,9 +61,28 @@ MESON_FLAGS += -Dgst-plugins-good:gtk3=enabled
 MESON_FLAGS += -Dgst-plugins-good:isomp4=enabled
 MESON_FLAGS += -Dgst-plugins-good:matroska=enabled
 MESON_FLAGS += -Dgst-plugins-good:pulse=enabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2=enabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2-gudev=disabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2-libv4l2=disabled
+MESON_FLAGS += -Dgst-plugins-good:v4l2-probe=true
 MESON_FLAGS += -Dgst-plugins-good:videofilter=enabled
-MESON_FLAGS += -Dgst-plugins-bad:v4l2codecs=enabled
-MESON_FLAGS += -Dgst-plugins-bad:videoparsers=enabled
+MESON_FLAGS += -Dgst-plugins-good:vpx=enabled
+MESON_FLAGS += -Dgstreamer:bash-completion=enabled
+MESON_FLAGS += -Dgstreamer:check=enabled
+MESON_FLAGS += -Dgstreamer:coretracers=enabled
+MESON_FLAGS += -Dgtk=disabled
+MESON_FLAGS += -Dgtk_doc=disabled
+MESON_FLAGS += -Dintrospection=disabled
+MESON_FLAGS += -Dlibav=enabled
+MESON_FLAGS += --libexecdir=lib/$(DEB_HOST_MULTIARCH)/gstreamer1.0
+MESON_FLAGS += -Dorc-source=system
+MESON_FLAGS += -Dpython=disabled
+MESON_FLAGS += -Drs=disabled
+MESON_FLAGS += -Drtsp_server=disabled
+MESON_FLAGS += -Dsharp=disabled
+MESON_FLAGS += -Dtests=disabled
+MESON_FLAGS += -Dtools=enabled
+MESON_FLAGS += -Dugly=disabled
 
 %:
 	dh $@ --buildsystem=meson --builddirectory=$(BUILDDIR)
