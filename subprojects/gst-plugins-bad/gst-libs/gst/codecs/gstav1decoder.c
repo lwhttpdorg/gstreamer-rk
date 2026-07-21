@@ -143,24 +143,34 @@ gst_av1_decoder_finalize (GObject * object)
 }
 
 static void
-gst_av1_decoder_reset (GstAV1Decoder * self)
+gst_av1_decoder_reset (GstAV1Decoder * self, gboolean preserve_sequence)
 {
   GstAV1DecoderPrivate *priv = self->priv;
+  GstAV1SequenceHeaderOBU *seq_header = NULL;
+  gboolean keep_sequence;
 
-  self->highest_spatial_layer = 0;
+  keep_sequence = preserve_sequence && priv->parser && priv->parser->seq_header;
+  if (keep_sequence)
+    seq_header = g_steal_pointer (&priv->parser->seq_header);
 
-  priv->max_width = 0;
-  priv->max_height = 0;
-  priv->frame_width = 0;
-  priv->frame_height = 0;
+  if (!keep_sequence) {
+    self->highest_spatial_layer = 0;
+    priv->max_width = 0;
+    priv->max_height = 0;
+    priv->frame_width = 0;
+    priv->frame_height = 0;
+    priv->profile = GST_AV1_PROFILE_UNDEFINED;
+  }
+
   gst_clear_av1_picture (&priv->current_picture);
   priv->current_frame = NULL;
-  priv->profile = GST_AV1_PROFILE_UNDEFINED;
 
   if (priv->dpb)
     gst_av1_dpb_clear (priv->dpb);
-  if (priv->parser)
+  if (priv->parser) {
     gst_av1_parser_reset (priv->parser, FALSE);
+    priv->parser->seq_header = seq_header;
+  }
 
   gst_vec_deque_clear (priv->output_queue);
 }
@@ -174,7 +184,7 @@ gst_av1_decoder_start (GstVideoDecoder * decoder)
   priv->parser = gst_av1_parser_new ();
   priv->dpb = gst_av1_dpb_new ();
 
-  gst_av1_decoder_reset (self);
+  gst_av1_decoder_reset (self, FALSE);
 
   return TRUE;
 }
@@ -185,7 +195,7 @@ gst_av1_decoder_stop (GstVideoDecoder * decoder)
   GstAV1Decoder *self = GST_AV1_DECODER (decoder);
   GstAV1DecoderPrivate *priv = self->priv;
 
-  gst_av1_decoder_reset (self);
+  gst_av1_decoder_reset (self, FALSE);
 
   g_clear_pointer (&self->input_state, gst_video_codec_state_unref);
   g_clear_pointer (&priv->parser, gst_av1_parser_free);
@@ -278,7 +288,7 @@ gst_av1_decoder_finish (GstVideoDecoder * decoder)
   GST_DEBUG_OBJECT (decoder, "finish");
 
   gst_av1_decoder_drain_output_queue (self, 0, &ret);
-  gst_av1_decoder_reset (self);
+  gst_av1_decoder_reset (self, FALSE);
 
   return ret;
 }
@@ -288,7 +298,9 @@ gst_av1_decoder_flush (GstVideoDecoder * decoder)
 {
   GST_DEBUG_OBJECT (decoder, "flush");
 
-  gst_av1_decoder_reset (GST_AV1_DECODER (decoder));
+  /* A flush invalidates all reference state, but not the coded sequence.
+   * Sequence headers are commonly only available before the seek target. */
+  gst_av1_decoder_reset (GST_AV1_DECODER (decoder), TRUE);
 
   return TRUE;
 }
@@ -302,7 +314,7 @@ gst_av1_decoder_drain (GstVideoDecoder * decoder)
   GST_DEBUG_OBJECT (decoder, "drain");
 
   gst_av1_decoder_drain_output_queue (self, 0, &ret);
-  gst_av1_decoder_reset (self);
+  gst_av1_decoder_reset (self, FALSE);
 
   return ret;
 }
@@ -715,6 +727,7 @@ gst_av1_decoder_handle_frame (GstVideoDecoder * decoder,
   guint32 total_consumed, consumed;
   GstAV1OBU obu;
   GstAV1ParserResult res;
+  guint32 frame_number = frame->system_frame_number;
 
   GST_LOG_OBJECT (self, "handle frame id %d, buf %" GST_PTR_FORMAT,
       frame->system_frame_number, in_buf);
@@ -834,7 +847,7 @@ out:
 
   if (ret == GST_FLOW_ERROR) {
     GST_VIDEO_DECODER_ERROR (decoder, 1, STREAM, DECODE,
-        ("Failed to handle the frame %d", frame->system_frame_number),
+        ("Failed to handle the frame %d", frame_number),
         NULL, ret);
   }
 

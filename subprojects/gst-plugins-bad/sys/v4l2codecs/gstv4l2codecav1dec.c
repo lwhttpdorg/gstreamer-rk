@@ -38,6 +38,8 @@
 #include "config.h"
 #endif
 
+#include <errno.h>
+
 #define GST_USE_UNSTABLE_API
 #include <gst/codecs/gstav1decoder.h>
 
@@ -131,6 +133,9 @@ struct _GstV4l2CodecAV1Dec
 
 static GstElementClass *parent_class = NULL;
 
+static void gst_v4l2_codec_av1_dec_set_flushing (GstV4l2CodecAV1Dec * self,
+    gboolean flushing);
+
 static GstFlowReturn
 gst_v4l2_codec_av1_dec_ensure_bitstream (GstV4l2CodecAV1Dec * self)
 {
@@ -140,6 +145,9 @@ gst_v4l2_codec_av1_dec_ensure_bitstream (GstV4l2CodecAV1Dec * self)
   self->bitstream = gst_v4l2_codec_allocator_alloc (self->sink_allocator);
 
   if (!self->bitstream) {
+    if (gst_v4l2_decoder_is_flushing (self->decoder))
+      return GST_FLOW_FLUSHING;
+
     GST_ELEMENT_ERROR (self, RESOURCE, NO_SPACE_LEFT,
         ("Not enough memory to decode AV1 stream."), (NULL));
     return GST_FLOW_ERROR;
@@ -248,18 +256,26 @@ static gboolean
 gst_v4l2_codec_av1_dec_close (GstVideoDecoder * decoder)
 {
   GstV4l2CodecAV1Dec *self = GST_V4L2_CODEC_AV1_DEC (decoder);
-  gst_v4l2_decoder_close (self->decoder);
-  return TRUE;
+  gboolean ret = gst_v4l2_decoder_close (self->decoder);
+
+  if (ret)
+    self->streaming = FALSE;
+
+  return ret;
 }
 
-static void
+static gboolean
 gst_v4l2_codec_av1_dec_streamoff (GstV4l2CodecAV1Dec * self)
 {
-  if (self->streaming) {
-    gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SINK);
-    gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SRC);
-    self->streaming = FALSE;
-  }
+  if (!gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SINK))
+    return FALSE;
+
+  if (!gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SRC))
+    return FALSE;
+
+  self->streaming = FALSE;
+  self->need_sequence = TRUE;
+  return TRUE;
 }
 
 static void
@@ -282,8 +298,8 @@ gst_v4l2_codec_av1_dec_stop (GstVideoDecoder * decoder)
 {
   GstV4l2CodecAV1Dec *self = GST_V4L2_CODEC_AV1_DEC (decoder);
 
-  gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SINK);
-  gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SRC);
+  if (!gst_v4l2_codec_av1_dec_streamoff (self))
+    return FALSE;
 
   gst_v4l2_codec_av1_dec_reset_allocation (self);
 
@@ -384,20 +400,29 @@ done:
       return TRUE;
 
     if (!gst_v4l2_decoder_streamon (self->decoder, GST_PAD_SINK)) {
+      gint saved_errno = errno;
+
+      gst_v4l2_codec_av1_dec_streamoff (self);
       GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
           ("Could not enable the decoder driver."),
-          ("VIDIOC_STREAMON(SINK) failed: %s", g_strerror (errno)));
+          ("VIDIOC_STREAMON(SINK) failed: %s", g_strerror (saved_errno)));
+      errno = saved_errno;
       return FALSE;
     }
 
     if (!gst_v4l2_decoder_streamon (self->decoder, GST_PAD_SRC)) {
+      gint saved_errno = errno;
+
+      gst_v4l2_codec_av1_dec_streamoff (self);
       GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
           ("Could not enable the decoder driver."),
-          ("VIDIOC_STREAMON(SRC) failed: %s", g_strerror (errno)));
+          ("VIDIOC_STREAMON(SRC) failed: %s", g_strerror (saved_errno)));
+      errno = saved_errno;
       return FALSE;
     }
 
     self->streaming = TRUE;
+    gst_v4l2_codec_av1_dec_set_flushing (self, FALSE);
 
     return TRUE;
   }
@@ -514,6 +539,8 @@ static void
 gst_v4l2_codec_av1_dec_set_flushing (GstV4l2CodecAV1Dec * self,
     gboolean flushing)
 {
+  gst_v4l2_decoder_set_flushing (self->decoder, flushing);
+
   if (self->sink_allocator)
     gst_v4l2_codec_allocator_set_flushing (self->sink_allocator, flushing);
   if (self->src_allocator)
@@ -524,13 +551,27 @@ static gboolean
 gst_v4l2_codec_av1_dec_flush (GstVideoDecoder * decoder)
 {
   GstV4l2CodecAV1Dec *self = GST_V4L2_CODEC_AV1_DEC (decoder);
+  gboolean v4l2_ret = TRUE;
+  gboolean parent_ret;
 
   GST_DEBUG_OBJECT (self, "Flushing decoder state.");
 
-  gst_v4l2_decoder_flush (self->decoder);
-  gst_v4l2_codec_av1_dec_set_flushing (self, FALSE);
+  if (self->streaming ||
+      gst_v4l2_decoder_has_active_queues (self->decoder)) {
+    v4l2_ret = gst_v4l2_decoder_flush (self->decoder);
+    if (v4l2_ret)
+      self->streaming = TRUE;
+    /* STREAMOFF invalidates the active hardware context.  Re-submit the
+     * retained sequence control with the first request after a seek. */
+    self->need_sequence = TRUE;
+  }
 
-  return GST_VIDEO_DECODER_CLASS (parent_class)->flush (decoder);
+  if (v4l2_ret)
+    gst_v4l2_codec_av1_dec_set_flushing (self, FALSE);
+
+  parent_ret = GST_VIDEO_DECODER_CLASS (parent_class)->flush (decoder);
+
+  return v4l2_ret && parent_ret;
 }
 
 static gboolean
@@ -1182,9 +1223,9 @@ gst_v4l2_codec_av1_dec_new_picture (GstAV1Decoder * decoder,
 
   if (self->need_negotiation) {
     /* Call streamoff only if the resolution change on keyframe */
-    if (frame_hdr->frame_type == GST_AV1_KEY_FRAME) {
-      gst_v4l2_codec_av1_dec_streamoff (self);
-    }
+    if (frame_hdr->frame_type == GST_AV1_KEY_FRAME &&
+        !gst_v4l2_codec_av1_dec_streamoff (self))
+      return GST_FLOW_ERROR;
 
     if (!gst_video_decoder_negotiate (GST_VIDEO_DECODER (self))) {
       GST_ERROR_OBJECT (self, "Failed to negotiate with downstream");
@@ -1302,6 +1343,8 @@ gst_v4l2_codec_av1_dec_end_picture (GstAV1Decoder * decoder,
   GstV4l2Request *request = NULL;
   GstBuffer *buffer;
   GstFlowReturn flow_ret;
+  gboolean submit_sequence = self->need_sequence;
+  gint result_errno = 0;
   guint count = 1;
   gsize bytesused;
 
@@ -1337,14 +1380,12 @@ gst_v4l2_codec_av1_dec_end_picture (GstAV1Decoder * decoder,
     };
   }
 
-  if (self->need_sequence) {
+  if (submit_sequence) {
     decode_params_control[count++] = (struct v4l2_ext_control) {
       .id = V4L2_CID_STATELESS_AV1_SEQUENCE,
       .ptr = &self->v4l2_sequence,
       .size = sizeof (self->v4l2_sequence),
     };
-
-    self->need_sequence = FALSE;
   }
 
 
@@ -1375,8 +1416,22 @@ gst_v4l2_codec_av1_dec_end_picture (GstAV1Decoder * decoder,
 
   frame = gst_video_decoder_get_frame (GST_VIDEO_DECODER (self),
       GST_CODEC_PICTURE_FRAME_NUMBER (picture));
-  g_return_val_if_fail (frame, FALSE);
-  g_warn_if_fail (frame->output_buffer == NULL);
+  if (!frame) {
+    GST_ERROR_OBJECT (self, "No codec frame found for picture %u",
+        GST_CODEC_PICTURE_FRAME_NUMBER (picture));
+    gst_buffer_unref (buffer);
+    flow_ret = GST_FLOW_ERROR;
+    goto fail;
+  }
+
+  if (frame->output_buffer) {
+    GST_ERROR_OBJECT (self, "Codec frame already has an output buffer");
+    gst_video_codec_frame_unref (frame);
+    gst_buffer_unref (buffer);
+    flow_ret = GST_FLOW_ERROR;
+    goto fail;
+  }
+
   frame->output_buffer = buffer;
   gst_video_codec_frame_unref (frame);
 
@@ -1396,11 +1451,23 @@ gst_v4l2_codec_av1_dec_end_picture (GstAV1Decoder * decoder,
     goto fail;
   }
 
+  errno = 0;
   if (!gst_v4l2_request_queue (request, 0)) {
+    result_errno = errno ? errno : EIO;
+
+    if (result_errno == EBUSY &&
+        gst_v4l2_decoder_is_flushing (self->decoder)) {
+      flow_ret = GST_FLOW_FLUSHING;
+      goto fail;
+    }
+
     GST_ELEMENT_ERROR (self, RESOURCE, WRITE,
         ("Driver did not accept the decode request."), (NULL));
     goto fail;
   }
+
+  if (submit_sequence)
+    self->need_sequence = FALSE;
 
   gst_av1_picture_set_user_data (picture, request,
       (GDestroyNotify) gst_v4l2_request_unref);
@@ -1413,6 +1480,9 @@ fail:
 
   gst_v4l2_codec_av1_dec_reset_picture (self);
 
+  if (result_errno)
+    errno = result_errno;
+
   if (flow_ret != GST_FLOW_OK)
     return flow_ret;
 
@@ -1423,10 +1493,12 @@ static gboolean
 gst_v4l2_codec_av1_dec_copy_output_buffer (GstV4l2CodecAV1Dec * self,
     GstVideoCodecFrame * codec_frame)
 {
-  GstVideoFrame src_frame;
-  GstVideoFrame dest_frame;
+  GstVideoFrame src_frame = { 0, };
+  GstVideoFrame dest_frame = { 0, };
   GstVideoInfo dest_vinfo;
-  GstBuffer *buffer;
+  GstBuffer *buffer = NULL;
+  gboolean src_mapped = FALSE;
+  gboolean dest_mapped = FALSE;
 
   gst_video_info_set_format (&dest_vinfo,
       GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->render_width,
@@ -1439,31 +1511,35 @@ gst_v4l2_codec_av1_dec_copy_output_buffer (GstV4l2CodecAV1Dec * self,
   if (!gst_video_frame_map (&src_frame, &self->vinfo_drm.vinfo,
           codec_frame->output_buffer, GST_MAP_READ))
     goto fail;
+  src_mapped = TRUE;
 
-  if (!gst_video_frame_map (&dest_frame, &dest_vinfo, buffer, GST_MAP_WRITE)) {
-    gst_video_frame_unmap (&dest_frame);
+  if (!gst_video_frame_map (&dest_frame, &dest_vinfo, buffer, GST_MAP_WRITE))
     goto fail;
-  }
+  dest_mapped = TRUE;
 
   /* gst_video_frame_copy can crop this, but does not know, so let make it
    * think it's all right */
   GST_VIDEO_INFO_WIDTH (&src_frame.info) = self->render_width;
   GST_VIDEO_INFO_HEIGHT (&src_frame.info) = self->render_height;
 
-  if (!gst_video_frame_copy (&dest_frame, &src_frame)) {
-    gst_video_frame_unmap (&src_frame);
-    gst_video_frame_unmap (&dest_frame);
+  if (!gst_video_frame_copy (&dest_frame, &src_frame))
     goto fail;
-  }
 
   gst_video_frame_unmap (&src_frame);
+  src_mapped = FALSE;
   gst_video_frame_unmap (&dest_frame);
+  dest_mapped = FALSE;
   gst_buffer_replace (&codec_frame->output_buffer, buffer);
   gst_buffer_unref (buffer);
 
   return TRUE;
 
 fail:
+  if (src_mapped)
+    gst_video_frame_unmap (&src_frame);
+  if (dest_mapped)
+    gst_video_frame_unmap (&dest_frame);
+  gst_clear_buffer (&buffer);
   GST_ERROR_OBJECT (self, "Failed copy output buffer.");
   return FALSE;
 }
@@ -1476,12 +1552,14 @@ gst_v4l2_codec_av1_dec_output_picture (GstAV1Decoder * decoder,
   GstVideoDecoder *vdec = GST_VIDEO_DECODER (decoder);
   GstV4l2Request *request = NULL;
   GstCodecPicture *codec_picture = GST_CODEC_PICTURE (picture);
-  gint ret;
+  GstFlowReturn flow_ret = GST_FLOW_ERROR;
+  gint request_status;
 
   if (codec_picture->discont_state) {
     if (!gst_video_decoder_negotiate (vdec)) {
       GST_ERROR_OBJECT (vdec, "Could not re-negotiate with updated state");
-      return FALSE;
+      flow_ret = GST_FLOW_NOT_NEGOTIATED;
+      goto error;
     }
   }
 
@@ -1492,12 +1570,17 @@ gst_v4l2_codec_av1_dec_output_picture (GstAV1Decoder * decoder,
     request = gst_av1_picture_get_user_data (picture);
 
   if (request) {
-    ret = gst_v4l2_request_set_done (request);
-    if (ret == 0) {
+    request_status = gst_v4l2_request_set_done (request);
+    if (request_status == 0) {
       GST_ELEMENT_ERROR (self, STREAM, DECODE,
           ("Decoding frame took too long"), (NULL));
       goto error;
-    } else if (ret < 0) {
+    } else if (request_status < 0) {
+      if (errno == EBUSY && gst_v4l2_decoder_is_flushing (self->decoder)) {
+        flow_ret = GST_FLOW_FLUSHING;
+        goto error;
+      }
+
       GST_ELEMENT_ERROR (self, STREAM, DECODE,
           ("Decoding request failed: %s", g_strerror (errno)), (NULL));
       goto error;
@@ -1507,6 +1590,13 @@ gst_v4l2_codec_av1_dec_output_picture (GstAV1Decoder * decoder,
       GST_ELEMENT_ERROR (self, STREAM, DECODE,
           ("Failed to decode frame %u", codec_picture->system_frame_number),
           (NULL));
+      goto error;
+    }
+
+    if (!frame->output_buffer) {
+      GST_ELEMENT_ERROR (self, STREAM, DECODE,
+          ("Decoded frame %u has no output buffer",
+              codec_picture->system_frame_number), (NULL));
       goto error;
     }
 
@@ -1526,8 +1616,9 @@ gst_v4l2_codec_av1_dec_output_picture (GstAV1Decoder * decoder,
     goto error;
   }
 
-  if (self->copy_frames)
-    gst_v4l2_codec_av1_dec_copy_output_buffer (self, frame);
+  if (self->copy_frames &&
+      !gst_v4l2_codec_av1_dec_copy_output_buffer (self, frame))
+    goto error;
 
   gst_av1_picture_unref (picture);
 
@@ -1537,7 +1628,7 @@ error:
   gst_video_decoder_drop_frame (vdec, frame);
   gst_av1_picture_unref (picture);
 
-  return GST_FLOW_ERROR;
+  return flow_ret;
 }
 
 static void
@@ -1616,6 +1707,8 @@ static void
 gst_v4l2_codec_av1_dec_init (GstV4l2CodecAV1Dec * self,
     GstV4l2CodecAV1DecClass * klass)
 {
+  gst_video_decoder_set_needs_sync_point (GST_VIDEO_DECODER (self), TRUE);
+
   self->decoder = gst_v4l2_decoder_new (klass->device);
   gst_video_info_dma_drm_init (&self->vinfo_drm);
   self->tile_group_entries =

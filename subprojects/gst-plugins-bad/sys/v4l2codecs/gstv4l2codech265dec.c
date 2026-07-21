@@ -37,6 +37,8 @@
 #include <config.h>
 #endif
 
+#include <errno.h>
+
 #define GST_USE_UNSTABLE_API
 #include <gst/codecs/gsth265decoder.h>
 
@@ -140,6 +142,9 @@ struct _GstV4l2CodecH265Dec
 };
 
 static GstElementClass *parent_class = NULL;
+
+static void gst_v4l2_codec_h265_dec_set_flushing (GstV4l2CodecH265Dec * self,
+    gboolean flushing);
 
 static gboolean
 is_frame_based (GstV4l2CodecH265Dec * self)
@@ -320,18 +325,26 @@ static gboolean
 gst_v4l2_codec_h265_dec_close (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
-  gst_v4l2_decoder_close (self->decoder);
-  return TRUE;
+  gboolean ret = gst_v4l2_decoder_close (self->decoder);
+
+  if (ret)
+    self->streaming = FALSE;
+
+  return ret;
 }
 
-static void
+static gboolean
 gst_v4l2_codec_h265_dec_streamoff (GstV4l2CodecH265Dec * self)
 {
-  if (self->streaming) {
-    gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SINK);
-    gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SRC);
-    self->streaming = FALSE;
-  }
+  if (!gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SINK))
+    return FALSE;
+
+  if (!gst_v4l2_decoder_streamoff (self->decoder, GST_PAD_SRC))
+    return FALSE;
+
+  self->streaming = FALSE;
+  self->need_sequence = TRUE;
+  return TRUE;
 }
 
 static void
@@ -354,7 +367,9 @@ gst_v4l2_codec_h265_dec_stop (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
 
-  gst_v4l2_codec_h265_dec_streamoff (self);
+  if (!gst_v4l2_codec_h265_dec_streamoff (self))
+    return FALSE;
+
   gst_v4l2_codec_h265_dec_reset_allocation (self);
 
   if (self->output_state)
@@ -482,20 +497,29 @@ done:
       return TRUE;
 
     if (!gst_v4l2_decoder_streamon (self->decoder, GST_PAD_SINK)) {
+      gint saved_errno = errno;
+
+      gst_v4l2_codec_h265_dec_streamoff (self);
       GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
           ("Could not enable the decoder driver."),
-          ("VIDIOC_STREAMON(SINK) failed: %s", g_strerror (errno)));
+          ("VIDIOC_STREAMON(SINK) failed: %s", g_strerror (saved_errno)));
+      errno = saved_errno;
       return FALSE;
     }
 
     if (!gst_v4l2_decoder_streamon (self->decoder, GST_PAD_SRC)) {
+      gint saved_errno = errno;
+
+      gst_v4l2_codec_h265_dec_streamoff (self);
       GST_ELEMENT_ERROR (self, RESOURCE, FAILED,
           ("Could not enable the decoder driver."),
-          ("VIDIOC_STREAMON(SRC) failed: %s", g_strerror (errno)));
+          ("VIDIOC_STREAMON(SRC) failed: %s", g_strerror (saved_errno)));
+      errno = saved_errno;
       return FALSE;
     }
 
     self->streaming = TRUE;
+    gst_v4l2_codec_h265_dec_set_flushing (self, FALSE);
 
     return TRUE;
   }
@@ -1099,7 +1123,9 @@ gst_v4l2_codec_h265_dec_new_sequence (GstH265Decoder * decoder,
   gst_v4l2_codec_h265_dec_fill_ext_sps_rps (self, sps);
 
   if (negotiation_needed) {
-    gst_v4l2_codec_h265_dec_streamoff (self);
+    if (!gst_v4l2_codec_h265_dec_streamoff (self))
+      return GST_FLOW_ERROR;
+
     if (!gst_video_decoder_negotiate (GST_VIDEO_DECODER (self))) {
       GST_ERROR_OBJECT (self, "Failed to negotiate with downstream");
       return GST_FLOW_NOT_NEGOTIATED;
@@ -1118,8 +1144,14 @@ gst_v4l2_codec_h265_dec_ensure_bitstream (GstV4l2CodecH265Dec * self)
   self->bitstream = gst_v4l2_codec_allocator_alloc (self->sink_allocator);
 
   if (!self->bitstream) {
-    GST_ELEMENT_ERROR (self, RESOURCE, NO_SPACE_LEFT,
-        ("Not enough memory to decode H265 stream."), (NULL));
+    if (gst_v4l2_decoder_is_flushing (self->decoder)) {
+      GST_DEBUG_OBJECT (self, "Bitstream allocation interrupted by flushing");
+      errno = EBUSY;
+    } else {
+      GST_ELEMENT_ERROR (self, RESOURCE, NO_SPACE_LEFT,
+          ("Not enough memory to decode H265 stream."), (NULL));
+      errno = ENOMEM;
+    }
     return FALSE;
   }
 
@@ -1127,6 +1159,7 @@ gst_v4l2_codec_h265_dec_ensure_bitstream (GstV4l2CodecH265Dec * self)
     GST_ELEMENT_ERROR (self, RESOURCE, WRITE,
         ("Could not access bitstream memory for writing"), (NULL));
     g_clear_pointer (&self->bitstream, gst_memory_unref);
+    errno = EIO;
     return FALSE;
   }
 
@@ -1204,8 +1237,12 @@ gst_v4l2_codec_h265_dec_start_picture (GstH265Decoder * decoder,
   if (!self->sink_allocator)
     return GST_FLOW_NOT_NEGOTIATED;
 
-  if (!gst_v4l2_codec_h265_dec_ensure_bitstream (self))
+  if (!gst_v4l2_codec_h265_dec_ensure_bitstream (self)) {
+    if (errno == EBUSY &&
+        gst_v4l2_decoder_is_flushing (self->decoder))
+      return GST_FLOW_FLUSHING;
     return GST_FLOW_ERROR;
+  }
 
   /* The base class will only emit new_sequence for allocation related changes
    * in the SPS, make sure to keep the SPS upt-to-date */
@@ -1294,10 +1331,12 @@ static gboolean
 gst_v4l2_codec_h265_dec_copy_output_buffer (GstV4l2CodecH265Dec * self,
     GstVideoCodecFrame * codec_frame)
 {
-  GstVideoFrame src_frame;
-  GstVideoFrame dest_frame;
+  GstVideoFrame src_frame = { 0, };
+  GstVideoFrame dest_frame = { 0, };
   GstVideoInfo dest_vinfo;
-  GstBuffer *buffer;
+  GstBuffer *buffer = NULL;
+  gboolean src_mapped = FALSE;
+  gboolean dest_mapped = FALSE;
 
   gst_video_info_set_format (&dest_vinfo,
       GST_VIDEO_INFO_FORMAT (&self->vinfo_drm.vinfo), self->display_width,
@@ -1310,17 +1349,15 @@ gst_v4l2_codec_h265_dec_copy_output_buffer (GstV4l2CodecH265Dec * self,
   if (!gst_video_frame_map (&src_frame, &self->vinfo_drm.vinfo,
           codec_frame->output_buffer, GST_MAP_READ))
     goto fail;
+  src_mapped = TRUE;
 
-  if (!gst_video_frame_map (&dest_frame, &dest_vinfo, buffer, GST_MAP_WRITE)) {
-    gst_video_frame_unmap (&dest_frame);
+  if (!gst_video_frame_map (&dest_frame, &dest_vinfo, buffer, GST_MAP_WRITE))
     goto fail;
-  }
+  dest_mapped = TRUE;
 
   if (self->need_crop) {
     if (!gst_v4l2_codec_h265_dec_crop_output_buffer (self, &dest_frame,
             &src_frame)) {
-      gst_video_frame_unmap (&src_frame);
-      gst_video_frame_unmap (&dest_frame);
       GST_ERROR_OBJECT (self, "fail to apply the video crop.");
       goto fail;
     }
@@ -1330,21 +1367,25 @@ gst_v4l2_codec_h265_dec_copy_output_buffer (GstV4l2CodecH265Dec * self,
     GST_VIDEO_INFO_WIDTH (&src_frame.info) = self->display_width;
     GST_VIDEO_INFO_HEIGHT (&src_frame.info) = self->display_height;
 
-    if (!gst_video_frame_copy (&dest_frame, &src_frame)) {
-      gst_video_frame_unmap (&src_frame);
-      gst_video_frame_unmap (&dest_frame);
+    if (!gst_video_frame_copy (&dest_frame, &src_frame))
       goto fail;
-    }
   }
 
   gst_video_frame_unmap (&src_frame);
+  src_mapped = FALSE;
   gst_video_frame_unmap (&dest_frame);
+  dest_mapped = FALSE;
   gst_buffer_replace (&codec_frame->output_buffer, buffer);
   gst_buffer_unref (buffer);
 
   return TRUE;
 
 fail:
+  if (src_mapped)
+    gst_video_frame_unmap (&src_frame);
+  if (dest_mapped)
+    gst_video_frame_unmap (&dest_frame);
+  gst_clear_buffer (&buffer);
   GST_ERROR_OBJECT (self, "Failed copy output buffer.");
   return FALSE;
 }
@@ -1357,14 +1398,19 @@ gst_v4l2_codec_h265_dec_output_picture (GstH265Decoder * decoder,
   GstVideoDecoder *vdec = GST_VIDEO_DECODER (decoder);
   GstV4l2Request *request = gst_h265_picture_get_user_data (picture);
   GstCodecPicture *codec_picture = GST_CODEC_PICTURE (picture);
+  GstFlowReturn flow_ret = GST_FLOW_ERROR;
   gint ret;
 
-  g_return_val_if_fail (request, GST_FLOW_ERROR);
+  if (!request) {
+    GST_ERROR_OBJECT (self, "Picture does not have an associated request");
+    goto error;
+  }
 
   if (codec_picture->discont_state) {
     if (!gst_video_decoder_negotiate (vdec)) {
       GST_ERROR_OBJECT (vdec, "Could not re-negotiate with updated state");
-      return FALSE;
+      flow_ret = GST_FLOW_NOT_NEGOTIATED;
+      goto error;
     }
   }
 
@@ -1378,11 +1424,20 @@ gst_v4l2_codec_h265_dec_output_picture (GstH265Decoder * decoder,
         (NULL));
     goto error;
   } else if (ret < 0) {
+    if (errno == EBUSY &&
+        gst_v4l2_decoder_is_flushing (self->decoder)) {
+      GST_DEBUG_OBJECT (self, "Request wait interrupted by flushing");
+      flow_ret = GST_FLOW_FLUSHING;
+      goto error;
+    }
     GST_ELEMENT_ERROR (self, STREAM, DECODE,
         ("Decoding request failed: %s", g_strerror (errno)), (NULL));
     goto error;
   }
-  g_return_val_if_fail (frame->output_buffer, GST_FLOW_ERROR);
+  if (!frame->output_buffer) {
+    GST_ERROR_OBJECT (self, "Decoded frame has no output buffer");
+    goto error;
+  }
 
   if (gst_v4l2_request_failed (request)) {
     GST_ELEMENT_ERROR (self, STREAM, DECODE,
@@ -1395,8 +1450,9 @@ gst_v4l2_codec_h265_dec_output_picture (GstH265Decoder * decoder,
   gst_h265_picture_set_user_data (picture,
       gst_buffer_ref (frame->output_buffer), (GDestroyNotify) gst_buffer_unref);
 
-  if (self->copy_frames)
-    gst_v4l2_codec_h265_dec_copy_output_buffer (self, frame);
+  if (self->copy_frames &&
+      !gst_v4l2_codec_h265_dec_copy_output_buffer (self, frame))
+    goto error;
 
   gst_h265_picture_unref (picture);
 
@@ -1406,7 +1462,7 @@ error:
   gst_video_decoder_drop_frame (vdec, frame);
   gst_h265_picture_unref (picture);
 
-  return GST_FLOW_ERROR;
+  return flow_ret;
 }
 
 static void
@@ -1436,11 +1492,14 @@ gst_v4l2_codec_h265_dec_ensure_output_buffer (GstV4l2CodecH265Dec * self,
   flow_ret = gst_buffer_pool_acquire_buffer (GST_BUFFER_POOL (self->src_pool),
       &buffer, NULL);
   if (flow_ret != GST_FLOW_OK) {
-    if (flow_ret == GST_FLOW_FLUSHING)
+    if (flow_ret == GST_FLOW_FLUSHING) {
       GST_DEBUG_OBJECT (self, "Frame decoding aborted, we are flushing.");
-    else
+      errno = EBUSY;
+    } else {
       GST_ELEMENT_ERROR (self, RESOURCE, WRITE,
           ("No more picture buffer available."), (NULL));
+      errno = EIO;
+    }
     return FALSE;
   }
 
@@ -1455,6 +1514,8 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
   GstV4l2Request *prev_request, *request = NULL;
   gsize bytesused;
   gboolean ret = FALSE;
+  gboolean submit_sequence = self->need_sequence;
+  gint result_errno = EIO;
   gint num_controls = 0;
 
   /* *INDENT-OFF* */
@@ -1487,9 +1548,14 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
 
     frame = gst_video_decoder_get_frame (GST_VIDEO_DECODER (self),
         system_frame_number);
-    g_return_val_if_fail (frame, FALSE);
+    if (!frame) {
+      GST_ERROR_OBJECT (self, "Could not find codec frame %u",
+          system_frame_number);
+      goto done;
+    }
 
     if (!gst_v4l2_codec_h265_dec_ensure_output_buffer (self, frame)) {
+      result_errno = errno ? errno : EIO;
       gst_video_codec_frame_unref (frame);
       goto done;
     }
@@ -1506,12 +1572,11 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
     goto done;
   }
 
-  if (self->need_sequence) {
+  if (submit_sequence) {
     control[num_controls].id = V4L2_CID_STATELESS_HEVC_SPS;
     control[num_controls].ptr = &self->sps;
     control[num_controls].size = sizeof (self->sps);
     num_controls++;
-    self->need_sequence = FALSE;
     if (self->sps.num_short_term_ref_pic_sets
         && self->support_long_short_term_rps) {
       control[num_controls].id = V4L2_CID_STATELESS_HEVC_EXT_SPS_ST_RPS;
@@ -1582,11 +1647,20 @@ gst_v4l2_codec_h265_dec_submit_bitstream (GstV4l2CodecH265Dec * self,
     goto done;
   }
 
+  errno = 0;
   if (!gst_v4l2_request_queue (request, flags)) {
-    GST_ELEMENT_ERROR (self, RESOURCE, WRITE,
-        ("Driver did not accept the decode request."), (NULL));
+    result_errno = errno ? errno : EIO;
+    if (result_errno == EBUSY &&
+        gst_v4l2_decoder_is_flushing (self->decoder))
+      GST_DEBUG_OBJECT (self, "Request queue interrupted by flushing");
+    else
+      GST_ELEMENT_ERROR (self, RESOURCE, WRITE,
+          ("Driver did not accept the decode request."), (NULL));
     goto done;
   }
+
+  if (submit_sequence)
+    self->need_sequence = FALSE;
 
   gst_h265_picture_set_user_data (picture, g_steal_pointer (&request),
       (GDestroyNotify) gst_v4l2_request_unref);
@@ -1597,6 +1671,9 @@ done:
     gst_v4l2_request_unref (request);
 
   gst_v4l2_codec_h265_dec_reset_picture (self);
+
+  if (!ret)
+    errno = result_errno;
 
   return ret;
 }
@@ -1617,9 +1694,19 @@ gst_v4l2_codec_h265_dec_decode_slice (GstH265Decoder * decoder,
         /* In slice mode, we submit the pending slice asking the accelerator to
          * hold on the picture */
         if (!gst_v4l2_codec_h265_dec_submit_bitstream (self, picture,
-                V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF)
-            || !gst_v4l2_codec_h265_dec_ensure_bitstream (self))
+                V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF)) {
+          if (errno == EBUSY &&
+              gst_v4l2_decoder_is_flushing (self->decoder))
+            return GST_FLOW_FLUSHING;
           return GST_FLOW_ERROR;
+        }
+
+        if (!gst_v4l2_codec_h265_dec_ensure_bitstream (self)) {
+          if (errno == EBUSY &&
+              gst_v4l2_decoder_is_flushing (self->decoder))
+            return GST_FLOW_FLUSHING;
+          return GST_FLOW_ERROR;
+        }
       }
     }
     /* in frame based mode with slices, we need to provide the required data for
@@ -1671,8 +1758,12 @@ gst_v4l2_codec_h265_dec_end_picture (GstH265Decoder * decoder,
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
 
-  if (!gst_v4l2_codec_h265_dec_submit_bitstream (self, picture, 0))
+  if (!gst_v4l2_codec_h265_dec_submit_bitstream (self, picture, 0)) {
+    if (errno == EBUSY &&
+        gst_v4l2_decoder_is_flushing (self->decoder))
+      return GST_FLOW_FLUSHING;
     return GST_FLOW_ERROR;
+  }
 
   return GST_FLOW_OK;
 }
@@ -1698,6 +1789,8 @@ static void
 gst_v4l2_codec_h265_dec_set_flushing (GstV4l2CodecH265Dec * self,
     gboolean flushing)
 {
+  gst_v4l2_decoder_set_flushing (self->decoder, flushing);
+
   if (self->sink_allocator)
     gst_v4l2_codec_allocator_set_flushing (self->sink_allocator, flushing);
   if (self->src_allocator)
@@ -1708,13 +1801,24 @@ static gboolean
 gst_v4l2_codec_h265_dec_flush (GstVideoDecoder * decoder)
 {
   GstV4l2CodecH265Dec *self = GST_V4L2_CODEC_H265_DEC (decoder);
+  gboolean v4l2_ret;
+  gboolean parent_ret;
 
   GST_DEBUG_OBJECT (self, "Flushing decoder state.");
 
-  gst_v4l2_decoder_flush (self->decoder);
-  gst_v4l2_codec_h265_dec_set_flushing (self, FALSE);
+  v4l2_ret = TRUE;
+  if (self->streaming ||
+      gst_v4l2_decoder_has_active_queues (self->decoder)) {
+    v4l2_ret = gst_v4l2_decoder_flush (self->decoder);
+    if (v4l2_ret)
+      self->streaming = TRUE;
+    self->need_sequence = TRUE;
+  }
+  if (v4l2_ret)
+    gst_v4l2_codec_h265_dec_set_flushing (self, FALSE);
+  parent_ret = GST_VIDEO_DECODER_CLASS (parent_class)->flush (decoder);
 
-  return GST_VIDEO_DECODER_CLASS (parent_class)->flush (decoder);
+  return v4l2_ret && parent_ret;
 }
 
 static gboolean
@@ -1778,6 +1882,7 @@ static void
 gst_v4l2_codec_h265_dec_init (GstV4l2CodecH265Dec * self,
     GstV4l2CodecH265DecClass * klass)
 {
+  gst_video_decoder_set_needs_sync_point (GST_VIDEO_DECODER (self), TRUE);
   self->decoder = gst_v4l2_decoder_new (klass->device);
   gst_video_info_dma_drm_init (&self->vinfo_drm);
   self->slice_params = g_array_sized_new (FALSE, TRUE,
