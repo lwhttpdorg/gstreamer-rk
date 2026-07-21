@@ -29,6 +29,7 @@
 #include "linux/media.h"
 #include "linux/videodev2.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -38,6 +39,10 @@
 #include <gst/base/base.h>
 
 #define IMAGE_MINSZ (256*1024)  /* 256kB */
+
+/* Some stateless decoder watchdogs expire after up to two seconds.  Give the
+ * driver enough time to complete the request and report the hardware error. */
+#define REQUEST_TIMEOUT (3 * GST_SECOND)
 
 GST_DEBUG_CATEGORY (v4l2_decoder_debug);
 #define GST_CAT_DEFAULT v4l2_decoder_debug
@@ -61,6 +66,7 @@ struct _GstV4l2Request
   gint ref_count;
 
   GstV4l2Decoder *decoder;
+  guint64 generation;
   gint fd;
   guint32 frame_num;
   GstMemory *bitstream;
@@ -80,11 +86,23 @@ struct _GstV4l2Decoder
   GstObject parent;
 
   gboolean opened;
+  guint64 generation;
   gint media_fd;
   gint video_fd;
   GstVecDeque *request_pool;
   GstVecDeque *pending_requests;
   guint version;
+
+  /* Protects the request currently blocked in gst_poll_wait() from a
+   * concurrent FLUSH_START. */
+  gboolean flushing;
+  GstV4l2Request *waiting_request;
+
+  /* A request can only release its DMA-backed buffers after both queues have
+   * stopped.  Keep the state here so a partial STREAMOFF failure cannot make
+   * the other queue release those references prematurely. */
+  gboolean sink_active;
+  gboolean src_active;
 
   enum v4l2_buf_type src_buf_type;
   enum v4l2_buf_type sink_buf_type;
@@ -108,6 +126,19 @@ G_DEFINE_TYPE_WITH_CODE (GstV4l2Decoder, gst_v4l2_decoder, GST_TYPE_OBJECT,
         "V4L2 stateless decoder helper"));
 
 static void gst_v4l2_request_free (GstV4l2Request * request);
+
+static void
+gst_v4l2_decoder_release_pending_requests (GstV4l2Decoder * self)
+{
+  GstV4l2Request *request;
+
+  while ((request = gst_vec_deque_pop_head (self->pending_requests))) {
+    g_clear_pointer (&request->bitstream, gst_memory_unref);
+    request->failed = TRUE;
+    request->pending = FALSE;
+    gst_v4l2_request_unref (request);
+  }
+}
 
 static guint32
 direction_to_buffer_type (GstV4l2Decoder * self, GstPadDirection direction)
@@ -187,7 +218,12 @@ gst_v4l2_decoder_open (GstV4l2Decoder * self)
 
   guint32 capabilities;
 
+  /* A previous PAUSED-to-READY transition may have left request polling in
+   * flushing state.  Opening starts a new decoder session. */
+  gst_v4l2_decoder_set_flushing (self, FALSE);
+
   if (self->doc_mode) {
+    self->generation++;
     self->opened = TRUE;
     return TRUE;
   }
@@ -248,6 +284,14 @@ gst_v4l2_decoder_open (GstV4l2Decoder * self)
   else
     self->supports_remove_buffers = FALSE;
 
+  if (!(createbufs.capabilities & V4L2_BUF_CAP_SUPPORTS_REQUESTS)) {
+    GST_ERROR_OBJECT (self,
+        "Stateless decoder OUTPUT queue does not support media requests.");
+    gst_v4l2_decoder_close (self);
+    return FALSE;
+  }
+
+  self->generation++;
   self->opened = TRUE;
 
   return TRUE;
@@ -258,20 +302,30 @@ gst_v4l2_decoder_close (GstV4l2Decoder * self)
 {
   GstV4l2Request *request;
 
-  while ((request = gst_vec_deque_pop_head (self->pending_requests)))
-    gst_v4l2_request_unref (request);
+  gst_v4l2_decoder_set_flushing (self, TRUE);
 
+  /* Closing the video node stops both queues.  Only after that is it safe to
+   * release memories which might still be bound to a request or queued on
+   * CAPTURE. */
+  if (self->video_fd)
+    close (self->video_fd);
+  self->video_fd = 0;
+  self->sink_active = FALSE;
+  self->src_active = FALSE;
+  self->opened = FALSE;
+
+  gst_v4l2_decoder_release_pending_requests (self);
+
+  /* Close pooled request fds before the media device.  Requests still owned
+   * by codec pictures keep their independent anon-inode fd until the picture
+   * drops its final reference. */
   while ((request = gst_vec_deque_pop_head (self->request_pool)))
     gst_v4l2_request_free (request);
 
   if (self->media_fd)
     close (self->media_fd);
-  if (self->video_fd)
-    close (self->video_fd);
 
   self->media_fd = 0;
-  self->video_fd = 0;
-  self->opened = FALSE;
 
   return TRUE;
 }
@@ -279,14 +333,24 @@ gst_v4l2_decoder_close (GstV4l2Decoder * self)
 gboolean
 gst_v4l2_decoder_streamon (GstV4l2Decoder * self, GstPadDirection direction)
 {
+  gboolean *active;
   gint ret;
   guint32 type = direction_to_buffer_type (self, direction);
 
+  active = direction == GST_PAD_SRC ?
+      &self->src_active : &self->sink_active;
+
   ret = ioctl (self->video_fd, VIDIOC_STREAMON, &type);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_STREAMON failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_STREAMON failed: %s",
+        g_strerror (saved_errno));
+    errno = saved_errno;
     return FALSE;
   }
+
+  *active = TRUE;
 
   return TRUE;
 }
@@ -294,40 +358,108 @@ gst_v4l2_decoder_streamon (GstV4l2Decoder * self, GstPadDirection direction)
 gboolean
 gst_v4l2_decoder_streamoff (GstV4l2Decoder * self, GstPadDirection direction)
 {
+  gboolean *active;
   guint32 type = direction_to_buffer_type (self, direction);
   gint ret;
 
-  if (direction == GST_PAD_SRC) {
-    GstV4l2Request *pending_req;
+  active = direction == GST_PAD_SRC ?
+      &self->src_active : &self->sink_active;
 
-    /* STREAMOFF have the effect of cancelling all requests and unqueuing all
-     * buffers, so clear the pending request list */
-    while ((pending_req = gst_vec_deque_pop_head (self->pending_requests))) {
-      g_clear_pointer (&pending_req->bitstream, gst_memory_unref);
-      pending_req->pending = FALSE;
-      gst_v4l2_request_unref (pending_req);
-    }
+  /* A successful earlier STREAMOFF, with no subsequent STREAMON or QBUF,
+   * already guarantees that this queue owns no buffers. */
+  if (!*active) {
+    if (!self->sink_active && !self->src_active)
+      gst_v4l2_decoder_release_pending_requests (self);
+    return TRUE;
   }
 
   ret = ioctl (self->video_fd, VIDIOC_STREAMOFF, &type);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_STREAMOFF failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_STREAMOFF failed: %s",
+        g_strerror (saved_errno));
+    gst_v4l2_decoder_set_flushing (self, TRUE);
+    errno = saved_errno;
     return FALSE;
   }
 
+  *active = FALSE;
+
+  /* A single STREAMOFF is insufficient: OUTPUT may still consume bitstream
+   * memory while CAPTURE may still own picture buffers. */
+  if (!self->sink_active && !self->src_active)
+    gst_v4l2_decoder_release_pending_requests (self);
+
   return TRUE;
+}
+
+void
+gst_v4l2_decoder_set_flushing (GstV4l2Decoder * self, gboolean flushing)
+{
+  GST_OBJECT_LOCK (self);
+  self->flushing = flushing;
+
+  if (self->waiting_request)
+    gst_poll_set_flushing (self->waiting_request->poll, flushing);
+
+  GST_OBJECT_UNLOCK (self);
+}
+
+gboolean
+gst_v4l2_decoder_is_flushing (GstV4l2Decoder * self)
+{
+  gboolean flushing;
+
+  GST_OBJECT_LOCK (self);
+  flushing = self->flushing;
+  GST_OBJECT_UNLOCK (self);
+
+  return flushing;
+}
+
+gboolean
+gst_v4l2_decoder_has_active_queues (GstV4l2Decoder * self)
+{
+  /* Queue state changes are serialized by GstVideoDecoder's stream lock.
+   * FLUSH_START only changes the independently locked flushing state. */
+  return self->sink_active || self->src_active;
 }
 
 gboolean
 gst_v4l2_decoder_flush (GstV4l2Decoder * self)
 {
-  /* We ignore streamoff failure as it's not relevant, if we manage to
-   * streamon again, we are good. */
-  gst_v4l2_decoder_streamoff (self, GST_PAD_SINK);
-  gst_v4l2_decoder_streamoff (self, GST_PAD_SRC);
+  gboolean sink_stopped, src_stopped;
+  gboolean sink_started = FALSE, src_started = FALSE;
+  gboolean success;
 
-  return gst_v4l2_decoder_streamon (self, GST_PAD_SINK) &&
-      gst_v4l2_decoder_streamon (self, GST_PAD_SRC);
+  gst_v4l2_decoder_set_flushing (self, TRUE);
+
+  /* Do not stop CAPTURE after OUTPUT failed to stop.  In that state the
+   * request buffers are still potentially in use and must remain retained. */
+  sink_stopped = gst_v4l2_decoder_streamoff (self, GST_PAD_SINK);
+  if (sink_stopped)
+    src_stopped = gst_v4l2_decoder_streamoff (self, GST_PAD_SRC);
+  else
+    src_stopped = FALSE;
+
+  if (sink_stopped && src_stopped) {
+    sink_started = gst_v4l2_decoder_streamon (self, GST_PAD_SINK);
+    if (sink_started)
+      src_started = gst_v4l2_decoder_streamon (self, GST_PAD_SRC);
+
+    if (sink_started && !src_started)
+      gst_v4l2_decoder_streamoff (self, GST_PAD_SINK);
+  }
+
+  success = sink_stopped && src_stopped && sink_started && src_started;
+
+  /* A failed reset leaves the queue state unknown.  Keep rejecting requests
+   * until the decoder is stopped and opened as a new session. */
+  if (success)
+    gst_v4l2_decoder_set_flushing (self, FALSE);
+
+  return success;
 }
 
 gboolean
@@ -991,9 +1123,15 @@ gst_v4l2_decoder_queue_sink_mem (GstV4l2Decoder * self,
 
   ret = ioctl (self->video_fd, VIDIOC_QBUF, &buf);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_QBUF failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_QBUF failed: %s",
+        g_strerror (saved_errno));
+    errno = saved_errno;
     return FALSE;
   }
+
+  self->sink_active = TRUE;
 
   return TRUE;
 }
@@ -1036,15 +1174,22 @@ gst_v4l2_decoder_queue_src_buffer (GstV4l2Decoder * self, GstBuffer * buffer)
 
   ret = ioctl (self->video_fd, VIDIOC_QBUF, &buf);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_QBUF failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_QBUF failed: %s",
+        g_strerror (saved_errno));
+    errno = saved_errno;
     return FALSE;
   }
+
+  self->src_active = TRUE;
 
   return TRUE;
 }
 
 static gboolean
-gst_v4l2_decoder_dequeue_sink (GstV4l2Decoder * self)
+gst_v4l2_decoder_dequeue_sink (GstV4l2Decoder * self,
+    gboolean * buffer_error)
 {
   gint ret;
   struct v4l2_plane planes[GST_VIDEO_MAX_PLANES] = { {0} };
@@ -1053,6 +1198,8 @@ gst_v4l2_decoder_dequeue_sink (GstV4l2Decoder * self)
     .memory = V4L2_MEMORY_MMAP,
   };
 
+  *buffer_error = FALSE;
+
   if (self->mplane) {
     buf.length = GST_VIDEO_MAX_PLANES;
     buf.m.planes = planes;
@@ -1060,17 +1207,28 @@ gst_v4l2_decoder_dequeue_sink (GstV4l2Decoder * self)
 
   ret = ioctl (self->video_fd, VIDIOC_DQBUF, &buf);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_DQBUF failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_DQBUF failed: %s",
+        g_strerror (saved_errno));
+    errno = saved_errno;
     return FALSE;
   }
 
   GST_TRACE_OBJECT (self, "Dequeued bitstream buffer %i", buf.index);
 
+  if (buf.flags & V4L2_BUF_FLAG_ERROR) {
+    GST_WARNING_OBJECT (self,
+        "Dequeued bitstream buffer %i with V4L2_BUF_FLAG_ERROR", buf.index);
+    *buffer_error = TRUE;
+  }
+
   return TRUE;
 }
 
 static gboolean
-gst_v4l2_decoder_dequeue_src (GstV4l2Decoder * self, guint32 * out_frame_num)
+gst_v4l2_decoder_dequeue_src (GstV4l2Decoder * self, guint32 * out_frame_num,
+    gboolean * buffer_error)
 {
   gint ret;
   struct v4l2_plane planes[GST_VIDEO_MAX_PLANES] = { {0} };
@@ -1079,6 +1237,8 @@ gst_v4l2_decoder_dequeue_src (GstV4l2Decoder * self, guint32 * out_frame_num)
     .memory = V4L2_MEMORY_MMAP,
   };
 
+  *buffer_error = FALSE;
+
   if (self->mplane) {
     buf.length = GST_VIDEO_MAX_PLANES;
     buf.m.planes = planes;
@@ -1086,13 +1246,23 @@ gst_v4l2_decoder_dequeue_src (GstV4l2Decoder * self, guint32 * out_frame_num)
 
   ret = ioctl (self->video_fd, VIDIOC_DQBUF, &buf);
   if (ret < 0) {
-    GST_ERROR_OBJECT (self, "VIDIOC_DQBUF failed: %s", g_strerror (errno));
+    gint saved_errno = errno;
+
+    GST_ERROR_OBJECT (self, "VIDIOC_DQBUF failed: %s",
+        g_strerror (saved_errno));
+    errno = saved_errno;
     return FALSE;
   }
 
   *out_frame_num = buf.timestamp.tv_usec + buf.timestamp.tv_sec * 1000000;
 
   GST_TRACE_OBJECT (self, "Dequeued picture buffer %i", buf.index);
+
+  if (buf.flags & V4L2_BUF_FLAG_ERROR) {
+    GST_WARNING_OBJECT (self,
+        "Dequeued picture buffer %i with V4L2_BUF_FLAG_ERROR", buf.index);
+    *buffer_error = TRUE;
+  }
 
   return TRUE;
 }
@@ -1314,14 +1484,27 @@ gst_v4l2_decoder_alloc_request (GstV4l2Decoder * self, guint32 frame_num,
       return NULL;
     }
 
-    request->poll = gst_poll_new (FALSE);
+    request->poll = gst_poll_new (TRUE);
+    if (!request->poll) {
+      GST_ERROR_OBJECT (self, "Failed to create a request poll set.");
+      close (request->fd);
+      g_free (request);
+      return NULL;
+    }
     gst_poll_fd_init (&request->pollfd);
     request->pollfd.fd = request->fd;
-    gst_poll_add_fd (request->poll, &request->pollfd);
-    gst_poll_fd_ctl_pri (request->poll, &request->pollfd, TRUE);
+    if (!gst_poll_add_fd (request->poll, &request->pollfd) ||
+        !gst_poll_fd_ctl_pri (request->poll, &request->pollfd, TRUE)) {
+      GST_ERROR_OBJECT (self, "Failed to configure a request poll set.");
+      gst_poll_free (request->poll);
+      close (request->fd);
+      g_free (request);
+      return NULL;
+    }
   }
 
   request->decoder = g_object_ref (self);
+  request->generation = self->generation;
   request->bitstream = gst_memory_ref (bitstream);
   request->pic_buf = gst_buffer_ref (pic_buf);
   request->frame_num = frame_num;
@@ -1361,14 +1544,27 @@ gst_v4l2_decoder_alloc_sub_request (GstV4l2Decoder * self,
       return NULL;
     }
 
-    request->poll = gst_poll_new (FALSE);
+    request->poll = gst_poll_new (TRUE);
+    if (!request->poll) {
+      GST_ERROR_OBJECT (self, "Failed to create a request poll set.");
+      close (request->fd);
+      g_free (request);
+      return NULL;
+    }
     gst_poll_fd_init (&request->pollfd);
     request->pollfd.fd = request->fd;
-    gst_poll_add_fd (request->poll, &request->pollfd);
-    gst_poll_fd_ctl_pri (request->poll, &request->pollfd, TRUE);
+    if (!gst_poll_add_fd (request->poll, &request->pollfd) ||
+        !gst_poll_fd_ctl_pri (request->poll, &request->pollfd, TRUE)) {
+      GST_ERROR_OBJECT (self, "Failed to configure a request poll set.");
+      gst_poll_free (request->poll);
+      close (request->fd);
+      g_free (request);
+      return NULL;
+    }
   }
 
   request->decoder = g_object_ref (self);
+  request->generation = self->generation;
   request->bitstream = gst_memory_ref (bitstream);
   request->pic_buf = gst_buffer_ref (prev_request->pic_buf);
   request->frame_num = prev_request->frame_num;
@@ -1487,6 +1683,13 @@ gst_v4l2_request_unref (GstV4l2Request * request)
     return;
   }
 
+  /* close() has already stopped the video node, so this request cannot be
+   * reused even if MEDIA_REQUEST_IOC_REINIT would still accept it. */
+  if (!decoder->opened || request->generation != decoder->generation) {
+    gst_v4l2_request_free (request);
+    return;
+  }
+
   GST_TRACE_OBJECT (decoder, "Recycling request %i.", request->fd);
 
   ret = ioctl (request->fd, MEDIA_REQUEST_IOC_REINIT, NULL);
@@ -1505,6 +1708,7 @@ gboolean
 gst_v4l2_request_queue (GstV4l2Request * request, guint flags)
 {
   GstV4l2Decoder *decoder = request->decoder;
+  gint saved_errno;
   gint ret;
   guint max_pending;
 
@@ -1519,23 +1723,34 @@ gst_v4l2_request_queue (GstV4l2Request * request, guint flags)
     return FALSE;
   }
 
+  if (gst_v4l2_decoder_is_flushing (decoder)) {
+    GST_DEBUG_OBJECT (decoder,
+        "Not queuing request %i while the decoder is flushing.", request->fd);
+    errno = EBUSY;
+    return FALSE;
+  }
+
   if (!gst_v4l2_decoder_queue_sink_mem (decoder, request,
           request->bitstream, request->frame_num, flags)) {
+    saved_errno = errno;
     GST_ERROR_OBJECT (decoder, "Driver did not accept the bitstream data.");
+    errno = saved_errno;
     return FALSE;
   }
 
   if (!request->sub_request &&
       !gst_v4l2_decoder_queue_src_buffer (decoder, request->pic_buf)) {
+    saved_errno = errno;
     GST_ERROR_OBJECT (decoder, "Driver did not accept the picture buffer.");
-    return FALSE;
+    goto rollback;
   }
 
   ret = ioctl (request->fd, MEDIA_REQUEST_IOC_QUEUE, NULL);
   if (ret < 0) {
+    saved_errno = errno;
     GST_ERROR_OBJECT (decoder, "MEDIA_REQUEST_IOC_QUEUE, failed: %s",
-        g_strerror (errno));
-    return FALSE;
+        g_strerror (saved_errno));
+    goto rollback;
   }
 
   if (flags & V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF)
@@ -1549,12 +1764,59 @@ gst_v4l2_request_queue (GstV4l2Request * request, guint flags)
 
   if (gst_vec_deque_get_length (decoder->pending_requests) > max_pending) {
     GstV4l2Request *pending_req;
+    gboolean failed;
+    gint wait_errno;
 
-    pending_req = gst_vec_deque_peek_head (decoder->pending_requests);
-    gst_v4l2_request_set_done (pending_req);
+    pending_req = gst_v4l2_request_ref (
+        gst_vec_deque_peek_head (decoder->pending_requests));
+    ret = gst_v4l2_request_set_done (pending_req);
+    wait_errno = errno;
+    failed = gst_v4l2_request_failed (pending_req);
+    gst_v4l2_request_unref (pending_req);
+
+    if (ret <= 0 || failed) {
+      gint error = ret <= 0 ? wait_errno : EIO;
+
+      if (error == EBUSY)
+        GST_DEBUG_OBJECT (decoder,
+            "Previous decode request was interrupted by flushing.");
+      else
+        GST_WARNING_OBJECT (decoder,
+            "Previous decode request did not complete successfully.");
+
+      /* The current request is already queued, but the caller will not take
+       * ownership of it after this failure.  Prevent further submissions
+       * until the codec flush resets both its DPB and the V4L2 queues. */
+      gst_v4l2_decoder_set_flushing (decoder, TRUE);
+      errno = error;
+      return FALSE;
+    }
   }
 
   return TRUE;
+
+rollback:
+  /* OUTPUT QBUF already succeeded.  It may still be bound to this request;
+   * CAPTURE may also own pic_buf.  A full queue reset is the only operation
+   * that makes both DMA-backed references safe to release. */
+  if (!gst_v4l2_decoder_flush (decoder)) {
+    GST_WARNING_OBJECT (decoder,
+        "Failed to roll back partially queued request %i; retaining its buffers until STREAMOFF or close.",
+        request->fd);
+
+    request->failed = TRUE;
+    request->pending = TRUE;
+    gst_vec_deque_push_tail (decoder->pending_requests,
+        gst_v4l2_request_ref (request));
+  }
+
+  /* Even a successful queue reset invalidates the codec's reference state.
+   * Keep the device poisoned until the codec's regular flush resets its DPB
+   * and cached sequence state as well. */
+  gst_v4l2_decoder_set_flushing (decoder, TRUE);
+
+  errno = saved_errno;
+  return FALSE;
 }
 
 gint
@@ -1562,6 +1824,9 @@ gst_v4l2_request_set_done (GstV4l2Request * request)
 {
   GstV4l2Decoder *decoder = request->decoder;
   GstV4l2Request *pending_req = NULL;
+  gboolean completion_failed = FALSE;
+  gboolean found_target = FALSE;
+  gint saved_errno;
   gint ret;
 
   if (!request->pending)
@@ -1570,26 +1835,94 @@ gst_v4l2_request_set_done (GstV4l2Request * request)
   GST_DEBUG_OBJECT (decoder, "Waiting for request %i to complete.",
       request->fd);
 
-  ret = gst_poll_wait (request->poll, GST_SECOND);
+  GST_OBJECT_LOCK (decoder);
+  if (decoder->flushing) {
+    GST_OBJECT_UNLOCK (decoder);
+    errno = EBUSY;
+    return -1;
+  }
+
+  if (decoder->waiting_request) {
+    GST_OBJECT_UNLOCK (decoder);
+    GST_WARNING_OBJECT (decoder,
+        "Another request is already waiting for completion.");
+    errno = EALREADY;
+    return -1;
+  }
+
+  decoder->waiting_request = request;
+  gst_poll_set_flushing (request->poll, FALSE);
+  GST_OBJECT_UNLOCK (decoder);
+
+  ret = gst_poll_wait (request->poll, REQUEST_TIMEOUT);
+  saved_errno = errno;
+
+  GST_OBJECT_LOCK (decoder);
+  if (decoder->waiting_request == request)
+    decoder->waiting_request = NULL;
+  if (decoder->flushing) {
+    GST_OBJECT_UNLOCK (decoder);
+    errno = EBUSY;
+    return -1;
+  }
+  GST_OBJECT_UNLOCK (decoder);
+
+  errno = saved_errno;
   if (ret == 0) {
     GST_WARNING_OBJECT (decoder, "Request %i took too long.", request->fd);
+
+    /* A timed-out request is still owned by the driver and all later
+     * requests are ordered behind it.  Poison the decoder immediately so a
+     * caller draining several pictures does not wait for the same timeout on
+     * every pending request.  The codec flush/stop path will STREAMOFF both
+     * queues before releasing their DMA-backed references. */
+    gst_v4l2_decoder_set_flushing (decoder, TRUE);
+    errno = ETIMEDOUT;
     return 0;
   }
 
   if (ret < 0) {
-    GST_WARNING_OBJECT (decoder, "Request %i error: %s (%i)",
-        request->fd, g_strerror (errno), errno);
+    if (saved_errno == EBUSY)
+      GST_DEBUG_OBJECT (decoder, "Request %i wait interrupted by flushing.",
+          request->fd);
+    else
+      GST_WARNING_OBJECT (decoder, "Request %i error: %s (%i)",
+          request->fd, g_strerror (saved_errno), saved_errno);
+
+    /* EBUSY is the expected wake-up from FLUSH_START.  Any other polling
+     * error leaves completion and buffer ownership unknown, so reject later
+     * submissions until the queues and codec state have been reset. */
+    if (saved_errno != EBUSY)
+      gst_v4l2_decoder_set_flushing (decoder, TRUE);
+
+    errno = saved_errno;
     return ret;
   }
 
-  while ((pending_req = gst_vec_deque_pop_head (decoder->pending_requests))) {
-    gst_v4l2_decoder_dequeue_sink (decoder);
+  while ((pending_req = gst_vec_deque_peek_head (decoder->pending_requests))) {
+    gboolean buffer_error = FALSE;
+    gboolean is_target = pending_req == request;
+
+    if (!gst_v4l2_decoder_dequeue_sink (decoder, &buffer_error)) {
+      pending_req->failed = TRUE;
+      saved_errno = errno;
+      goto dequeue_failed;
+    }
+
+    if (buffer_error)
+      pending_req->failed = TRUE;
+
     g_clear_pointer (&pending_req->bitstream, gst_memory_unref);
 
     if (!pending_req->hold_pic_buf) {
       guint32 frame_num = G_MAXUINT32;
 
-      if (!gst_v4l2_decoder_dequeue_src (decoder, &frame_num)) {
+      if (!gst_v4l2_decoder_dequeue_src (decoder, &frame_num,
+              &buffer_error)) {
+        pending_req->failed = TRUE;
+        saved_errno = errno;
+        goto dequeue_failed;
+      } else if (buffer_error) {
         pending_req->failed = TRUE;
       } else if (frame_num != pending_req->frame_num) {
         GST_WARNING_OBJECT (decoder,
@@ -1599,17 +1932,60 @@ gst_v4l2_request_set_done (GstV4l2Request * request)
       }
     }
 
+    if (pending_req->failed)
+      completion_failed = TRUE;
+
+    g_assert (gst_vec_deque_pop_head (decoder->pending_requests) ==
+        pending_req);
     pending_req->pending = FALSE;
     gst_v4l2_request_unref (pending_req);
 
-    if (pending_req == request)
+    if (is_target) {
+      found_target = TRUE;
       break;
+    }
   }
 
   /* Pending request must be in the pending request list */
-  g_assert (pending_req == request);
+  if (!found_target) {
+    GST_ERROR_OBJECT (decoder, "Request %i was not in the pending list.",
+        request->fd);
+
+    /* request->pending says the driver may still own its buffers.  Preserve
+     * an independent reference until STREAMOFF even though the ordering list
+     * was inconsistent, otherwise the caller's error cleanup could release
+     * DMA memory still visible to the device. */
+    request->failed = TRUE;
+    gst_vec_deque_push_tail (decoder->pending_requests,
+        gst_v4l2_request_ref (request));
+    gst_v4l2_decoder_set_flushing (decoder, TRUE);
+    errno = ENOENT;
+    return -1;
+  }
+
+  /* A completed request that carries an OUTPUT/CAPTURE error invalidates the
+   * codec reference state even though DQBUF itself succeeded.  Already
+   * dequeued buffers are safe to release; keep later pending requests owned
+   * by the driver until the codec flush stops both queues. */
+  if (completion_failed)
+    gst_v4l2_decoder_set_flushing (decoder, TRUE);
 
   return ret;
+
+dequeue_failed:
+  /* The request remains at the head of pending_requests and therefore keeps
+   * every buffer reference alive.  STREAMOFF is required before either a
+   * failed DQBUF buffer or any later queued request can be released. */
+  if (!gst_v4l2_decoder_flush (decoder))
+    GST_WARNING_OBJECT (decoder,
+        "Failed to recover request queues after DQBUF error; retaining pending buffers until STREAMOFF or close.");
+
+  /* The V4L2 queues and codec DPB must be reset as one operation.  Do not
+   * accept more requests before the codec's regular flush has run. */
+  gst_v4l2_decoder_set_flushing (decoder, TRUE);
+
+  errno = saved_errno;
+  return -1;
 }
 
 gboolean

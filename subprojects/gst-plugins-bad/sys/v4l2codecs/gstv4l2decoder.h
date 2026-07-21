@@ -57,6 +57,13 @@ gboolean          gst_v4l2_decoder_streamon (GstV4l2Decoder * self,
 gboolean          gst_v4l2_decoder_streamoff (GstV4l2Decoder * self,
                                               GstPadDirection direction);
 
+void              gst_v4l2_decoder_set_flushing (GstV4l2Decoder * self,
+                                                  gboolean flushing);
+
+gboolean          gst_v4l2_decoder_is_flushing (GstV4l2Decoder * self);
+
+gboolean          gst_v4l2_decoder_has_active_queues (GstV4l2Decoder * self);
+
 gboolean          gst_v4l2_decoder_flush (GstV4l2Decoder * self);
 
 gboolean          gst_v4l2_decoder_enum_sink_fmt (GstV4l2Decoder * self,

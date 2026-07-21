@@ -1338,8 +1338,13 @@ static gboolean
 gst_h265_decoder_flush (GstVideoDecoder * decoder)
 {
   GstH265Decoder *self = GST_H265_DECODER (decoder);
+  GstH265DecoderPrivate *priv = self->priv;
 
   gst_h265_decoder_clear_dpb (self, TRUE);
+  priv->new_bitstream = TRUE;
+  priv->prev_nal_is_eos = FALSE;
+  priv->associated_irap_NoRaslOutputFlag = FALSE;
+  priv->no_output_of_prior_pics_flag = FALSE;
 
   return TRUE;
 }
